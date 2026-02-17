@@ -17,11 +17,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # Only run on: version tags, pushes to dev, or merges from dev to main
-    if: |
-      startsWith(github.ref, 'refs/tags/v') ||
-      github.ref == 'refs/heads/dev' ||
-      (github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'Merge branch ''dev'''))
+    # Runs on: version tags, any push to dev, any push to main (including PR merges)
     permissions:
       contents: read
       packages: write
