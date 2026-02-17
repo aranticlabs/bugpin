@@ -44,6 +44,9 @@ RUN bun install --production
 # Back to app root
 WORKDIR /app
 
+# Copy root package.json (used for version at runtime)
+COPY package.json ./
+
 # Copy server source (Bun runs TypeScript directly)
 COPY src/server ./src/server
 COPY src/shared ./src/shared
