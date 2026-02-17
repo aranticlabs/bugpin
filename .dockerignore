@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs (rebuilt in container)
+dist/
+
+# Data directory
+data/
+
+# Development files
+*.log
+server.log
+.server.pid
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Environment files (use Docker env vars instead)
+.env
+.env.local
+.env.*.local
+
+# Documentation (not needed in production)
+docs/
+*.md
+!README.md
+
+# Tests
+tests/
+**/*.test.ts
+**/*.spec.ts
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo

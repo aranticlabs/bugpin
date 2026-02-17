@@ -1,0 +1,98 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Commits since $PREVIOUS_TAG:"
+            git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges > changelog.txt
+          else
+            echo "Initial release"
+            git log --pretty=format:"- %s (%h)" --no-merges > changelog.txt
+          fi
+
+          # Set output
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat changelog.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: BugPin ${{ steps.version.outputs.version }}
+          body: |
+            ## 🚀 BugPin ${{ steps.version.outputs.version }}
+
+            ### Docker Image
+
+            ```bash
+            docker pull registry.arantic.cloud/bugpin/bugpin:${{ steps.version.outputs.version }}
+            ```
+
+            ### What's Changed
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Deployment
+
+            **Docker Compose:**
+            ```yaml
+            services:
+              bugpin:
+                image: registry.arantic.cloud/bugpin/bugpin:${{ steps.version.outputs.version }}
+                ports:
+                  - "7300:7300"
+                volumes:
+                  - bugpin-data:/data
+                environment:
+                  - NODE_ENV=production
+
+            volumes:
+              bugpin-data:
+            ```
+
+            **Docker CLI:**
+            ```bash
+            docker run -d \
+              --name bugpin \
+              -p 7300:7300 \
+              -v bugpin-data:/data \
+              -e NODE_ENV=production \
+              registry.arantic.cloud/bugpin/bugpin:${{ steps.version.outputs.version }}
+            ```
+
+            ### Full Changelog
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.previous_tag }}...${{ github.ref_name }}
+          draft: false
+          prerelease: false

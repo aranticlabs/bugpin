@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime data
+data/
+*.db
+*.db-shm
+*.db-wal
+uploads/
+
+# Environment variables
+.env
+.env.*
+
+# Scripts with credentials
+/scripts/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# AI agent files
+CLAUDE.md
+AGENT.md
+GEMINI.md
+
+# Build automation
+Makefile
+
+# Development docs
+docs-dev/
+
+# Testing
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.temp/
+
+# Bun
+.bun/
+
+# Vite
+.vite/
+.cache/

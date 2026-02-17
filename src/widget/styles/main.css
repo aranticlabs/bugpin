@@ -1,0 +1,179 @@
+/* Tailwind v4 - Shadow DOM provides style isolation */
+@import 'tailwindcss';
+
+/* Dark mode variant for .bugpin-theme-dark */
+/* @custom-variant is a Tailwind CSS v4 feature - ignore unknown at-rule warning */
+@custom-variant dark (&:is(.bugpin-theme-dark *));
+
+/* Base reset - Shadow DOM handles isolation */
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Design tokens via @theme inline (Tailwind v4 pattern) */
+/* stylelint-disable-next-line at-rule-no-unknown */
+@theme inline {
+  /* BugPin Primary Color Palette */
+  --color-bugpin-primary-50: #e6f3f9;
+  --color-bugpin-primary-100: #cbe7f2;
+  --color-bugpin-primary-200: #9ed1e6;
+  --color-bugpin-primary-300: #6ab8d8;
+  --color-bugpin-primary-400: #2e9bc6;
+  --color-bugpin-primary-500: #0e84b1;
+  --color-bugpin-primary-600: #036f9b;
+  --color-bugpin-primary-700: #02658d;
+  --color-bugpin-primary-800: #024f6f;
+  --color-bugpin-primary-900: #013a52;
+  --color-bugpin-primary-950: #012738;
+
+  /* UI colors mapped to CSS variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-hover-foreground: var(--primary-hover-foreground);
+
+  /* Radius token */
+  --radius-DEFAULT: var(--radius);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: calc(var(--radius) + 2px);
+
+  /* Shadow tokens */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-DEFAULT: var(--shadow);
+  --shadow-lg: var(--shadow-lg);
+}
+
+/* Widget root CSS variables */
+#bugpin-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+
+  /* BugPin Primary Color Palette (for reference in JS) */
+  --bugpin-primary-50: #e6f3f9;
+  --bugpin-primary-100: #cbe7f2;
+  --bugpin-primary-200: #9ed1e6;
+  --bugpin-primary-300: #6ab8d8;
+  --bugpin-primary-400: #2e9bc6;
+  --bugpin-primary-500: #0e84b1;
+  --bugpin-primary-600: #036f9b;
+  --bugpin-primary-700: #02658d;
+  --bugpin-primary-800: #024f6f;
+  --bugpin-primary-900: #013a52;
+  --bugpin-primary-950: #012738;
+
+  /* Light mode defaults */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #a3a3a3;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --radius: 0.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  color: var(--foreground);
+}
+
+/* Dynamic primary colors from App.tsx */
+.bugpin-container {
+  --primary: var(--button-color, var(--bugpin-primary-700));
+  --primary-foreground: var(--button-text-color, #fafafa);
+  --primary-hover: var(--button-hover-color, var(--bugpin-primary-800));
+  --primary-hover-foreground: var(--button-hover-text-color, #fafafa);
+}
+
+/* Dark theme variable overrides */
+.bugpin-theme-dark,
+.bugpin-container.bugpin-theme-dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --border: #262626;
+  --input: #262626;
+  --ring: #d4d4d4;
+}
+
+/* Keyframe animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bugpin-tooltip-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Priority colors (semantic - not Tailwind utilities) */
+.priority-lowest {
+  color: #6b7280;
+}
+.priority-low {
+  color: #3b82f6;
+}
+.priority-medium {
+  color: #f59e0b;
+}
+.priority-high {
+  color: #ef4444;
+}
+.priority-highest {
+  color: #dc2626;
+}

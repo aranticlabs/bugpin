@@ -1,0 +1,47 @@
+# BugPin systemd Service
+#
+# Quick setup:
+#   sudo cp bugpin.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bugpin
+#   sudo systemctl start bugpin
+#
+# Full documentation: https://docs.bugpin.io/monitoring/systemd
+
+[Unit]
+Description=BugPin - Self-hosted Bug Reporting & Feedback Widget
+Documentation=https://github.com/aranticlabs/bugpin
+After=network.target
+
+[Service]
+Type=simple
+User=bugpin
+Group=bugpin
+WorkingDirectory=/opt/bugpin
+
+# Command to start the server
+ExecStart=/usr/bin/bun run start
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bugpin
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bugpin/data
+
+# Resource limits (optional)
+LimitNOFILE=65536
+# MemoryMax=1G
+# CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target

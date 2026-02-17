@@ -1,0 +1,72 @@
+{
+  "name": "@arantic/bugpin-widget",
+  "version": "1.0.0",
+  "description": "Embeddable visual bug reporting widget - Capture screenshots, annotate issues, and submit bug reports",
+  "type": "module",
+  "main": "dist/widget.cjs.js",
+  "module": "dist/widget.esm.js",
+  "exports": {
+    ".": {
+      "import": "./dist/widget.esm.js",
+      "require": "./dist/widget.cjs.js",
+      "script": "./dist/widget.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "bug-reporting",
+    "feedback",
+    "screenshot",
+    "annotation",
+    "widget",
+    "issue-tracker",
+    "visual-feedback",
+    "bugpin",
+    "self-hosted"
+  ],
+  "author": "Arantic Digital",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aranticlabs/bugpin.git",
+    "directory": "src/widget"
+  },
+  "homepage": "https://bugpin.io",
+  "bugs": {
+    "url": "https://github.com/aranticlabs/bugpin/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "build:watch": "vite build --watch",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "fabric": "^6.4.0",
+    "html-to-image": "^1.11.0",
+    "idb": "^8.0.0",
+    "lucide-preact": "^0.460.0",
+    "preact": "^10.24.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/jsdom": "^21.1.6",
+    "jsdom": "^25.0.0",
+    "preact-render-to-string": "^6.6.5",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.3.0",
+    "vite": "^5.4.0"
+  }
+}

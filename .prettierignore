@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Runtime data
+data
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Lock files
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Cache
+.vite
+.cache
+
+# Coverage
+coverage
+
+# Logs
+*.log
+
+# Generated/minified
+*.min.js
+*.min.css
+
+# Documentation build
+docs/
+docs-dev/

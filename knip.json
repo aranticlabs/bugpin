@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignoreExportsUsedInFile": {
+    "interface": true,
+    "type": true
+  },
+  "tags": ["-lintignore"],
+  "ignoreFiles": ["src/server/database/repositories/api-tokens.repo.ts"],
+  "ignoreDependencies": ["@aws-sdk/client-s3"],
+  "rules": {
+    "exports": "warn",
+    "types": "warn",
+    "unlisted": "off"
+  },
+  "workspaces": {
+    ".": {
+      "project": ["**/*.{ts,tsx,js,jsx}", "!ee/**"],
+      "entry": ["tests/**/*.test.ts"]
+    }
+  }
+}

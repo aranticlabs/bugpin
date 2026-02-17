@@ -1,0 +1,43 @@
+{
+  "name": "bugpin",
+  "version": "1.0.0",
+  "description": "Self-hosted visual bug reporting tool",
+  "license": "AGPL-3.0-only",
+  "private": false,
+  "type": "module",
+  "workspaces": [
+    "src/server",
+    "src/admin",
+    "src/widget"
+  ],
+  "scripts": {
+    "dev": "bun run dev:server & bun run dev:admin",
+    "dev:server": "bun run --cwd src/server dev",
+    "dev:admin": "bun run --cwd src/admin dev",
+    "dev:widget": "bun run --cwd src/widget build:watch",
+    "build": "bun run build:server && bun run build:admin && bun run build:widget",
+    "build:server": "bun run --cwd src/server build",
+    "build:admin": "bun run --cwd src/admin build",
+    "build:widget": "bun run --cwd src/widget build",
+    "start": "bun run src/server/index.ts",
+    "typecheck": "bun run typecheck:server && bun run typecheck:admin && bun run typecheck:widget",
+    "typecheck:server": "bun run --cwd src/server typecheck",
+    "typecheck:admin": "bun run --cwd src/admin typecheck",
+    "typecheck:widget": "bun run --cwd src/widget typecheck",
+    "test": "bun run test:server && bun run test:admin && bun run test:widget",
+    "test:server": "bun test src/server tests/unit/server",
+    "test:admin": "bun run --cwd src/admin test",
+    "test:widget": "bun run --cwd src/widget test",
+    "migrate": "bun run --cwd src/server migrate",
+    "knip": "knip",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "@types/node": "^25.0.3",
+    "knip": "^5.80.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3"
+  }
+}

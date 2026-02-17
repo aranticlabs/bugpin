@@ -1,0 +1,83 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v2.1.3
+  workflow_dispatch:  # Allows manual triggering
+
+env:
+  HARBOR_REGISTRY: registry.arantic.cloud
+  HARBOR_PROJECT: bugpin
+  IMAGE_NAME: bugpin
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Only run on: version tags, pushes to dev, or merges from dev to main
+    if: |
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.ref == 'refs/heads/dev' ||
+      (github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'Merge branch ''dev'''))
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor Registry (Production)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ vars.HARBOR_ROBOT }}
+          password: ${{ secrets.HARBOR_KEY }}
+
+      - name: Log in to Harbor Registry (Dev/Stage)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ vars.HARBOR_ROBOT_DEV }}
+          password: ${{ secrets.HARBOR_KEY_DEV }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # For version tags (v1.0.0) -> 1.0.0, 1.0, 1, latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # For main branch (dev merges) -> main, main-abc1234
+            # For dev branch (PR merges) -> dev, dev-abc1234
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-,format=short
+          labels: |
+            org.opencontainers.image.title=BugPin
+            org.opencontainers.image.description=Self-hosted bug reporting and feedback widget
+            org.opencontainers.image.vendor=Arantic Digital
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64  # Add linux/arm64 if needed
+
+      - name: Image digest
+        run: echo "Image pushed with digest ${{ steps.meta.outputs.digest }}"

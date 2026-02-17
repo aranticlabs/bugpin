@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BugPin Admin</title>
+    <!-- Light mode favicons -->
+    <link rel="icon" type="image/x-icon" href="/branding/light/favicon-light.ico" media="(prefers-color-scheme: light)" />
+    <link rel="apple-touch-icon" href="/branding/light/apple-touch-icon-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="manifest" href="/branding/light/site.webmanifest" media="(prefers-color-scheme: light)" />
+    <!-- Dark mode favicons -->
+    <link rel="icon" type="image/x-icon" href="/branding/dark/favicon-dark.ico" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="/branding/dark/apple-touch-icon-dark.png" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="/branding/dark/site.webmanifest" media="(prefers-color-scheme: dark)" />
+    <!-- Theme colors -->
+    <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <!-- Branding CSS variables -->
+    <style id="branding-styles">
+      :root {
+        --color-primary-brand: #02658D;
+      }
+    </style>
+    <script>
+      // Fetch and apply branding config on load
+      fetch('/api/branding/config')
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.config && data.config.primaryColor) {
+            document.documentElement.style.setProperty(
+              '--color-primary-brand',
+              data.config.primaryColor
+            );
+          }
+        })
+        .catch(() => {
+          // Silently fail - use default color
+        });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+# BugPin - Self-hosted Bug Reporting & Feedback Widget
+# https://github.com/aranticlabs/bugpin
+#
+# Quick start:
+#   docker compose up -d
+#
+# Access: http://localhost:7300
+# Default login: admin@example.com / changeme123
+# Change password after first login!
+#
+# Update:
+#   docker compose pull && docker compose up -d
+
+services:
+  bugpin:
+    image: registry.arantic.cloud/bugpin/bugpin:latest
+    container_name: bugpin
+    restart: unless-stopped
+    ports:
+      - "7300:7300"
+    volumes:
+      - ./data:/data
+      # Alternative: use named volume
+      # - bugpin-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+    # Traefik reverse proxy example (uncomment to use)
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.bugpin.rule=Host(`bugpin.yourdomain.com`)"
+    #   - "traefik.http.routers.bugpin.entrypoints=websecure"
+    #   - "traefik.http.routers.bugpin.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.bugpin.loadbalancer.server.port=7300"
+    # networks:
+    #   - traefik
+
+# Uncomment if using Traefik or external network
+# networks:
+#   traefik:
+#     external: true
+
+# Uncomment if using named volumes
+# volumes:
+#   bugpin-data:
