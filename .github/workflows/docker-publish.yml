@@ -55,10 +55,10 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # For main branch (dev merges) -> main, main-abc1234
-            # For dev branch (PR merges) -> dev, dev-abc1234
+            # For branch pushes -> main, dev
             type=ref,event=branch
-            type=sha,prefix={{branch}}-,format=short
+            # For branch pushes -> main-abc1234, dev-abc1234 (only on branches, not tags)
+            type=sha,prefix={{branch}}-,format=short,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
           labels: |
             org.opencontainers.image.title=BugPin
             org.opencontainers.image.description=Self-hosted bug reporting and feedback widget

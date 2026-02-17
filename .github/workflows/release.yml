@@ -33,9 +33,10 @@ jobs:
           fi
 
           # Set outputs
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "changelog<<CHANGELOG_EOF" >> $GITHUB_OUTPUT
           cat changelog.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "CHANGELOG_EOF" >> $GITHUB_OUTPUT
           echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
 
       - name: Extract version
