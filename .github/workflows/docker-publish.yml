@@ -2,10 +2,9 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - dev
     tags:
-      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v2.1.3
+      - 'v*.*.*'       # Production: v1.0.0 -> latest, 1.0.0
+      - 'v*.*.*-dev'   # Development: v1.0.1-dev -> dev, 1.0.1-dev
   workflow_dispatch:  # Allows manual triggering
 
 env:
@@ -16,7 +15,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # Runs on: version tags, any push to dev, any push to main (including PR merges)
+    # Runs on: version tags only (v1.0.0 for production, v1.0.0-dev for development)
     permissions:
       contents: read
       packages: write
@@ -25,11 +24,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if dev tag
+        id: check
+        run: |
+          if [[ "${{ github.ref_name }}" == *-dev ]]; then
+            echo "is_dev=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_dev=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Harbor Registry (Production)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.check.outputs.is_dev == 'false'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.HARBOR_REGISTRY }}
@@ -37,7 +45,7 @@ jobs:
           password: ${{ secrets.HARBOR_KEY }}
 
       - name: Log in to Harbor Registry (Dev/Stage)
-        if: "!startsWith(github.ref, 'refs/tags/v')"
+        if: steps.check.outputs.is_dev == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.HARBOR_REGISTRY }}
@@ -50,12 +58,11 @@ jobs:
         with:
           images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}
           tags: |
-            # For version tags (v1.0.0) -> 1.0.0, latest
-            type=semver,pattern={{version}}
-            # For branch pushes -> main, dev
-            type=ref,event=branch
-            # For branch pushes -> main-abc1234, dev-abc1234 (only on branches, not tags)
-            type=sha,prefix={{branch}}-,format=short,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
+            # For production tags (v1.0.0) -> 1.0.0, latest
+            type=semver,pattern={{version}},enable=${{ steps.check.outputs.is_dev == 'false' }}
+            # For dev tags (v1.0.1-dev) -> 1.0.1-dev, dev
+            type=match,pattern=v(.*),group=1,enable=${{ steps.check.outputs.is_dev == 'true' }}
+            type=raw,value=dev,enable=${{ steps.check.outputs.is_dev == 'true' }}
           labels: |
             org.opencontainers.image.title=BugPin
             org.opencontainers.image.description=Self-hosted bug reporting and feedback widget
