@@ -3,8 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     tags:
-      - 'v*.*.*'       # Production: v1.0.0 -> latest, 1.0.0
-      - 'v*.*.*-dev'   # Development: v1.0.1-dev -> dev, 1.0.1-dev
+      - 'v*.*.*'  # Matches both production (v1.0.0) and dev (v1.0.0-dev) tags
   workflow_dispatch:  # Allows manual triggering
 
 env:
