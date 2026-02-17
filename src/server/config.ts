@@ -3,8 +3,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 
-// Package version - read from package.json if available
-const VERSION = '0.1.0';
+// Read version from root package.json (single source of truth)
+const packageJson = await Bun.file(path.join(path.resolve(import.meta.dir, '../..'), 'package.json')).json();
+const VERSION: string = packageJson.version;
 
 const configSchema = z.object({
   nodeEnv: z.enum(['development', 'production', 'test']).default('production'),

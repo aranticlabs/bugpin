@@ -1,12 +1,12 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { ExternalLink } from 'lucide-react';
 
+declare const __APP_VERSION__: string;
+
 interface AboutDialogProps {
   open: boolean;
   onClose: () => void;
 }
-
-const VERSION = '1.0.0';
 const GITHUB_URL = 'https://github.com/aranticlabs/bugpin';
 const LICENSE_URL = 'https://docs.bugpin.io/legal/license';
 const TRADEMARK_URL = 'https://docs.bugpin.io/legal/trademark';
@@ -25,7 +25,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
         <div className="space-y-4 py-4">
           <div>
             <p className="text-sm font-semibold text-foreground">Version</p>
-            <p className="text-sm text-muted-foreground">{VERSION}</p>
+            <p className="text-sm text-muted-foreground">{__APP_VERSION__}</p>
           </div>
 
           <div>
