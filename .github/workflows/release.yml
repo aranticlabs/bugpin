@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      - '!v*.*.*-dev'  # Exclude dev tags
 
 permissions:
   contents: write
