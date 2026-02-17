@@ -48,6 +48,9 @@ WORKDIR /app
 COPY src/server ./src/server
 COPY src/shared ./src/shared
 
+# Copy Enterprise Edition module (from builder, which includes submodule if initialized)
+COPY --from=builder /app/ee ./ee
+
 # Copy built frontend assets from builder
 COPY --from=builder /app/dist/admin ./dist/admin
 
