@@ -57,9 +57,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
             # For production tags (v1.0.0) -> 1.0.0, latest
             type=semver,pattern={{version}},enable=${{ steps.check.outputs.is_dev == 'false' }}
+            type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' }}
             # For dev tags (v1.0.1-dev) -> 1.0.1-dev, dev
             type=match,pattern=v(.*),group=1,enable=${{ steps.check.outputs.is_dev == 'true' }}
             type=raw,value=dev,enable=${{ steps.check.outputs.is_dev == 'true' }}
