@@ -32,10 +32,11 @@ jobs:
             git log --pretty=format:"- %s (%h)" --no-merges > changelog.txt
           fi
 
-          # Set output
+          # Set outputs
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           cat changelog.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
 
       - name: Extract version
         id: version
