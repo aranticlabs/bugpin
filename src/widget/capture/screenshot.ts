@@ -1,5 +1,7 @@
 import { toCanvas } from 'html-to-image';
 
+type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
+
 export type CaptureMethod = 'visible' | 'fullpage' | 'element';
 
 export interface CaptureOptions {
@@ -208,6 +210,26 @@ function getBackgroundColor(): string {
 }
 
 /**
+ * Resilient wrapper around html-to-image's toCanvas.
+ * Attempts capture with font embedding first. If it fails (common on pages
+ * with cross-origin stylesheets like WordPress), retries with skipFonts: true.
+ */
+async function resilientToCanvas(
+  element: HTMLElement,
+  options: ToCanvasOptions,
+): Promise<HTMLCanvasElement> {
+  try {
+    return await toCanvas(element, options);
+  } catch (error) {
+    console.warn(
+      '[BugPin] Screenshot capture failed, retrying without font embedding:',
+      error instanceof Error ? error.message : error,
+    );
+    return await toCanvas(element, { ...options, skipFonts: true });
+  }
+}
+
+/**
  * Capture screenshot using Screen Capture API
  * Requires user permission to select tab/window to capture
  * Provides pixel-perfect screenshots including videos, canvas, WebGL
@@ -366,7 +388,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const fullCanvas = await toCanvas(element, toCanvasOptions);
+      const fullCanvas = await resilientToCanvas(element, toCanvasOptions);
 
       // Debug: log actual canvas dimensions
       console.log('[BugPin] Canvas captured:', {
@@ -433,7 +455,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const canvas = await toCanvas(element, toCanvasOptions);
+      const canvas = await resilientToCanvas(element, toCanvasOptions);
       return canvas.toDataURL('image/png');
     }
 
@@ -449,7 +471,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       filter: shouldIncludeNode,
     };
 
-    const canvas = await toCanvas(element, toCanvasOptions);
+    const canvas = await resilientToCanvas(element, toCanvasOptions);
     return canvas.toDataURL('image/png');
   } finally {
     // Restore visibility of all BugPin elements
