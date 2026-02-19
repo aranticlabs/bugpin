@@ -255,20 +255,40 @@ function getCaptureDefaults(): ToCanvasOptions {
 }
 
 /**
- * Capture screenshot using Screen Capture API
- * Requires user permission to select tab/window to capture
- * Provides pixel-perfect screenshots including videos, canvas, WebGL
+ * Check whether the Screen Capture API is available in this context.
+ * Requires HTTPS, the browser to support getDisplayMedia, and the
+ * Permissions-Policy header to allow display-capture on the host page.
+ */
+function isScreenCaptureAvailable(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getDisplayMedia === 'function'
+  );
+}
+
+/**
+ * Capture screenshot using Screen Capture API.
+ * Requires the host page to send the HTTP header:
+ *   Permissions-Policy: display-capture=self
  * @returns Base64 data URL of the screenshot
  */
 async function captureWithScreenCaptureAPI(): Promise<string> {
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        displaySurface: 'browser',
-      } as MediaTrackConstraints,
-      audio: false,
-    });
+  if (!isScreenCaptureAvailable()) {
+    throw new Error(
+      'Screen Capture API is not available. The host page must be served over HTTPS ' +
+        'and include the header: Permissions-Policy: display-capture=self',
+    );
+  }
 
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: {
+      displaySurface: 'browser',
+    } as MediaTrackConstraints,
+    audio: false,
+  });
+
+  try {
     const video = document.createElement('video');
     video.srcObject = stream;
     video.autoplay = true;
@@ -288,14 +308,9 @@ async function captureWithScreenCaptureAPI(): Promise<string> {
     }
 
     ctx.drawImage(video, 0, 0);
-    stream.getTracks().forEach((track) => track.stop());
-
     return canvas.toDataURL('image/png');
-  } catch (error) {
-    if (error instanceof Error && error.name === 'NotAllowedError') {
-      throw new Error('Screen capture permission denied');
-    }
-    throw error;
+  } finally {
+    stream.getTracks().forEach((track) => track.stop());
   }
 }
 
@@ -307,9 +322,16 @@ async function captureWithScreenCaptureAPI(): Promise<string> {
 export async function captureScreenshot(options: CaptureOptions = {}): Promise<string> {
   const { method = 'visible', selector, useScreenCaptureAPI = false, cacheBust } = options;
 
-  // Use Screen Capture API if enabled
+  // Use Screen Capture API if enabled, fall back to html-to-image on failure
   if (useScreenCaptureAPI) {
-    return captureWithScreenCaptureAPI();
+    try {
+      return await captureWithScreenCaptureAPI();
+    } catch (error) {
+      console.warn(
+        '[BugPin] Screen Capture API unavailable, falling back to DOM capture:',
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   // Get the element to capture
