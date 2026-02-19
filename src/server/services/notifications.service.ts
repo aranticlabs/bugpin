@@ -140,16 +140,35 @@ export const notificationsService = {
    */
   async notifyNewReport(report: Report): Promise<void> {
     try {
+      logger.debug('Starting new report notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+      });
+
       // Get all users with email notifications enabled for this project
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
 
+      logger.debug('Found notification preferences for project', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+        preferences: preferences.map((p) => ({
+          userId: p.userId,
+          emailEnabled: p.emailEnabled,
+          notifyOnNewReport: p.notifyOnNewReport,
+        })),
+      });
+
       // Filter users who want new report notifications
       const usersToNotify = preferences.filter((p) => p.notifyOnNewReport);
 
       if (usersToNotify.length === 0) {
-        logger.info('No users to notify for new report', { reportId: report.id });
+        logger.info('No users to notify for new report', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -170,6 +189,7 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup', { reportId: report.id });
         return;
       }
 
@@ -199,12 +219,35 @@ export const notificationsService = {
    */
   async notifyStatusChange(report: Report, oldStatus: string, newStatus: string): Promise<void> {
     try {
+      logger.debug('Starting status change notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        oldStatus,
+        newStatus,
+      });
+
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
+
+      logger.debug('Found notification preferences for status change', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+        preferences: preferences.map((p) => ({
+          userId: p.userId,
+          emailEnabled: p.emailEnabled,
+          notifyOnStatusChange: p.notifyOnStatusChange,
+        })),
+      });
+
       const usersToNotify = preferences.filter((p) => p.notifyOnStatusChange);
 
       if (usersToNotify.length === 0) {
+        logger.info('No users to notify for status change', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -212,6 +255,9 @@ export const notificationsService = {
       const project = await projectsRepo.findById(report.projectId);
 
       if (!project) {
+        logger.error('Project not found for status change notification', {
+          projectId: report.projectId,
+        });
         return;
       }
 
@@ -223,6 +269,9 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup for status change', {
+          reportId: report.id,
+        });
         return;
       }
 
@@ -254,12 +303,29 @@ export const notificationsService = {
    */
   async notifyAssignment(report: Report, assignedToUserId: string): Promise<void> {
     try {
+      logger.debug('Starting assignment notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        assignedToUserId,
+      });
+
       const preferences = await notificationPreferencesRepo.findByUserAndProject(
         assignedToUserId,
         report.projectId,
       );
 
-      if (!preferences || !preferences.emailEnabled || !preferences.notifyOnAssignment) {
+      // If no explicit preferences exist, treat as enabled (matching DB defaults)
+      const emailEnabled = preferences ? preferences.emailEnabled : true;
+      const notifyOnAssignment = preferences ? preferences.notifyOnAssignment : true;
+
+      if (!emailEnabled || !notifyOnAssignment) {
+        logger.info('Skipping assignment notification - preferences disabled', {
+          reportId: report.id,
+          assignedToUserId,
+          hasPreferences: !!preferences,
+          emailEnabled,
+          notifyOnAssignment,
+        });
         return;
       }
 
@@ -301,12 +367,30 @@ export const notificationsService = {
     newPriority: string,
   ): Promise<void> {
     try {
+      logger.debug('Starting priority change notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        oldPriority,
+        newPriority,
+      });
+
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
+
+      logger.debug('Found notification preferences for priority change', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+      });
+
       const usersToNotify = preferences.filter((p) => p.notifyOnPriorityChange);
 
       if (usersToNotify.length === 0) {
+        logger.info('No users to notify for priority change', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -314,6 +398,9 @@ export const notificationsService = {
       const project = await projectsRepo.findById(report.projectId);
 
       if (!project) {
+        logger.error('Project not found for priority change notification', {
+          projectId: report.projectId,
+        });
         return;
       }
 
@@ -325,6 +412,9 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup for priority change', {
+          reportId: report.id,
+        });
         return;
       }
 

@@ -50,6 +50,15 @@ export const emailService = {
       // Load SMTP settings
       const settings = await settingsCacheService.getAll();
 
+      logger.debug('sendEmail called', {
+        recipientCount: options.to.length,
+        recipients: options.to.map((r) => r.email),
+        subject: options.subject,
+        smtpEnabled: settings.smtpEnabled,
+        smtpHost: settings.smtpConfig.host || '(not set)',
+        smtpFrom: settings.smtpConfig.from || '(not set)',
+      });
+
       if (!settings.smtpEnabled) {
         logger.info('SMTP disabled, skipping email send');
         return { success: false, error: 'SMTP is disabled' };

@@ -91,13 +91,33 @@ export const notificationPreferencesRepo = {
   },
 
   /**
-   * Get all users who should be notified for a project
+   * Get all users who should be notified for a project.
+   * Includes active users without explicit preferences (defaults are all enabled).
    */
   async findByProjectWithEmailEnabled(projectId: string): Promise<NotificationPreferences[]> {
     const db = getDb();
+
+    // LEFT JOIN users with their notification preferences for this project.
+    // Users without a preferences row are treated as having all notifications enabled (matching DB defaults).
     const rows = db
-      .query('SELECT * FROM notification_preferences WHERE project_id = ? AND email_enabled = 1')
-      .all(projectId) as NotificationPreferencesRow[];
+      .query(
+        `SELECT
+          COALESCE(np.id, 'default-' || u.id) as id,
+          u.id as user_id,
+          ? as project_id,
+          COALESCE(np.notify_on_new_report, 1) as notify_on_new_report,
+          COALESCE(np.notify_on_status_change, 1) as notify_on_status_change,
+          COALESCE(np.notify_on_priority_change, 1) as notify_on_priority_change,
+          COALESCE(np.notify_on_assignment, 1) as notify_on_assignment,
+          COALESCE(np.email_enabled, 1) as email_enabled,
+          COALESCE(np.created_at, u.created_at) as created_at,
+          COALESCE(np.updated_at, u.updated_at) as updated_at
+        FROM users u
+        LEFT JOIN notification_preferences np ON np.user_id = u.id AND np.project_id = ?
+        WHERE u.is_active = 1
+          AND COALESCE(np.email_enabled, 1) = 1`,
+      )
+      .all(projectId, projectId) as NotificationPreferencesRow[];
 
     return rows.map(mapRowToPreferences);
   },
