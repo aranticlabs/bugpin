@@ -18,6 +18,10 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 // Get log level based on environment
 function getConfiguredLogLevel(): LogLevel {
+  const envLevel = process.env.LOG_LEVEL?.toLowerCase();
+  if (envLevel && envLevel in LOG_LEVEL_PRIORITY) {
+    return envLevel as LogLevel;
+  }
   // debug in development, info in production
   return process.env.NODE_ENV === 'development' ? 'debug' : 'info';
 }
