@@ -209,24 +209,49 @@ function getBackgroundColor(): string {
   return '#ffffff';
 }
 
+// 1x1 transparent PNG used as fallback for cross-origin images that fail to fetch.
+// Avoids slow CORS fetch timeouts during screenshot capture.
+const TRANSPARENT_PIXEL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==';
+
 /**
- * Resilient wrapper around html-to-image's toCanvas.
- * Attempts capture with font embedding first. If it fails (common on pages
- * with cross-origin stylesheets like WordPress), retries with skipFonts: true.
+ * Detect whether the page has cross-origin stylesheets that html-to-image
+ * cannot read. Accessing `cssRules` on a cross-origin sheet throws a
+ * SecurityError - this is what triggers the .trim() crash in html-to-image's
+ * font embedding code.
  */
-async function resilientToCanvas(
-  element: HTMLElement,
-  options: ToCanvasOptions,
-): Promise<HTMLCanvasElement> {
+function hasCrossOriginStyleSheets(): boolean {
   try {
-    return await toCanvas(element, options);
-  } catch (error) {
-    console.warn(
-      '[BugPin] Screenshot capture failed, retrying without font embedding:',
-      error instanceof Error ? error.message : error,
-    );
-    return await toCanvas(element, { ...options, skipFonts: true });
+    for (const sheet of document.styleSheets) {
+      if (sheet.href) {
+        try {
+          void sheet.cssRules;
+        } catch {
+          return true;
+        }
+      }
+    }
+  } catch {
+    return true;
   }
+  return false;
+}
+
+/**
+ * Build capture options adapted to the current page. Same-origin pages get
+ * full font embedding for pixel-perfect screenshots. Pages with cross-origin
+ * stylesheets (WordPress, sites with CDN assets) skip font embedding to avoid
+ * crashes and slow CORS timeouts.
+ */
+function getCaptureDefaults(): ToCanvasOptions {
+  const crossOrigin = hasCrossOriginStyleSheets();
+  if (crossOrigin) {
+    console.log('[BugPin] Cross-origin stylesheets detected, skipping font embedding');
+  }
+  return {
+    skipFonts: crossOrigin,
+    imagePlaceholder: TRANSPARENT_PIXEL,
+  };
 }
 
 /**
@@ -380,6 +405,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
 
       // Capture from origin to the end of the visible viewport
       const toCanvasOptions: Parameters<typeof toCanvas>[1] = {
+        ...getCaptureDefaults(),
         cacheBust: cacheBust ?? false,
         pixelRatio: dpr,
         width: captureWidth,
@@ -388,7 +414,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const fullCanvas = await resilientToCanvas(element, toCanvasOptions);
+      const fullCanvas = await toCanvas(element, toCanvasOptions);
 
       // Debug: log actual canvas dimensions
       console.log('[BugPin] Canvas captured:', {
@@ -447,6 +473,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       const bgColor = getBackgroundColor();
 
       const toCanvasOptions: Parameters<typeof toCanvas>[1] = {
+        ...getCaptureDefaults(),
         cacheBust: cacheBust ?? true, // Default on for fullpage (more likely to have stale images)
         pixelRatio: dpr,
         width: fullWidth,
@@ -455,7 +482,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const canvas = await resilientToCanvas(element, toCanvasOptions);
+      const canvas = await toCanvas(element, toCanvasOptions);
       return canvas.toDataURL('image/png');
     }
 
@@ -465,13 +492,14 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
     const bgColor = getBackgroundColor();
 
     const toCanvasOptions: Parameters<typeof toCanvas>[1] = {
+      ...getCaptureDefaults(),
       cacheBust: cacheBust ?? false, // Default off for element mode
       pixelRatio: dpr,
       backgroundColor: bgColor,
       filter: shouldIncludeNode,
     };
 
-    const canvas = await resilientToCanvas(element, toCanvasOptions);
+    const canvas = await toCanvas(element, toCanvasOptions);
     return canvas.toDataURL('image/png');
   } finally {
     // Restore visibility of all BugPin elements
