@@ -45,7 +45,11 @@ export function Login() {
       await login(data.email, data.password);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      if (err instanceof Error && err.message.includes('401')) {
+        setError('Invalid email or password. Please try again.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
