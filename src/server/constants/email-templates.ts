@@ -231,7 +231,7 @@ export const defaultEmailTemplates: EmailTemplates = {
         Click the button below to accept the invitation and set up your account:
       </p>
       <div style="text-align: center;">
-        <a href="{{invite.url}}" class="button" style="padding: 14px 28px; font-weight: 600;">Accept Invitation</a>
+        <a href="{{invite.url}}" class="button" style="padding: 14px 28px; font-weight: 600; color: white;">Accept Invitation</a>
       </div>
       <p style="font-size: 14px; color: #6b7280;">
         This invitation will expire in {{invite.expiresInDays}} days.
@@ -340,7 +340,7 @@ export function getSampleDataForTemplate(
           name: 'Jane Smith',
         },
         invite: {
-          url: `${appUrl}/accept-invitation?token=sample-token-123`,
+          url: `${appUrl}/admin/accept-invitation?token=sample-token-123`,
           expiresInDays: 7,
         },
       };

@@ -86,7 +86,7 @@ export const invitationsService = {
 
     // Send invitation email
     const appUrl = settings.appUrl || '';
-    const inviteUrl = `${appUrl}/accept-invitation?token=${token}`;
+    const inviteUrl = `${appUrl}/admin/accept-invitation?token=${token}`;
 
     const emailResult = await emailService.sendInvitationEmail(
       { email: user.email, name: user.name },
@@ -146,7 +146,7 @@ export const invitationsService = {
 
     // Send invitation email
     const appUrl = settings.appUrl || '';
-    const inviteUrl = `${appUrl}/accept-invitation?token=${token}`;
+    const inviteUrl = `${appUrl}/admin/accept-invitation?token=${token}`;
 
     const emailResult = await emailService.sendInvitationEmail(
       { email: updatedUser.email, name: updatedUser.name },

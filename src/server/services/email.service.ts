@@ -73,7 +73,7 @@ export const emailService = {
       }
 
       const transporter = nodemailer.createTransport({
-        host: settings.smtpConfig.host,
+        host: sanitizeSmtpHost(settings.smtpConfig.host),
         port: settings.smtpConfig.port || 587,
         secure: settings.smtpConfig.port === 465,
         auth: settings.smtpConfig.user
@@ -288,8 +288,9 @@ export const emailService = {
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
     const withFooter = appendFooterToHtml(compiledHtml, 'invitation');
+    const withFooterCompiled = templateService.compileTemplate(withFooter, templateData);
     const html = applyBrandColor(
-      withFooter,
+      withFooterCompiled,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
     );
 
@@ -314,7 +315,7 @@ export const emailService = {
       }
 
       const transporter = nodemailer.createTransport({
-        host: config.host,
+        host: sanitizeSmtpHost(config.host),
         port: config.port || 587,
         secure: config.port === 465,
         auth: config.user
@@ -370,6 +371,10 @@ export const emailService = {
 };
 
 // Helper Functions
+
+function sanitizeSmtpHost(host: string): string {
+  return host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
 
 function formatStatus(status: string): string {
   const labels: Record<string, string> = {
