@@ -62,6 +62,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
   notifyOnStatusChange: true,
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
+  notifyOnDeletion: true,
 };
 
 const DEFAULT_BRANDING: BrandingSettings = {

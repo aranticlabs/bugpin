@@ -34,6 +34,11 @@ const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: st
     description: 'Sent when a report status changes',
   },
   {
+    value: 'priorityChange',
+    label: 'Priority Change',
+    description: 'Sent when a report priority changes',
+  },
+  {
     value: 'assignment',
     label: 'Assignment',
     description: 'Sent when a report is assigned to someone',
@@ -42,6 +47,11 @@ const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: st
     value: 'invitation',
     label: 'Invitation',
     description: 'Sent when inviting a new user',
+  },
+  {
+    value: 'reportDeleted',
+    label: 'Report Deleted',
+    description: 'Sent when a report is deleted',
   },
   {
     value: 'testEmail',
@@ -77,6 +87,18 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'newStatus',
     'newStatusFormatted',
   ],
+  priorityChange: [
+    'app.name',
+    'app.url',
+    'project.name',
+    'report.title',
+    'report.description',
+    'report.url',
+    'oldPriority',
+    'oldPriorityFormatted',
+    'newPriority',
+    'newPriorityFormatted',
+  ],
   assignment: [
     'app.name',
     'app.url',
@@ -88,6 +110,17 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'assignee.email',
   ],
   invitation: ['app.name', 'inviter.name', 'invite.url', 'invite.expiresInDays'],
+  reportDeleted: [
+    'app.name',
+    'app.url',
+    'project.name',
+    'report.title',
+    'report.description',
+    'report.status',
+    'report.statusFormatted',
+    'report.priority',
+    'report.priorityFormatted',
+  ],
   testEmail: ['app.name'],
 };
 

@@ -186,6 +186,7 @@ describe('Settings Page', () => {
               notifyOnStatusChange: true,
               notifyOnPriorityChange: false,
               notifyOnAssignment: true,
+              notifyOnDeletion: true,
             },
             branding: {
               primaryColor: '#02658D',

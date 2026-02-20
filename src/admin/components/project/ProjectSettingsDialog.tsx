@@ -164,6 +164,7 @@ export function ProjectSettingsDialog({
         notifyOnStatusChange: notificationDefaults.defaultNotifyOnStatusChange,
         notifyOnPriorityChange: notificationDefaults.defaultNotifyOnPriorityChange,
         notifyOnAssignment: notificationDefaults.defaultNotifyOnAssignment,
+        notifyOnDeletion: notificationDefaults.defaultNotifyOnDeletion,
       });
     } else {
       setUseCustomNotifications(false);
@@ -261,6 +262,7 @@ export function ProjectSettingsDialog({
           defaultNotifyOnStatusChange: notificationSettings.notifyOnStatusChange,
           defaultNotifyOnPriorityChange: notificationSettings.notifyOnPriorityChange,
           defaultNotifyOnAssignment: notificationSettings.notifyOnAssignment,
+          defaultNotifyOnDeletion: notificationSettings.notifyOnDeletion,
         });
       } else {
         await deleteNotificationMutation.mutateAsync();

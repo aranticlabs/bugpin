@@ -135,6 +135,7 @@ const notificationDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnStatusChange: false,
   defaultNotifyOnPriorityChange: false,
   defaultNotifyOnAssignment: true,
+  defaultNotifyOnDeletion: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -201,6 +202,7 @@ describe('ProjectSettingsDialog', () => {
         defaultNotifyOnStatusChange: false,
         defaultNotifyOnPriorityChange: false,
         defaultNotifyOnAssignment: true,
+        defaultNotifyOnDeletion: true,
       },
     );
 

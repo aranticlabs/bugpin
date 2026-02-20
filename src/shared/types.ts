@@ -323,6 +323,7 @@ export interface NotificationDefaultSettings {
   notifyOnStatusChange: boolean;
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
+  notifyOnDeletion: boolean;
 }
 
 // Admin Portal button colors
@@ -490,6 +491,7 @@ export interface NotificationPreferences {
   notifyOnStatusChange: boolean;
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
+  notifyOnDeletion: boolean;
   emailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -502,6 +504,7 @@ export interface ProjectNotificationDefaults {
   defaultNotifyOnStatusChange: boolean;
   defaultNotifyOnPriorityChange: boolean;
   defaultNotifyOnAssignment: boolean;
+  defaultNotifyOnDeletion: boolean;
   defaultEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -528,8 +531,10 @@ export interface ApiToken {
 export type EmailTemplateType =
   | 'newReport'
   | 'statusChange'
+  | 'priorityChange'
   | 'assignment'
   | 'invitation'
+  | 'reportDeleted'
   | 'testEmail';
 
 export interface EmailTemplate {
@@ -540,7 +545,9 @@ export interface EmailTemplate {
 export interface EmailTemplates {
   newReport: EmailTemplate;
   statusChange: EmailTemplate;
+  priorityChange: EmailTemplate;
   assignment: EmailTemplate;
   invitation: EmailTemplate;
+  reportDeleted: EmailTemplate;
   testEmail: EmailTemplate;
 }

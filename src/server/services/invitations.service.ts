@@ -86,6 +86,9 @@ export const invitationsService = {
 
     // Send invitation email
     const appUrl = settings.appUrl || '';
+    if (!appUrl) {
+      logger.warn('Application URL is not configured. Invitation links will not work. Please set the Application URL in the settings..');
+    }
     const inviteUrl = `${appUrl}/admin/accept-invitation?token=${token}`;
 
     const emailResult = await emailService.sendInvitationEmail(

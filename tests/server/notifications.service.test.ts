@@ -53,6 +53,7 @@ const basePreferences: NotificationPreferences = {
   notifyOnStatusChange: true,
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
+  notifyOnDeletion: true,
   emailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -65,6 +66,7 @@ const baseDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnStatusChange: true,
   defaultNotifyOnPriorityChange: true,
   defaultNotifyOnAssignment: true,
+  defaultNotifyOnDeletion: true,
   defaultEmailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -97,6 +99,8 @@ let defaultsByProject: ProjectNotificationDefaults | null = baseDefaults;
 const sendNewReportNotification = mock(async () => ({ success: true }));
 const sendStatusChangeNotification = mock(async () => ({ success: true }));
 const sendAssignmentNotification = mock(async () => ({ success: true }));
+const sendPriorityChangeNotification = mock(async () => ({ success: true }));
+const sendReportDeletedNotification = mock(async () => ({ success: true }));
 const sendEmail = mock(async () => ({ success: true }));
 
 beforeEach(() => {
@@ -125,11 +129,15 @@ beforeEach(() => {
   emailService.sendNewReportNotification = sendNewReportNotification;
   emailService.sendStatusChangeNotification = sendStatusChangeNotification;
   emailService.sendAssignmentNotification = sendAssignmentNotification;
+  emailService.sendPriorityChangeNotification = sendPriorityChangeNotification;
+  emailService.sendReportDeletedNotification = sendReportDeletedNotification;
   emailService.sendEmail = sendEmail;
 
   sendNewReportNotification.mockClear();
   sendStatusChangeNotification.mockClear();
   sendAssignmentNotification.mockClear();
+  sendPriorityChangeNotification.mockClear();
+  sendReportDeletedNotification.mockClear();
   sendEmail.mockClear();
 
   logger.info = () => undefined;
@@ -202,6 +210,23 @@ describe('notificationsService notifications', () => {
 
   it('sends priority change notifications', async () => {
     await notificationsService.notifyPriorityChange(baseReport, 'low', 'high');
-    expect(sendEmail).toHaveBeenCalled();
+    expect(sendPriorityChangeNotification).toHaveBeenCalled();
+  });
+
+  it('sends report deleted notifications', async () => {
+    await notificationsService.notifyReportDeleted(baseReport);
+    expect(sendReportDeletedNotification).toHaveBeenCalled();
+  });
+
+  it('skips report deleted notifications when no recipients', async () => {
+    preferencesByProject = [];
+    await notificationsService.notifyReportDeleted(baseReport);
+    expect(sendReportDeletedNotification).not.toHaveBeenCalled();
+  });
+
+  it('skips report deleted notifications when notifyOnDeletion is false', async () => {
+    preferencesByProject = [{ ...basePreferences, notifyOnDeletion: false }];
+    await notificationsService.notifyReportDeleted(baseReport);
+    expect(sendReportDeletedNotification).not.toHaveBeenCalled();
   });
 });

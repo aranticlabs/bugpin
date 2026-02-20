@@ -28,6 +28,7 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
     notifyOnStatusChange: true,
     notifyOnPriorityChange: true,
     notifyOnAssignment: true,
+    notifyOnDeletion: true,
   });
 
   const handleFormChange = (value: Partial<NotificationDefaultSettings>) => {
@@ -50,6 +51,7 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
         notifyOnStatusChange: settings.notificationDefaultNotifyOnStatusChange ?? true,
         notifyOnPriorityChange: settings.notificationDefaultNotifyOnPriorityChange ?? true,
         notifyOnAssignment: settings.notificationDefaultNotifyOnAssignment ?? true,
+        notifyOnDeletion: settings.notificationDefaultNotifyOnDeletion ?? true,
       });
     }
   }, [settings]);
@@ -61,6 +63,7 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
       notificationDefaultNotifyOnStatusChange: boolean;
       notificationDefaultNotifyOnPriorityChange: boolean;
       notificationDefaultNotifyOnAssignment: boolean;
+      notificationDefaultNotifyOnDeletion: boolean;
     }) => {
       const response = await api.put('/settings', data);
       return response.data;
@@ -82,6 +85,7 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
       notificationDefaultNotifyOnStatusChange: formData.notifyOnStatusChange ?? true,
       notificationDefaultNotifyOnPriorityChange: formData.notifyOnPriorityChange ?? true,
       notificationDefaultNotifyOnAssignment: formData.notifyOnAssignment ?? true,
+      notificationDefaultNotifyOnDeletion: formData.notifyOnDeletion ?? true,
     });
   };
 

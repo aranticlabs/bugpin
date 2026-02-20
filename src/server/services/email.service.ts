@@ -84,13 +84,24 @@ export const emailService = {
           : undefined,
       });
 
-      await transporter.sendMail({
-        from: `"${settings.appName}" <${settings.smtpConfig.from}>`,
-        to: options.to.map((r) => (r.name ? `"${r.name}" <${r.email}>` : r.email)).join(', '),
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-      });
+      // Send individual emails per recipient in batches to avoid overwhelming the SMTP server
+      const fromAddress = `"${settings.appName}" <${settings.smtpConfig.from}>`;
+      const batchSize = 10;
+
+      for (let i = 0; i < options.to.length; i += batchSize) {
+        const batch = options.to.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map((recipient) =>
+            transporter.sendMail({
+              from: fromAddress,
+              to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+              subject: options.subject,
+              html: options.html,
+              text: options.text,
+            }),
+          ),
+        );
+      }
 
       logger.info('Email sent successfully', {
         to: options.to.map((r) => r.email),
@@ -204,6 +215,95 @@ export const emailService = {
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
     const withFooter = appendFooterToHtml(compiledHtml, 'statusChange');
+    const html = applyBrandColor(
+      withFooter,
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
+    );
+
+    return this.sendEmail({
+      to: recipients,
+      subject,
+      html,
+    });
+  },
+
+  /**
+   * Send notification email for report priority change
+   */
+  async sendPriorityChangeNotification(
+    recipients: EmailRecipient[],
+    data: ReportEmailData & { oldPriority: string; newPriority: string },
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = await settingsCacheService.getAll();
+    const { report, projectName, reportUrl, oldPriority, newPriority } = data;
+
+    const template = await this.getTemplate('priorityChange');
+    const templateData = {
+      app: {
+        name: settings.appName || 'BugPin',
+        url: settings.appUrl || '',
+      },
+      project: {
+        name: projectName,
+      },
+      report: {
+        title: report.title,
+        description: report.description || '',
+        url: reportUrl,
+      },
+      oldPriority,
+      oldPriorityFormatted: formatPriority(oldPriority),
+      newPriority,
+      newPriorityFormatted: formatPriority(newPriority),
+    };
+
+    const subject = templateService.compileTemplate(template.subject, templateData);
+    const compiledHtml = templateService.compileTemplate(template.html, templateData);
+    const withFooter = appendFooterToHtml(compiledHtml, 'priorityChange');
+    const html = applyBrandColor(
+      withFooter,
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
+    );
+
+    return this.sendEmail({
+      to: recipients,
+      subject,
+      html,
+    });
+  },
+
+  /**
+   * Send notification email for report deletion
+   */
+  async sendReportDeletedNotification(
+    recipients: EmailRecipient[],
+    data: ReportEmailData,
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = await settingsCacheService.getAll();
+    const { report, projectName } = data;
+
+    const template = await this.getTemplate('reportDeleted');
+    const templateData = {
+      app: {
+        name: settings.appName || 'BugPin',
+        url: settings.appUrl || '',
+      },
+      project: {
+        name: projectName,
+      },
+      report: {
+        title: report.title,
+        description: report.description || '',
+        status: report.status,
+        statusFormatted: formatStatus(report.status),
+        priority: report.priority,
+        priorityFormatted: formatPriority(report.priority),
+      },
+    };
+
+    const subject = templateService.compileTemplate(template.subject, templateData);
+    const compiledHtml = templateService.compileTemplate(template.html, templateData);
+    const withFooter = appendFooterToHtml(compiledHtml, 'reportDeleted');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,

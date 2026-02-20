@@ -5,6 +5,7 @@ import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { saveAvatar, deleteAllAvatars } from '../../storage/files.js';
 import { config } from '../../config.js';
+import { settingsCacheService } from '../../services/settings-cache.service.js';
 import type { User } from '@shared/types';
 import * as path from 'path';
 
@@ -80,11 +81,18 @@ users.post('/invite', authorize(['admin']), validate({ body: schemas.inviteUser 
     return c.json({ success: false, error: result.code, message: result.error }, status);
   }
 
+  // Check if App URL is configured - invitation links won't work without it
+  const settings = await settingsCacheService.getAll();
+  const warning = !settings.appUrl
+    ? 'Application URL is not configured. Invitation links will not work. Please set the Application URL in the settings.'
+    : undefined;
+
   return c.json(
     {
       success: true,
       user: result.value,
       message: 'Invitation sent successfully',
+      warning,
     },
     201,
   );
@@ -107,10 +115,16 @@ users.post(
       return c.json({ success: false, error: result.code, message: result.error }, status);
     }
 
+    const settings = await settingsCacheService.getAll();
+    const warning = !settings.appUrl
+      ? 'App URL is not configured. Invitation links will not work. Please set the App URL in Settings.'
+      : undefined;
+
     return c.json({
       success: true,
       user: result.value,
       message: 'Invitation resent successfully',
+      warning,
     });
   },
 );
