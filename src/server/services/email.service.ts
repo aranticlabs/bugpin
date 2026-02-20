@@ -99,8 +99,13 @@ export const emailService = {
 
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to send email', { error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as Record<string, unknown>).message)
+            : String(error);
+      logger.error('Failed to send email', undefined, { error: message });
       return { success: false, error: message };
     }
   },
@@ -352,8 +357,13 @@ export const emailService = {
       logger.info('Test email sent successfully', { to: recipientEmail });
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to send test email', { error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as Record<string, unknown>).message)
+            : String(error);
+      logger.error('Failed to send test email', undefined, { error: message });
       return { success: false, error: message };
     }
   },
