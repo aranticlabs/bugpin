@@ -14,7 +14,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { Spinner } from '../../components/ui/spinner';
-import { Crown, Check, X, ExternalLink, Trash2 } from 'lucide-react';
+import { Crown, Check, ExternalLink, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,11 +34,6 @@ export function LicenseSettings() {
   const { data: status, isLoading } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
-  });
-
-  const { data: features } = useQuery({
-    queryKey: ['license-features'],
-    queryFn: licenseApi.getFeatures,
   });
 
   const activateMutation = useMutation({
@@ -209,64 +204,6 @@ export function LicenseSettings() {
         </CardContent>
       </Card>
 
-      {/* Feature Availability */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Enterprise Features</CardTitle>
-          <CardDescription>Features available with an Enterprise license</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[
-              {
-                id: 'custom-branding',
-                name: 'Custom Branding',
-                description: 'Custom logo, icon, favicon, and colors',
-              },
-              { id: 'sso', name: 'Single Sign-On', description: 'SAML and OIDC authentication' },
-              { id: 'audit-log', name: 'Audit Log', description: 'Track all user actions' },
-              { id: 'api-access', name: 'API Access', description: 'Full REST API access' },
-              {
-                id: 'webhooks',
-                name: 'Webhooks',
-                description: 'Push notifications to external URLs on events',
-              },
-              { id: 'white-label', name: 'White Label', description: 'Remove BugPin branding' },
-              {
-                id: 'email-templates',
-                name: 'Email Templates',
-                description: 'Customize email notification templates',
-              },
-              {
-                id: 's3-storage',
-                name: 'S3 Storage',
-                description: 'Store uploads in S3-compatible object storage',
-              },
-            ].map((feature) => {
-              const isEnabled = features?.features?.[feature.id] ?? false;
-              return (
-                <div key={feature.id} className="flex items-center justify-between py-2">
-                  <div>
-                    <p className="font-medium">{feature.name}</p>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
-                  </div>
-                  {isEnabled ? (
-                    <Badge variant="default" className="bg-green-600">
-                      <Check className="h-3 w-3 mr-1" />
-                      Enabled
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">
-                      <X className="h-3 w-3 mr-1" />
-                      Locked
-                    </Badge>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
