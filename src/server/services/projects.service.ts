@@ -20,18 +20,11 @@ export interface UpdateProjectInput {
 
 // Service
 
-// Return type for create that includes the one-time API key
-export interface CreateProjectResult {
-  project: Project;
-  apiKey: string; // Full API key, only available on create
-}
-
 export const projectsService = {
   /**
    * Create a new project
-   * Returns the project and the full API key (only time it's available)
    */
-  async create(input: CreateProjectInput): Promise<Result<CreateProjectResult>> {
+  async create(input: CreateProjectInput): Promise<Result<Project>> {
     // Validate name
     if (!input.name || input.name.trim().length < 2) {
       return Result.fail('Project name must be at least 2 characters', 'INVALID_NAME');
@@ -46,10 +39,10 @@ export const projectsService = {
       settings: input.settings ?? {},
     };
 
-    const { project, apiKey } = await projectsRepo.create(projectData);
+    const project = await projectsRepo.create(projectData);
 
     logger.info('Project created', { projectId: project.id, name: project.name });
-    return Result.ok({ project, apiKey });
+    return Result.ok(project);
   },
 
   /**
@@ -153,21 +146,21 @@ export const projectsService = {
   /**
    * Regenerate API key for a project
    */
-  async regenerateApiKey(id: string): Promise<Result<string>> {
+  async regenerateApiKey(id: string): Promise<Result<Project>> {
     const existing = await projectsRepo.findById(id);
 
     if (!existing) {
       return Result.fail('Project not found', 'NOT_FOUND');
     }
 
-    const newApiKey = await projectsRepo.regenerateApiKey(id);
+    const project = await projectsRepo.regenerateApiKey(id);
 
-    if (!newApiKey) {
+    if (!project) {
       return Result.fail('Failed to regenerate API key', 'REGENERATE_FAILED');
     }
 
     logger.info('API key regenerated', { projectId: id });
-    return Result.ok(newApiKey);
+    return Result.ok(project);
   },
 
   /**

@@ -139,13 +139,13 @@ describe('Projects Page', () => {
       expect(screen.getByText('API Key')).toBeInTheDocument();
     });
 
-    // Find the API key code element - it should contain the prefix with ellipsis
+    // Find the API key code element - it should contain the API key
     const codeElements = document.querySelectorAll('code');
     const apiKeyCode = Array.from(codeElements).find((el) =>
       el.textContent?.includes('test-api-key-123'),
     );
     expect(apiKeyCode).toBeTruthy();
-    expect(apiKeyCode?.textContent).toContain('test-api-key-123...');
+    expect(apiKeyCode?.textContent).toContain('test-api-key-123');
 
     // Find widget snippet section
     const snippetLabels = screen.getAllByText('Widget Snippet');
@@ -156,7 +156,7 @@ describe('Projects Page', () => {
     expect(snippetSection).toBeInTheDocument();
 
     const snippetPre = snippetSection?.querySelector('pre');
-    expect(snippetPre?.textContent).toContain('data-api-key="YOUR_API_KEY"');
+    expect(snippetPre?.textContent).toContain('data-api-key="test-api-key-123"');
   });
 
   it('creates a project with trimmed name and validates required fields', async () => {

@@ -72,6 +72,7 @@ export async function initSchema(): Promise<void> {
       name TEXT NOT NULL,
       api_key_hash TEXT UNIQUE NOT NULL,
       api_key_prefix TEXT NOT NULL,
+      api_key TEXT NOT NULL DEFAULT '',
       settings JSON DEFAULT '{}',
       reports_count INTEGER DEFAULT 0 NOT NULL,
       is_active INTEGER DEFAULT 1 NOT NULL CHECK(is_active IN (0, 1)),
@@ -91,6 +92,13 @@ export async function initSchema(): Promise<void> {
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_projects_position ON projects(position ASC) WHERE deleted_at IS NULL`,
   );
+
+  // Add api_key column to existing databases (stores full key for display in admin)
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN api_key TEXT NOT NULL DEFAULT ''`);
+  } catch {
+    // Column already exists
+  }
 
   // Users table
   db.exec(`

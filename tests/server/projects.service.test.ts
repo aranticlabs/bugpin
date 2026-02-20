@@ -29,7 +29,7 @@ let projectById: Project | null = baseProject;
 let projectByApiKey: Project | null = baseProject;
 let lastProjectUpdates: unknown;
 let updateReturnsProject: Project | null = baseProject;
-let regenerateApiKeyValue: string | null = 'proj_new';
+let regenerateApiKeyProject: Project | null = { ...baseProject, apiKey: 'proj_new' };
 let deletedProjectId: string | null = null;
 
 beforeEach(() => {
@@ -37,12 +37,11 @@ beforeEach(() => {
   projectByApiKey = baseProject;
   lastProjectUpdates = undefined;
   updateReturnsProject = baseProject;
-  regenerateApiKeyValue = 'proj_new';
+  regenerateApiKeyProject = { ...baseProject, apiKey: 'proj_new' };
   deletedProjectId = null;
 
   projectsRepo.create = async (input) => {
-    const project = { ...baseProject, ...input, id: 'prj_new' };
-    return { project, apiKey: 'proj_new_key' };
+    return { ...baseProject, ...input, id: 'prj_new', apiKey: 'proj_new_key' };
   };
   projectsRepo.findById = async () => projectById;
   projectsRepo.findByApiKey = async () => projectByApiKey;
@@ -55,7 +54,7 @@ beforeEach(() => {
     deletedProjectId = id;
     return true;
   };
-  projectsRepo.regenerateApiKey = async () => regenerateApiKeyValue;
+  projectsRepo.regenerateApiKey = async () => regenerateApiKeyProject;
 
   reportsRepo.countByProject = async () => 7;
   webhooksRepo.findByProjectId = async () => [{ id: 'whk_1' }] as never;
@@ -82,7 +81,7 @@ describe('projectsService.create', () => {
     const result = await projectsService.create({ name: ' Project ' });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.value.project.name).toBe('Project');
+      expect(result.value.name).toBe('Project');
     }
   });
 });
@@ -160,16 +159,16 @@ describe('projectsService.regenerateApiKey', () => {
   });
 
   it('returns failure when api key regeneration fails', async () => {
-    regenerateApiKeyValue = null;
+    regenerateApiKeyProject = null;
     const result = await projectsService.regenerateApiKey('prj_1');
     expect(result.success).toBe(false);
   });
 
-  it('returns new api key when successful', async () => {
+  it('returns project with new api key when successful', async () => {
     const result = await projectsService.regenerateApiKey('prj_1');
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.value).toBe('proj_new');
+      expect(result.value.apiKey).toBe('proj_new');
     }
   });
 });
