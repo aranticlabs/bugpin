@@ -25,6 +25,13 @@ COPY . .
 # Build admin portal and widget
 RUN bun run build:admin && bun run build:widget
 
+# Build EE module (compile TypeScript to JavaScript) if submodule is present
+# Create stub files for CE-only builds so COPY commands don't fail
+RUN if [ -d "ee/src" ]; then cd ee && bun run build.ts; fi && \
+    mkdir -p ee/dist && \
+    (test -f ee/package.json || echo '{}' > ee/package.json) && \
+    (test -f ee/tsconfig.json || echo '{}' > ee/tsconfig.json)
+
 # =============================================================================
 # Stage 2: Production
 # =============================================================================
@@ -51,8 +58,10 @@ COPY package.json ./
 COPY src/server ./src/server
 COPY src/shared ./src/shared
 
-# Copy Enterprise Edition module (from builder, which includes submodule if initialized)
-COPY --from=builder /app/ee ./ee
+# Copy Enterprise Edition compiled output only (no TypeScript source)
+COPY --from=builder /app/ee/dist ./ee/dist
+COPY --from=builder /app/ee/package.json ./ee/package.json
+COPY --from=builder /app/ee/tsconfig.json ./ee/tsconfig.json
 
 # Copy built frontend assets from builder
 COPY --from=builder /app/dist/admin ./dist/admin
