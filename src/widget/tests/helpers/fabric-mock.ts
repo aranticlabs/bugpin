@@ -1,6 +1,11 @@
 import { mock } from 'bun:test';
 
 class FabricObject {
+  static ownDefaults: Record<string, unknown> = {
+    originX: 'left',
+    originY: 'top',
+  };
+
   data?: Record<string, unknown>;
   left = 0;
   top = 0;
@@ -130,7 +135,7 @@ class Canvas {
     return undefined;
   }
 
-  getPointer(event?: { clientX?: number; clientY?: number }) {
+  getScenePoint(event?: { clientX?: number; clientY?: number }) {
     return { x: event?.clientX ?? 0, y: event?.clientY ?? 0 };
   }
 

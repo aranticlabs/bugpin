@@ -52,7 +52,7 @@
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "fabric": "^6.4.0",
+    "fabric": "^7.2.0",
     "html-to-image": "^1.11.0",
     "idb": "^8.0.0",
     "lucide-preact": "^0.460.0",

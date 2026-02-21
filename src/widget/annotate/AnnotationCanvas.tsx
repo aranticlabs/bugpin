@@ -34,6 +34,11 @@ interface FabricObjectWithData extends fabric.FabricObject {
   data?: PixelateData;
 }
 
+// Fabric v7 changed origin defaults from 'left'/'top' to 'center' — override back
+// since all positioning code assumes top-left origin
+fabric.FabricObject.ownDefaults.originX = 'left';
+fabric.FabricObject.ownDefaults.originY = 'top';
+
 // Extend Fabric serialization to include custom 'data' field (with HMR guard)
 const TO_OBJECT_PATCHED = Symbol.for('bugpin-toObject-patched');
 if (!(fabric.FabricObject.prototype as unknown as Record<symbol, boolean>)[TO_OBJECT_PATCHED]) {
@@ -348,12 +353,11 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
       // Don't start drawing if clicking on an existing object (allow moving/selecting instead)
       // Use findTarget for robustness with group selection and disabled selection states
-      if (e.target || fabricRef.current?.findTarget(e.e as MouseEvent)) return;
+      if (e.target || fabricRef.current?.findTarget(e.e as MouseEvent).target) return;
 
       isDrawingRef.current = true;
       const canvas = fabricRef.current;
-      // Use getPointer for correct canvas coordinates under zoom/pan
-      const pointer = canvas.getPointer(e.e);
+      const pointer = e.scenePoint;
 
       let shape: fabric.FabricObject | null = null;
 
@@ -463,8 +467,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       ._drawingShape;
     if (!drawingShape || !drawingShape._startPoint) return;
 
-    // Use getPointer for correct canvas coordinates under zoom/pan
-    const pointer = canvas.getPointer(e.e);
+    const pointer = e.scenePoint;
     const startPoint = drawingShape._startPoint;
 
     if (drawingShape instanceof fabric.Rect) {
