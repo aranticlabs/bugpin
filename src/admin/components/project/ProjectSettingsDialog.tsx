@@ -13,6 +13,7 @@ import type {
 } from '@shared/types';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -278,8 +279,8 @@ export function ProjectSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] min-h-[67vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-3xl max-h-[85vh] min-h-[67vh]">
+        <DialogHeader>
           <DialogTitle>Project Settings</DialogTitle>
           <DialogDescription>Configure settings for "{project.name}"</DialogDescription>
         </DialogHeader>
@@ -289,22 +290,22 @@ export function ProjectSettingsDialog({
             <Spinner className="text-primary" />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto py-4 pr-4">
-            <Tabs
-              value={activeTab}
-              onValueChange={(v) => setActiveTab(v as typeof activeTab)}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="widgetDialog">Widget Dialog</TabsTrigger>
-                <TabsTrigger value="widgetLauncherButton">Widget Button</TabsTrigger>
-                <TabsTrigger value="screenshot">Screenshot</TabsTrigger>
-                <TabsTrigger value="notifications">Notifications</TabsTrigger>
-                <TabsTrigger value="whitelists">Whitelists</TabsTrigger>
-              </TabsList>
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as typeof activeTab)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <TabsList className="grid w-full flex-shrink-0 grid-cols-5">
+              <TabsTrigger value="widgetDialog">Widget Dialog</TabsTrigger>
+              <TabsTrigger value="widgetLauncherButton">Widget Button</TabsTrigger>
+              <TabsTrigger value="screenshot">Screenshot</TabsTrigger>
+              <TabsTrigger value="notifications">Notifications</TabsTrigger>
+              <TabsTrigger value="whitelists">Whitelists</TabsTrigger>
+            </TabsList>
 
+            <DialogBody className="flex-1 pt-4">
               {/* Widget Dialog Tab (dialog colors) */}
-              <TabsContent value="widgetDialog" className="mt-4">
+              <TabsContent value="widgetDialog" className="mt-0">
                 <WidgetDialogSettingsForm
                   value={widgetDialogSettings}
                   onChange={setWidgetDialogSettings}
@@ -316,7 +317,7 @@ export function ProjectSettingsDialog({
               </TabsContent>
 
               {/* Widget Launcher Button Tab */}
-              <TabsContent value="widgetLauncherButton" className="mt-4">
+              <TabsContent value="widgetLauncherButton" className="mt-0">
                 <WidgetLauncherButtonSettingsForm
                   value={buttonSettings}
                   onChange={setButtonSettings}
@@ -329,7 +330,7 @@ export function ProjectSettingsDialog({
               </TabsContent>
 
               {/* Screenshot Tab */}
-              <TabsContent value="screenshot" className="mt-4">
+              <TabsContent value="screenshot" className="mt-0">
                 <ScreenshotSettingsForm
                   value={screenshotSettings}
                   onChange={setScreenshotSettings}
@@ -341,7 +342,7 @@ export function ProjectSettingsDialog({
               </TabsContent>
 
               {/* Notifications Tab */}
-              <TabsContent value="notifications" className="mt-4">
+              <TabsContent value="notifications" className="mt-0">
                 <NotificationSettingsForm
                   value={notificationSettings}
                   onChange={setNotificationSettings}
@@ -353,7 +354,7 @@ export function ProjectSettingsDialog({
               </TabsContent>
 
               {/* Domain Whitelists Tab */}
-              <TabsContent value="whitelists" className="mt-4">
+              <TabsContent value="whitelists" className="mt-0">
                 <ProjectWhitelistForm
                   value={whitelistSettings}
                   onChange={setWhitelistSettings}
@@ -362,11 +363,11 @@ export function ProjectSettingsDialog({
                   onCustomToggle={setUseCustomWhitelist}
                 />
               </TabsContent>
-            </Tabs>
-          </div>
+            </DialogBody>
+          </Tabs>
         )}
 
-        <DialogFooter className="flex-shrink-0 border-t pt-4">
+        <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

@@ -26,10 +26,6 @@ vi.mock('../../components/SyncExistingReportsDialog', () => ({
   SyncExistingReportsDialog: () => null,
 }));
 
-vi.mock('../../components/GitHubTokenHelpDialog', () => ({
-  GitHubTokenHelpDialog: () => null,
-}));
-
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
@@ -138,6 +134,7 @@ describe('IntegrationDialog', () => {
           accessToken: 'token-123',
           labels: ['bug'],
           assignees: ['alice'],
+          fileTransferMode: 'link',
         },
       });
     });
@@ -181,6 +178,7 @@ describe('IntegrationDialog', () => {
             accessToken: 'new-token',
             labels: ['bug'],
             assignees: ['alice'],
+            fileTransferMode: 'link',
           },
         },
       });

@@ -23,6 +23,7 @@ import {
 import { SyncExistingReportsDialog } from './SyncExistingReportsDialog';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -48,7 +49,6 @@ import { Spinner } from './ui/spinner';
 import { toast } from 'sonner';
 import { Checkbox } from './ui/checkbox';
 import { Switch } from './ui/switch';
-import { GitHubTokenHelpDialog } from './GitHubTokenHelpDialog';
 
 interface IntegrationDialogProps {
   open: boolean;
@@ -109,7 +109,6 @@ export function IntegrationDialog({
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string>('');
-  const [showTokenHelp, setShowTokenHelp] = useState(false);
   const [availableLabels, setAvailableLabels] = useState<GitHubLabel[]>([]);
   const [availableAssignees, setAvailableAssignees] = useState<GitHubAssignee[]>([]);
   const [enableLabels, setEnableLabels] = useState(false);
@@ -401,8 +400,8 @@ export function IntegrationDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-3xl">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh]">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex min-h-0 flex-1 flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{isEditing ? 'Edit Integration' : 'Add Integration'}</DialogTitle>
               <DialogDescription>
@@ -410,7 +409,7 @@ export function IntegrationDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-3 flex-1">
               <div className="space-y-2">
                 <Label htmlFor="name">
                   Integration Name <span className="text-destructive">*</span>
@@ -486,14 +485,15 @@ export function IntegrationDialog({
                 )}
 
                 <p className="text-sm text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => setShowTokenHelp(true)}
+                  <a
+                    href="https://docs.bugpin.io/integrations/github"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-primary hover:underline"
                   >
                     <HelpCircle className="h-3.5 w-3.5" />
                     How to create a GitHub token
-                  </button>
+                  </a>
                   {(!isEditing || showTokenInput) && (
                     <>
                       {' · '}
@@ -559,16 +559,9 @@ export function IntegrationDialog({
               </div>
 
               {/* Labels Toggle */}
-              <div className="space-y-3 border rounded-lg p-4">
+              <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enable-labels" className="text-base">
-                      Add labels to issues
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically apply labels when forwarding reports
-                    </p>
-                  </div>
+                  <Label htmlFor="enable-labels">Add labels to issues</Label>
                   <Switch
                     id="enable-labels"
                     checked={enableLabels}
@@ -580,24 +573,17 @@ export function IntegrationDialog({
                 {enableLabels && (
                   <div className="pt-2 border-t">
                     {labelsError ? (
-                      <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4">
-                        <div className="flex items-start gap-2">
-                          <HelpCircle className="h-4 w-4 text-amber-600 mt-0.5" />
-                          <div className="text-amber-800 dark:text-amber-200">
-                            <p className="font-medium">Unable to load labels</p>
-                            <p className="mt-1 text-sm">
-                              Your token needs <strong>Metadata: Read</strong> permission.{' '}
-                              <button
-                                type="button"
-                                onClick={() => setShowTokenHelp(true)}
-                                className="underline hover:no-underline"
-                              >
-                                View token setup
-                              </button>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        Unable to load labels. Token needs <strong>Metadata: Read</strong> permission.{' '}
+                        <a
+                          href="https://docs.bugpin.io/integrations/github"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:no-underline"
+                        >
+                          View setup guide
+                        </a>
+                      </p>
                     ) : fetchLabelsMutation.isPending ? (
                       <p className="text-sm text-muted-foreground flex items-center gap-2">
                         <Spinner size="xs" />
@@ -605,7 +591,7 @@ export function IntegrationDialog({
                       </p>
                     ) : availableLabels.length > 0 ? (
                       <div className="space-y-2">
-                        <div className="border rounded-md p-3 max-h-32 overflow-y-auto space-y-2">
+                        <div className="border rounded-md p-2 max-h-28 overflow-y-auto space-y-1">
                           {availableLabels.map((label) => (
                             <div key={label.name} className="flex items-center space-x-2">
                               <Checkbox
@@ -650,16 +636,9 @@ export function IntegrationDialog({
               </div>
 
               {/* Assignees Toggle */}
-              <div className="space-y-3 border rounded-lg p-4">
+              <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enable-assignees" className="text-base">
-                      Assign issues to users
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically assign team members when forwarding reports
-                    </p>
-                  </div>
+                  <Label htmlFor="enable-assignees">Assign issues to users</Label>
                   <Switch
                     id="enable-assignees"
                     checked={enableAssignees}
@@ -671,24 +650,17 @@ export function IntegrationDialog({
                 {enableAssignees && (
                   <div className="pt-2 border-t">
                     {assigneesError ? (
-                      <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4">
-                        <div className="flex items-start gap-2">
-                          <HelpCircle className="h-4 w-4 text-amber-600 mt-0.5" />
-                          <div className="text-amber-800 dark:text-amber-200">
-                            <p className="font-medium">Unable to load assignees</p>
-                            <p className="mt-1 text-sm">
-                              Your token needs <strong>Metadata: Read</strong> permission.{' '}
-                              <button
-                                type="button"
-                                onClick={() => setShowTokenHelp(true)}
-                                className="underline hover:no-underline"
-                              >
-                                View token setup
-                              </button>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        Unable to load assignees. Token needs <strong>Metadata: Read</strong> permission.{' '}
+                        <a
+                          href="https://docs.bugpin.io/integrations/github"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:no-underline"
+                        >
+                          View setup guide
+                        </a>
+                      </p>
                     ) : fetchAssigneesMutation.isPending ? (
                       <p className="text-sm text-muted-foreground flex items-center gap-2">
                         <Spinner size="xs" />
@@ -696,7 +668,7 @@ export function IntegrationDialog({
                       </p>
                     ) : availableAssignees.length > 0 ? (
                       <div className="space-y-2">
-                        <div className="border rounded-md p-3 max-h-32 overflow-y-auto space-y-2">
+                        <div className="border rounded-md p-2 max-h-28 overflow-y-auto space-y-1">
                           {availableAssignees.map((assignee) => (
                             <div key={assignee.login} className="flex items-center space-x-2">
                               <Checkbox
@@ -742,17 +714,9 @@ export function IntegrationDialog({
               </div>
 
               {/* File Transfer Mode Toggle */}
-              <div className="space-y-3 border rounded-lg p-4">
+              <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enable-upload" className="text-base">
-                      Upload files to GitHub
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Upload report files directly to the repository. Recommended if your BugPin
-                      server is not publicly accessible.
-                    </p>
-                  </div>
+                  <Label htmlFor="enable-upload">Upload files to GitHub</Label>
                   <Switch
                     id="enable-upload"
                     checked={fileTransferMode === 'upload'}
@@ -763,26 +727,21 @@ export function IntegrationDialog({
                 </div>
                 {fileTransferMode === 'upload' && (
                   <p className="text-xs text-muted-foreground pt-2 border-t">
-                    Images and GIFs under 10 MB will be uploaded as commits to{' '}
+                    Files under 10 MB uploaded to{' '}
                     {watchedOwner && watchedRepo
                       ? `${watchedOwner}/${watchedRepo}`
                       : 'your repository'}
-                    . Videos and files over 10 MB will link to your BugPin server instead.
+                    . Requires{' '}
+                    <strong>Contents: Read and write</strong> permission (fine-grained) or{' '}
+                    <code className="px-1 py-0.5 bg-muted rounded">repo</code> scope (classic).
                   </p>
                 )}
               </div>
 
               {/* Automatic Sync Toggle */}
-              <div className="space-y-3 border rounded-lg p-4">
+              <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enable-sync" className="text-base">
-                      Automatic sync
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically create GitHub issues for new reports
-                    </p>
-                  </div>
+                  <Label htmlFor="enable-sync">Automatic sync</Label>
                   <Switch
                     id="enable-sync"
                     checked={syncMode === 'automatic'}
@@ -792,12 +751,12 @@ export function IntegrationDialog({
                 </div>
                 {syncMode === 'automatic' && (
                   <p className="text-xs text-muted-foreground pt-2 border-t">
-                    New reports will be automatically synced to GitHub. Changes to GitHub issues
-                    (closed/reopened) will update report status in BugPin.
+                    New reports synced automatically. GitHub issue changes (closed/reopened) update
+                    BugPin status.
                   </p>
                 )}
               </div>
-            </div>
+            </DialogBody>
 
             <DialogFooter>
               {isEditing && (
@@ -836,8 +795,6 @@ export function IntegrationDialog({
           </form>
         </DialogContent>
       </Dialog>
-
-      <GitHubTokenHelpDialog open={showTokenHelp} onClose={() => setShowTokenHelp(false)} />
 
       {integration && (
         <SyncExistingReportsDialog
