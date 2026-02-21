@@ -9,7 +9,7 @@ export interface BrandingConfig {
   iconDarkUrl: string | null;
   faviconLightVersion: string;
   faviconDarkVersion: string;
-  // Admin Portal button colors
+  // Admin Console button colors
   adminThemeColors: ThemeColors;
   // Widget primary theme colors (for modal/popup UI)
   widgetPrimaryColors: ThemeColors;

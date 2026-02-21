@@ -165,7 +165,7 @@ export const settingsUpdateSchema = z.object({
   notifications: notificationSettingsSchema.optional(),
   // Branding settings
   branding: brandingSettingsSchema.optional(),
-  // Admin Portal settings
+  // Admin Console settings
   adminButton: themeColorsSchema.optional(),
 });
 

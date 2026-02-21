@@ -62,7 +62,7 @@ const tabConfigs: Record<MainTabValue, SubTab[]> = {
   design: [
     { hash: 'widgetLauncherButton', label: 'Widget Button' },
     { hash: 'widgetDialog', label: 'Widget Dialog' },
-    { hash: 'design', label: 'Admin Portal' },
+    { hash: 'design', label: 'Admin Console' },
   ],
   notifications: [
     { hash: 'notifications', label: 'SMTP' },
@@ -144,7 +144,7 @@ export function Settings() {
   // Hidden outer tabs - controlled by activeMainTab derived from hash
   return (
     <Tabs value={activeMainTab}>
-      <TabsContent value="system" className="max-w-2xl mt-0">
+      <TabsContent value="system" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="system" activeHash={activeHash}>
           <SystemSettings />
           <ScreenshotSettings />
@@ -152,7 +152,7 @@ export function Settings() {
         </SubPageTabs>
       </TabsContent>
 
-      <TabsContent value="design" className="max-w-2xl mt-0">
+      <TabsContent value="design" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="design" activeHash={activeHash}>
           <WidgetLauncherButtonSettings />
           <WidgetDialogSettings />
@@ -160,26 +160,26 @@ export function Settings() {
         </SubPageTabs>
       </TabsContent>
 
-      <TabsContent value="notifications" className="max-w-4xl mt-0">
+      <TabsContent value="notifications" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="notifications" activeHash={activeHash}>
           <SMTPSettings />
           <EmailTemplatesSettings />
         </SubPageTabs>
       </TabsContent>
 
-      <TabsContent value="security" className="max-w-4xl mt-0">
+      <TabsContent value="security" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="security" activeHash={activeHash}>
           <SecuritySettings />
         </SubPageTabs>
       </TabsContent>
 
-      <TabsContent value="users" className="max-w-4xl mt-0">
+      <TabsContent value="users" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="users" activeHash={activeHash}>
           <UsersSettings />
         </SubPageTabs>
       </TabsContent>
 
-      <TabsContent value="license" className="max-w-2xl mt-0">
+      <TabsContent value="license" className="max-w-3xl mt-0">
         <SubPageTabs mainTab="license" activeHash={activeHash}>
           <LicenseSettings />
         </SubPageTabs>

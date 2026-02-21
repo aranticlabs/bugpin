@@ -55,7 +55,7 @@ export interface UpdateSettingsInput {
   notifications?: Partial<NotificationDefaultSettings>;
   // Branding settings
   branding?: Partial<BrandingSettings>;
-  // Admin Portal settings
+  // Admin Console settings
   adminButton?: Partial<AdminButtonColors>;
 }
 
@@ -220,7 +220,7 @@ export const settingsService = {
       updates.branding = input.branding as BrandingSettings;
     }
 
-    // Admin Portal settings
+    // Admin Console settings
     if (input.adminButton !== undefined) {
       updates.adminButton = input.adminButton as AdminButtonColors;
     }

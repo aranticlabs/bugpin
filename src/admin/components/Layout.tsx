@@ -11,7 +11,7 @@ const hashToLabel: Record<string, string> = {
   system: 'System',
   screenshot: 'Screenshot',
   storage: 'Storage',
-  design: 'Admin Portal',
+  design: 'Admin Console',
   widgetDialog: 'Widget Dialog',
   widgetLauncherButton: 'Widget Button',
   notifications: 'SMTP',

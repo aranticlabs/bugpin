@@ -38,7 +38,7 @@ src/
 |-----------|------------|
 | Server | Bun runtime, Hono framework |
 | Database | SQLite (single file) |
-| Admin Portal | React 18, Vite, TanStack Query |
+| Admin Console | React 18, Vite, TanStack Query |
 | Widget | Preact, Shadow DOM |
 | Auth | Session-based, bcrypt |
 

@@ -326,7 +326,7 @@ export interface NotificationDefaultSettings {
   notifyOnDeletion: boolean;
 }
 
-// Admin Portal button colors
+// Admin Console button colors
 export interface AdminButtonColors {
   lightButtonColor: string;
   lightTextColor: string;
@@ -424,7 +424,7 @@ export interface AppSettings {
   notifications: NotificationDefaultSettings;
   // Branding settings
   branding: BrandingSettings;
-  // Admin Portal settings
+  // Admin Console settings
   adminButton: AdminButtonColors;
   // Email templates (optional - uses defaults if not set)
   emailTemplates?: EmailTemplates;

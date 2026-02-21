@@ -36,7 +36,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
           <div>
             <p className="text-sm font-semibold text-foreground">License</p>
             <p className="text-sm text-muted-foreground">
-              AGPL-3.0 (Server/Admin Portal), MIT (Widget)
+              AGPL-3.0 (Server/Admin Console), MIT (Widget)
             </p>
             <a
               href={LICENSE_URL}

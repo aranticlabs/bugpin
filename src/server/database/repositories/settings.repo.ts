@@ -195,7 +195,7 @@ export const settingsRepo = {
         ...DEFAULT_BRANDING,
         ...(settings.branding as Partial<BrandingSettings>),
       },
-      // Admin Portal settings
+      // Admin Console settings
       adminButton: {
         ...DEFAULT_ADMIN_BUTTON,
         ...(settings.adminButton as Partial<AdminButtonColors>),

@@ -61,7 +61,7 @@ export class SettingsCacheService implements ISettingsCacheService {
 
   /**
    * Invalidate cached settings (forces next getAll() to fetch from DB).
-   * Call this when settings are updated via the Admin Portal.
+   * Call this when settings are updated via the Admin Console.
    */
   invalidate(): void {
     this.cache = null;
