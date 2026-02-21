@@ -52,6 +52,8 @@ interface ReportItem {
   priority: string;
   createdAt: string;
   metadata?: { url?: string };
+  reporterEmail?: string;
+  reporterName?: string;
   githubSyncStatus?: 'pending' | 'synced' | 'error' | null;
   githubIssueNumber?: number | null;
   githubIssueUrl?: string | null;
@@ -465,6 +467,11 @@ export function Reports() {
                     <p className="text-sm text-muted-foreground truncate max-w-xs">
                       {report.metadata?.url || 'No URL'}
                     </p>
+                    {report.reporterEmail && (
+                      <p className="text-xs text-muted-foreground">
+                        {report.reporterName || report.reporterEmail}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span className="text-sm text-muted-foreground">

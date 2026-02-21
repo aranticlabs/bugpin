@@ -323,11 +323,16 @@ async function buildIssueBody(
   const appUrl = settings.appUrl || '';
   const reportUrl = appUrl ? `${appUrl}/admin/reports/${report.id}` : '';
 
+  const reporterInfo = report.reporterName
+    ? `${report.reporterName}${report.reporterEmail ? ` (${report.reporterEmail})` : ''}`
+    : report.reporterEmail || null;
+
   let body = `## Bug Report
 
 **URL:** ${metadata.url || 'N/A'}
 ${metadata.title ? `**Page Title:** ${metadata.title}` : ''}
 ${metadata.referrer ? `**Referrer:** ${metadata.referrer}` : ''}
+${reporterInfo ? `**Reporter:** ${reporterInfo}` : ''}
 
 ### Description
 ${report.description || 'No description provided.'}

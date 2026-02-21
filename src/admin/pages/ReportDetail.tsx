@@ -701,10 +701,15 @@ export function ReportDetail() {
                 <Label className="text-muted-foreground">Created</Label>
                 <p className="text-sm">{new Date(report.createdAt).toLocaleString()}</p>
               </div>
-              {report.reporterEmail && (
+              {(report.reporterEmail || report.reporterName) && (
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Reporter</Label>
-                  <p className="text-sm">{report.reporterName || report.reporterEmail}</p>
+                  {report.reporterName && (
+                    <p className="text-sm">{report.reporterName}</p>
+                  )}
+                  {report.reporterEmail && (
+                    <p className="text-sm text-muted-foreground">{report.reporterEmail}</p>
+                  )}
                 </div>
               )}
             </CardContent>
