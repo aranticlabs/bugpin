@@ -476,6 +476,7 @@ export const handlers = [
           notifyOnStatusChange: true,
           notifyOnPriorityChange: false,
           notifyOnAssignment: true,
+          notifyOnDeletion: true,
         },
         branding: {
           primaryColor: '#02658D',

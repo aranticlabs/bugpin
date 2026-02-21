@@ -55,9 +55,7 @@ projects.post('/', authorize(['admin']), validate({ body: schemas.createProject 
   return c.json(
     {
       success: true,
-      project: result.value.project,
-      apiKey: result.value.apiKey, // Full API key, only available on create
-      showApiKeyOnce: true, // Flag for UI to show the "save your key" modal
+      project: result.value,
     },
     201,
   );
@@ -123,8 +121,7 @@ projects.post(
 
     return c.json({
       success: true,
-      apiKey: result.value, // Full API key, only available on regenerate
-      showApiKeyOnce: true, // Flag for UI to show the "save your key" modal
+      project: result.value,
     });
   },
 );

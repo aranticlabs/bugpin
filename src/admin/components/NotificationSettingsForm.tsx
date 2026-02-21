@@ -33,6 +33,8 @@ export function NotificationSettingsForm({
     value.notifyOnPriorityChange ?? globalSettings?.notifications.notifyOnPriorityChange ?? true;
   const effectiveNotifyOnAssignment =
     value.notifyOnAssignment ?? globalSettings?.notifications.notifyOnAssignment ?? true;
+  const effectiveNotifyOnDeletion =
+    value.notifyOnDeletion ?? globalSettings?.notifications.notifyOnDeletion ?? true;
 
   return (
     <div className="space-y-4">
@@ -60,6 +62,7 @@ export function NotificationSettingsForm({
                   notifyOnStatusChange: undefined,
                   notifyOnPriorityChange: undefined,
                   notifyOnAssignment: undefined,
+                  notifyOnDeletion: undefined,
                 });
               }
             }}
@@ -152,6 +155,22 @@ export function NotificationSettingsForm({
                   id="default-assignment"
                   checked={effectiveNotifyOnAssignment}
                   onCheckedChange={(checked) => onChange({ ...value, notifyOnAssignment: checked })}
+                  disabled={disabled}
+                />
+              </div>
+
+              {/* Deletions */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="default-deletion" className="text-sm font-normal">
+                    Deletions
+                  </Label>
+                  <p className="text-xs text-muted-foreground">Notify when reports are deleted</p>
+                </div>
+                <Switch
+                  id="default-deletion"
+                  checked={effectiveNotifyOnDeletion}
+                  onCheckedChange={(checked) => onChange({ ...value, notifyOnDeletion: checked })}
                   disabled={disabled}
                 />
               </div>

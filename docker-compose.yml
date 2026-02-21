@@ -22,6 +22,9 @@ services:
       - ./data:/data
       # Alternative: use named volume
       # - bugpin-data:/data
+    environment:
+      # Set to "debug" for verbose logging (default: info)
+      - LOG_LEVEL=info
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
       interval: 30s

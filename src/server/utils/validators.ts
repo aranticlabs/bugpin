@@ -107,6 +107,7 @@ export const notificationSettingsSchema = z
     notifyOnStatusChange: z.boolean().optional(),
     notifyOnPriorityChange: z.boolean().optional(),
     notifyOnAssignment: z.boolean().optional(),
+    notifyOnDeletion: z.boolean().optional(),
   })
   .partial();
 

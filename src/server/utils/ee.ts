@@ -13,6 +13,9 @@ import { logger } from './logger.js';
 // Cache EE availability check
 let eeAvailable: boolean | null = null;
 
+// Resolved EE module path (dist/ in production, src/ in development)
+let eeModulePath: string | null = null;
+
 // Cached EE plugin instance
 let eePlugin: EEPlugin | null = null;
 
@@ -20,18 +23,31 @@ let eePlugin: EEPlugin | null = null;
 let eeInitialized = false;
 
 /**
+ * Resolve the EE module path.
+ * Tries compiled dist/ first (production), falls back to src/ (development).
+ */
+function resolveEEPath(): string | null {
+  if (eeModulePath) return eeModulePath;
+
+  for (const path of ['../../../ee/dist', '../../../ee/src']) {
+    try {
+      require.resolve(path);
+      eeModulePath = path;
+      return eeModulePath;
+    } catch {
+      // Try next path
+    }
+  }
+
+  return null;
+}
+
+/**
  * Check if EE code is available (submodule present)
  */
 export function isEEAvailable(): boolean {
   if (eeAvailable !== null) return eeAvailable;
-
-  try {
-    require.resolve('../../../ee/src');
-    eeAvailable = true;
-  } catch {
-    eeAvailable = false;
-  }
-
+  eeAvailable = resolveEEPath() !== null;
   return eeAvailable;
 }
 
@@ -39,10 +55,11 @@ export function isEEAvailable(): boolean {
  * Get the EE license service if available
  */
 export function getEELicenseService() {
-  if (!isEEAvailable()) return null;
+  const path = resolveEEPath();
+  if (!path) return null;
 
   try {
-    const ee = require('../../../ee/src');
+    const ee = require(path);
     return ee.licenseService;
   } catch {
     return null;
@@ -57,7 +74,7 @@ export function getEEPlugin(): EEPlugin | null {
   if (eePlugin) return eePlugin;
 
   try {
-    const ee = require('../../../ee/src');
+    const ee = require(resolveEEPath()!);
     if (ee.createPlugin) {
       eePlugin = ee.createPlugin();
       return eePlugin;
@@ -239,6 +256,7 @@ export function requireEEFeature(feature: string) {
  */
 export function resetEEState(): void {
   eeAvailable = null;
+  eeModulePath = null;
   eePlugin = null;
   eeInitialized = false;
   resetEEHooks();

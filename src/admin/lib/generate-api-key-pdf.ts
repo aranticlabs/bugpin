@@ -258,23 +258,6 @@ export async function generateApiKeyPdf(data: ApiKeyPdfData): Promise<void> {
   doc.text(projectName, margin, y);
   y += 15;
 
-  // Warning box
-  doc.setFillColor(255, 243, 224); // Light amber
-  doc.setDrawColor(245, 158, 11); // Amber border
-  doc.roundedRect(margin, y, contentWidth, 25, 3, 3, 'FD');
-
-  doc.setTextColor(180, 83, 9); // Amber text
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('IMPORTANT: Keep this document secure', margin + 5, y + 10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(
-    'This API key provides access to your BugPin project. Do not share it publicly.',
-    margin + 5,
-    y + 18,
-  );
-  y += 35;
-
   // API Key section
   doc.setTextColor(100, 100, 100);
   doc.setFontSize(10);

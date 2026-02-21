@@ -1,6 +1,6 @@
 {
   "name": "@arantic/bugpin-widget",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Embeddable visual bug reporting widget - Capture screenshots, annotate issues, and submit bug reports",
   "type": "module",
   "main": "dist/widget.cjs.js",

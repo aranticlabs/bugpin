@@ -56,6 +56,18 @@ export const templateVariables: Record<EmailTemplateType, string[]> = {
     'newStatus',
     'newStatusFormatted',
   ],
+  priorityChange: [
+    'app.name',
+    'app.url',
+    'project.name',
+    'report.title',
+    'report.description',
+    'report.url',
+    'oldPriority',
+    'oldPriorityFormatted',
+    'newPriority',
+    'newPriorityFormatted',
+  ],
   assignment: [
     'app.name',
     'app.url',
@@ -67,6 +79,17 @@ export const templateVariables: Record<EmailTemplateType, string[]> = {
     'assignee.email',
   ],
   invitation: ['app.name', 'inviter.name', 'invite.url', 'invite.expiresInDays'],
+  reportDeleted: [
+    'app.name',
+    'app.url',
+    'project.name',
+    'report.title',
+    'report.description',
+    'report.status',
+    'report.statusFormatted',
+    'report.priority',
+    'report.priorityFormatted',
+  ],
   testEmail: ['app.name'],
 };
 
@@ -77,6 +100,8 @@ export const emailStyles = `
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
     .header { background: ${BRAND_COLOR_PLACEHOLDER}; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
     .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; }
+    .content a { color: ${BRAND_COLOR_PLACEHOLDER}; }
+    .content a:hover { text-decoration: underline; }
     .footer { background: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; border-top: none; }
     .footer a { color: ${BRAND_COLOR_PLACEHOLDER}; text-decoration: none; }
     .footer a:hover { text-decoration: underline; }
@@ -145,7 +170,7 @@ export const defaultEmailTemplates: EmailTemplates = {
         </div>
       </div>
 
-      <a href="{{report.url}}" class="button">View Report</a>
+      <a href="{{report.url}}" class="button" style="color: white;">View Report</a>
     </div>
   </div>
 </body>
@@ -171,6 +196,7 @@ export const defaultEmailTemplates: EmailTemplates = {
     </div>
     <div class="content">
       <h2 style="margin-top: 0;">{{report.title}}</h2>
+      <p style="color: #4b5563;">The status of this report in <strong>{{project.name}}</strong> has been updated.</p>
 
       <div class="status-change">
         <strong style="color: #6b7280;">{{oldStatusFormatted}}</strong>
@@ -178,7 +204,41 @@ export const defaultEmailTemplates: EmailTemplates = {
         <strong style="color: ${BRAND_COLOR_PLACEHOLDER};">{{newStatusFormatted}}</strong>
       </div>
 
-      <a href="{{report.url}}" class="button">View Report</a>
+      <a href="{{report.url}}" class="button" style="color: white;">View Report</a>
+    </div>
+  </div>
+</body>
+</html>`,
+  },
+  priorityChange: {
+    subject: '[{{project.name}}] Report Priority Changed: {{report.title}}',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    ${emailStyles}
+    .priority-change { background: white; padding: 15px; border-radius: 6px; margin: 15px 0; text-align: center; }
+    .arrow { color: #6b7280; margin: 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0; font-size: 24px;">Report Priority Updated</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">{{project.name}}</p>
+    </div>
+    <div class="content">
+      <h2 style="margin-top: 0;">{{report.title}}</h2>
+      <p style="color: #4b5563;">The priority of this report in <strong>{{project.name}}</strong> has been changed.</p>
+
+      <div class="priority-change">
+        <strong style="color: #6b7280;">{{oldPriorityFormatted}}</strong>
+        <span class="arrow">&rarr;</span>
+        <strong style="color: ${BRAND_COLOR_PLACEHOLDER};">{{newPriorityFormatted}}</strong>
+      </div>
+
+      <a href="{{report.url}}" class="button" style="color: white;">View Report</a>
     </div>
   </div>
 </body>
@@ -200,10 +260,10 @@ export const defaultEmailTemplates: EmailTemplates = {
     </div>
     <div class="content">
       <h2 style="margin-top: 0;">{{report.title}}</h2>
-      <p>This report has been assigned to <strong>{{assignee.name}}</strong></p>
+      <p style="color: #4b5563;">A report in <strong>{{project.name}}</strong> has been assigned to <strong>{{assignee.name}}</strong>. Please review the details below and take any necessary action.</p>
       <p>{{report.description}}</p>
 
-      <a href="{{report.url}}" class="button">View Report</a>
+      <a href="{{report.url}}" class="button" style="color: white;">View Report</a>
     </div>
   </div>
 </body>
@@ -231,7 +291,7 @@ export const defaultEmailTemplates: EmailTemplates = {
         Click the button below to accept the invitation and set up your account:
       </p>
       <div style="text-align: center;">
-        <a href="{{invite.url}}" class="button" style="padding: 14px 28px; font-weight: 600;">Accept Invitation</a>
+        <a href="{{invite.url}}" class="button" style="padding: 14px 28px; font-weight: 600; color: white;">Accept Invitation</a>
       </div>
       <p style="font-size: 14px; color: #6b7280;">
         This invitation will expire in {{invite.expiresInDays}} days.
@@ -239,6 +299,39 @@ export const defaultEmailTemplates: EmailTemplates = {
       <p style="font-size: 14px; color: #6b7280;">
         If you didn't expect this invitation, you can safely ignore this email.
       </p>
+    </div>
+  </div>
+</body>
+</html>`,
+  },
+  reportDeleted: {
+    subject: '[{{project.name}}] Report Deleted: {{report.title}}',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>${emailStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0; font-size: 24px;">Report Deleted</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">{{project.name}}</p>
+    </div>
+    <div class="content">
+      <h2 style="margin-top: 0;">{{report.title}}</h2>
+      <p style="color: #4b5563;">A report in <strong>{{project.name}}</strong> has been permanently deleted. The report and all associated data are no longer available. Below is a summary of the report at the time of deletion.</p>
+
+      <div class="meta">
+        <div class="meta-row">
+          <span class="label">Status:</span>
+          <span class="badge badge-status">{{report.statusFormatted}}</span>
+        </div>
+        <div class="meta-row">
+          <span class="label">Priority:</span>
+          <span class="badge badge-priority">{{report.priorityFormatted}}</span>
+        </div>
+      </div>
     </div>
   </div>
 </body>
@@ -301,7 +394,9 @@ export function getSampleDataForTemplate(
   switch (templateType) {
     case 'newReport':
     case 'statusChange':
+    case 'priorityChange':
     case 'assignment':
+    case 'reportDeleted':
       return {
         ...baseData,
         project: {
@@ -315,7 +410,7 @@ export function getSampleDataForTemplate(
           statusFormatted: 'Open',
           priority: 'high',
           priorityFormatted: 'High',
-          url: `${appUrl}/reports/sample-123`,
+          url: `${appUrl}/admin/reports/sample-123`,
           pageUrl: 'https://example.com/checkout',
           createdAt: new Date().toLocaleString(),
         },
@@ -324,6 +419,12 @@ export function getSampleDataForTemplate(
           oldStatusFormatted: 'Open',
           newStatus: 'in_progress',
           newStatusFormatted: 'In Progress',
+        }),
+        ...(templateType === 'priorityChange' && {
+          oldPriority: 'medium',
+          oldPriorityFormatted: 'Medium',
+          newPriority: 'high',
+          newPriorityFormatted: 'High',
         }),
         ...(templateType === 'assignment' && {
           assignee: {
@@ -340,7 +441,7 @@ export function getSampleDataForTemplate(
           name: 'Jane Smith',
         },
         invite: {
-          url: `${appUrl}/accept-invitation?token=sample-token-123`,
+          url: `${appUrl}/admin/accept-invitation?token=sample-token-123`,
           expiresInDays: 7,
         },
       };

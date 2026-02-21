@@ -55,7 +55,6 @@ import {
   Power,
   ChevronDown,
   GripVertical,
-  AlertTriangle,
   ExternalLink,
   Download,
 } from 'lucide-react';
@@ -69,7 +68,7 @@ import type { ProjectSettings } from '@shared/types';
 interface Project {
   id: string;
   name: string;
-  apiKey: string; // This is now just the prefix (e.g., "proj_a1b2c3d4")
+  apiKey: string;
   reportsCount: number;
   isActive: boolean;
   position: number;
@@ -77,7 +76,7 @@ interface Project {
 }
 
 interface NewApiKeyData {
-  apiKey: string; // Full API key, only available once on create/regenerate
+  apiKey: string;
   projectName: string;
 }
 
@@ -143,7 +142,7 @@ export function Projects() {
   const createMutation = useMutation({
     mutationFn: async (data: { name: string }) => {
       const response = await api.post('/projects', data);
-      return response.data as { project: Project; apiKey: string; showApiKeyOnce: boolean };
+      return response.data as { project: Project };
     },
     onSuccess: (data) => {
       // Auto-expand the newly created project
@@ -155,10 +154,7 @@ export function Projects() {
       });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setShowCreateModal(false);
-      // Show the API key modal - this is the only time the full key is available
-      if (data.showApiKeyOnce && data.apiKey) {
-        setNewApiKeyData({ apiKey: data.apiKey, projectName: data.project.name });
-      }
+      setNewApiKeyData({ apiKey: data.project.apiKey, projectName: data.project.name });
       toast.success('Project created successfully');
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
@@ -169,19 +165,12 @@ export function Projects() {
   const regenerateKeyMutation = useMutation({
     mutationFn: async (project: Project) => {
       const response = await api.post(`/projects/${project.id}/regenerate-key`);
-      return { ...response.data, projectName: project.name } as {
-        apiKey: string;
-        showApiKeyOnce: boolean;
-        projectName: string;
-      };
+      return response.data as { project: Project };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setRegenerateProject(null);
-      // Show the API key modal - this is the only time the full key is available
-      if (data.showApiKeyOnce && data.apiKey) {
-        setNewApiKeyData({ apiKey: data.apiKey, projectName: data.projectName });
-      }
+      setNewApiKeyData({ apiKey: data.project.apiKey, projectName: data.project.name });
       toast.success('API key regenerated successfully');
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
@@ -394,9 +383,9 @@ export function Projects() {
         />
       )}
 
-      {/* Save API Key Modal - shown once on create/regenerate */}
+      {/* API Key Modal - shown on create/regenerate */}
       {newApiKeyData && (
-        <SaveApiKeyModal
+        <ApiKeyModal
           apiKey={newApiKeyData.apiKey}
           projectName={newApiKeyData.projectName}
           open={!!newApiKeyData}
@@ -439,13 +428,18 @@ function SortableProjectCard({
     opacity: isDragging ? 0.8 : 1,
   };
 
+  const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
-  // The apiKey field now contains only the prefix (e.g., "proj_a1b2c3d4")
-  // The full key is only available once when creating/regenerating
   const widgetSnippet = `<!-- Start of BugPin Widget -->
-<script src="${window.location.origin}/widget.js" data-api-key="YOUR_API_KEY"></script>
+<script src="${window.location.origin}/widget.js" data-api-key="${project.apiKey}"></script>
 <!-- End of BugPin Widget -->`;
+
+  const copyApiKey = () => {
+    navigator.clipboard.writeText(project.apiKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
 
   const copyWidgetSnippet = () => {
     navigator.clipboard.writeText(widgetSnippet);
@@ -549,18 +543,17 @@ function SortableProjectCard({
         </CardHeader>
         {isExpanded && (
           <CardContent className="space-y-4">
-            {/* API Key Prefix */}
+            {/* API Key */}
             <div className="space-y-2">
               <Label>API Key</Label>
               <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 bg-muted rounded-lg text-sm font-mono text-muted-foreground">
-                  {project.apiKey}...
+                <code className="flex-1 px-3 py-2 bg-muted rounded-lg text-sm font-mono text-muted-foreground break-all">
+                  {project.apiKey}
                 </code>
+                <Button variant="outline" size="sm" onClick={copyApiKey}>
+                  {copiedKey ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                For security, the full API key is only shown once when created. Use "Regenerate Key"
-                if you need a new one.
-              </p>
             </div>
 
             {/* Widget Snippet */}
@@ -575,7 +568,7 @@ function SortableProjectCard({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Replace YOUR_API_KEY with the API key you saved when creating this project.
+                Add this snippet to your website's HTML to enable bug reporting.
               </p>
             </div>
           </CardContent>
@@ -669,7 +662,7 @@ function CreateProjectModal({
   );
 }
 
-function SaveApiKeyModal({
+function ApiKeyModal({
   apiKey,
   projectName,
   open,
@@ -725,27 +718,19 @@ function SaveApiKeyModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-xl"
-        onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <DialogTitle>Save Your API Key</DialogTitle>
-          </div>
+          <DialogTitle>API Key for "{projectName}"</DialogTitle>
           <DialogDescription>
-            This is the only time you'll see this API key. Please save it securely.
+            Your API key and widget snippet are ready. You can always find these in the project
+            settings.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
-            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-              API Key for "{projectName}"
-            </p>
-            <code className="block px-3 py-2 bg-background rounded text-sm font-mono break-all">
+          <div className="space-y-2">
+            <Label>API Key</Label>
+            <code className="block px-3 py-2 bg-muted rounded-lg text-sm font-mono break-all">
               {apiKey}
             </code>
             <Button variant="outline" size="sm" className="w-full" onClick={copyApiKey}>
@@ -763,7 +748,7 @@ function SaveApiKeyModal({
             </Button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label>Widget Snippet</Label>
             <pre className="px-3 py-2 bg-muted rounded-lg text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all">
               {widgetSnippet}
@@ -823,10 +808,10 @@ function SaveApiKeyModal({
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            {isGeneratingPdf ? 'Generating...' : 'Download API Key'}
+            {isGeneratingPdf ? 'Generating...' : 'Download PDF'}
           </Button>
           <Button onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-            I have saved my API key
+            Done
           </Button>
         </DialogFooter>
       </DialogContent>

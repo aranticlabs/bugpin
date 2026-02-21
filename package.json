@@ -1,6 +1,6 @@
 {
   "name": "bugpin",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Self-hosted visual bug reporting tool",
   "license": "AGPL-3.0-only",
   "private": false,

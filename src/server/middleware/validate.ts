@@ -273,6 +273,7 @@ export const schemas = {
     notifyOnStatusChange: z.boolean().optional(),
     notifyOnPriorityChange: z.boolean().optional(),
     notifyOnAssignment: z.boolean().optional(),
+    notifyOnDeletion: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
   }),
 
@@ -282,6 +283,7 @@ export const schemas = {
     defaultNotifyOnStatusChange: z.boolean().optional(),
     defaultNotifyOnPriorityChange: z.boolean().optional(),
     defaultNotifyOnAssignment: z.boolean().optional(),
+    defaultNotifyOnDeletion: z.boolean().optional(),
     defaultEmailEnabled: z.boolean().optional(),
   }),
 

@@ -72,6 +72,7 @@ export async function initSchema(): Promise<void> {
       name TEXT NOT NULL,
       api_key_hash TEXT UNIQUE NOT NULL,
       api_key_prefix TEXT NOT NULL,
+      api_key TEXT NOT NULL DEFAULT '',
       settings JSON DEFAULT '{}',
       reports_count INTEGER DEFAULT 0 NOT NULL,
       is_active INTEGER DEFAULT 1 NOT NULL CHECK(is_active IN (0, 1)),
@@ -91,6 +92,13 @@ export async function initSchema(): Promise<void> {
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_projects_position ON projects(position ASC) WHERE deleted_at IS NULL`,
   );
+
+  // Add api_key column to existing databases (stores full key for display in admin)
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN api_key TEXT NOT NULL DEFAULT ''`);
+  } catch {
+    // Column already exists
+  }
 
   // Users table
   db.exec(`
@@ -247,6 +255,7 @@ export async function initSchema(): Promise<void> {
       notify_on_status_change INTEGER DEFAULT 1 NOT NULL,
       notify_on_priority_change INTEGER DEFAULT 1 NOT NULL,
       notify_on_assignment INTEGER DEFAULT 1 NOT NULL,
+      notify_on_deletion INTEGER DEFAULT 1 NOT NULL,
       email_enabled INTEGER DEFAULT 1 NOT NULL,
       created_at TEXT DEFAULT (datetime('now')) NOT NULL,
       updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
@@ -263,6 +272,13 @@ export async function initSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_notification_preferences_enabled ON notification_preferences(email_enabled) WHERE email_enabled = 1`,
   );
 
+  // Add notify_on_deletion column to existing databases
+  try {
+    db.exec(`ALTER TABLE notification_preferences ADD COLUMN notify_on_deletion INTEGER DEFAULT 1 NOT NULL`);
+  } catch {
+    // Column already exists
+  }
+
   // Project notification defaults table
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_notification_defaults (
@@ -272,11 +288,19 @@ export async function initSchema(): Promise<void> {
       default_notify_on_status_change INTEGER DEFAULT 1 NOT NULL,
       default_notify_on_priority_change INTEGER DEFAULT 1 NOT NULL,
       default_notify_on_assignment INTEGER DEFAULT 1 NOT NULL,
+      default_notify_on_deletion INTEGER DEFAULT 1 NOT NULL,
       default_email_enabled INTEGER DEFAULT 1 NOT NULL,
       created_at TEXT DEFAULT (datetime('now')) NOT NULL,
       updated_at TEXT DEFAULT (datetime('now')) NOT NULL
     )
   `);
+
+  // Add default_notify_on_deletion column to existing databases
+  try {
+    db.exec(`ALTER TABLE project_notification_defaults ADD COLUMN default_notify_on_deletion INTEGER DEFAULT 1 NOT NULL`);
+  } catch {
+    // Column already exists
+  }
 
   // API Tokens table (for programmatic API access - Enterprise feature)
   db.exec(`

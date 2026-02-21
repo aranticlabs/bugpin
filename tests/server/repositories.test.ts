@@ -67,8 +67,7 @@ beforeEach(() => {
 });
 
 async function createProject(name = 'Project') {
-  const result = await projectsRepo.create({ name });
-  return result.project;
+  return projectsRepo.create({ name });
 }
 
 async function createUser(email = 'user@example.com') {
@@ -90,10 +89,10 @@ const baseMetadata = {
 
 describe('projectsRepo', () => {
   it('creates, updates, and deletes projects', async () => {
-    const { project, apiKey } = await projectsRepo.create({ name: 'Alpha' });
-    expect(apiKey).toContain('proj_');
+    const project = await projectsRepo.create({ name: 'Alpha' });
+    expect(project.apiKey).toContain('proj_');
 
-    const byApiKey = await projectsRepo.findByApiKey(apiKey);
+    const byApiKey = await projectsRepo.findByApiKey(project.apiKey);
     expect(byApiKey?.id).toBe(project.id);
 
     const updated = await projectsRepo.update(project.id, { name: 'Beta' });
@@ -102,8 +101,9 @@ describe('projectsRepo', () => {
     const count = await projectsRepo.count();
     expect(count).toBe(1);
 
-    const newKey = await projectsRepo.regenerateApiKey(project.id);
-    expect(newKey).toBeTruthy();
+    const regenerated = await projectsRepo.regenerateApiKey(project.id);
+    expect(regenerated).toBeTruthy();
+    expect(regenerated?.apiKey).not.toBe(project.apiKey);
 
     const deleted = await projectsRepo.delete(project.id);
     expect(deleted).toBe(true);

@@ -24,13 +24,13 @@ jobs:
           # Get the previous tag
           PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
 
-          # Generate changelog
+          # Generate changelog (include all commits from merged branches)
           if [ -n "$PREVIOUS_TAG" ]; then
             echo "Commits since $PREVIOUS_TAG:"
-            git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges > changelog.txt
+            git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" > changelog.txt
           else
             echo "Initial release"
-            git log --pretty=format:"- %s (%h)" --no-merges > changelog.txt
+            git log --pretty=format:"- %s (%h)" > changelog.txt
           fi
 
           # Set outputs

@@ -92,10 +92,14 @@ export function UsersSettings() {
       const response = await api.post('/users/invite', data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowInviteModal(false);
-      toast.success('Invitation sent successfully');
+      if (data.warning) {
+        toast.warning(data.warning);
+      } else {
+        toast.success('Invitation sent successfully');
+      }
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'Failed to send invitation');
@@ -107,9 +111,13 @@ export function UsersSettings() {
       const response = await api.post(`/users/${userId}/resend-invitation`);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('Invitation resent successfully');
+      if (data.warning) {
+        toast.warning(data.warning);
+      } else {
+        toast.success('Invitation resent successfully');
+      }
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'Failed to resend invitation');

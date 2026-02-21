@@ -50,6 +50,15 @@ export const emailService = {
       // Load SMTP settings
       const settings = await settingsCacheService.getAll();
 
+      logger.debug('sendEmail called', {
+        recipientCount: options.to.length,
+        recipients: options.to.map((r) => r.email),
+        subject: options.subject,
+        smtpEnabled: settings.smtpEnabled,
+        smtpHost: settings.smtpConfig.host || '(not set)',
+        smtpFrom: settings.smtpConfig.from || '(not set)',
+      });
+
       if (!settings.smtpEnabled) {
         logger.info('SMTP disabled, skipping email send');
         return { success: false, error: 'SMTP is disabled' };
@@ -64,7 +73,7 @@ export const emailService = {
       }
 
       const transporter = nodemailer.createTransport({
-        host: settings.smtpConfig.host,
+        host: sanitizeSmtpHost(settings.smtpConfig.host),
         port: settings.smtpConfig.port || 587,
         secure: settings.smtpConfig.port === 465,
         auth: settings.smtpConfig.user
@@ -75,13 +84,24 @@ export const emailService = {
           : undefined,
       });
 
-      await transporter.sendMail({
-        from: `"${settings.appName}" <${settings.smtpConfig.from}>`,
-        to: options.to.map((r) => (r.name ? `"${r.name}" <${r.email}>` : r.email)).join(', '),
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-      });
+      // Send individual emails per recipient in batches to avoid overwhelming the SMTP server
+      const fromAddress = `"${settings.appName}" <${settings.smtpConfig.from}>`;
+      const batchSize = 10;
+
+      for (let i = 0; i < options.to.length; i += batchSize) {
+        const batch = options.to.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map((recipient) =>
+            transporter.sendMail({
+              from: fromAddress,
+              to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+              subject: options.subject,
+              html: options.html,
+              text: options.text,
+            }),
+          ),
+        );
+      }
 
       logger.info('Email sent successfully', {
         to: options.to.map((r) => r.email),
@@ -90,8 +110,13 @@ export const emailService = {
 
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to send email', { error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as Record<string, unknown>).message)
+            : String(error);
+      logger.error('Failed to send email', undefined, { error: message });
       return { success: false, error: message };
     }
   },
@@ -203,6 +228,95 @@ export const emailService = {
   },
 
   /**
+   * Send notification email for report priority change
+   */
+  async sendPriorityChangeNotification(
+    recipients: EmailRecipient[],
+    data: ReportEmailData & { oldPriority: string; newPriority: string },
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = await settingsCacheService.getAll();
+    const { report, projectName, reportUrl, oldPriority, newPriority } = data;
+
+    const template = await this.getTemplate('priorityChange');
+    const templateData = {
+      app: {
+        name: settings.appName || 'BugPin',
+        url: settings.appUrl || '',
+      },
+      project: {
+        name: projectName,
+      },
+      report: {
+        title: report.title,
+        description: report.description || '',
+        url: reportUrl,
+      },
+      oldPriority,
+      oldPriorityFormatted: formatPriority(oldPriority),
+      newPriority,
+      newPriorityFormatted: formatPriority(newPriority),
+    };
+
+    const subject = templateService.compileTemplate(template.subject, templateData);
+    const compiledHtml = templateService.compileTemplate(template.html, templateData);
+    const withFooter = appendFooterToHtml(compiledHtml, 'priorityChange');
+    const html = applyBrandColor(
+      withFooter,
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
+    );
+
+    return this.sendEmail({
+      to: recipients,
+      subject,
+      html,
+    });
+  },
+
+  /**
+   * Send notification email for report deletion
+   */
+  async sendReportDeletedNotification(
+    recipients: EmailRecipient[],
+    data: ReportEmailData,
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = await settingsCacheService.getAll();
+    const { report, projectName } = data;
+
+    const template = await this.getTemplate('reportDeleted');
+    const templateData = {
+      app: {
+        name: settings.appName || 'BugPin',
+        url: settings.appUrl || '',
+      },
+      project: {
+        name: projectName,
+      },
+      report: {
+        title: report.title,
+        description: report.description || '',
+        status: report.status,
+        statusFormatted: formatStatus(report.status),
+        priority: report.priority,
+        priorityFormatted: formatPriority(report.priority),
+      },
+    };
+
+    const subject = templateService.compileTemplate(template.subject, templateData);
+    const compiledHtml = templateService.compileTemplate(template.html, templateData);
+    const withFooter = appendFooterToHtml(compiledHtml, 'reportDeleted');
+    const html = applyBrandColor(
+      withFooter,
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
+    );
+
+    return this.sendEmail({
+      to: recipients,
+      subject,
+      html,
+    });
+  },
+
+  /**
    * Send notification email for report assignment
    */
   async sendAssignmentNotification(
@@ -274,8 +388,9 @@ export const emailService = {
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
     const withFooter = appendFooterToHtml(compiledHtml, 'invitation');
+    const withFooterCompiled = templateService.compileTemplate(withFooter, templateData);
     const html = applyBrandColor(
-      withFooter,
+      withFooterCompiled,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR,
     );
 
@@ -300,7 +415,7 @@ export const emailService = {
       }
 
       const transporter = nodemailer.createTransport({
-        host: config.host,
+        host: sanitizeSmtpHost(config.host),
         port: config.port || 587,
         secure: config.port === 465,
         auth: config.user
@@ -343,14 +458,23 @@ export const emailService = {
       logger.info('Test email sent successfully', { to: recipientEmail });
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to send test email', { error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as Record<string, unknown>).message)
+            : String(error);
+      logger.error('Failed to send test email', undefined, { error: message });
       return { success: false, error: message };
     }
   },
 };
 
 // Helper Functions
+
+function sanitizeSmtpHost(host: string): string {
+  return host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
 
 function formatStatus(status: string): string {
   const labels: Record<string, string> = {

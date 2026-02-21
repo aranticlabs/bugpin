@@ -17,6 +17,7 @@ export interface UpdateNotificationPreferencesInput {
   notifyOnStatusChange?: boolean;
   notifyOnPriorityChange?: boolean;
   notifyOnAssignment?: boolean;
+  notifyOnDeletion?: boolean;
   emailEnabled?: boolean;
 }
 
@@ -25,6 +26,7 @@ export interface UpdateProjectNotificationDefaultsInput {
   defaultNotifyOnStatusChange?: boolean;
   defaultNotifyOnPriorityChange?: boolean;
   defaultNotifyOnAssignment?: boolean;
+  defaultNotifyOnDeletion?: boolean;
   defaultEmailEnabled?: boolean;
 }
 
@@ -140,16 +142,35 @@ export const notificationsService = {
    */
   async notifyNewReport(report: Report): Promise<void> {
     try {
+      logger.debug('Starting new report notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+      });
+
       // Get all users with email notifications enabled for this project
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
 
+      logger.debug('Found notification preferences for project', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+        preferences: preferences.map((p) => ({
+          userId: p.userId,
+          emailEnabled: p.emailEnabled,
+          notifyOnNewReport: p.notifyOnNewReport,
+        })),
+      });
+
       // Filter users who want new report notifications
       const usersToNotify = preferences.filter((p) => p.notifyOnNewReport);
 
       if (usersToNotify.length === 0) {
-        logger.info('No users to notify for new report', { reportId: report.id });
+        logger.info('No users to notify for new report', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -170,22 +191,30 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup', { reportId: report.id });
         return;
       }
 
       const settings = await settingsCacheService.getAll();
-      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/reports/${report.id}`;
+      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/admin/reports/${report.id}`;
 
-      await emailService.sendNewReportNotification(recipients, {
+      const result = await emailService.sendNewReportNotification(recipients, {
         report,
         projectName: project.name,
         reportUrl,
       });
 
-      logger.info('New report notification sent', {
-        reportId: report.id,
-        recipientCount: recipients.length,
-      });
+      if (result.success) {
+        logger.info('New report notification sent', {
+          reportId: report.id,
+          recipientCount: recipients.length,
+        });
+      } else {
+        logger.warn('New report notification failed', {
+          reportId: report.id,
+          error: result.error,
+        });
+      }
     } catch (error) {
       logger.error('Failed to send new report notification', {
         reportId: report.id,
@@ -199,12 +228,35 @@ export const notificationsService = {
    */
   async notifyStatusChange(report: Report, oldStatus: string, newStatus: string): Promise<void> {
     try {
+      logger.debug('Starting status change notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        oldStatus,
+        newStatus,
+      });
+
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
+
+      logger.debug('Found notification preferences for status change', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+        preferences: preferences.map((p) => ({
+          userId: p.userId,
+          emailEnabled: p.emailEnabled,
+          notifyOnStatusChange: p.notifyOnStatusChange,
+        })),
+      });
+
       const usersToNotify = preferences.filter((p) => p.notifyOnStatusChange);
 
       if (usersToNotify.length === 0) {
+        logger.info('No users to notify for status change', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -212,6 +264,9 @@ export const notificationsService = {
       const project = await projectsRepo.findById(report.projectId);
 
       if (!project) {
+        logger.error('Project not found for status change notification', {
+          projectId: report.projectId,
+        });
         return;
       }
 
@@ -223,13 +278,16 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup for status change', {
+          reportId: report.id,
+        });
         return;
       }
 
       const settings = await settingsCacheService.getAll();
-      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/reports/${report.id}`;
+      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/admin/reports/${report.id}`;
 
-      await emailService.sendStatusChangeNotification(recipients, {
+      const result = await emailService.sendStatusChangeNotification(recipients, {
         report,
         projectName: project.name,
         reportUrl,
@@ -237,10 +295,17 @@ export const notificationsService = {
         newStatus,
       });
 
-      logger.info('Status change notification sent', {
-        reportId: report.id,
-        recipientCount: recipients.length,
-      });
+      if (result.success) {
+        logger.info('Status change notification sent', {
+          reportId: report.id,
+          recipientCount: recipients.length,
+        });
+      } else {
+        logger.warn('Status change notification failed', {
+          reportId: report.id,
+          error: result.error,
+        });
+      }
     } catch (error) {
       logger.error('Failed to send status change notification', {
         reportId: report.id,
@@ -254,12 +319,29 @@ export const notificationsService = {
    */
   async notifyAssignment(report: Report, assignedToUserId: string): Promise<void> {
     try {
+      logger.debug('Starting assignment notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        assignedToUserId,
+      });
+
       const preferences = await notificationPreferencesRepo.findByUserAndProject(
         assignedToUserId,
         report.projectId,
       );
 
-      if (!preferences || !preferences.emailEnabled || !preferences.notifyOnAssignment) {
+      // If no explicit preferences exist, treat as enabled (matching DB defaults)
+      const emailEnabled = preferences ? preferences.emailEnabled : true;
+      const notifyOnAssignment = preferences ? preferences.notifyOnAssignment : true;
+
+      if (!emailEnabled || !notifyOnAssignment) {
+        logger.info('Skipping assignment notification - preferences disabled', {
+          reportId: report.id,
+          assignedToUserId,
+          hasPreferences: !!preferences,
+          emailEnabled,
+          notifyOnAssignment,
+        });
         return;
       }
 
@@ -271,19 +353,30 @@ export const notificationsService = {
       }
 
       const settings = await settingsCacheService.getAll();
-      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/reports/${report.id}`;
+      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/admin/reports/${report.id}`;
 
-      await emailService.sendAssignmentNotification([{ email: user.email, name: user.name }], {
-        report,
-        projectName: project.name,
-        reportUrl,
-        assignedToName: user.name,
-      });
+      const result = await emailService.sendAssignmentNotification(
+        [{ email: user.email, name: user.name }],
+        {
+          report,
+          projectName: project.name,
+          reportUrl,
+          assignedToName: user.name,
+        },
+      );
 
-      logger.info('Assignment notification sent', {
-        reportId: report.id,
-        assignedTo: assignedToUserId,
-      });
+      if (result.success) {
+        logger.info('Assignment notification sent', {
+          reportId: report.id,
+          assignedTo: assignedToUserId,
+        });
+      } else {
+        logger.warn('Assignment notification failed', {
+          reportId: report.id,
+          assignedTo: assignedToUserId,
+          error: result.error,
+        });
+      }
     } catch (error) {
       logger.error('Failed to send assignment notification', {
         reportId: report.id,
@@ -301,12 +394,30 @@ export const notificationsService = {
     newPriority: string,
   ): Promise<void> {
     try {
+      logger.debug('Starting priority change notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+        oldPriority,
+        newPriority,
+      });
+
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
         report.projectId,
       );
+
+      logger.debug('Found notification preferences for priority change', {
+        projectId: report.projectId,
+        preferencesCount: preferences.length,
+      });
+
       const usersToNotify = preferences.filter((p) => p.notifyOnPriorityChange);
 
       if (usersToNotify.length === 0) {
+        logger.info('No users to notify for priority change', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
         return;
       }
 
@@ -314,6 +425,9 @@ export const notificationsService = {
       const project = await projectsRepo.findById(report.projectId);
 
       if (!project) {
+        logger.error('Project not found for priority change notification', {
+          projectId: report.projectId,
+        });
         return;
       }
 
@@ -325,28 +439,113 @@ export const notificationsService = {
         }));
 
       if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup for priority change', {
+          reportId: report.id,
+        });
         return;
       }
 
       const settings = await settingsCacheService.getAll();
-      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/reports/${report.id}`;
+      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/admin/reports/${report.id}`;
 
-      // For priority change, we can reuse status change template with modified content
-      await emailService.sendEmail({
-        to: recipients,
-        subject: `[${project.name}] Report Priority Changed: ${report.title}`,
-        html: `
-          <p>Report priority changed from <strong>${oldPriority}</strong> to <strong>${newPriority}</strong></p>
-          <p><a href="${reportUrl}">View Report</a></p>
-        `,
+      const result = await emailService.sendPriorityChangeNotification(recipients, {
+        report,
+        projectName: project.name,
+        reportUrl,
+        oldPriority,
+        newPriority,
       });
 
-      logger.info('Priority change notification sent', {
-        reportId: report.id,
-        recipientCount: recipients.length,
-      });
+      if (result.success) {
+        logger.info('Priority change notification sent', {
+          reportId: report.id,
+          recipientCount: recipients.length,
+        });
+      } else {
+        logger.warn('Priority change notification failed', {
+          reportId: report.id,
+          error: result.error,
+        });
+      }
     } catch (error) {
       logger.error('Failed to send priority change notification', {
+        reportId: report.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+
+  /**
+   * Send notification for report deletion
+   */
+  async notifyReportDeleted(report: Report): Promise<void> {
+    try {
+      logger.debug('Starting report deleted notification', {
+        reportId: report.id,
+        projectId: report.projectId,
+      });
+
+      const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
+        report.projectId,
+      );
+
+      const usersToNotify = preferences.filter((p) => p.notifyOnDeletion);
+
+      if (usersToNotify.length === 0) {
+        logger.info('No users to notify for report deletion', {
+          reportId: report.id,
+          projectId: report.projectId,
+          totalPreferences: preferences.length,
+        });
+        return;
+      }
+
+      const users = await Promise.all(usersToNotify.map((p) => usersRepo.findById(p.userId)));
+      const project = await projectsRepo.findById(report.projectId);
+
+      if (!project) {
+        logger.error('Project not found for report deleted notification', {
+          projectId: report.projectId,
+        });
+        return;
+      }
+
+      const recipients = users
+        .filter((u) => u !== null)
+        .map((u) => ({
+          email: u!.email,
+          name: u!.name,
+        }));
+
+      if (recipients.length === 0) {
+        logger.debug('No valid recipients after user lookup for report deletion', {
+          reportId: report.id,
+        });
+        return;
+      }
+
+      const settings = await settingsCacheService.getAll();
+      const reportUrl = `${settings.appUrl || 'http://localhost:3000'}/admin/reports/${report.id}`;
+
+      const result = await emailService.sendReportDeletedNotification(recipients, {
+        report,
+        projectName: project.name,
+        reportUrl,
+      });
+
+      if (result.success) {
+        logger.info('Report deleted notification sent', {
+          reportId: report.id,
+          recipientCount: recipients.length,
+        });
+      } else {
+        logger.warn('Report deleted notification failed', {
+          reportId: report.id,
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to send report deleted notification', {
         reportId: report.id,
         error: error instanceof Error ? error.message : 'Unknown error',
       });

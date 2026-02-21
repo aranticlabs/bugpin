@@ -366,6 +366,11 @@ export const reportsService = {
         logger.error('Failed to trigger webhooks for report deletion', error, { reportId: id });
       });
 
+    // Send deletion notification before deleting (async, don't block)
+    notificationsService.notifyReportDeleted(existing).catch((error) => {
+      logger.error('Failed to send report deleted notification', error, { reportId: id });
+    });
+
     // Delete files from filesystem
     deleteReportFiles(id);
 

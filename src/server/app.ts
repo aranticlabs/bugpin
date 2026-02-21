@@ -29,7 +29,11 @@ export function createApp(): Hono {
     if (c.req.path === '/widget.js') {
       return next();
     }
-    return secureHeaders()(c, next);
+    return secureHeaders({
+      permissionsPolicy: {
+        displayCapture: ['self'],
+      },
+    })(c, next);
   });
 
   // Request ID middleware - adds unique ID to each request for tracing

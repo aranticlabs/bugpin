@@ -49,6 +49,7 @@ function createBaseSettings(): AppSettings {
       notifyOnStatusChange: true,
       notifyOnPriorityChange: true,
       notifyOnAssignment: true,
+      notifyOnDeletion: true,
     },
     branding: {
       primaryColor: '#02658D',

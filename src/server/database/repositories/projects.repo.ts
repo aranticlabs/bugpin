@@ -1,6 +1,6 @@
 import { getDb } from '../database.js';
 import { generateId, generateApiKey } from '../../utils/id.js';
-import { hashApiKey, extractApiKeyPrefix } from '../../utils/crypto.js';
+import { hashApiKey } from '../../utils/crypto.js';
 import type { CreateProjectData } from './interfaces.js';
 import type { Project, ProjectSettings } from '@shared/types';
 
@@ -11,6 +11,7 @@ interface ProjectRow {
   name: string;
   api_key_hash: string;
   api_key_prefix: string;
+  api_key: string;
   settings: string;
   reports_count: number;
   is_active: number;
@@ -26,7 +27,7 @@ function mapRowToProject(row: ProjectRow): Project {
   return {
     id: row.id,
     name: row.name,
-    apiKey: row.api_key_prefix, // Only return the prefix, not the full key
+    apiKey: row.api_key || row.api_key_prefix, // Full key if available, otherwise prefix for legacy projects
     settings: JSON.parse(row.settings) as ProjectSettings,
     reportsCount: row.reports_count,
     isActive: row.is_active === 1,
@@ -45,14 +46,13 @@ export const projectsRepo = {
   /**
    * Create a new project
    * New projects are inserted at position 0 (top of the list)
-   * Returns the project with the full API key (only time it's available)
    */
-  async create(data: CreateProjectData): Promise<{ project: Project; apiKey: string }> {
+  async create(data: CreateProjectData): Promise<Project> {
     const db = getDb();
     const id = generateId('proj');
     const apiKey = generateApiKey();
     const apiKeyHash = hashApiKey(apiKey);
-    const apiKeyPrefix = extractApiKeyPrefix(apiKey);
+    const apiKeyPrefix = apiKey.substring(0, 12);
     const now = new Date().toISOString();
 
     // Shift all existing projects down by 1 position
@@ -60,19 +60,17 @@ export const projectsRepo = {
       now,
     ]);
 
-    // Insert new project at position 0 with hashed API key
     db.run(
-      `INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings, position, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-      [id, data.name, apiKeyHash, apiKeyPrefix, JSON.stringify(data.settings ?? {}), now, now],
+      `INSERT INTO projects (id, name, api_key_hash, api_key_prefix, api_key, settings, position, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [id, data.name, apiKeyHash, apiKeyPrefix, apiKey, JSON.stringify(data.settings ?? {}), now, now],
     );
 
     const project = await this.findById(id);
     if (!project) {
       throw new Error('Failed to create project');
     }
-    // Return both project and the full API key (only time it's available)
-    return { project, apiKey };
+    return project;
   },
 
   /**
@@ -160,22 +158,21 @@ export const projectsRepo = {
 
   /**
    * Regenerate API key for a project
-   * Returns the full new API key (only time it's available)
    */
-  async regenerateApiKey(id: string): Promise<string | null> {
+  async regenerateApiKey(id: string): Promise<Project | null> {
     const db = getDb();
     const newApiKey = generateApiKey();
     const apiKeyHash = hashApiKey(newApiKey);
-    const apiKeyPrefix = extractApiKeyPrefix(newApiKey);
+    const apiKeyPrefix = newApiKey.substring(0, 12);
     const now = new Date().toISOString();
 
     const result = db.run(
-      'UPDATE projects SET api_key_hash = ?, api_key_prefix = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
-      [apiKeyHash, apiKeyPrefix, now, id],
+      'UPDATE projects SET api_key_hash = ?, api_key_prefix = ?, api_key = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+      [apiKeyHash, apiKeyPrefix, newApiKey, now, id],
     );
 
     if (result.changes > 0) {
-      return newApiKey;
+      return this.findById(id);
     }
     return null;
   },

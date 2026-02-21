@@ -12,6 +12,7 @@ interface NotificationPreferencesRow {
   notify_on_status_change: number;
   notify_on_priority_change: number;
   notify_on_assignment: number;
+  notify_on_deletion: number;
   email_enabled: number;
   created_at: string;
   updated_at: string;
@@ -24,6 +25,7 @@ interface ProjectNotificationDefaultsRow {
   default_notify_on_status_change: number;
   default_notify_on_priority_change: number;
   default_notify_on_assignment: number;
+  default_notify_on_deletion: number;
   default_email_enabled: number;
   created_at: string;
   updated_at: string;
@@ -40,6 +42,7 @@ function mapRowToPreferences(row: NotificationPreferencesRow): NotificationPrefe
     notifyOnStatusChange: Boolean(row.notify_on_status_change),
     notifyOnPriorityChange: Boolean(row.notify_on_priority_change),
     notifyOnAssignment: Boolean(row.notify_on_assignment),
+    notifyOnDeletion: Boolean(row.notify_on_deletion),
     emailEnabled: Boolean(row.email_enabled),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -54,6 +57,7 @@ function mapRowToDefaults(row: ProjectNotificationDefaultsRow): ProjectNotificat
     defaultNotifyOnStatusChange: Boolean(row.default_notify_on_status_change),
     defaultNotifyOnPriorityChange: Boolean(row.default_notify_on_priority_change),
     defaultNotifyOnAssignment: Boolean(row.default_notify_on_assignment),
+    defaultNotifyOnDeletion: Boolean(row.default_notify_on_deletion),
     defaultEmailEnabled: Boolean(row.default_email_enabled),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -91,13 +95,34 @@ export const notificationPreferencesRepo = {
   },
 
   /**
-   * Get all users who should be notified for a project
+   * Get all users who should be notified for a project.
+   * Includes active users without explicit preferences (defaults are all enabled).
    */
   async findByProjectWithEmailEnabled(projectId: string): Promise<NotificationPreferences[]> {
     const db = getDb();
+
+    // LEFT JOIN users with their notification preferences for this project.
+    // Users without a preferences row are treated as having all notifications enabled (matching DB defaults).
     const rows = db
-      .query('SELECT * FROM notification_preferences WHERE project_id = ? AND email_enabled = 1')
-      .all(projectId) as NotificationPreferencesRow[];
+      .query(
+        `SELECT
+          COALESCE(np.id, 'default-' || u.id) as id,
+          u.id as user_id,
+          ? as project_id,
+          COALESCE(np.notify_on_new_report, 1) as notify_on_new_report,
+          COALESCE(np.notify_on_status_change, 1) as notify_on_status_change,
+          COALESCE(np.notify_on_priority_change, 1) as notify_on_priority_change,
+          COALESCE(np.notify_on_assignment, 1) as notify_on_assignment,
+          COALESCE(np.notify_on_deletion, 1) as notify_on_deletion,
+          COALESCE(np.email_enabled, 1) as email_enabled,
+          COALESCE(np.created_at, u.created_at) as created_at,
+          COALESCE(np.updated_at, u.updated_at) as updated_at
+        FROM users u
+        LEFT JOIN notification_preferences np ON np.user_id = u.id AND np.project_id = ?
+        WHERE u.is_active = 1
+          AND COALESCE(np.email_enabled, 1) = 1`,
+      )
+      .all(projectId, projectId) as NotificationPreferencesRow[];
 
     return rows.map(mapRowToPreferences);
   },
@@ -139,6 +164,10 @@ export const notificationPreferencesRepo = {
         sets.push('notify_on_assignment = ?');
         params.push(preferences.notifyOnAssignment ? 1 : 0);
       }
+      if (preferences.notifyOnDeletion !== undefined) {
+        sets.push('notify_on_deletion = ?');
+        params.push(preferences.notifyOnDeletion ? 1 : 0);
+      }
       if (preferences.emailEnabled !== undefined) {
         sets.push('email_enabled = ?');
         params.push(preferences.emailEnabled ? 1 : 0);
@@ -159,8 +188,8 @@ export const notificationPreferencesRepo = {
         `INSERT INTO notification_preferences (
           id, user_id, project_id,
           notify_on_new_report, notify_on_status_change, notify_on_priority_change, notify_on_assignment,
-          email_enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          notify_on_deletion, email_enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           userId,
@@ -173,6 +202,7 @@ export const notificationPreferencesRepo = {
             ? 1
             : 0,
           (preferences.notifyOnAssignment ?? defaults?.defaultNotifyOnAssignment ?? true) ? 1 : 0,
+          (preferences.notifyOnDeletion ?? defaults?.defaultNotifyOnDeletion ?? true) ? 1 : 0,
           (preferences.emailEnabled ?? defaults?.defaultEmailEnabled ?? true) ? 1 : 0,
           now,
           now,
@@ -258,6 +288,10 @@ export const projectNotificationDefaultsRepo = {
         sets.push('default_notify_on_assignment = ?');
         params.push(defaults.defaultNotifyOnAssignment ? 1 : 0);
       }
+      if (defaults.defaultNotifyOnDeletion !== undefined) {
+        sets.push('default_notify_on_deletion = ?');
+        params.push(defaults.defaultNotifyOnDeletion ? 1 : 0);
+      }
       if (defaults.defaultEmailEnabled !== undefined) {
         sets.push('default_email_enabled = ?');
         params.push(defaults.defaultEmailEnabled ? 1 : 0);
@@ -277,8 +311,8 @@ export const projectNotificationDefaultsRepo = {
           id, project_id,
           default_notify_on_new_report, default_notify_on_status_change,
           default_notify_on_priority_change, default_notify_on_assignment,
-          default_email_enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          default_notify_on_deletion, default_email_enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           projectId,
@@ -286,6 +320,7 @@ export const projectNotificationDefaultsRepo = {
           (defaults.defaultNotifyOnStatusChange ?? true) ? 1 : 0,
           (defaults.defaultNotifyOnPriorityChange ?? true) ? 1 : 0,
           (defaults.defaultNotifyOnAssignment ?? true) ? 1 : 0,
+          (defaults.defaultNotifyOnDeletion ?? true) ? 1 : 0,
           (defaults.defaultEmailEnabled ?? true) ? 1 : 0,
           now,
           now,
