@@ -28,7 +28,7 @@ _Dark Mode_
 - **Multi-Project** - Manage multiple projects with separate API keys
 - **Enhanced Security Features** - Domain whitelists, configurable rate limiting, HSTS, and secure headers
 - **GitHub Integration** - Forward reports to GitHub Issues
-- **Dark Mode** - Admin Portal supports light and dark themes
+- **Dark Mode** - Admin Console supports light and dark themes
 
 # Quick Start
 
@@ -113,7 +113,7 @@ Full documentation is available at [docs.bugpin.io](https://docs.bugpin.io):
 ## Tech Stack
 
 - **Server**: Bun, Hono, SQLite
-- **Admin Portal**: React, TanStack Query, Tailwind CSS
+- **Admin Console**: React, TanStack Query, Tailwind CSS
 - **Widget**: Preact, Fabric.js, Shadow DOM
 
 ## Support
@@ -129,5 +129,5 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 BugPin uses a multi-license approach:
 
-- **Server & Admin Portal**: [AGPL-3.0](LICENCE)
+- **Server & Admin Console**: [AGPL-3.0](LICENCE)
 - **Widget**: [MIT](https://github.com/aranticlabs/bugpin/blob/main/src/widget/LICENSE)

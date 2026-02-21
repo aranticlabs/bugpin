@@ -4,7 +4,7 @@ BugPin is a trademark of Arantic Digital.
 
 ## What This Means
 
-The open source licenses under which BugPin is licensed (AGPL-3.0 for Server/Admin Portal, MIT for Widget) **do not grant permission** to use the BugPin name, logo, or other trademarks.
+The open source licenses under which BugPin is licensed (AGPL-3.0 for Server/Admin Console, MIT for Widget) **do not grant permission** to use the BugPin name, logo, or other trademarks.
 
 ## Permitted Uses
 

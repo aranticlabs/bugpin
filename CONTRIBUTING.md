@@ -121,7 +121,7 @@ Key principles:
 - Routes: `/src/server/routes/`
 - Services: `/src/server/services/`
 - Repositories: `/src/server/database/repositories/`
-- Admin Portal: `/src/admin/`
+- Admin Console: `/src/admin/`
 - Widget: `/src/widget/`
 
 ### Naming Conventions
@@ -179,7 +179,7 @@ rm -rf dist node_modules src/*/node_modules
 ### Architecture Overview
 
 - **Server**: Bun runtime + Hono framework + SQLite
-- **Admin Portal**: React 18 + Vite + TanStack Query + Tailwind CSS
+- **Admin Console**: React 18 + Vite + TanStack Query + Tailwind CSS
 - **Widget**: Preact + Fabric.js (for annotations) + IndexedDB (offline support)
 
 ## Pull Request Guidelines
@@ -244,9 +244,6 @@ The AGPL-3.0 and MIT licenses include:
 These licenses do not grant permission to use the BugPin name or logo. See [legal/TRADEMARK.md](legal/TRADEMARK.md) for our trademark policy.
 
 **No separate Contributor License Agreement (CLA) is required.** The DCO sign-off is sufficient.
-
-For more details on our licensing strategy, see [docs/LICENSING-AND-EE-STRATEGY.md](docs/LICENSING-AND-EE-STRATEGY.md).
-
 ---
 
 Thank you for contributing to BugPin!
