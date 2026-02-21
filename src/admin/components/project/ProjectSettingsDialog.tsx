@@ -118,29 +118,22 @@ export function ProjectSettingsDialog({
       // Widget Dialog settings - using new nested structure
       const dialogSettings = projectDetail.settings?.widgetDialog;
       const hasCustomWidgetDialog =
-        dialogSettings &&
-        (dialogSettings.lightButtonColor !== undefined ||
-          dialogSettings.darkButtonColor !== undefined);
+        dialogSettings && Object.keys(dialogSettings).length > 0;
       setUseCustomWidgetDialog(!!hasCustomWidgetDialog);
       setWidgetDialogSettings(dialogSettings || {});
 
       // Widget Button (launcher) settings - using new nested structure
       const launcherSettings = projectDetail.settings?.widgetLauncherButton;
       const hasCustomButton =
-        launcherSettings &&
-        (launcherSettings.position !== undefined ||
-          launcherSettings.buttonText !== undefined ||
-          launcherSettings.buttonShape !== undefined ||
-          launcherSettings.lightButtonColor !== undefined);
+        launcherSettings && Object.keys(launcherSettings).length > 0;
       setUseCustomButton(!!hasCustomButton);
       setButtonSettings(launcherSettings || {});
 
       // Screenshot settings - using new nested structure
       const screenshotConf = projectDetail.settings?.screenshot;
       const hasCustomScreenshot =
-        screenshotConf?.useScreenCaptureAPI !== undefined ||
-        screenshotConf?.maxScreenshotSize !== undefined;
-      setUseCustomScreenshot(hasCustomScreenshot);
+        screenshotConf && Object.keys(screenshotConf).length > 0;
+      setUseCustomScreenshot(!!hasCustomScreenshot);
       setScreenshotSettings({
         useScreenCaptureAPI: screenshotConf?.useScreenCaptureAPI,
         maxScreenshotSize: screenshotConf?.maxScreenshotSize,
@@ -296,7 +289,7 @@ export function ProjectSettingsDialog({
             <Spinner className="text-primary" />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto py-4">
+          <div className="flex-1 overflow-y-auto py-4 pr-4">
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as typeof activeTab)}
