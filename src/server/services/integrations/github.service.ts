@@ -44,13 +44,13 @@ export async function createGitHubIssue(
 
   try {
     // Upload files to GitHub if upload mode is enabled
-    let uploadedUrls: Map<string, string> | undefined;
+    let uploadResult: UploadFilesResult | undefined;
     if (githubConfig.fileTransferMode === 'upload' && report.files && report.files.length > 0) {
-      uploadedUrls = await uploadReportFiles(report.files, report.id, githubConfig);
+      uploadResult = await uploadReportFiles(report.files, report.id, githubConfig);
     }
 
     // Build issue body
-    const body = await buildIssueBody(report, uploadedUrls);
+    const body = await buildIssueBody(report, uploadResult);
 
     // Merge labels and assignees
     const labels = [...(githubConfig.labels || []), ...(options?.labels || [])];
@@ -153,12 +153,17 @@ export async function testGitHubConnection(githubConfig: GitHubConfig): Promise<
   }
 }
 
+interface UploadResult {
+  url: string | null;
+  error?: string;
+}
+
 async function uploadFileToGitHub(
   fileBuffer: Buffer,
   fileName: string,
   reportId: string,
   githubConfig: GitHubConfig,
-): Promise<string | null> {
+): Promise<UploadResult> {
   const { owner, repo, accessToken } = githubConfig;
   const path = `.bugpin/files/${reportId}/${fileName}`;
   const headers = {
@@ -177,7 +182,7 @@ async function uploadFileToGitHub(
 
     if (getResponse.ok) {
       const existing = (await getResponse.json()) as { download_url: string };
-      return existing.download_url;
+      return { url: existing.download_url };
     }
 
     // Upload file
@@ -199,24 +204,54 @@ async function uploadFileToGitHub(
       const errorMessage =
         (errorData as { message?: string }).message || `HTTP ${putResponse.status}`;
       logger.error(`GitHub file upload failed for ${fileName}: ${errorMessage}`);
-      return null;
+      return { url: null, error: errorMessage };
     }
 
     const result = (await putResponse.json()) as { content: { download_url: string } };
-    return result.content.download_url;
+    return { url: result.content.download_url };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error(`Failed to upload file ${fileName} to GitHub: ${message}`);
-    return null;
+    return { url: null, error: message };
   }
+}
+
+/**
+ * Read a file buffer from local storage or remote URL (S3)
+ */
+async function readFileBuffer(filePath: string): Promise<Buffer | null> {
+  // Check if path is a remote URL (S3 storage)
+  if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
+    try {
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        logger.warn(`Failed to fetch remote file: HTTP ${response.status}`, { path: filePath });
+        return null;
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (error) {
+      logger.warn('Error fetching remote file', { path: filePath, error });
+      return null;
+    }
+  }
+
+  // Local file
+  return readFile(filePath);
+}
+
+interface UploadFilesResult {
+  uploadedUrls: Map<string, string>;
+  uploadError?: string;
 }
 
 async function uploadReportFiles(
   files: FileRecord[],
   reportId: string,
   githubConfig: GitHubConfig,
-): Promise<Map<string, string>> {
+): Promise<UploadFilesResult> {
   const uploadedUrls = new Map<string, string>();
+  let lastError: string | undefined;
 
   for (const file of files) {
     // Skip videos — GitHub can't render them inline in markdown
@@ -232,25 +267,36 @@ async function uploadReportFiles(
       continue;
     }
 
-    const buffer = readFile(file.path);
+    const buffer = await readFileBuffer(file.path);
     if (!buffer) {
       logger.warn(`Could not read file ${file.filename} at ${file.path}`);
+      lastError = 'Could not read file from storage';
       continue;
     }
 
-    const githubUrl = await uploadFileToGitHub(buffer, file.filename, reportId, githubConfig);
-    if (githubUrl) {
-      uploadedUrls.set(file.filename, githubUrl);
+    const result = await uploadFileToGitHub(buffer, file.filename, reportId, githubConfig);
+    if (result.url) {
+      uploadedUrls.set(file.filename, result.url);
+    } else {
+      lastError = result.error;
+      // If we get a permission error, skip remaining uploads
+      if (result.error?.includes('Resource not accessible') || result.error?.includes('Not Found')) {
+        logger.warn(
+          'GitHub file upload permission denied — token likely needs Contents: Read and write permission. Skipping remaining uploads.',
+        );
+        break;
+      }
     }
   }
 
-  return uploadedUrls;
+  return { uploadedUrls, uploadError: lastError };
 }
 
 async function buildIssueBody(
   report: ReportWithFiles,
-  uploadedUrls?: Map<string, string>,
+  uploadResult?: UploadFilesResult,
 ): Promise<string> {
+  const uploadedUrls = uploadResult?.uploadedUrls;
   const metadata = report.metadata as {
     url?: string;
     title?: string;
@@ -400,8 +446,9 @@ ${metadata.userActivity
             : '';
           if (imageUrl) {
             body += `\n![${screenshot.filename}](${imageUrl})`;
-            if (uploadedUrls) {
-              body += `\n_File hosted on BugPin server (GitHub upload failed). File may not display if the server is not publicly accessible._`;
+            if (uploadResult) {
+              const reason = uploadResult.uploadError || 'unknown error';
+              body += `\n_File hosted on BugPin server (GitHub upload failed: ${reason}). File may not display if the server is not publicly accessible._`;
             }
             body += '\n';
           }
@@ -438,8 +485,9 @@ ${metadata.userActivity
             } else {
               body += `\n[${attachment.filename}](${fileUrl})`;
             }
-            if (uploadedUrls) {
-              body += `\n_File hosted on BugPin server (GitHub upload failed). File may not display if the server is not publicly accessible._`;
+            if (uploadResult) {
+              const reason = uploadResult.uploadError || 'unknown error';
+              body += `\n_File hosted on BugPin server (GitHub upload failed: ${reason}). File may not display if the server is not publicly accessible._`;
             }
             body += '\n';
           }
@@ -671,13 +719,13 @@ export async function updateGitHubIssue(
 
   try {
     // Upload files to GitHub if upload mode is enabled
-    let uploadedUrls: Map<string, string> | undefined;
+    let uploadResult: UploadFilesResult | undefined;
     if (githubConfig.fileTransferMode === 'upload' && report.files && report.files.length > 0) {
-      uploadedUrls = await uploadReportFiles(report.files, report.id, githubConfig);
+      uploadResult = await uploadReportFiles(report.files, report.id, githubConfig);
     }
 
     // Build updated issue body
-    const body = await buildIssueBody(report, uploadedUrls);
+    const body = await buildIssueBody(report, uploadResult);
 
     // Map report status to GitHub issue state
     const state = report.status === 'resolved' || report.status === 'closed' ? 'closed' : 'open';
