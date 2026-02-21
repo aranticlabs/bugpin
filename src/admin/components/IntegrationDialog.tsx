@@ -117,6 +117,7 @@ export function IntegrationDialog({
   const [labelsError, setLabelsError] = useState(false);
   const [assigneesError, setAssigneesError] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
+  const [fileTransferMode, setFileTransferMode] = useState<'link' | 'upload'>('link');
   const [syncMode, setSyncMode] = useState<GitHubSyncMode>('manual');
   const [showSyncDialog, setShowSyncDialog] = useState(false);
   const [pendingUnsyncedCount, setPendingUnsyncedCount] = useState(0);
@@ -136,9 +137,36 @@ export function IntegrationDialog({
         });
         setSelectedLabels(config.labels || []);
         setSelectedAssignees(config.assignees || []);
-        setEnableLabels((config.labels?.length ?? 0) > 0);
-        setEnableAssignees((config.assignees?.length ?? 0) > 0);
+        const hasLabels = (config.labels?.length ?? 0) > 0;
+        const hasAssignees = (config.assignees?.length ?? 0) > 0;
+        setEnableLabels(hasLabels);
+        setEnableAssignees(hasAssignees);
+        setFileTransferMode(config.fileTransferMode || 'link');
         setSyncMode(config.syncMode || 'manual');
+
+        // Auto-fetch labels and assignees for editing when toggles are enabled
+        if (hasLabels && config.owner && config.repo) {
+          fetchLabelsMutation
+            .mutateAsync({
+              accessToken: '',
+              owner: config.owner,
+              repo: config.repo,
+              integrationId: integration.id,
+            })
+            .then(setAvailableLabels)
+            .catch(() => setLabelsError(true));
+        }
+        if (hasAssignees && config.owner && config.repo) {
+          fetchAssigneesMutation
+            .mutateAsync({
+              accessToken: '',
+              owner: config.owner,
+              repo: config.repo,
+              integrationId: integration.id,
+            })
+            .then(setAvailableAssignees)
+            .catch(() => setAssigneesError(true));
+        }
       } else {
         // Reset for new integration
         reset({
@@ -151,6 +179,7 @@ export function IntegrationDialog({
         setSelectedAssignees([]);
         setEnableLabels(false);
         setEnableAssignees(false);
+        setFileTransferMode('link');
         setSyncMode('manual');
       }
       setRepositories([]);
@@ -207,6 +236,7 @@ export function IntegrationDialog({
           accessToken: watchedToken || '',
           owner: watchedOwner,
           repo: watchedRepo,
+          integrationId: integration?.id,
         });
         setAvailableLabels(result);
       } catch {
@@ -228,6 +258,7 @@ export function IntegrationDialog({
           accessToken: watchedToken || '',
           owner: watchedOwner,
           repo: watchedRepo,
+          integrationId: integration?.id,
         });
         setAvailableAssignees(result);
       } catch {
@@ -241,7 +272,11 @@ export function IntegrationDialog({
   };
 
   const handleSyncModeToggle = async (enabled: boolean) => {
-    if (!integration) return;
+    // For new integrations, just store the preference — sync will be enabled after creation
+    if (!integration) {
+      setSyncMode(enabled ? 'automatic' : 'manual');
+      return;
+    }
 
     if (enabled) {
       // Switching to automatic - check for unsynced reports
@@ -296,18 +331,10 @@ export function IntegrationDialog({
   };
 
   const handleTest = async () => {
-    if (!watchedOwner || !watchedRepo || !watchedToken) {
-      toast.error('Please fill in owner, repo, and access token to test the connection');
-      return;
-    }
-
     if (isEditing && integration) {
-      const result = await testMutation.mutateAsync(integration.id);
-      if (result.success) {
-        toast.success('Connection successful!');
-      } else {
-        toast.error(`Connection failed: ${result.error || 'Unknown error'}`);
-      }
+      // Editing: test uses the stored token via integration ID
+      // Toast is handled by the useTestIntegration hook
+      await testMutation.mutateAsync(integration.id);
     } else {
       toast.error('Save the integration first to test the connection');
     }
@@ -321,6 +348,7 @@ export function IntegrationDialog({
         data.accessToken?.trim() || (integration?.config as GitHubIntegrationConfig).accessToken,
       labels: selectedLabels.length > 0 ? selectedLabels : undefined,
       assignees: selectedAssignees.length > 0 ? selectedAssignees : undefined,
+      fileTransferMode,
     };
 
     try {
@@ -343,12 +371,23 @@ export function IntegrationDialog({
           data: updateData,
         });
       } else {
-        await createMutation.mutateAsync({
+        const created = await createMutation.mutateAsync({
           projectId,
           type: 'github' as IntegrationType,
           name: data.name.trim(),
           config,
         });
+
+        // Enable automatic sync after creation if the user toggled it on
+        if (syncMode === 'automatic' && created?.id) {
+          try {
+            await setSyncModeMutation.mutateAsync({ id: created.id, syncMode: 'automatic' });
+          } catch {
+            toast.error(
+              'Integration created, but automatic sync could not be enabled. You can enable it by editing the integration.',
+            );
+          }
+        }
       }
       onClose();
     } catch (err) {
@@ -702,33 +741,62 @@ export function IntegrationDialog({
                 )}
               </div>
 
-              {/* Automatic Sync Toggle - Only show for existing integrations */}
-              {isEditing && (
-                <div className="space-y-3 border rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="enable-sync" className="text-base">
-                        Automatic sync
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically create GitHub issues for new reports
-                      </p>
-                    </div>
-                    <Switch
-                      id="enable-sync"
-                      checked={syncMode === 'automatic'}
-                      onCheckedChange={handleSyncModeToggle}
-                      disabled={setSyncModeMutation.isPending}
-                    />
-                  </div>
-                  {syncMode === 'automatic' && (
-                    <p className="text-xs text-muted-foreground pt-2 border-t">
-                      New reports will be automatically synced to GitHub. Changes to GitHub issues
-                      (closed/reopened) will update report status in BugPin.
+              {/* File Transfer Mode Toggle */}
+              <div className="space-y-3 border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enable-upload" className="text-base">
+                      Upload files to GitHub
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Upload report files directly to the repository. Recommended if your BugPin
+                      server is not publicly accessible.
                     </p>
-                  )}
+                  </div>
+                  <Switch
+                    id="enable-upload"
+                    checked={fileTransferMode === 'upload'}
+                    onCheckedChange={(checked) =>
+                      setFileTransferMode(checked ? 'upload' : 'link')
+                    }
+                  />
                 </div>
-              )}
+                {fileTransferMode === 'upload' && (
+                  <p className="text-xs text-muted-foreground pt-2 border-t">
+                    Images and GIFs under 10 MB will be uploaded as commits to{' '}
+                    {watchedOwner && watchedRepo
+                      ? `${watchedOwner}/${watchedRepo}`
+                      : 'your repository'}
+                    . Videos and files over 10 MB will link to your BugPin server instead.
+                  </p>
+                )}
+              </div>
+
+              {/* Automatic Sync Toggle */}
+              <div className="space-y-3 border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enable-sync" className="text-base">
+                      Automatic sync
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically create GitHub issues for new reports
+                    </p>
+                  </div>
+                  <Switch
+                    id="enable-sync"
+                    checked={syncMode === 'automatic'}
+                    onCheckedChange={handleSyncModeToggle}
+                    disabled={setSyncModeMutation.isPending}
+                  />
+                </div>
+                {syncMode === 'automatic' && (
+                  <p className="text-xs text-muted-foreground pt-2 border-t">
+                    New reports will be automatically synced to GitHub. Changes to GitHub issues
+                    (closed/reopened) will update report status in BugPin.
+                  </p>
+                )}
+              </div>
             </div>
 
             <DialogFooter>

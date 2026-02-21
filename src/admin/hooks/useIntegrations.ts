@@ -228,12 +228,19 @@ export function useFetchGitHubLabels() {
       accessToken,
       owner,
       repo,
+      integrationId,
     }: {
       accessToken: string;
       owner: string;
       repo: string;
+      integrationId?: string;
     }) => {
-      const response = await api.post('/integrations/github/labels', { accessToken, owner, repo });
+      const response = await api.post('/integrations/github/labels', {
+        accessToken: accessToken || undefined,
+        owner,
+        repo,
+        integrationId,
+      });
       return response.data.labels as GitHubLabel[];
     },
     // No toast - errors are handled inline in the dialog
@@ -256,15 +263,18 @@ export function useFetchGitHubAssignees() {
       accessToken,
       owner,
       repo,
+      integrationId,
     }: {
       accessToken: string;
       owner: string;
       repo: string;
+      integrationId?: string;
     }) => {
       const response = await api.post('/integrations/github/assignees', {
-        accessToken,
+        accessToken: accessToken || undefined,
         owner,
         repo,
+        integrationId,
       });
       return response.data.assignees as GitHubAssignee[];
     },

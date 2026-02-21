@@ -85,6 +85,7 @@ export const githubSyncService = {
             owner: githubConfig.owner,
             repo: githubConfig.repo,
             accessToken: githubConfig.accessToken,
+            fileTransferMode: githubConfig.fileTransferMode,
           },
         );
 
@@ -114,6 +115,7 @@ export const githubSyncService = {
             accessToken: githubConfig.accessToken,
             labels: githubConfig.labels,
             assignees: githubConfig.assignees,
+            fileTransferMode: githubConfig.fileTransferMode,
           },
         );
 

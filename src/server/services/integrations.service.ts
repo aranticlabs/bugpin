@@ -299,6 +299,7 @@ export const integrationsService = {
               accessToken: config.accessToken,
               labels: config.labels,
               assignees: config.assignees,
+              fileTransferMode: config.fileTransferMode,
             },
             options,
           );

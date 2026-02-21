@@ -9,7 +9,7 @@ import { Integration } from '@shared/types';
 import { IntegrationCard } from '../IntegrationCard';
 import { IntegrationDialog } from '../IntegrationDialog';
 import { Button } from '../ui/button';
-import { toast } from 'sonner';
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import {
   AlertDialog,
@@ -47,6 +47,9 @@ export function ProjectIntegrationsDialog({
   // Load integrations for the project
   const { data: integrations, isLoading } = useIntegrations(project.id);
 
+  // CE only supports one GitHub integration per project
+  const hasGitHubIntegration = integrations?.some((i) => i.type === 'github') ?? false;
+
   const handleAddIntegration = () => {
     setEditingIntegration(undefined);
     setDialogOpen(true);
@@ -71,16 +74,8 @@ export function ProjectIntegrationsDialog({
   };
 
   const handleTestIntegration = async (id: string) => {
-    try {
-      const result = await testMutation.mutateAsync(id);
-      if (result.success) {
-        toast.success('Connection successful!');
-      } else {
-        toast.error(`Connection failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Test failed');
-    }
+    // Toast is handled by the useTestIntegration hook
+    await testMutation.mutateAsync(id).catch(() => {});
   };
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
@@ -100,10 +95,12 @@ export function ProjectIntegrationsDialog({
                 <DialogTitle>Integrations</DialogTitle>
                 <DialogDescription>Manage integrations for "{project.name}"</DialogDescription>
               </div>
-              <Button onClick={handleAddIntegration} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Integration
-              </Button>
+              {!hasGitHubIntegration && (
+                <Button onClick={handleAddIntegration} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Integration
+                </Button>
+              )}
             </div>
           </DialogHeader>
 

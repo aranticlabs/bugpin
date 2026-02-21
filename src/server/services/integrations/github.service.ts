@@ -1,6 +1,9 @@
 import { logger } from '../../utils/logger.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
+import { readFile } from '../../storage/files.js';
 import type { Report, FileRecord } from '@shared/types';
+
+const MAX_GITHUB_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export interface GitHubConfig {
   owner: string;
@@ -8,6 +11,7 @@ export interface GitHubConfig {
   accessToken: string;
   labels?: string[];
   assignees?: string[];
+  fileTransferMode?: 'link' | 'upload';
 }
 
 export interface GitHubIssueResult {
@@ -39,8 +43,14 @@ export async function createGitHubIssue(
   }
 
   try {
+    // Upload files to GitHub if upload mode is enabled
+    let uploadedUrls: Map<string, string> | undefined;
+    if (githubConfig.fileTransferMode === 'upload' && report.files && report.files.length > 0) {
+      uploadedUrls = await uploadReportFiles(report.files, report.id, githubConfig);
+    }
+
     // Build issue body
-    const body = await buildIssueBody(report);
+    const body = await buildIssueBody(report, uploadedUrls);
 
     // Merge labels and assignees
     const labels = [...(githubConfig.labels || []), ...(options?.labels || [])];
@@ -143,10 +153,104 @@ export async function testGitHubConnection(githubConfig: GitHubConfig): Promise<
   }
 }
 
-/**
- * Build the issue body markdown from a report
- */
-async function buildIssueBody(report: ReportWithFiles): Promise<string> {
+async function uploadFileToGitHub(
+  fileBuffer: Buffer,
+  fileName: string,
+  reportId: string,
+  githubConfig: GitHubConfig,
+): Promise<string | null> {
+  const { owner, repo, accessToken } = githubConfig;
+  const path = `.bugpin/files/${reportId}/${fileName}`;
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${accessToken}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    // Check if file already exists
+    const getResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      { headers },
+    );
+
+    if (getResponse.ok) {
+      const existing = (await getResponse.json()) as { download_url: string };
+      return existing.download_url;
+    }
+
+    // Upload file
+    const content = fileBuffer.toString('base64');
+    const putResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          message: `[BugPin] Add file for report ${reportId}`,
+          content,
+        }),
+      },
+    );
+
+    if (!putResponse.ok) {
+      const errorData = await putResponse.json().catch(() => ({}));
+      const errorMessage =
+        (errorData as { message?: string }).message || `HTTP ${putResponse.status}`;
+      logger.error(`GitHub file upload failed for ${fileName}: ${errorMessage}`);
+      return null;
+    }
+
+    const result = (await putResponse.json()) as { content: { download_url: string } };
+    return result.content.download_url;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`Failed to upload file ${fileName} to GitHub: ${message}`);
+    return null;
+  }
+}
+
+async function uploadReportFiles(
+  files: FileRecord[],
+  reportId: string,
+  githubConfig: GitHubConfig,
+): Promise<Map<string, string>> {
+  const uploadedUrls = new Map<string, string>();
+
+  for (const file of files) {
+    // Skip videos — GitHub can't render them inline in markdown
+    if (file.mimeType.startsWith('video/')) {
+      continue;
+    }
+
+    // Skip files larger than 10 MB
+    if (file.sizeBytes > MAX_GITHUB_UPLOAD_BYTES) {
+      logger.warn(
+        `Skipping file ${file.filename} (${file.sizeBytes} bytes) — exceeds 10 MB limit`,
+      );
+      continue;
+    }
+
+    const buffer = readFile(file.path);
+    if (!buffer) {
+      logger.warn(`Could not read file ${file.filename} at ${file.path}`);
+      continue;
+    }
+
+    const githubUrl = await uploadFileToGitHub(buffer, file.filename, reportId, githubConfig);
+    if (githubUrl) {
+      uploadedUrls.set(file.filename, githubUrl);
+    }
+  }
+
+  return uploadedUrls;
+}
+
+async function buildIssueBody(
+  report: ReportWithFiles,
+  uploadedUrls?: Map<string, string>,
+): Promise<string> {
   const metadata = report.metadata as {
     url?: string;
     title?: string;
@@ -270,22 +374,75 @@ ${metadata.userActivity
 `;
   }
 
-  // Add screenshots if available
+  // Add screenshots and attachments if available
   if (report.files && report.files.length > 0) {
     const screenshots = report.files.filter((f) => f.type === 'screenshot');
+    const attachments = report.files.filter((f) => f.type !== 'screenshot');
+
     if (screenshots.length > 0) {
       body += `
 ### Screenshots
 `;
       for (const screenshot of screenshots) {
-        // Generate public URL for the screenshot
-        const imageUrl = appUrl
-          ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
-          : '';
-        if (imageUrl) {
-          body += `
-![${screenshot.filename}](${imageUrl})
+        const githubUrl = uploadedUrls?.get(screenshot.filename);
+        if (githubUrl) {
+          body += `\n![${screenshot.filename}](${githubUrl})\n`;
+        } else if (screenshot.mimeType.startsWith('video/')) {
+          const videoUrl = appUrl
+            ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
+            : '';
+          if (videoUrl) {
+            body += `\n[${screenshot.filename}](${videoUrl}) _(Video)_\n`;
+          }
+        } else {
+          const imageUrl = appUrl
+            ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
+            : '';
+          if (imageUrl) {
+            body += `\n![${screenshot.filename}](${imageUrl})`;
+            if (uploadedUrls) {
+              body += `\n_File hosted on BugPin server (GitHub upload failed). File may not display if the server is not publicly accessible._`;
+            }
+            body += '\n';
+          }
+        }
+      }
+    }
+
+    if (attachments.length > 0) {
+      body += `
+### Attachments
 `;
+      for (const attachment of attachments) {
+        const githubUrl = uploadedUrls?.get(attachment.filename);
+        if (githubUrl) {
+          if (attachment.mimeType.startsWith('image/')) {
+            body += `\n![${attachment.filename}](${githubUrl})\n`;
+          } else {
+            body += `\n[${attachment.filename}](${githubUrl})\n`;
+          }
+        } else if (attachment.mimeType.startsWith('video/')) {
+          const videoUrl = appUrl
+            ? `${appUrl}/api/public/files/${report.id}/${attachment.filename}`
+            : '';
+          if (videoUrl) {
+            body += `\n[${attachment.filename}](${videoUrl}) _(Video)_\n`;
+          }
+        } else {
+          const fileUrl = appUrl
+            ? `${appUrl}/api/public/files/${report.id}/${attachment.filename}`
+            : '';
+          if (fileUrl) {
+            if (attachment.mimeType.startsWith('image/')) {
+              body += `\n![${attachment.filename}](${fileUrl})`;
+            } else {
+              body += `\n[${attachment.filename}](${fileUrl})`;
+            }
+            if (uploadedUrls) {
+              body += `\n_File hosted on BugPin server (GitHub upload failed). File may not display if the server is not publicly accessible._`;
+            }
+            body += '\n';
+          }
         }
       }
     }
@@ -513,8 +670,14 @@ export async function updateGitHubIssue(
   }
 
   try {
+    // Upload files to GitHub if upload mode is enabled
+    let uploadedUrls: Map<string, string> | undefined;
+    if (githubConfig.fileTransferMode === 'upload' && report.files && report.files.length > 0) {
+      uploadedUrls = await uploadReportFiles(report.files, report.id, githubConfig);
+    }
+
     // Build updated issue body
-    const body = buildIssueBody(report);
+    const body = await buildIssueBody(report, uploadedUrls);
 
     // Map report status to GitHub issue state
     const state = report.status === 'resolved' || report.status === 'closed' ? 'closed' : 'open';

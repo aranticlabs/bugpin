@@ -179,9 +179,29 @@ integrations.post('/github/repositories', authorize(['admin']), async (c) => {
 // Fetch GitHub Labels for a repository (Admin only)
 
 integrations.post('/github/labels', authorize(['admin']), async (c) => {
-  const body = (await c.req.json()) as { accessToken?: string; owner?: string; repo?: string };
+  const body = (await c.req.json()) as {
+    accessToken?: string;
+    owner?: string;
+    repo?: string;
+    integrationId?: string;
+  };
 
-  if (!body.accessToken || !body.owner || !body.repo) {
+  // Resolve access token: use provided token, or look up from existing integration
+  let accessToken = body.accessToken;
+  let owner = body.owner;
+  let repo = body.repo;
+
+  if (!accessToken && body.integrationId) {
+    const integration = await integrationsRepo.findById(body.integrationId);
+    if (integration) {
+      const config = integration.config as GitHubIntegrationConfig;
+      accessToken = config.accessToken;
+      owner = owner || config.owner;
+      repo = repo || config.repo;
+    }
+  }
+
+  if (!accessToken || !owner || !repo) {
     return c.json(
       {
         success: false,
@@ -192,7 +212,7 @@ integrations.post('/github/labels', authorize(['admin']), async (c) => {
     );
   }
 
-  const result = await githubService.fetchLabels(body.accessToken, body.owner, body.repo);
+  const result = await githubService.fetchLabels(accessToken, owner, repo);
 
   if (!result.success) {
     return c.json({ success: false, error: 'FETCH_FAILED', message: result.error }, 400);
@@ -207,9 +227,29 @@ integrations.post('/github/labels', authorize(['admin']), async (c) => {
 // Fetch GitHub Assignees for a repository (Admin only)
 
 integrations.post('/github/assignees', authorize(['admin']), async (c) => {
-  const body = (await c.req.json()) as { accessToken?: string; owner?: string; repo?: string };
+  const body = (await c.req.json()) as {
+    accessToken?: string;
+    owner?: string;
+    repo?: string;
+    integrationId?: string;
+  };
 
-  if (!body.accessToken || !body.owner || !body.repo) {
+  // Resolve access token: use provided token, or look up from existing integration
+  let accessToken = body.accessToken;
+  let owner = body.owner;
+  let repo = body.repo;
+
+  if (!accessToken && body.integrationId) {
+    const integration = await integrationsRepo.findById(body.integrationId);
+    if (integration) {
+      const config = integration.config as GitHubIntegrationConfig;
+      accessToken = config.accessToken;
+      owner = owner || config.owner;
+      repo = repo || config.repo;
+    }
+  }
+
+  if (!accessToken || !owner || !repo) {
     return c.json(
       {
         success: false,
@@ -220,7 +260,7 @@ integrations.post('/github/assignees', authorize(['admin']), async (c) => {
     );
   }
 
-  const result = await githubService.fetchAssignees(body.accessToken, body.owner, body.repo);
+  const result = await githubService.fetchAssignees(accessToken, owner, repo);
 
   if (!result.success) {
     return c.json({ success: false, error: 'FETCH_FAILED', message: result.error }, 400);
