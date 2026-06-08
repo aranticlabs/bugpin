@@ -3,10 +3,11 @@ import { integrationsService } from '../../services/integrations.service.js';
 import { githubService } from '../../services/integrations/github.service.js';
 import { githubSyncService } from '../../services/integrations/github-sync.service.js';
 import { syncQueueService } from '../../services/integrations/sync-queue.service.js';
+import { jiraService } from '../../services/integrations/jira.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { integrationsRepo } from '../../database/repositories/integrations.repo.js';
-import type { GitHubIntegrationConfig } from '@shared/types';
+import type { GitHubIntegrationConfig, JiraIntegrationConfig } from '@shared/types';
 
 const integrations = new Hono();
 
@@ -269,6 +270,123 @@ integrations.post('/github/assignees', authorize(['admin']), async (c) => {
   return c.json({
     success: true,
     assignees: result.assignees,
+  });
+});
+
+// =============================================================================
+// Jira Endpoints
+// =============================================================================
+
+// Fetch Jira Projects (Admin only)
+// Accepts credentials (or an existing integrationId) and returns available projects
+
+integrations.post('/jira/projects', authorize(['admin']), async (c) => {
+  const body = (await c.req.json()) as {
+    deployment?: 'cloud' | 'server';
+    domain?: string;
+    email?: string;
+    apiToken?: string;
+    integrationId?: string;
+  };
+
+  // Resolve credentials: use provided values, or look up from existing integration
+  let { deployment, domain, email, apiToken } = body;
+
+  if ((!domain || !apiToken) && body.integrationId) {
+    const integration = await integrationsRepo.findById(body.integrationId);
+    if (integration && integration.type === 'jira') {
+      const config = integration.config as JiraIntegrationConfig;
+      deployment = deployment || config.deployment;
+      domain = domain || config.domain;
+      email = email || config.email;
+      apiToken = apiToken || config.apiToken;
+    }
+  }
+
+  const isServer = deployment === 'server';
+
+  if (!domain || !apiToken || (!isServer && !email)) {
+    return c.json(
+      {
+        success: false,
+        error: 'MISSING_PARAMS',
+        message: isServer
+          ? 'Domain and personal access token are required'
+          : 'Domain, email, and API token are required',
+      },
+      400
+    );
+  }
+
+  const result = await jiraService.fetchProjects({ deployment, domain, email, apiToken });
+
+  if (!result.success) {
+    return c.json({ success: false, error: 'FETCH_FAILED', message: result.error }, 400);
+  }
+
+  return c.json({
+    success: true,
+    projects: result.projects,
+  });
+});
+
+// Fetch Jira Issue Types for a project (Admin only)
+
+integrations.post('/jira/issue-types', authorize(['admin']), async (c) => {
+  const body = (await c.req.json()) as {
+    deployment?: 'cloud' | 'server';
+    domain?: string;
+    email?: string;
+    apiToken?: string;
+    projectKey?: string;
+    integrationId?: string;
+  };
+
+  // Resolve credentials: use provided values, or look up from existing integration
+  let { deployment, domain, email, apiToken, projectKey } = body;
+
+  if ((!domain || !apiToken) && body.integrationId) {
+    const integration = await integrationsRepo.findById(body.integrationId);
+    if (integration && integration.type === 'jira') {
+      const config = integration.config as JiraIntegrationConfig;
+      deployment = deployment || config.deployment;
+      domain = domain || config.domain;
+      email = email || config.email;
+      apiToken = apiToken || config.apiToken;
+      projectKey = projectKey || config.projectKey;
+    }
+  }
+
+  const isServer = deployment === 'server';
+
+  if (!domain || !apiToken || !projectKey || (!isServer && !email)) {
+    return c.json(
+      {
+        success: false,
+        error: 'MISSING_PARAMS',
+        message: isServer
+          ? 'Domain, personal access token, and project key are required'
+          : 'Domain, email, API token, and project key are required',
+      },
+      400
+    );
+  }
+
+  const result = await jiraService.fetchIssueTypes({
+    deployment,
+    domain,
+    email,
+    apiToken,
+    projectKey,
+  });
+
+  if (!result.success) {
+    return c.json({ success: false, error: 'FETCH_FAILED', message: result.error }, 400);
+  }
+
+  return c.json({
+    success: true,
+    issueTypes: result.issueTypes,
   });
 });
 

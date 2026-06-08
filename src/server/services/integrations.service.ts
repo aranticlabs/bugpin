@@ -6,6 +6,7 @@ import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import { githubService } from './integrations/github.service.js';
+import { jiraService } from './integrations/jira.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type {
@@ -13,6 +14,7 @@ import type {
   IntegrationType,
   IntegrationConfig,
   GitHubIntegrationConfig,
+  JiraIntegrationConfig,
   ForwardedReference,
 } from '@shared/types';
 
@@ -226,7 +228,25 @@ export const integrationsService = {
           break;
         }
 
-        case 'jira':
+        case 'jira': {
+          const config = integration.config as JiraIntegrationConfig;
+          const testResult = await jiraService.testConnection({
+            deployment: config.deployment,
+            domain: config.domain,
+            email: config.email,
+            apiToken: config.apiToken,
+            projectKey: config.projectKey,
+            issueType: config.issueType,
+          });
+
+          result = {
+            success: testResult.success,
+            error: testResult.error,
+            details: testResult.projectName ? { projectName: testResult.projectName } : undefined,
+          };
+          break;
+        }
+
         case 'slack':
         case 'linear':
         case 'webhook':
@@ -319,7 +339,35 @@ export const integrationsService = {
           break;
         }
 
-        case 'jira':
+        case 'jira': {
+          const config = integration.config as JiraIntegrationConfig;
+          const jiraResult = await jiraService.createIssue(
+            { ...report, files },
+            {
+              deployment: config.deployment,
+              domain: config.domain,
+              email: config.email,
+              apiToken: config.apiToken,
+              projectKey: config.projectKey,
+              issueType: config.issueType,
+              labels: config.labels,
+              customFields: config.customFields,
+            },
+            { labels: options.labels }
+          );
+
+          if (!jiraResult.success) {
+            return Result.fail(jiraResult.error || 'Failed to create Jira issue', 'FORWARD_FAILED');
+          }
+
+          result = {
+            type: 'jira',
+            id: jiraResult.issueKey!,
+            url: jiraResult.issueUrl,
+          };
+          break;
+        }
+
         case 'slack':
         case 'linear':
         case 'webhook':
@@ -393,7 +441,31 @@ function validateConfig(
       return { success: true };
     }
 
-    case 'jira':
+    case 'jira': {
+      const jiraConfig = config as JiraIntegrationConfig;
+      const isServer = jiraConfig.deployment === 'server';
+      if (!jiraConfig.domain || !jiraConfig.domain.trim()) {
+        return { success: false, error: 'Jira domain is required' };
+      }
+      // Cloud authenticates with email + API token; Server/DC uses a bearer PAT only.
+      if (!isServer && (!jiraConfig.email || !jiraConfig.email.trim())) {
+        return { success: false, error: 'Jira email is required' };
+      }
+      if (!jiraConfig.apiToken || !jiraConfig.apiToken.trim()) {
+        return {
+          success: false,
+          error: isServer ? 'Jira personal access token is required' : 'Jira API token is required',
+        };
+      }
+      if (!jiraConfig.projectKey || !jiraConfig.projectKey.trim()) {
+        return { success: false, error: 'Jira project key is required' };
+      }
+      if (!jiraConfig.issueType || !jiraConfig.issueType.trim()) {
+        return { success: false, error: 'Jira issue type is required' };
+      }
+      return { success: true };
+    }
+
     case 'slack':
     case 'linear':
     case 'webhook':

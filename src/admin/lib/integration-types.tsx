@@ -1,6 +1,13 @@
 import { Github } from '../components/icons/Github';
-import { Integration, IntegrationType, GitHubIntegrationConfig } from '@shared/types';
+import { Jira } from '../components/icons/Jira';
+import {
+  Integration,
+  IntegrationType,
+  GitHubIntegrationConfig,
+  JiraIntegrationConfig,
+} from '@shared/types';
 import { IntegrationDialog } from '../components/IntegrationDialog';
+import { JiraIntegrationDialog } from '../components/JiraIntegrationDialog';
 
 export interface IntegrationConfigDialogProps {
   open: boolean;
@@ -38,6 +45,32 @@ function GitHubConfigSummary({ integration }: { integration: Integration }) {
   );
 }
 
+function JiraConfigSummary({ integration }: { integration: Integration }) {
+  const config = integration.config as JiraIntegrationConfig;
+  return (
+    <div className="space-y-1 text-sm">
+      <p className="text-muted-foreground">
+        <span className="font-medium">Type:</span>{' '}
+        {config.deployment === 'server' ? 'Server / Data Center' : 'Cloud'}
+      </p>
+      <p className="text-muted-foreground">
+        <span className="font-medium">Project:</span> {config.projectKey}
+      </p>
+      <p className="text-muted-foreground">
+        <span className="font-medium">Issue Type:</span> {config.issueType}
+      </p>
+      <p className="text-muted-foreground">
+        <span className="font-medium">Domain:</span> {config.domain}
+      </p>
+      {config.labels && config.labels.length > 0 && (
+        <p className="text-muted-foreground">
+          <span className="font-medium">Labels:</span> {config.labels.join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export const CE_INTEGRATION_TYPES: IntegrationTypeDefinition[] = [
   {
     type: 'github',
@@ -47,5 +80,14 @@ export const CE_INTEGRATION_TYPES: IntegrationTypeDefinition[] = [
     maxPerProject: 1,
     getConfigSummary: (integration) => <GitHubConfigSummary integration={integration} />,
     ConfigDialog: IntegrationDialog,
+  },
+  {
+    type: 'jira',
+    name: 'Jira',
+    description: 'Create issues from bug reports in your Jira project',
+    icon: Jira,
+    maxPerProject: 1,
+    getConfigSummary: (integration) => <JiraConfigSummary integration={integration} />,
+    ConfigDialog: JiraIntegrationDialog,
   },
 ];

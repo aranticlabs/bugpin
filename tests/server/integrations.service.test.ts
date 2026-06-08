@@ -202,7 +202,7 @@ describe('integrationsService.testConnection', () => {
   });
 
   it('returns NOT_IMPLEMENTED for unsupported types', async () => {
-    integrationById = { ...baseIntegration, type: 'jira' };
+    integrationById = { ...baseIntegration, type: 'slack' };
     const result = await integrationsService.testConnection('int_1');
     expect(result.success).toBe(false);
   });

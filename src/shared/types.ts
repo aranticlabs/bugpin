@@ -556,12 +556,16 @@ export interface GitHubIntegrationConfig {
   fileTransferMode?: 'link' | 'upload'; // 'link' (default) or 'upload' files to GitHub repo
 }
 
+export type JiraDeployment = 'cloud' | 'server';
+
 export interface JiraIntegrationConfig {
+  deployment?: JiraDeployment; // 'cloud' (default) or 'server' (self-hosted Server/Data Center)
   domain: string;
-  email: string;
-  apiToken: string;
+  email?: string; // Required for Cloud (Basic auth); unused for Server/DC (Bearer/PAT)
+  apiToken: string; // Cloud API token or Server/DC personal access token. Masked in API responses
   projectKey: string;
   issueType: string;
+  labels?: string[];
   customFields?: Record<string, string>;
 }
 

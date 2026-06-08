@@ -282,6 +282,74 @@ export function useFetchGitHubAssignees() {
   });
 }
 
+// Jira Types
+
+export interface JiraProject {
+  key: string;
+  name: string;
+}
+
+export interface JiraIssueType {
+  id: string;
+  name: string;
+}
+
+interface JiraCredentials {
+  deployment?: 'cloud' | 'server';
+  domain: string;
+  email?: string;
+  apiToken?: string;
+  integrationId?: string;
+}
+
+/**
+ * Fetch Jira projects accessible by the given credentials
+ */
+export function useFetchJiraProjects() {
+  return useMutation({
+    mutationFn: async ({ deployment, domain, email, apiToken, integrationId }: JiraCredentials) => {
+      const response = await api.post('/integrations/jira/projects', {
+        deployment,
+        domain,
+        email: email || undefined,
+        apiToken: apiToken || undefined,
+        integrationId,
+      });
+      return response.data.projects as JiraProject[];
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'Failed to fetch Jira projects');
+    },
+  });
+}
+
+/**
+ * Fetch Jira issue types for a project
+ */
+export function useFetchJiraIssueTypes() {
+  return useMutation({
+    mutationFn: async ({
+      deployment,
+      domain,
+      email,
+      apiToken,
+      projectKey,
+      integrationId,
+    }: JiraCredentials & { projectKey: string }) => {
+      const response = await api.post('/integrations/jira/issue-types', {
+        deployment,
+        domain,
+        email: email || undefined,
+        apiToken: apiToken || undefined,
+        projectKey,
+        integrationId,
+      });
+      return response.data.issueTypes as JiraIssueType[];
+    },
+    // No toast - errors are handled inline in the dialog
+  });
+}
+
 // Sync Mode Types
 
 export interface SyncModeResult {
