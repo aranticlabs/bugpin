@@ -9,8 +9,10 @@ import {
   useTestIntegration,
   useFetchJiraProjects,
   useFetchJiraIssueTypes,
+  useFetchJiraComponents,
   JiraProject,
   JiraIssueType,
+  JiraComponent,
 } from '../hooks/useIntegrations';
 import {
   Dialog,
@@ -24,6 +26,9 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { Checkbox } from './ui/checkbox';
+import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { RefreshCw, HelpCircle, CheckCircle } from 'lucide-react';
 import { Spinner } from './ui/spinner';
@@ -81,6 +86,7 @@ export function JiraIntegrationDialog({
   const testMutation = useTestIntegration();
   const fetchProjectsMutation = useFetchJiraProjects();
   const fetchIssueTypesMutation = useFetchJiraIssueTypes();
+  const fetchComponentsMutation = useFetchJiraComponents();
 
   const {
     register,
@@ -112,7 +118,11 @@ export function JiraIntegrationDialog({
 
   const [projects, setProjects] = useState<JiraProject[]>([]);
   const [issueTypes, setIssueTypes] = useState<JiraIssueType[]>([]);
+  const [availableComponents, setAvailableComponents] = useState<JiraComponent[]>([]);
+  const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
   const [labels, setLabels] = useState<string>('');
+  const [additionalFields, setAdditionalFields] = useState<string>('');
+  const [autoForward, setAutoForward] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
 
   // Load integration data when editing
@@ -130,6 +140,33 @@ export function JiraIntegrationDialog({
           issueType: config.issueType || '',
         });
         setLabels((config.labels || []).join(', '));
+        setAutoForward(config.autoForward === true);
+        setSelectedComponents(config.components || []);
+        setAdditionalFields(
+          config.customFields && Object.keys(config.customFields).length > 0
+            ? JSON.stringify(config.customFields, null, 2)
+            : ''
+        );
+
+        // Auto-load issue types and components for the saved project so the
+        // current selection is editable (token is resolved server-side by ID).
+        if (config.projectKey) {
+          const creds = {
+            deployment: config.deployment,
+            domain: config.domain,
+            email: config.email,
+            projectKey: config.projectKey,
+            integrationId: integration.id,
+          };
+          fetchIssueTypesMutation
+            .mutateAsync(creds)
+            .then(setIssueTypes)
+            .catch(() => {});
+          fetchComponentsMutation
+            .mutateAsync(creds)
+            .then(setAvailableComponents)
+            .catch(() => {});
+        }
       } else {
         reset({
           name: '',
@@ -141,18 +178,25 @@ export function JiraIntegrationDialog({
           issueType: '',
         });
         setLabels('');
+        setAutoForward(false);
+        setSelectedComponents([]);
+        setAdditionalFields('');
+        setIssueTypes([]);
+        setAvailableComponents([]);
       }
       setProjects([]);
-      setIssueTypes([]);
       setShowTokenInput(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [integration, open, reset]);
 
   const handleDeploymentChange = (value: string) => {
     setValue('deployment', value as JiraDeployment, { shouldValidate: true });
-    // Project/issue type lists are instance-specific — clear them on switch.
+    // Project/issue type/component lists are instance-specific — clear on switch.
     setProjects([]);
     setIssueTypes([]);
+    setAvailableComponents([]);
+    setSelectedComponents([]);
     setValue('projectKey', '');
     setValue('issueType', '');
   };
@@ -194,20 +238,36 @@ export function JiraIntegrationDialog({
     setValue('projectKey', projectKey, { shouldValidate: true });
     setValue('issueType', '');
     setIssueTypes([]);
+    setAvailableComponents([]);
+    setSelectedComponents([]);
+
+    const creds = {
+      deployment: watchedDeployment,
+      domain: watchedDomain,
+      email: watchedEmail || undefined,
+      apiToken: watchedToken || undefined,
+      projectKey,
+      integrationId: integration?.id,
+    };
 
     try {
-      const result = await fetchIssueTypesMutation.mutateAsync({
-        deployment: watchedDeployment,
-        domain: watchedDomain,
-        email: watchedEmail || undefined,
-        apiToken: watchedToken || undefined,
-        projectKey,
-        integrationId: integration?.id,
-      });
+      const result = await fetchIssueTypesMutation.mutateAsync(creds);
       setIssueTypes(result);
     } catch {
       toast.error('Unable to load issue types for this project');
     }
+
+    // Components are optional — load them if the project has any.
+    try {
+      const components = await fetchComponentsMutation.mutateAsync(creds);
+      setAvailableComponents(components);
+    } catch {
+      // Non-fatal: project may have no components or token lacks access.
+    }
+  };
+
+  const toggleComponent = (name: string, checked: boolean) => {
+    setSelectedComponents((prev) => (checked ? [...prev, name] : prev.filter((c) => c !== name)));
   };
 
   const handleTest = async () => {
@@ -225,6 +285,23 @@ export function JiraIntegrationDialog({
       .map((l) => l.trim())
       .filter(Boolean);
 
+    // Parse the advanced "additional fields" JSON, if provided.
+    let customFields: Record<string, unknown> | undefined;
+    const trimmedFields = additionalFields.trim();
+    if (trimmedFields) {
+      try {
+        const parsed = JSON.parse(trimmedFields);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          toast.error('Additional fields must be a JSON object');
+          return;
+        }
+        customFields = parsed as Record<string, unknown>;
+      } catch {
+        toast.error('Additional fields contain invalid JSON');
+        return;
+      }
+    }
+
     const config: JiraIntegrationConfig = {
       deployment: data.deployment,
       domain: data.domain.trim(),
@@ -233,7 +310,9 @@ export function JiraIntegrationDialog({
       projectKey: data.projectKey.trim(),
       issueType: data.issueType.trim(),
       labels: parsedLabels.length > 0 ? parsedLabels : undefined,
-      customFields: existingConfig?.customFields,
+      components: selectedComponents.length > 0 ? selectedComponents : undefined,
+      customFields,
+      autoForward,
     };
 
     try {
@@ -513,6 +592,58 @@ export function JiraIntegrationDialog({
               <input type="hidden" {...register('issueType')} />
             </div>
 
+            {/* Components */}
+            <div className="space-y-2">
+              <Label>Components</Label>
+              {fetchComponentsMutation.isPending ? (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Spinner size="xs" />
+                  Loading components...
+                </p>
+              ) : availableComponents.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="border rounded-md p-2 max-h-28 overflow-y-auto space-y-1">
+                    {availableComponents.map((component) => (
+                      <div key={component.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`component-${component.id}`}
+                          checked={selectedComponents.includes(component.name)}
+                          onCheckedChange={(checked: boolean) =>
+                            toggleComponent(component.name, checked)
+                          }
+                        />
+                        <label
+                          htmlFor={`component-${component.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {component.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedComponents.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {selectedComponents.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : selectedComponents.length > 0 ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md border">
+                  <span className="font-medium">{selectedComponents.join(', ')}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    Reselect the project to change components
+                  </span>
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-muted/50 rounded-md border border-dashed text-muted-foreground text-sm">
+                  Select a project to load components
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Add components to every created issue. Required in some Jira projects.
+              </p>
+            </div>
+
             {/* Labels */}
             <div className="space-y-2">
               <Label htmlFor="labels">Labels</Label>
@@ -525,6 +656,40 @@ export function JiraIntegrationDialog({
               <p className="text-xs text-muted-foreground">
                 Added to every created issue. Spaces are replaced with dashes.
               </p>
+            </div>
+
+            {/* Additional Fields (advanced) */}
+            <div className="space-y-2">
+              <Label htmlFor="additional-fields">Additional fields (advanced)</Label>
+              <Textarea
+                id="additional-fields"
+                rows={4}
+                className="font-mono text-xs"
+                placeholder={
+                  '{\n  "customfield_10010": { "value": "High" },\n  "duedate": "2026-01-01"\n}'
+                }
+                value={additionalFields}
+                onChange={(e) => setAdditionalFields(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                JSON merged into the issue's{' '}
+                <code className="px-1 py-0.5 bg-muted rounded">fields</code>. Use this for any other
+                required fields, with Jira's native value shapes.
+              </p>
+            </div>
+
+            {/* Automatic forwarding */}
+            <div className="space-y-2 border rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="auto-forward">Automatic forwarding</Label>
+                <Switch id="auto-forward" checked={autoForward} onCheckedChange={setAutoForward} />
+              </div>
+              {autoForward && (
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  A Jira issue is created automatically whenever a new report is submitted — no
+                  manual forwarding needed.
+                </p>
+              )}
             </div>
           </DialogBody>
 

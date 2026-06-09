@@ -390,6 +390,66 @@ integrations.post('/jira/issue-types', authorize(['admin']), async (c) => {
   });
 });
 
+// Fetch Jira Components for a project (Admin only)
+
+integrations.post('/jira/components', authorize(['admin']), async (c) => {
+  const body = (await c.req.json()) as {
+    deployment?: 'cloud' | 'server';
+    domain?: string;
+    email?: string;
+    apiToken?: string;
+    projectKey?: string;
+    integrationId?: string;
+  };
+
+  // Resolve credentials: use provided values, or look up from existing integration
+  let { deployment, domain, email, apiToken, projectKey } = body;
+
+  if ((!domain || !apiToken) && body.integrationId) {
+    const integration = await integrationsRepo.findById(body.integrationId);
+    if (integration && integration.type === 'jira') {
+      const config = integration.config as JiraIntegrationConfig;
+      deployment = deployment || config.deployment;
+      domain = domain || config.domain;
+      email = email || config.email;
+      apiToken = apiToken || config.apiToken;
+      projectKey = projectKey || config.projectKey;
+    }
+  }
+
+  const isServer = deployment === 'server';
+
+  if (!domain || !apiToken || !projectKey || (!isServer && !email)) {
+    return c.json(
+      {
+        success: false,
+        error: 'MISSING_PARAMS',
+        message: isServer
+          ? 'Domain, personal access token, and project key are required'
+          : 'Domain, email, API token, and project key are required',
+      },
+      400
+    );
+  }
+
+  const result = await jiraService.fetchComponents({
+    deployment,
+    domain,
+    email,
+    apiToken,
+    projectKey,
+  });
+
+  if (!result.success) {
+    return c.json({ success: false, error: 'FETCH_FAILED', message: result.error }, 400);
+  }
+
+  return c.json({
+    success: true,
+    components: result.components,
+  });
+});
+
 // =============================================================================
 // GitHub Sync Endpoints
 // =============================================================================

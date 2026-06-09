@@ -21,7 +21,8 @@ export interface JiraConfig {
   projectKey: string;
   issueType: string;
   labels?: string[];
-  customFields?: Record<string, string>;
+  components?: string[]; // Component names, sent to Jira as [{ name }]
+  customFields?: Record<string, unknown>; // Raw extra fields merged into the issue payload
 }
 
 export interface JiraIssueResult {
@@ -446,7 +447,18 @@ export async function createJiraIssue(
       fields.labels = labels;
     }
 
-    // Merge any configured custom fields (e.g. { customfield_10010: "value" }).
+    // Components are commonly required; Jira expects an array of { name }.
+    const components = (jiraConfig.components || [])
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => ({ name }));
+    if (components.length > 0) {
+      fields.components = components;
+    }
+
+    // Merge any configured extra/required fields. Values are passed through
+    // as-is so callers can supply Jira's native shapes, e.g.
+    //   { "customfield_10010": { "value": "High" }, "duedate": "2026-01-01" }
     if (jiraConfig.customFields) {
       for (const [key, value] of Object.entries(jiraConfig.customFields)) {
         fields[key] = value;
@@ -660,9 +672,51 @@ export async function fetchJiraIssueTypes(
   }
 }
 
+/**
+ * Fetch the components defined for a given project.
+ */
+export async function fetchJiraComponents(
+  creds: JiraCredentials & { projectKey: string }
+): Promise<{
+  success: boolean;
+  components?: Array<{ id: string; name: string }>;
+  error?: string;
+}> {
+  const { domain, email, apiToken, projectKey, deployment } = creds;
+
+  if (!domain || !apiToken || !projectKey) {
+    return { success: false, error: 'Domain, API token, and project key are required' };
+  }
+  if (isCloud(deployment) && !email) {
+    return { success: false, error: 'Jira Cloud requires an account email' };
+  }
+
+  try {
+    const response = await fetch(
+      `${apiBase(domain, deployment)}/project/${encodeURIComponent(projectKey)}/components`,
+      { headers: jsonHeaders(creds) }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return { success: false, error: 'Project not found or no access' };
+      }
+      return { success: false, error: `Jira API error: HTTP ${response.status}` };
+    }
+
+    const data = (await response.json()) as Array<{ id: string; name: string }>;
+
+    return { success: true, components: data.map((c) => ({ id: c.id, name: c.name })) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: message };
+  }
+}
+
 export const jiraService = {
   createIssue: createJiraIssue,
   testConnection: testJiraConnection,
   fetchProjects: fetchJiraProjects,
   fetchIssueTypes: fetchJiraIssueTypes,
+  fetchComponents: fetchJiraComponents,
 };

@@ -67,6 +67,11 @@ function JiraConfigSummary({ integration }: { integration: Integration }) {
           <span className="font-medium">Labels:</span> {config.labels.join(', ')}
         </p>
       )}
+      {config.autoForward && (
+        <p className="text-muted-foreground">
+          <span className="font-medium">Auto-forward:</span> Enabled
+        </p>
+      )}
     </div>
   );
 }

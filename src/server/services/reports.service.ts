@@ -9,6 +9,7 @@ import { getEEHooks } from '../utils/ee-hooks.js';
 import { notificationsService } from './notifications.service.js';
 import { githubSyncService } from './integrations/github-sync.service.js';
 import { syncQueueService } from './integrations/sync-queue.service.js';
+import { integrationsService } from './integrations.service.js';
 import { usersService } from './users.service.js';
 import { normalizeUrl } from '../utils/validators.js';
 import type {
@@ -348,6 +349,11 @@ async function createForProject(
     .catch((error) => {
       logger.error('Failed to check for auto-sync integration', error, { projectId: project.id });
     });
+
+  // Auto-forward to integrations that opt in (e.g. Jira), async, don't block
+  integrationsService.autoForwardNewReport(report.id, project.id).catch((error) => {
+    logger.error('Failed to auto-forward report', error, { reportId: report.id });
+  });
 
   return Result.ok(report);
 }

@@ -5,7 +5,8 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import { githubService } from '../../src/server/services/integrations/github.service';
-import type { Integration, Project, Report } from '../../src/shared/types';
+import { jiraService } from '../../src/server/services/integrations/jira.service';
+import type { Integration, Project, Report, JiraIntegrationConfig } from '../../src/shared/types';
 
 const baseProject: Project = {
   id: 'prj_1',
@@ -55,6 +56,28 @@ const originalProjectsRepo = { ...projectsRepo };
 const originalReportsRepo = { ...reportsRepo };
 const originalFilesRepo = { ...filesRepo };
 const originalGithubService = { ...githubService };
+const originalJiraService = { ...jiraService };
+
+const jiraConfig: JiraIntegrationConfig = {
+  deployment: 'cloud',
+  domain: 'acme.atlassian.net',
+  email: 'dev@acme.com',
+  apiToken: 'jira-token-1234',
+  projectKey: 'BUG',
+  issueType: 'Bug',
+};
+
+const jiraIntegration: Integration = {
+  id: 'int_jira',
+  projectId: 'prj_1',
+  type: 'jira',
+  name: 'Jira',
+  config: jiraConfig,
+  isActive: true,
+  usageCount: 0,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
 
 let integrationById: Integration | null = baseIntegration;
 let integrationsByProject: Integration[] = [baseIntegration];
@@ -107,6 +130,7 @@ afterEach(() => {
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(filesRepo, originalFilesRepo);
   Object.assign(githubService, originalGithubService);
+  Object.assign(jiraService, originalJiraService);
 });
 
 describe('integrationsService.create', () => {
@@ -251,5 +275,71 @@ describe('integrationsService.forwardReport', () => {
       expect(updateLastUsedId).toBe('int_1');
       expect(updateReportPayload).toBeTruthy();
     }
+  });
+
+  it('forwards report to jira', async () => {
+    integrationById = jiraIntegration;
+    jiraService.createIssue = async () => ({
+      success: true,
+      issueKey: 'BUG-42',
+      issueUrl: 'https://acme.atlassian.net/browse/BUG-42',
+    });
+
+    const result = await integrationsService.forwardReport('rpt_1', 'int_jira');
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.type).toBe('jira');
+      expect(result.value.id).toBe('BUG-42');
+      expect(updateLastUsedId).toBe('int_jira');
+    }
+  });
+});
+
+describe('integrationsService.autoForwardNewReport', () => {
+  it('forwards to jira integrations with autoForward enabled', async () => {
+    const autoIntegration: Integration = {
+      ...jiraIntegration,
+      config: { ...jiraConfig, autoForward: true },
+    };
+    integrationsByProject = [autoIntegration];
+    integrationById = autoIntegration;
+
+    let created = false;
+    jiraService.createIssue = async () => {
+      created = true;
+      return { success: true, issueKey: 'BUG-1', issueUrl: 'https://acme/browse/BUG-1' };
+    };
+
+    await integrationsService.autoForwardNewReport('rpt_1', 'prj_1');
+    expect(created).toBe(true);
+    expect(updateLastUsedId).toBe('int_jira');
+  });
+
+  it('does not forward when autoForward is disabled', async () => {
+    integrationsByProject = [jiraIntegration]; // autoForward undefined
+
+    let created = false;
+    jiraService.createIssue = async () => {
+      created = true;
+      return { success: true, issueKey: 'BUG-1' };
+    };
+
+    await integrationsService.autoForwardNewReport('rpt_1', 'prj_1');
+    expect(created).toBe(false);
+  });
+
+  it('skips inactive integrations even when autoForward is enabled', async () => {
+    integrationsByProject = [
+      { ...jiraIntegration, isActive: false, config: { ...jiraConfig, autoForward: true } },
+    ];
+
+    let created = false;
+    jiraService.createIssue = async () => {
+      created = true;
+      return { success: true, issueKey: 'BUG-1' };
+    };
+
+    await integrationsService.autoForwardNewReport('rpt_1', 'prj_1');
+    expect(created).toBe(false);
   });
 });

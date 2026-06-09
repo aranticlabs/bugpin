@@ -294,6 +294,11 @@ export interface JiraIssueType {
   name: string;
 }
 
+export interface JiraComponent {
+  id: string;
+  name: string;
+}
+
 interface JiraCredentials {
   deployment?: 'cloud' | 'server';
   domain: string;
@@ -345,6 +350,33 @@ export function useFetchJiraIssueTypes() {
         integrationId,
       });
       return response.data.issueTypes as JiraIssueType[];
+    },
+    // No toast - errors are handled inline in the dialog
+  });
+}
+
+/**
+ * Fetch Jira components for a project
+ */
+export function useFetchJiraComponents() {
+  return useMutation({
+    mutationFn: async ({
+      deployment,
+      domain,
+      email,
+      apiToken,
+      projectKey,
+      integrationId,
+    }: JiraCredentials & { projectKey: string }) => {
+      const response = await api.post('/integrations/jira/components', {
+        deployment,
+        domain,
+        email: email || undefined,
+        apiToken: apiToken || undefined,
+        projectKey,
+        integrationId,
+      });
+      return response.data.components as JiraComponent[];
     },
     // No toast - errors are handled inline in the dialog
   });

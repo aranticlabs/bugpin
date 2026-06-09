@@ -351,6 +351,7 @@ export const integrationsService = {
               projectKey: config.projectKey,
               issueType: config.issueType,
               labels: config.labels,
+              components: config.components,
               customFields: config.customFields,
             },
             { labels: options.labels }
@@ -413,6 +414,35 @@ export const integrationsService = {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Failed to forward report', { reportId, integrationId, error: message });
       return Result.fail(`Failed to forward report: ${message}`, 'FORWARD_FAILED');
+    }
+  },
+
+  /**
+   * Automatically forward a newly-created report to any integrations in the
+   * project that have auto-forwarding enabled (currently Jira only).
+   *
+   * Intended to be called fire-and-forget from the report creation flow.
+   * forwardReport is idempotent (it records forwardedTo), so this is safe to
+   * call without risking duplicate issues.
+   */
+  async autoForwardNewReport(reportId: string, projectId: string): Promise<void> {
+    const integrations = await integrationsRepo.findByProjectId(projectId);
+
+    const targets = integrations.filter(
+      (i) =>
+        i.type === 'jira' && i.isActive && (i.config as JiraIntegrationConfig).autoForward === true
+    );
+
+    for (const integration of targets) {
+      const result = await this.forwardReport(reportId, integration.id);
+      if (!result.success) {
+        logger.error('Auto-forward to integration failed', {
+          reportId,
+          integrationId: integration.id,
+          type: integration.type,
+          error: result.error,
+        });
+      }
     }
   },
 };

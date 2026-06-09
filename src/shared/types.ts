@@ -566,7 +566,9 @@ export interface JiraIntegrationConfig {
   projectKey: string;
   issueType: string;
   labels?: string[];
-  customFields?: Record<string, string>;
+  components?: string[]; // Component names; required in some Jira projects
+  customFields?: Record<string, unknown>; // Raw extra fields merged into the issue payload
+  autoForward?: boolean; // Automatically create a Jira issue when a report is submitted
 }
 
 export interface SlackIntegrationConfig {
