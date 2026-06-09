@@ -147,9 +147,13 @@ export const integrationsService = {
       }
     }
 
-    // Validate config if provided
+    // The config returned to clients has secrets masked, so an edit that doesn't
+    // change a secret sends the masked value back. Restore the stored secret in
+    // that case so we never persist a masked/empty token, then validate.
+    let mergedConfig: IntegrationConfig | undefined;
     if (input.config !== undefined) {
-      const configValidation = validateConfig(existing.type, input.config);
+      mergedConfig = preserveMaskedSecrets(existing.config, input.config);
+      const configValidation = validateConfig(existing.type, mergedConfig);
       if (!configValidation.success) {
         return Result.fail(configValidation.error!, 'INVALID_CONFIG');
       }
@@ -161,8 +165,8 @@ export const integrationsService = {
       updates.name = input.name.trim();
     }
 
-    if (input.config !== undefined) {
-      updates.config = input.config;
+    if (mergedConfig !== undefined) {
+      updates.config = mergedConfig;
     }
 
     if (input.isActive !== undefined) {
@@ -545,4 +549,38 @@ function maskToken(token: string): string {
     return '****';
   }
   return token.slice(0, 4) + '****' + token.slice(-4);
+}
+
+// Sensitive config fields that are masked in API responses.
+const SENSITIVE_FIELDS = ['accessToken', 'apiToken', 'webhookUrl'] as const;
+
+/**
+ * When updating an integration, the incoming config comes from a client that
+ * only ever saw masked secrets. For each sensitive field, if the incoming value
+ * is empty or still the masked form of the stored value, keep the stored secret
+ * instead of overwriting it with a masked/empty placeholder.
+ */
+function preserveMaskedSecrets(
+  existing: IntegrationConfig,
+  incoming: IntegrationConfig
+): IntegrationConfig {
+  const result = { ...incoming } as unknown as Record<string, unknown>;
+  const stored = existing as unknown as Record<string, unknown>;
+
+  for (const field of SENSITIVE_FIELDS) {
+    const incomingValue = result[field];
+    const storedValue = stored[field];
+
+    if (typeof storedValue !== 'string') {
+      continue;
+    }
+
+    if (incomingValue === '' || incomingValue === undefined) {
+      result[field] = storedValue;
+    } else if (typeof incomingValue === 'string' && incomingValue === maskToken(storedValue)) {
+      result[field] = storedValue;
+    }
+  }
+
+  return result as unknown as IntegrationConfig;
 }

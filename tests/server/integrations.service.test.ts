@@ -86,6 +86,7 @@ let updatedIntegration: Integration | null = baseIntegration;
 let projectById: Project | null = baseProject;
 let reportById: Report | null = baseReport;
 let updateReportPayload: unknown;
+let updateIntegrationPayload: Partial<Integration> | null = null;
 let updateLastUsedId: string | null = null;
 
 beforeEach(() => {
@@ -96,13 +97,17 @@ beforeEach(() => {
   projectById = baseProject;
   reportById = baseReport;
   updateReportPayload = undefined;
+  updateIntegrationPayload = null;
   updateLastUsedId = null;
 
   projectsRepo.findById = async () => projectById;
   integrationsRepo.findById = async () => integrationById;
   integrationsRepo.findByProjectId = async () => integrationsByProject;
   integrationsRepo.create = async () => createdIntegration as Integration;
-  integrationsRepo.update = async () => updatedIntegration;
+  integrationsRepo.update = async (_id, updates) => {
+    updateIntegrationPayload = updates as Partial<Integration>;
+    return updatedIntegration;
+  };
   integrationsRepo.delete = async () => true;
   integrationsRepo.updateLastUsed = async (id) => {
     updateLastUsedId = id;
@@ -210,6 +215,36 @@ describe('integrationsService.update/delete', () => {
   it('updates integration', async () => {
     const result = await integrationsService.update('int_1', { name: 'New Name' });
     expect(result.success).toBe(true);
+  });
+
+  it('preserves the stored token when the masked value is sent back (github)', async () => {
+    // Client only ever sees the masked token and sends it back unchanged.
+    const maskedToken = 'toke****1234';
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: maskedToken } as never,
+    });
+    expect(result.success).toBe(true);
+    const savedConfig = updateIntegrationPayload?.config as { accessToken: string };
+    expect(savedConfig.accessToken).toBe('token1234'); // original, not the mask
+  });
+
+  it('preserves the stored apiToken when an empty value is sent (jira)', async () => {
+    integrationById = jiraIntegration;
+    const result = await integrationsService.update('int_jira', {
+      config: { ...jiraConfig, apiToken: '' } as never,
+    });
+    expect(result.success).toBe(true);
+    const savedConfig = updateIntegrationPayload?.config as { apiToken: string };
+    expect(savedConfig.apiToken).toBe('jira-token-1234');
+  });
+
+  it('updates the token when a new value is provided', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: 'brand-new-token' } as never,
+    });
+    expect(result.success).toBe(true);
+    const savedConfig = updateIntegrationPayload?.config as { accessToken: string };
+    expect(savedConfig.accessToken).toBe('brand-new-token');
   });
 
   it('deletes integration', async () => {
