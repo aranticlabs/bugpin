@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   type LucideIcon,
   LayoutDashboard,
@@ -16,6 +17,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../api/client';
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -30,6 +32,17 @@ interface NavItem {
   url: string;
   icon: LucideIcon;
   roles?: Array<'admin' | 'editor' | 'viewer'>;
+  count?: number;
+}
+
+interface WorkspaceReportStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+}
+
+interface WorkspaceProject {
+  id: string;
 }
 
 const navItems: NavItem[] = [
@@ -82,13 +95,14 @@ function NavGroup({ label, items, location, onItemClick }: NavGroupProps) {
         {items.map((item) => {
           const isActive =
             item.url === '/' ? location.pathname === '/' : location.pathname.startsWith(item.url);
+          const itemLabel = item.count === undefined ? item.title : `${item.title} (${item.count})`;
 
           return (
             <SidebarMenuItem key={item.url}>
-              <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+              <SidebarMenuButton asChild isActive={isActive} tooltip={itemLabel}>
                 <Link to={item.url} onClick={onItemClick}>
                   <item.icon />
-                  <span>{item.title}</span>
+                  <span>{itemLabel}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -103,18 +117,47 @@ export function NavMain() {
   const { user } = useAuth();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
+  const showAdminGroups = !!user && user.role === 'admin';
+
+  const { data: reportStats } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const response = await api.get<{ success: boolean; stats: WorkspaceReportStats }>(
+        '/reports/stats/overview'
+      );
+      return response.data.stats;
+    },
+    enabled: !!user,
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+  });
+
+  const { data: projects } = useQuery({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      const response = await api.get<{ success: boolean; projects: WorkspaceProject[] }>(
+        '/projects'
+      );
+      return response.data.projects;
+    },
+    enabled: showAdminGroups,
+  });
 
   const closeSidebarOnMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
 
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.roles) return true;
-    if (!user) return false;
-    return item.roles.includes(user.role);
-  });
-
-  const showAdminGroups = !!user && user.role === 'admin';
+  const filteredNavItems = navItems
+    .filter((item) => {
+      if (!item.roles) return true;
+      if (!user) return false;
+      return item.roles.includes(user.role);
+    })
+    .map((item) => {
+      if (item.url === '/reports') return { ...item, count: reportStats?.total };
+      if (item.url === '/projects') return { ...item, count: projects?.length };
+      return item;
+    });
 
   return (
     <>
