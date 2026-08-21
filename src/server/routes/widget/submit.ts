@@ -93,7 +93,7 @@ const submitReportSchema = z.object({
       })
       .optional(),
   }),
-  annotations: z.record(z.unknown()).optional(),
+  annotations: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Submit Report
