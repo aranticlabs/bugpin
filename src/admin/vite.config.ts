@@ -89,6 +89,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Keep Node's process-wide Web Storage from shadowing jsdom's browser-scoped storage.
+    execArgv:
+      Number.parseInt(process.versions.node, 10) >= 25 ? ['--no-experimental-webstorage'] : [],
     setupFiles: ['./tests/setup.ts'],
     include: ['./tests/**/*.test.{ts,tsx}'],
     css: true,
