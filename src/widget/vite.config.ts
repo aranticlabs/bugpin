@@ -11,17 +11,16 @@ export default defineConfig({
     dts({
       include: ['**/*.ts', '**/*.tsx', '../shared/**/*.ts'],
       exclude: ['tests/**', 'node_modules/**', 'dist/**', 'vite.config.ts'],
-      rollupTypes: true,
       tsconfigPath: './tsconfig.json',
       compilerOptions: {
-        rootDir: path.resolve(__dirname, '..'),
+        rootDir: path.resolve(import.meta.dirname, '..'),
       },
     }),
   ],
   root: '.',
   resolve: {
     alias: {
-      '@shared': path.resolve(__dirname, '../shared'),
+      '@shared': path.resolve(import.meta.dirname, '../shared'),
     },
   },
   build: {
@@ -37,12 +36,7 @@ export default defineConfig({
     },
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        inlineDynamicImports: true,
-      },
-    },
-    minify: 'esbuild',
+    minify: 'oxc',
     cssCodeSplit: false,
     sourcemap: false,
   },

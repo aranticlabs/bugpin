@@ -1,10 +1,12 @@
 # BugPin Dockerfile
 # Multi-stage build for optimized production image
 
+ARG BUN_VERSION=1.4.0
+
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM oven/bun:1-alpine AS builder
+FROM oven/bun:${BUN_VERSION}-alpine AS builder
 
 # Pull latest Alpine security patches (libssl3, libcrypto3, musl, zlib, etc.)
 RUN apk update && apk upgrade --no-cache
@@ -12,15 +14,14 @@ RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
-# Copy package.json files (lockfile is optional)
-COPY package.json ./
-COPY bun.lock* ./
+# Copy package manifests and the required lockfile
+COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
 
-# Install dependencies (canvas is optional and may fail on Alpine, which is OK)
-RUN bun install; exit 0
+# Install the exact dependency graph from the committed lockfile
+RUN bun install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -45,7 +46,7 @@ RUN if [ -d "ee/src" ]; then cd ee && bun run build.ts; fi && \
 # =============================================================================
 # Stage 2: Production
 # =============================================================================
-FROM oven/bun:1-alpine
+FROM oven/bun:${BUN_VERSION}-alpine
 
 WORKDIR /app
 
@@ -53,17 +54,12 @@ WORKDIR /app
 # and install tini for signal handling and wget for health checks.
 RUN apk update && apk upgrade --no-cache && apk add --no-cache tini wget
 
-# Copy server package.json and install production dependencies only
-# We use the server's package.json directly to avoid workspace issues
+# Copy the workspace manifests and lockfile before installing server dependencies
+COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
-WORKDIR /app/src/server
-RUN bun install --production
-
-# Back to app root
-WORKDIR /app
-
-# Copy root package.json (used for version at runtime)
-COPY package.json ./
+COPY src/admin/package.json ./src/admin/
+COPY src/widget/package.json ./src/widget/
+RUN bun install --production --frozen-lockfile --filter @bugpin/server
 
 # Copy server source (Bun runs TypeScript directly)
 COPY src/server ./src/server

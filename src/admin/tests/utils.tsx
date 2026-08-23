@@ -31,8 +31,6 @@ interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   queryClient?: QueryClient;
 }
 
-const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
-
 export function renderWithProviders(
   ui: React.ReactElement,
   {
@@ -44,7 +42,7 @@ export function renderWithProviders(
   function Wrapper({ children }: WrapperProps) {
     return (
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={initialEntries} future={routerFuture}>
+        <MemoryRouter initialEntries={initialEntries}>
           <ThemeProvider>
             <BrandingProvider>
               <AuthProvider>{children}</AuthProvider>
@@ -86,11 +84,7 @@ export function renderWithRouter(
   { initialEntries = ['/'], ...options }: CustomRenderOptions = {}
 ) {
   function Wrapper({ children }: WrapperProps) {
-    return (
-      <MemoryRouter initialEntries={initialEntries} future={routerFuture}>
-        {children}
-      </MemoryRouter>
-    );
+    return <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>;
   }
 
   return render(ui, { wrapper: Wrapper, ...options });

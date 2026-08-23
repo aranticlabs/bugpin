@@ -272,6 +272,7 @@ export function Reports() {
     },
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setSelectedIds(new Set());
       setShowDeleteConfirm(false);
 

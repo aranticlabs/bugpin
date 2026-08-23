@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 import { defineConfig } from 'vitest/config';
 
 const packageJson = JSON.parse(
-  readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8')
+  readFileSync(path.resolve(import.meta.dirname, '../../package.json'), 'utf-8')
 );
 
 export default defineConfig({
@@ -19,43 +19,37 @@ export default defineConfig({
   publicDir: 'public',
   resolve: {
     alias: {
-      '@shared': path.resolve(__dirname, '../shared'),
+      '@shared': path.resolve(import.meta.dirname, '../shared'),
     },
   },
   build: {
     outDir: '../../dist/admin',
     emptyOutDir: true,
     sourcemap: false,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          // React and related libraries
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          // UI libraries
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-tooltip',
-            '@radix-ui/react-switch',
-            '@radix-ui/react-label',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-alert-dialog',
-            '@radix-ui/react-avatar',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-slot',
-          ],
-          // TanStack Query and data fetching
-          'vendor-query': ['@tanstack/react-query', 'axios'],
-          // Utility libraries
-          'vendor-utils': [
-            'clsx',
-            'tailwind-merge',
-            'class-variance-authority',
-            'lucide-react',
-            'sonner',
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-react',
+              test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom)(?:[\\/]|$)/,
+              priority: 40,
+            },
+            {
+              name: 'vendor-ui',
+              test: /node_modules[\\/]@radix-ui[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'vendor-query',
+              test: /node_modules[\\/](?:@tanstack[\\/]react-query|axios)(?:[\\/]|$)/,
+              priority: 20,
+            },
+            {
+              name: 'vendor-utils',
+              test: /node_modules[\\/](?:clsx|tailwind-merge|class-variance-authority|lucide-react|sonner)(?:[\\/]|$)/,
+              priority: 10,
+            },
           ],
         },
       },
@@ -95,6 +89,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Keep Node's process-wide Web Storage from shadowing jsdom's browser-scoped storage.
+    execArgv:
+      Number.parseInt(process.versions.node, 10) >= 25 ? ['--no-experimental-webstorage'] : [],
     setupFiles: ['./tests/setup.ts'],
     include: ['./tests/**/*.test.{ts,tsx}'],
     css: true,
