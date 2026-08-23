@@ -186,3 +186,5 @@ BugPin uses a multi-license approach:
 
 - **Server & Admin Console**: [AGPL-3.0](LICENSE)
 - **Widget**: [MIT](https://github.com/aranticlabs/bugpin/blob/main/src/widget/LICENSE)
+
+Enterprise Edition features are proprietary and not open-source software. They are covered by the [BugPin Business License](LICENSE-EE).

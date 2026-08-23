@@ -1,6 +1,6 @@
 # BugPin Trademark Policy
 
-BugPin is a trademark of Arantic Digital.
+BugPin is a trademark of Arantic Digital GmbH.
 
 ## What This Means
 
