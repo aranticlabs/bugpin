@@ -543,6 +543,7 @@ export const handlers = [
         sessionMaxAgeDays: 7,
         invitationExpirationDays: 7,
         updateCheckEnabled: true,
+        privacy: { euPrivacyMode: false },
         smtpEnabled: false,
         smtpConfig: {
           host: '',

@@ -48,6 +48,39 @@ The widget automatically fetches its configuration from the BugPin server based 
 | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `language` | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
 
+## Privacy and diagnostic capture
+
+The server controls which diagnostic categories the widget may collect. EU Privacy Mode disables
+the user activity trail for every project, with no project override. When EU Privacy Mode is off,
+the activity trail remains available automatically unless the project disables it. Console output,
+network failures, and storage-key names remain independent project controls; storage-key capture is
+off by default.
+
+The activity trail records at most 30 recent interactions with buttons, links, inputs, selects,
+checkboxes, and similar controls. It does not record keystrokes or typed values. Common personal
+data and token patterns are redacted before entering the in-memory buffer.
+
+Mark sensitive parts of an embedded website with `data-bugpin-private`. BugPin ignores activity
+inside the marked element and all of its descendants:
+
+```html
+<section data-bugpin-private>
+  <!-- Account, payment, health, or other sensitive UI -->
+</section>
+```
+
+Activity remains in page memory until it is submitted with a report or cleared. When EU Privacy
+Mode or the project activity setting disables capture, the widget does not install the activity
+listener and clears the activity buffer.
+
+Diagnostic capture is fail-closed and server-controlled:
+
+- Console and network capture start only after the widget config has been fetched. Errors that
+  occur before the widget initializes are not captured. If the config request fails, all
+  diagnostic capture stays disabled for the session.
+- The capture flags cannot be overridden through local `BugPin.init()` options; they are always
+  resolved from the server configuration so instance and project privacy settings take precedence.
+
 ## Language
 
 The widget ships with translations for English, German, French, Dutch, Spanish, Italian, Japanese, and Simplified Chinese.

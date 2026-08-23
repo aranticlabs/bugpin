@@ -1,6 +1,7 @@
 import { PageContext } from '../capture/context.js';
 import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
 import { bufferReport, startAutoSync } from '../storage/report-buffer.js';
+import type { UserActivityCapturePolicy } from '@shared/types';
 
 // Start auto-sync on module load
 startAutoSync();
@@ -185,6 +186,9 @@ export async function fetchWidgetConfig(
     annotation: boolean;
     attachments: boolean;
     consoleCapture: boolean;
+    networkCapture: boolean;
+    storageKeysCapture: boolean;
+    userActivityCapture: UserActivityCapturePolicy;
   };
   theme: string;
   position: string;

@@ -167,6 +167,10 @@ const projectSettingsSchema = z
     widgetLauncherButton: widgetLauncherButtonProjectSchema.optional(),
     widgetDialog: widgetDialogColorsSchema.optional(),
     screenshot: projectScreenshotSchema.optional(),
+    activityCapture: z.boolean().optional(),
+    consoleCapture: z.boolean().optional(),
+    networkCapture: z.boolean().optional(),
+    storageKeysCapture: z.boolean().optional(),
     security: projectSecuritySchema.optional(),
     branding: projectBrandingSchema.optional(),
     fields: projectFieldsSchema.optional(),
@@ -430,6 +434,12 @@ export const schemas = {
   updateSettings: z.object({
     appName: z.string().min(1).max(100).optional(),
     appUrl: z.string().optional(),
+    privacy: z
+      .object({
+        euPrivacyMode: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     widgetLauncherButton: widgetLauncherButtonGlobalSchema.optional(),
     smtpEnabled: z.boolean().optional(),
     smtpConfig: z

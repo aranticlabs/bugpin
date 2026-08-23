@@ -23,6 +23,7 @@ describe('AppSidebar', () => {
     expect(await screen.findByText('Reports (17)')).toBeInTheDocument();
     expect(await screen.findByText('Projects (2)')).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.getByText('Security & Privacy')).toBeInTheDocument();
 
     const userButton = screen.getByText('Admin User').closest('button');
     expect(userButton).not.toBeNull();

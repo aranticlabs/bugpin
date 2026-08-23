@@ -10,6 +10,7 @@ import type {
   ReporterNotificationSettings,
   LocalizedString,
   ProjectLanguageSettings,
+  PrivacySettings,
 } from '@shared/types';
 import {
   wrapLegacyLocalizedString,
@@ -106,6 +107,10 @@ const DEFAULT_LANGUAGE: ProjectLanguageSettings = {
   defaultLanguage: 'en',
 };
 
+const DEFAULT_PRIVACY: PrivacySettings = {
+  euPrivacyMode: false,
+};
+
 const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
   lightButtonColor: '#02658D',
   lightTextColor: '#ffffff',
@@ -127,6 +132,7 @@ const KEY_MAP: Record<string, string> = {
   invitationExpirationDays: 'invitation_expiration_days',
   updateCheckEnabled: 'update_check_enabled',
   enforceHttps: 'enforce_https',
+  privacy: 'privacy',
   smtpEnabled: 'smtp_enabled',
   smtpConfig: 'smtp_config',
   s3Enabled: 's3_enabled',
@@ -201,6 +207,11 @@ export const settingsRepo = {
       updateCheckEnabled: (settings.updateCheckEnabled as boolean) ?? true,
       // Security settings
       enforceHttps: (settings.enforceHttps as boolean) ?? false,
+      // Privacy settings
+      privacy: {
+        ...DEFAULT_PRIVACY,
+        ...(settings.privacy as Partial<PrivacySettings>),
+      },
       // SMTP settings
       smtpEnabled: (settings.smtpEnabled as boolean) ?? false,
       smtpConfig: (settings.smtpConfig as AppSettings['smtpConfig']) ?? {},

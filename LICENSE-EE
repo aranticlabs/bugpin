@@ -1,0 +1,38 @@
+BugPin Enterprise Edition License
+Copyright 2026 Arantic Digital GmbH. All rights reserved.
+
+This software and associated documentation files (the "Software") may only
+be used in production with a valid Enterprise license from Arantic Digital GmbH.
+
+You may:
+
+- View and inspect the source code for evaluation purposes
+- Run the Software in a non-production environment for evaluation (30 days)
+- Modify the Software for internal evaluation purposes
+
+You may not:
+
+- Use the Software in production without a valid license
+- Distribute, sublicense, or sell copies of the Software
+- Remove or alter any license or copyright notices
+- Share access credentials or license keys with third parties
+- Use the Software to provide a competing service (SaaS/hosted offering)
+
+License terms:
+
+- Licenses are per-organization and non-transferable
+- Violation of these terms automatically terminates your license
+
+Warranty disclaimer:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+Limitation of liability:
+IN NO EVENT SHALL ARANTIC DIGITAL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+For licensing inquiries: admin@arantic.com
+
+The open-source components of BugPin are available under AGPL-3.0 at:
+https://github.com/aranticlabs/bugpin

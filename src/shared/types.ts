@@ -40,6 +40,11 @@ export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
 export type GitHubSyncStatus = 'pending' | 'synced' | 'error';
 export type GitHubSyncMode = 'manual' | 'automatic';
+export type UserActivityCapturePolicy = 'automatic' | 'disabled';
+
+export interface PrivacySettings {
+  euPrivacyMode: boolean;
+}
 
 // Report Types
 
@@ -240,6 +245,10 @@ export interface ProjectSettings {
   widgetDialog?: WidgetDialogSettings;
   language?: ProjectLanguageSettings;
   screenshot?: ScreenshotSettings;
+  activityCapture?: boolean;
+  consoleCapture?: boolean;
+  networkCapture?: boolean;
+  storageKeysCapture?: boolean;
   security?: {
     allowedOrigins?: string[];
   };
@@ -498,6 +507,8 @@ export interface AppSettings {
   updateCheckEnabled: boolean;
   // Security settings
   enforceHttps: boolean;
+  // Privacy settings
+  privacy: PrivacySettings;
   // SMTP settings
   smtpEnabled: boolean;
   smtpConfig: {

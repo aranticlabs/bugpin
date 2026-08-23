@@ -346,8 +346,8 @@ export async function generateApiKeyPdf(data: ApiKeyPdfData): Promise<void> {
   const currentYear = new Date().getFullYear();
   doc.setFontSize(9);
 
-  // Calculate centered position for "© 2026 Arantic Digital | GitHub"
-  const copyrightText = `© ${currentYear} Arantic Digital  |  `;
+  // Calculate centered position for "© 2026 Arantic Digital GmbH | GitHub"
+  const copyrightText = `© ${currentYear} Arantic Digital GmbH  |  `;
   const githubText = 'GitHub';
   const copyrightWidth = doc.getTextWidth(copyrightText);
   const githubWidth = doc.getTextWidth(githubText);

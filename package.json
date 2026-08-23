@@ -26,7 +26,7 @@
     "typecheck:admin": "bun run --cwd src/admin typecheck",
     "typecheck:widget": "bun run --cwd src/widget typecheck",
     "test": "bun run test:server && bun run test:admin && bun run test:widget",
-    "test:server": "bun test tests/server",
+    "test:server": "bun test tests/server tests/shared",
     "test:admin": "bun run --cwd src/admin test",
     "test:widget": "bun run --cwd src/widget test",
     "migrate": "bun run --cwd src/server migrate",

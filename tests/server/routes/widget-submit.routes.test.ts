@@ -328,6 +328,89 @@ describe('widget routes', () => {
       expect(res.status).toBe(400);
     });
 
+    it('removes user activity when EU Privacy Mode disables capture', async () => {
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          privacy: {
+            euPrivacyMode: true,
+          },
+        }) as AppSettings;
+      settingsCacheService.invalidate();
+
+      let capturedMetadata: Report['metadata'] | undefined;
+      reportsService.create = async (input) => {
+        capturedMetadata = input.metadata;
+        return Result.ok(baseReport);
+      };
+
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'test_api_key_123',
+        },
+        body: JSON.stringify({
+          ...validSubmitBody,
+          metadata: {
+            ...validSubmitBody.metadata,
+            userActivity: [
+              {
+                type: 'button',
+                text: 'Save',
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          },
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(capturedMetadata?.userActivity).toBeUndefined();
+    });
+
+    it('keeps activity when EU Privacy Mode is off', async () => {
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          privacy: {
+            euPrivacyMode: false,
+          },
+        }) as AppSettings;
+      settingsCacheService.invalidate();
+
+      let capturedMetadata: Report['metadata'] | undefined;
+      reportsService.create = async (input) => {
+        capturedMetadata = input.metadata;
+        return Result.ok(baseReport);
+      };
+
+      const activity = {
+        type: 'button' as const,
+        text: 'Save',
+        timestamp: new Date().toISOString(),
+      };
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'test_api_key_123',
+        },
+        body: JSON.stringify({
+          ...validSubmitBody,
+          metadata: {
+            ...validSubmitBody.metadata,
+            userActivity: [activity],
+          },
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(capturedMetadata?.userActivity).toEqual([activity]);
+    });
+
     describe('reporter locale capture', () => {
       it('persists the normalized claimed locale for an auto-mode project', async () => {
         projectResult = {
@@ -445,6 +528,39 @@ describe('widget routes', () => {
   });
 
   describe('GET /widget/config/:apiKey', () => {
+    it('returns automatic activity capture when EU Privacy Mode is off', async () => {
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          privacy: {
+            euPrivacyMode: false,
+          },
+        }) as AppSettings;
+
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/config/test_api_key_123');
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.config.features.userActivityCapture).toBe('automatic');
+      expect(body.config.features.storageKeysCapture).toBe(false);
+    });
+
+    it('returns disabled activity capture for EU Privacy Mode', async () => {
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          privacy: {
+            euPrivacyMode: true,
+          },
+        }) as AppSettings;
+
+      const app = createApp();
+      const disabledResponse = await app.request('http://localhost/widget/config/test_api_key_123');
+      const disabledBody = await disabledResponse.json();
+      expect(disabledBody.config.features.userActivityCapture).toBe('disabled');
+    });
+
     it('returns 404 when project not found', async () => {
       projectResult = null;
 
