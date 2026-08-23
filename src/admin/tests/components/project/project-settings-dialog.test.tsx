@@ -143,14 +143,21 @@ const notificationDefaults: ProjectNotificationDefaults = {
   updatedAt: new Date().toISOString(),
 };
 
-function setupMockResponses(defaults: ProjectNotificationDefaults | null) {
+function setupMockResponses(defaults: ProjectNotificationDefaults | null, euPrivacyMode = false) {
   mockGet.mockImplementation((url: string) => {
     if (url === '/projects/project-1') {
       return Promise.resolve({ data: { project: baseProject } });
     }
     if (url === '/settings') {
       return Promise.resolve({
-        data: { settings: { widgetDialog: {}, widgetLauncherButton: {}, screenshot: {} } },
+        data: {
+          settings: {
+            widgetDialog: {},
+            widgetLauncherButton: {},
+            screenshot: {},
+            privacy: { euPrivacyMode },
+          },
+        },
       });
     }
     if (url === '/users/assignable') {
@@ -222,6 +229,58 @@ describe('ProjectSettingsDialog', () => {
 
     expect(mockToast.success).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('saves project diagnostic restrictions', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(
+      <ProjectSettingsDialog
+        project={{ id: 'project-1', name: 'Project' }}
+        open={true}
+        onOpenChange={() => undefined}
+        defaultTab="diagnostics"
+      />
+    );
+
+    const networkSwitch = await screen.findByRole('switch', { name: 'Network failures' });
+    const storageSwitch = screen.getByRole('switch', { name: 'Storage key names' });
+    expect(networkSwitch).toHaveAttribute('data-state', 'checked');
+    expect(storageSwitch).toHaveAttribute('data-state', 'unchecked');
+
+    await user.click(networkSwitch);
+    await user.click(storageSwitch);
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+        settings: expect.objectContaining({
+          activityCapture: true,
+          consoleCapture: true,
+          networkCapture: false,
+          storageKeysCapture: true,
+        }),
+      });
+    });
+  });
+
+  it('disables the project activity control in EU Privacy Mode', async () => {
+    setupMockResponses(notificationDefaults, true);
+
+    renderWithQuery(
+      <ProjectSettingsDialog
+        project={{ id: 'project-1', name: 'Project' }}
+        open={true}
+        onOpenChange={() => undefined}
+        defaultTab="diagnostics"
+      />
+    );
+
+    const activitySwitch = await screen.findByRole('switch', { name: 'User activity trail' });
+    expect(activitySwitch).toBeDisabled();
+    expect(activitySwitch).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByText(/disabled for every project by EU Privacy Mode/i)).toBeInTheDocument();
   });
 
   it('clears custom settings and deletes notification defaults when disabled', async () => {

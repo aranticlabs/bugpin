@@ -1,4 +1,4 @@
-import type { LauncherTextBundle, LocaleCode } from '@shared/types';
+import type { LauncherTextBundle, LocaleCode, UserActivityCapturePolicy } from '@shared/types';
 
 export type { LauncherTextBundle };
 
@@ -52,6 +52,9 @@ export interface WidgetConfig {
   enableScreenshot: boolean;
   enableAnnotation: boolean;
   enableConsoleCapture: boolean;
+  enableNetworkCapture: boolean;
+  enableStorageKeysCapture: boolean;
+  userActivityCapture: UserActivityCapturePolicy;
   captureMethod: 'visible' | 'fullpage' | 'element';
   useScreenCaptureAPI: boolean;
   maxScreenshotSize: number;
@@ -103,6 +106,9 @@ export const defaultConfig: WidgetConfig = {
   enableScreenshot: true,
   enableAnnotation: true,
   enableConsoleCapture: true,
+  enableNetworkCapture: true,
+  enableStorageKeysCapture: false,
+  userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 10 * 1024 * 1024, // 10MB

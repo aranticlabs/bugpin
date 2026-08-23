@@ -53,8 +53,8 @@ const NotificationsPage = lazyWithRetry(() =>
 const Users = lazyWithRetry(() =>
   import('./pages/console/Users').then((m) => ({ default: m.Users }))
 );
-const Security = lazyWithRetry(() =>
-  import('./pages/console/Security').then((m) => ({ default: m.Security }))
+const SecurityPrivacy = lazyWithRetry(() =>
+  import('./pages/console/SecurityPrivacy').then((m) => ({ default: m.SecurityPrivacy }))
 );
 const Branding = lazyWithRetry(() =>
   import('./pages/console/Branding').then((m) => ({ default: m.Branding }))
@@ -182,10 +182,10 @@ export function App() {
               }
             />
             <Route
-              path="security"
+              path="security-privacy"
               element={
                 <AdminRoute>
-                  <Security />
+                  <SecurityPrivacy />
                 </AdminRoute>
               }
             />

@@ -13,6 +13,7 @@ const captureContext = mock(() => ({
   timestamp: new Date().toISOString(),
 }));
 const submitReport = mock(async () => undefined);
+const clearUserActivity = mock(() => undefined);
 
 let lastDialogProps: Record<string, unknown> | null = null;
 let lastAnnotationProps: Record<string, unknown> | null = null;
@@ -33,6 +34,7 @@ const appDeps = {
   captureScreenshot,
   captureContext,
   submitReport,
+  clearUserActivity,
 };
 
 const baseConfig: WidgetConfig = {
@@ -75,6 +77,9 @@ const baseConfig: WidgetConfig = {
   enableScreenshot: true,
   enableAnnotation: true,
   enableConsoleCapture: true,
+  enableNetworkCapture: true,
+  enableStorageKeysCapture: false,
+  userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,
@@ -113,6 +118,7 @@ beforeEach(() => {
   captureScreenshot.mockClear();
   captureContext.mockClear();
   submitReport.mockClear();
+  clearUserActivity.mockClear();
 
   // Install fake IndexedDB for draft storage
   installFakeIndexedDB();

@@ -24,22 +24,41 @@ describe('Layout', () => {
     expect(await screen.findByText('About BugPin')).toBeInTheDocument();
   });
 
-  it('renders single-level breadcrumb on /security', async () => {
+  it('renders the Security breadcrumb on /security-privacy', async () => {
     window.location.hash = '';
 
     renderWithProviders(
       <BrandingProvider>
         <Routes>
-          <Route path="/security" element={<Layout />}>
+          <Route path="/security-privacy" element={<Layout />}>
             <Route index element={<div>Security Content</div>} />
           </Route>
         </Routes>
       </BrandingProvider>,
-      { initialEntries: ['/security'] }
+      { initialEntries: ['/security-privacy'] }
     );
 
-    expect(await screen.findByText('Security')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Security & Privacy' })).toBeInTheDocument();
+    expect(screen.getByText('Security', { exact: true })).toBeInTheDocument();
     expect(screen.getByText('Security Content')).toBeInTheDocument();
+  });
+
+  it('renders the Privacy breadcrumb for /security-privacy#privacy', async () => {
+    window.location.hash = '#privacy';
+
+    renderWithProviders(
+      <BrandingProvider>
+        <Routes>
+          <Route path="/security-privacy" element={<Layout />}>
+            <Route index element={<div>Privacy Content</div>} />
+          </Route>
+        </Routes>
+      </BrandingProvider>,
+      { initialEntries: ['/security-privacy#privacy'] }
+    );
+
+    expect(await screen.findByRole('button', { name: 'Security & Privacy' })).toBeInTheDocument();
+    expect(screen.getByText('Privacy')).toBeInTheDocument();
   });
 
   it('renders two-level breadcrumb on /settings#storage and clears hash on root click', async () => {

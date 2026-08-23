@@ -178,6 +178,12 @@ export const brandingSettingsSchema = z
   })
   .partial();
 
+const privacySettingsSchema = z
+  .object({
+    euPrivacyMode: z.boolean().optional(),
+  })
+  .strict();
+
 // Main settings update schema with nested structure
 export const settingsUpdateSchema = z.object({
   // System settings
@@ -202,6 +208,8 @@ export const settingsUpdateSchema = z.object({
     .min(1, 'Rate limit must be at least 1')
     .max(1000, 'Rate limit must be at most 1000')
     .optional(),
+  // Privacy settings
+  privacy: privacySettingsSchema.optional(),
   // SMTP settings
   smtpEnabled: z.boolean().optional(),
   smtpConfig: smtpConfigSchema.optional(),
@@ -261,8 +269,7 @@ export function validateSmtpConfig(
  */
 export function validateS3Config(
   s3Config:
-    | { bucket?: string; region?: string; accessKeyId?: string; secretAccessKey?: string }
-    | undefined
+    { bucket?: string; region?: string; accessKeyId?: string; secretAccessKey?: string } | undefined
 ): Result<void> {
   if (!s3Config?.bucket || s3Config.bucket.trim().length === 0) {
     return Result.fail('S3 bucket name is required when enabling S3', 'INVALID_S3_CONFIG');

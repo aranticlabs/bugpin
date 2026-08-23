@@ -1,3 +1,5 @@
+import { redactSensitiveText } from '@shared/privacy';
+
 // Extend XMLHttpRequest for tracking
 declare global {
   interface XMLHttpRequest {
@@ -71,221 +73,312 @@ export interface PageContext {
   storageKeys?: StorageKeys;
 }
 
-// Store console errors, network errors, and user activity
+// Store diagnostic signals and user activity in separate bounded buffers.
 const capturedErrors: ConsoleError[] = [];
 const capturedNetworkErrors: NetworkError[] = [];
 const capturedUserActivity: UserActivity[] = [];
 const MAX_ACTIVITY_ITEMS = 30;
-let isCapturing = false;
+const MAX_CONSOLE_ITEMS = 50;
+const MAX_NETWORK_ITEMS = 50;
+const MAX_MESSAGE_LENGTH = 2048;
 
-/**
- * Start capturing console errors and network errors
- */
-export function startErrorCapture(): void {
-  if (isCapturing) return;
-  isCapturing = true;
+let isDiagnosticCaptureActive = false;
+let userActivityListener: ((event: Event) => void) | null = null;
 
-  // Capture console.error
-  const originalError = console.error;
-  console.error = (...args) => {
-    capturedErrors.push({
-      type: 'error',
-      message: args.map((arg) => String(arg)).join(' '),
-      timestamp: new Date().toISOString(),
-    });
-    originalError.apply(console, args);
-  };
+export interface ErrorCaptureOptions {
+  consoleCapture?: boolean;
+  networkCapture?: boolean;
+}
 
-  // Capture console.warn
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    capturedErrors.push({
-      type: 'warn',
-      message: args.map((arg) => String(arg)).join(' '),
-      timestamp: new Date().toISOString(),
-    });
-    originalWarn.apply(console, args);
-  };
+export interface CaptureContextOptions {
+  consoleCapture?: boolean;
+  networkCapture?: boolean;
+  userActivityCapture?: boolean;
+  storageKeysCapture?: boolean;
+}
 
-  // Capture window.onerror
-  const originalOnError = window.onerror;
-  window.onerror = (message, source, line, _column, _error) => {
-    capturedErrors.push({
-      type: 'error',
-      message: String(message),
-      source: source || undefined,
-      line: line || undefined,
-      timestamp: new Date().toISOString(),
-    });
-    if (originalOnError) {
-      return originalOnError.apply(window, [message, source, line, _column, _error]);
-    }
-    return false;
-  };
+function pushBounded<T>(items: T[], item: T, limit: number): void {
+  items.push(item);
+  if (items.length > limit) {
+    items.shift();
+  }
+}
 
-  // Capture unhandled promise rejections
-  window.addEventListener('unhandledrejection', (event) => {
-    capturedErrors.push({
-      type: 'error',
-      message: `Unhandled Promise Rejection: ${String(event.reason)}`,
-      timestamp: new Date().toISOString(),
-    });
-  });
+function truncateMessage(value: string): string {
+  return value.slice(0, MAX_MESSAGE_LENGTH);
+}
 
-  // Capture network errors via fetch
-  const originalFetch = window.fetch.bind(window);
-  (
-    window as unknown as {
-      fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-    }
-  ).fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.href
-          : (input as Request).url;
-    const method = init?.method || 'GET';
+function sanitizeActivityText(value: string | null | undefined, limit: number): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  return redactSensitiveText(normalized).slice(0, limit);
+}
 
-    try {
-      const response = await originalFetch(input, init);
-      if (response.status >= 300) {
-        capturedNetworkErrors.push({
-          url,
-          method,
-          status: response.status,
-          statusText: response.statusText,
-          timestamp: new Date().toISOString(),
-        });
-      }
-      return response;
-    } catch (error) {
-      // Capture network failures (e.g., CORS, network down, etc.)
-      capturedNetworkErrors.push({
-        url,
-        method,
-        status: 0,
-        statusText: error instanceof Error ? error.message : 'Network Error',
-        timestamp: new Date().toISOString(),
-      });
-      throw error;
-    }
-  };
+function sanitizeActivityUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return redactSensitiveText(value).slice(0, MAX_MESSAGE_LENGTH);
+}
 
-  // Capture network errors via XMLHttpRequest
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSend = XMLHttpRequest.prototype.send;
-
-  XMLHttpRequest.prototype.open = function (method: string, url: string | URL) {
-    this._bugpinMethod = method;
-    this._bugpinUrl = typeof url === 'string' ? url : url.href;
-    return originalXHROpen.apply(this, arguments as unknown as Parameters<typeof originalXHROpen>);
-  };
-
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener('load', function () {
-      if (this.status >= 300) {
-        capturedNetworkErrors.push({
-          url: this._bugpinUrl || '',
-          method: this._bugpinMethod || 'GET',
-          status: this.status,
-          statusText: this.statusText,
-          timestamp: new Date().toISOString(),
-        });
-      }
-    });
-    return originalXHRSend.apply(this, arguments as unknown as Parameters<typeof originalXHRSend>);
-  };
-
-  // Track user clicks
-  document.addEventListener(
-    'click',
-    (event) => {
-      const target = event.target as HTMLElement;
-      if (!target) return;
-
-      // Skip clicks on the BugPin widget itself
-      if (target.closest('[data-bugpin-exclude]')) return;
-
-      let activity: UserActivity | null = null;
-
-      // Check for button
-      if (target.tagName === 'BUTTON' || target.closest('button')) {
-        const btn = target.tagName === 'BUTTON' ? target : target.closest('button')!;
-        activity = {
-          type: 'button',
-          text: btn.textContent?.trim().slice(0, 50) || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      // Check for link
-      else if (target.tagName === 'A' || target.closest('a')) {
-        const link = (target.tagName === 'A' ? target : target.closest('a')!) as HTMLAnchorElement;
-        activity = {
-          type: 'link',
-          text: link.textContent?.trim().slice(0, 50) || undefined,
-          url: link.href || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      // Check for checkbox
-      else if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
-        const input = target as HTMLInputElement;
-        activity = {
-          type: 'checkbox',
-          text: input.name || input.id || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      // Check for other inputs
-      else if (target.tagName === 'INPUT') {
-        const input = target as HTMLInputElement;
-        activity = {
-          type: 'input',
-          inputType: input.type || 'text',
-          text: input.name || input.placeholder?.slice(0, 30) || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      // Check for select
-      else if (target.tagName === 'SELECT' || target.closest('[role="combobox"]')) {
-        const select = target.tagName === 'SELECT' ? (target as HTMLSelectElement) : null;
-        activity = {
-          type: 'select',
-          text: select?.name || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      // Other elements (only track if they seem interactive)
-      else if (
-        target.onclick ||
-        target.getAttribute('role') === 'button' ||
-        target.classList.contains('btn') ||
-        target.closest('[role="button"]')
-      ) {
-        activity = {
-          type: 'other',
-          text: target.textContent?.trim().slice(0, 50) || undefined,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      if (activity) {
-        addUserActivity(activity);
-      }
-    },
-    true
-  );
+function getUnhandledReason(event: PromiseRejectionEvent | Event): unknown {
+  if ('reason' in event) {
+    return event.reason;
+  }
+  return (event as CustomEvent<{ reason?: unknown }>).detail?.reason;
 }
 
 /**
- * Add user activity to the trail (keeps last MAX_ACTIVITY_ITEMS)
+ * Start bounded console and network diagnostic capture.
  */
-function addUserActivity(activity: UserActivity): void {
-  capturedUserActivity.push(activity);
-  if (capturedUserActivity.length > MAX_ACTIVITY_ITEMS) {
-    capturedUserActivity.shift();
+export function startErrorCapture(options: ErrorCaptureOptions = {}): void {
+  if (isDiagnosticCaptureActive) return;
+  isDiagnosticCaptureActive = true;
+
+  const consoleCapture = options.consoleCapture ?? true;
+  const networkCapture = options.networkCapture ?? true;
+
+  if (consoleCapture) {
+    const originalError = console.error;
+    console.error = (...args) => {
+      pushBounded(
+        capturedErrors,
+        {
+          type: 'error',
+          message: truncateMessage(redactSensitiveText(args.map((arg) => String(arg)).join(' '))),
+          timestamp: new Date().toISOString(),
+        },
+        MAX_CONSOLE_ITEMS
+      );
+      originalError.apply(console, args);
+    };
+
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      pushBounded(
+        capturedErrors,
+        {
+          type: 'warn',
+          message: truncateMessage(redactSensitiveText(args.map((arg) => String(arg)).join(' '))),
+          timestamp: new Date().toISOString(),
+        },
+        MAX_CONSOLE_ITEMS
+      );
+      originalWarn.apply(console, args);
+    };
+
+    const originalOnError = window.onerror;
+    window.onerror = (message, source, line, column, error) => {
+      pushBounded(
+        capturedErrors,
+        {
+          type: 'error',
+          message: truncateMessage(redactSensitiveText(String(message))),
+          source: source ? redactSensitiveText(source) : undefined,
+          line: line || undefined,
+          timestamp: new Date().toISOString(),
+        },
+        MAX_CONSOLE_ITEMS
+      );
+      if (originalOnError) {
+        return originalOnError.apply(window, [message, source, line, column, error]);
+      }
+      return false;
+    };
+
+    window.addEventListener('unhandledrejection', (event) => {
+      pushBounded(
+        capturedErrors,
+        {
+          type: 'error',
+          message: truncateMessage(
+            redactSensitiveText(`Unhandled Promise Rejection: ${String(getUnhandledReason(event))}`)
+          ),
+          timestamp: new Date().toISOString(),
+        },
+        MAX_CONSOLE_ITEMS
+      );
+    });
   }
+
+  if (networkCapture) {
+    const originalFetch = window.fetch.bind(window);
+    (
+      window as unknown as {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+      }
+    ).fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = init?.method || 'GET';
+
+      try {
+        const response = await originalFetch(input, init);
+        if (response.status >= 300) {
+          pushBounded(
+            capturedNetworkErrors,
+            {
+              url: truncateMessage(redactSensitiveText(url)),
+              method,
+              status: response.status,
+              statusText: truncateMessage(redactSensitiveText(response.statusText)),
+              timestamp: new Date().toISOString(),
+            },
+            MAX_NETWORK_ITEMS
+          );
+        }
+        return response;
+      } catch (error) {
+        pushBounded(
+          capturedNetworkErrors,
+          {
+            url: truncateMessage(redactSensitiveText(url)),
+            method,
+            status: 0,
+            statusText: truncateMessage(
+              redactSensitiveText(error instanceof Error ? error.message : 'Network Error')
+            ),
+            timestamp: new Date().toISOString(),
+          },
+          MAX_NETWORK_ITEMS
+        );
+        throw error;
+      }
+    };
+
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    const originalXHRSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method: string, url: string | URL) {
+      this._bugpinMethod = method;
+      this._bugpinUrl = typeof url === 'string' ? url : url.href;
+      return originalXHROpen.apply(
+        this,
+        arguments as unknown as Parameters<typeof originalXHROpen>
+      );
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+      this.addEventListener('load', function () {
+        if (this.status >= 300) {
+          pushBounded(
+            capturedNetworkErrors,
+            {
+              url: truncateMessage(redactSensitiveText(this._bugpinUrl || '')),
+              method: this._bugpinMethod || 'GET',
+              status: this.status,
+              statusText: truncateMessage(redactSensitiveText(this.statusText)),
+              timestamp: new Date().toISOString(),
+            },
+            MAX_NETWORK_ITEMS
+          );
+        }
+      });
+      return originalXHRSend.apply(
+        this,
+        arguments as unknown as Parameters<typeof originalXHRSend>
+      );
+    };
+  }
+}
+
+function addUserActivity(activity: UserActivity): void {
+  pushBounded(capturedUserActivity, activity, MAX_ACTIVITY_ITEMS);
+}
+
+function captureUserActivity(event: Event): void {
+  const target = event.target as HTMLElement | null;
+  if (!target || typeof target.closest !== 'function') return;
+  if (target.closest('[data-bugpin-exclude], [data-bugpin-private]')) return;
+
+  let activity: UserActivity | null = null;
+
+  if (target.tagName === 'BUTTON' || target.closest('button')) {
+    const button = target.tagName === 'BUTTON' ? target : target.closest('button');
+    activity = {
+      type: 'button',
+      text: sanitizeActivityText(button?.textContent, 50),
+      timestamp: new Date().toISOString(),
+    };
+  } else if (target.tagName === 'A' || target.closest('a')) {
+    const link = (
+      target.tagName === 'A' ? target : target.closest('a')
+    ) as HTMLAnchorElement | null;
+    activity = {
+      type: 'link',
+      text: sanitizeActivityText(link?.textContent, 50),
+      url: sanitizeActivityUrl(link?.href),
+      timestamp: new Date().toISOString(),
+    };
+  } else if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
+    const input = target as HTMLInputElement;
+    activity = {
+      type: 'checkbox',
+      text: sanitizeActivityText(input.name || input.id, 50),
+      timestamp: new Date().toISOString(),
+    };
+  } else if (target.tagName === 'INPUT') {
+    const input = target as HTMLInputElement;
+    activity = {
+      type: 'input',
+      inputType: input.type || 'text',
+      text: sanitizeActivityText(input.name || input.placeholder, 30),
+      timestamp: new Date().toISOString(),
+    };
+  } else if (target.tagName === 'SELECT' || target.closest('[role="combobox"]')) {
+    const select = target.tagName === 'SELECT' ? (target as HTMLSelectElement) : null;
+    activity = {
+      type: 'select',
+      text: sanitizeActivityText(select?.name, 50),
+      timestamp: new Date().toISOString(),
+    };
+  } else if (
+    target.onclick ||
+    target.getAttribute('role') === 'button' ||
+    target.classList.contains('btn') ||
+    target.closest('[role="button"]')
+  ) {
+    activity = {
+      type: 'other',
+      text: sanitizeActivityText(target.textContent, 50),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  if (activity) {
+    addUserActivity(activity);
+  }
+}
+
+export function startUserActivityCapture(): void {
+  if (userActivityListener) return;
+  userActivityListener = captureUserActivity;
+  document.addEventListener('click', userActivityListener, true);
+}
+
+export function stopUserActivityCapture(): void {
+  if (!userActivityListener) return;
+  document.removeEventListener('click', userActivityListener, true);
+  userActivityListener = null;
+}
+
+export function clearUserActivity(): void {
+  capturedUserActivity.length = 0;
+}
+
+export function getUserActivity(): UserActivity[] {
+  return [...capturedUserActivity];
+}
+
+export function removeUserActivity(index: number): void {
+  if (index < 0 || index >= capturedUserActivity.length) return;
+  capturedUserActivity.splice(index, 1);
+}
+
+export function isUserActivityCaptureActive(): boolean {
+  return userActivityListener !== null;
 }
 
 /**
@@ -440,7 +533,11 @@ function getPageLoadTime(): number | undefined {
 /**
  * Capture all context information
  */
-export function captureContext(): PageContext {
+export function captureContext(options: CaptureContextOptions = {}): PageContext {
+  const consoleCapture = options.consoleCapture ?? true;
+  const networkCapture = options.networkCapture ?? true;
+  const userActivityCapture = options.userActivityCapture ?? true;
+  const storageKeysCapture = options.storageKeysCapture ?? true;
   return {
     url: window.location.href,
     title: document.title || undefined,
@@ -451,12 +548,13 @@ export function captureContext(): PageContext {
     timestamp: new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     pageLoadTime: getPageLoadTime(),
-    consoleErrors: capturedErrors.length > 0 ? [...capturedErrors] : undefined,
-    networkErrors: capturedNetworkErrors.length > 0 ? [...capturedNetworkErrors] : undefined,
-    userActivity: capturedUserActivity.length > 0 ? [...capturedUserActivity] : undefined,
-    storageKeys: getStorageKeys(),
+    consoleErrors: consoleCapture && capturedErrors.length > 0 ? [...capturedErrors] : undefined,
+    networkErrors:
+      networkCapture && capturedNetworkErrors.length > 0 ? [...capturedNetworkErrors] : undefined,
+    userActivity:
+      userActivityCapture && capturedUserActivity.length > 0
+        ? [...capturedUserActivity]
+        : undefined,
+    storageKeys: storageKeysCapture ? getStorageKeys() : undefined,
   };
 }
-
-// Note: startErrorCapture() is called from index.ts to ensure it runs
-// immediately when the widget script loads, before any async operations.

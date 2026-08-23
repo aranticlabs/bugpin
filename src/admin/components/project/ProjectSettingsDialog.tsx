@@ -48,6 +48,7 @@ interface ProjectSettingsDialogProps {
     | 'widgetDialog'
     | 'widgetLauncherButton'
     | 'screenshot'
+    | 'diagnostics'
     | 'notifications'
     | 'whitelists'
     | 'language';
@@ -93,6 +94,13 @@ export function ProjectSettingsDialog({
   // Screenshot settings state
   const [useCustomScreenshot, setUseCustomScreenshot] = useState(false);
   const [screenshotSettings, setScreenshotSettings] = useState<Partial<ScreenshotSettings>>({});
+
+  const [diagnosticSettings, setDiagnosticSettings] = useState({
+    activityCapture: true,
+    consoleCapture: true,
+    networkCapture: true,
+    storageKeysCapture: false,
+  });
 
   // Notification settings state
   const [useCustomNotifications, setUseCustomNotifications] = useState(false);
@@ -192,6 +200,13 @@ export function ProjectSettingsDialog({
         maxScreenshotSize: screenshotConf?.maxScreenshotSize,
         maxImageUploadSizeMb: screenshotConf?.maxImageUploadSizeMb,
         maxVideoUploadSizeMb: screenshotConf?.maxVideoUploadSizeMb,
+      });
+
+      setDiagnosticSettings({
+        activityCapture: projectDetail.settings?.activityCapture ?? true,
+        consoleCapture: projectDetail.settings?.consoleCapture ?? true,
+        networkCapture: projectDetail.settings?.networkCapture ?? true,
+        storageKeysCapture: projectDetail.settings?.storageKeysCapture ?? false,
       });
 
       // Whitelist settings
@@ -297,6 +312,11 @@ export function ProjectSettingsDialog({
         newSettings.screenshot = undefined;
       }
 
+      newSettings.activityCapture = diagnosticSettings.activityCapture;
+      newSettings.consoleCapture = diagnosticSettings.consoleCapture;
+      newSettings.networkCapture = diagnosticSettings.networkCapture;
+      newSettings.storageKeysCapture = diagnosticSettings.storageKeysCapture;
+
       // Security settings (whitelist)
       if (useCustomWhitelist && whitelistSettings.length > 0) {
         newSettings.security = {
@@ -395,6 +415,9 @@ export function ProjectSettingsDialog({
               </TabsTrigger>
               <TabsTrigger value="screenshot" className="justify-start px-3 py-2">
                 Screenshot
+              </TabsTrigger>
+              <TabsTrigger value="diagnostics" className="justify-start px-3 py-2">
+                Diagnostics
               </TabsTrigger>
               <TabsTrigger value="notifications" className="justify-start px-3 py-2">
                 Notifications
@@ -524,6 +547,71 @@ export function ProjectSettingsDialog({
                   useCustomSettings={useCustomScreenshot}
                   onCustomToggle={setUseCustomScreenshot}
                 />
+              </TabsContent>
+
+              <TabsContent value="diagnostics" className="mt-0">
+                <div className="space-y-5 rounded-xl border bg-card p-5">
+                  <div className="space-y-1">
+                    <h3 className="font-medium">Diagnostic data</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Disable diagnostic categories this project does not need. Instance-wide EU
+                      Privacy Mode disables the activity trail for every project and cannot be
+                      overridden here.
+                    </p>
+                  </div>
+                  {[
+                    {
+                      key: 'activityCapture' as const,
+                      label: 'User activity trail',
+                      description: globalSettings?.privacy?.euPrivacyMode
+                        ? 'Disabled for every project by EU Privacy Mode.'
+                        : 'Button, link, and other interactive actions. Typed values are not recorded.',
+                    },
+                    {
+                      key: 'consoleCapture' as const,
+                      label: 'Console output',
+                      description:
+                        'Browser errors and warnings captured while the widget is active.',
+                    },
+                    {
+                      key: 'networkCapture' as const,
+                      label: 'Network failures',
+                      description: 'Failed request URLs, methods, and response statuses.',
+                    },
+                    {
+                      key: 'storageKeysCapture' as const,
+                      label: 'Storage key names',
+                      description: 'Cookie and browser-storage key names only. Off by default.',
+                    },
+                  ].map((option) => (
+                    <div
+                      key={option.key}
+                      className="flex items-start justify-between gap-6 border-t pt-4"
+                    >
+                      <div className="space-y-1">
+                        <Label htmlFor={`diagnostic-${option.key}`}>{option.label}</Label>
+                        <p className="text-sm text-muted-foreground">{option.description}</p>
+                      </div>
+                      <Switch
+                        id={`diagnostic-${option.key}`}
+                        checked={
+                          option.key === 'activityCapture' && globalSettings?.privacy?.euPrivacyMode
+                            ? false
+                            : diagnosticSettings[option.key]
+                        }
+                        disabled={
+                          option.key === 'activityCapture' && globalSettings?.privacy?.euPrivacyMode
+                        }
+                        onCheckedChange={(checked) =>
+                          setDiagnosticSettings((current) => ({
+                            ...current,
+                            [option.key]: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
               </TabsContent>
 
               {/* Notifications Tab */}

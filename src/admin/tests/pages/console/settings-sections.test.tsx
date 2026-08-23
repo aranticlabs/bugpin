@@ -10,6 +10,7 @@ import {
 import { Settings } from '../../../pages/console/Settings';
 import { Screenshot } from '../../../pages/widget/Screenshot';
 import { Security } from '../../../pages/console/Security';
+import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
@@ -138,6 +139,57 @@ describe('Settings sections', () => {
         })
       );
     });
+  });
+
+  it('enables EU Privacy Mode', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<Privacy />);
+
+    expect(await screen.findByText(/activity trails are available/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /learn how EU Privacy Mode works/i })).toHaveAttribute(
+      'href',
+      'https://docs.bugpin.io/privacy/eu-privacy-mode'
+    );
+
+    await user.click(screen.getByRole('switch', { name: 'Enable EU Privacy Mode' }));
+    expect(screen.getByText(/disabled for all projects/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        privacy: {
+          euPrivacyMode: true,
+        },
+      });
+    });
+  });
+
+  it('blocks privacy changes until settings can be loaded', async () => {
+    const user = userEvent.setup();
+    const getSpy = vi
+      .spyOn(api, 'get')
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({
+        data: { settings: { privacy: { euPrivacyMode: true } } },
+      } as unknown);
+    const putSpy = vi.spyOn(api, 'put');
+
+    renderWithQuery(<Privacy />);
+
+    expect(await screen.findByText(/privacy settings could not be loaded/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('switch', { name: 'Enable EU Privacy Mode' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+    expect(putSpy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    const privacySwitch = await screen.findByRole('switch', { name: 'Enable EU Privacy Mode' });
+    expect(privacySwitch).toHaveAttribute('data-state', 'checked');
+    expect(getSpy).toHaveBeenCalledTimes(2);
   });
 
   it('submits SMTP settings and sends test email', async () => {

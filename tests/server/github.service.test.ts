@@ -65,14 +65,14 @@ describe('github service', () => {
       requestBody = JSON.parse(init?.body as string);
       return new Response(
         JSON.stringify({ number: 123, html_url: 'https://github.com/org/repo/issues/123' }),
-        { status: 201 },
+        { status: 201 }
       );
     };
 
     const result = await createGitHubIssue(
       baseReport,
       { owner: 'org', repo: 'repo', accessToken: 'token', labels: ['bug'] },
-      { labels: ['ui'], assignees: ['octo'] },
+      { labels: ['ui'], assignees: ['octo'] }
     );
 
     expect(result.success).toBe(true);
@@ -80,6 +80,34 @@ describe('github service', () => {
       labels: ['bug', 'ui'],
       assignees: ['octo'],
     });
+  });
+
+  it('includes stored activity in GitHub issues', async () => {
+    let issueBody = '';
+    globalThis.fetch = async (_url, init) => {
+      const request = JSON.parse(init?.body as string) as { body: string };
+      issueBody = request.body;
+      return new Response(
+        JSON.stringify({ number: 123, html_url: 'https://github.com/org/repo/issues/123' }),
+        { status: 201 }
+      );
+    };
+
+    await createGitHubIssue(
+      {
+        ...baseReport,
+        metadata: {
+          ...baseReport.metadata,
+          userActivity: [
+            { type: 'button', text: 'Sensitive action', timestamp: new Date().toISOString() },
+          ],
+        },
+      },
+      { owner: 'org', repo: 'repo', accessToken: 'token' }
+    );
+
+    expect(issueBody).toContain('User Activity Trail');
+    expect(issueBody).toContain('Sensitive action');
   });
 
   it('returns error when create GitHub issue fails', async () => {
@@ -130,7 +158,7 @@ describe('github service', () => {
         {
           status: 200,
           headers: new Headers({ Link: '<https://api.github.com/user/repos?page=2>; rel="next"' }),
-        },
+        }
       ),
       new Response(JSON.stringify([]), { status: 200 }),
     ];
@@ -165,7 +193,7 @@ describe('github service', () => {
     globalThis.fetch = async () =>
       new Response(
         JSON.stringify([{ login: 'octo', avatar_url: 'https://example.com/octo.png' }]),
-        { status: 200 },
+        { status: 200 }
       );
 
     const result = await fetchGitHubAssignees('token', 'org', 'repo');
@@ -182,7 +210,7 @@ describe('github service', () => {
     globalThis.fetch = async () =>
       new Response(
         JSON.stringify({ number: 321, html_url: 'https://github.com/org/repo/issues/321' }),
-        { status: 200 },
+        { status: 200 }
       );
 
     const result = await updateGitHubIssue(321, baseReport, {
@@ -218,7 +246,7 @@ describe('github service', () => {
           body: 'Body',
           html_url: 'https://github.com/org/repo/issues/321',
         }),
-        { status: 200 },
+        { status: 200 }
       );
 
     const result = await getGitHubIssue(321, {
@@ -248,7 +276,7 @@ describe('github service', () => {
     const result = await createGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
       'https://app.example.com/api/webhooks/github/int_1',
-      'secret',
+      'secret'
     );
 
     expect(result.success).toBe(true);
@@ -264,7 +292,7 @@ describe('github service', () => {
     const result = await createGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
       'https://app.example.com/api/webhooks/github/int_1',
-      'secret',
+      'secret'
     );
 
     expect(result.success).toBe(false);
@@ -275,7 +303,7 @@ describe('github service', () => {
 
     const result = await deleteGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
-      '42',
+      '42'
     );
 
     expect(result.success).toBe(true);
@@ -286,7 +314,7 @@ describe('github service', () => {
 
     const result = await deleteGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
-      '42',
+      '42'
     );
 
     expect(result.success).toBe(false);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { reportsService } from '../../services/reports.service.js';
 import { projectsService } from '../../services/projects.service.js';
 import { settingsService } from '../../services/settings.service.js';
+import { privacyPolicyService } from '../../services/privacy-policy.service.js';
 import { dynamicRateLimiter, apiKeyGenerator } from '../../middleware/rate-limit.js';
 import { logger } from '../../utils/logger.js';
 import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
@@ -301,7 +302,11 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     priority: data.priority,
     files: media,
     annotations: data.annotations as object,
-    metadata: data.metadata as ReportMetadata,
+    metadata: privacyPolicyService.applySubmissionPolicy(
+      data.metadata as ReportMetadata,
+      settings.privacy,
+      projectResult.value.settings
+    ),
     reporterEmail: data.reporterEmail || undefined,
     reporterName: data.reporterName || undefined,
     reporterLocale,
@@ -360,6 +365,10 @@ widget.get('/config/:apiKey', async (c) => {
   const globalButton = appSettings.widgetLauncherButton;
   const globalDialog = appSettings.widgetDialog;
   const globalScreenshot = appSettings.screenshot;
+  const diagnosticPolicy = privacyPolicyService.resolveDiagnosticPolicy(
+    appSettings.privacy,
+    project.settings
+  );
 
   // Use project-level settings if defined, otherwise fall back to global settings.
   // For nullable fields (buttonIcon, buttonText, tooltipText), check for undefined specifically
@@ -448,7 +457,10 @@ widget.get('/config/:apiKey', async (c) => {
         screenshot: true, // Always enabled
         annotation: true, // Always enabled for now
         attachments: false, // Not implemented yet
-        consoleCapture: true, // Always enabled
+        consoleCapture: diagnosticPolicy.consoleCapture,
+        networkCapture: diagnosticPolicy.networkCapture,
+        storageKeysCapture: diagnosticPolicy.storageKeysCapture,
+        userActivityCapture: diagnosticPolicy.userActivityCapture,
       },
       theme,
       position,

@@ -7,7 +7,7 @@ import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
 import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
-import { captureContext } from '../capture/context.js';
+import { captureContext, clearUserActivity } from '../capture/context.js';
 import { submitReport } from '../api/submit.js';
 import { draftStorage } from '../storage/draft-storage.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
@@ -30,6 +30,7 @@ type AppDependencies = {
   captureScreenshot: typeof captureScreenshot;
   captureContext: typeof captureContext;
   submitReport: typeof submitReport;
+  clearUserActivity: typeof clearUserActivity;
 };
 
 interface AppProps {
@@ -43,6 +44,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const captureScreenshotFn = deps?.captureScreenshot ?? captureScreenshot;
   const captureContextFn = deps?.captureContext ?? captureContext;
   const submitReportFn = deps?.submitReport ?? submitReport;
+  const clearUserActivityFn = deps?.clearUserActivity ?? clearUserActivity;
   useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const effectiveTheme = useEffectiveTheme(config.theme);
@@ -134,29 +136,36 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     formData.reporterName.trim() ||
     media.length > 0;
 
+  const resetUserActivity = useCallback(() => {
+    clearUserActivityFn();
+  }, [clearUserActivityFn]);
+
   // Request to close - show confirmation if there's content
   const handleRequestClose = useCallback(() => {
     if (hasContent) {
       setShowCloseConfirm(true);
     } else {
       // No content, just close
+      resetUserActivity();
       setStep('closed');
       setAnnotatingMediaId(null);
       setDraftLoaded(false);
     }
-  }, [hasContent]);
+  }, [hasContent, resetUserActivity]);
 
   // Close and keep draft
   const handleCloseKeepDraft = useCallback(() => {
     draftStorage.save(config.apiKey, formData, activeTab, media);
+    resetUserActivity();
     setShowCloseConfirm(false);
     setStep('closed');
     setAnnotatingMediaId(null);
     setDraftLoaded(false);
-  }, [config.apiKey, formData, activeTab, media]);
+  }, [config.apiKey, formData, activeTab, media, resetUserActivity]);
 
   // Close and discard draft
   const handleCloseDiscardDraft = useCallback(() => {
+    resetUserActivity();
     setMedia([]);
     setActiveTab('details');
     setFormData(INITIAL_FORM_DATA);
@@ -165,11 +174,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     setStep('closed');
     setAnnotatingMediaId(null);
     setDraftLoaded(false);
-  }, [config.apiKey]);
+  }, [config.apiKey, resetUserActivity]);
 
   // Direct close (used after successful submission)
   const handleCloseWidget = useCallback(
     (clearDraftData = false) => {
+      resetUserActivity();
       if (clearDraftData === true) {
         // Clear state and draft (after successful submission)
         setMedia([]);
@@ -182,7 +192,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       setAnnotatingMediaId(null);
       setDraftLoaded(false);
     },
-    [config.apiKey]
+    [config.apiKey, resetUserActivity]
   );
 
   // Listen for external open/close events
@@ -348,7 +358,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
       try {
         // Capture context
-        const metadata = captureContextFn();
+        const metadata = captureContextFn({
+          consoleCapture: config.enableConsoleCapture,
+          networkCapture: config.enableNetworkCapture,
+          storageKeysCapture: config.enableStorageKeysCapture,
+          userActivityCapture: config.userActivityCapture === 'automatic',
+        });
 
         // Submit report with all media
         await submitReportFn({
