@@ -962,6 +962,19 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const activeObject = fabricRef.current?.getActiveObject();
+      const isEditingFabricText = activeObject instanceof fabric.IText && activeObject.isEditing;
+      const isEditingHtmlField =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable);
+
+      // Do not let canvas shortcuts intercept normal typing in annotation text or form fields.
+      if (isEditingFabricText || isEditingHtmlField) {
+        return;
+      }
+
       // Space key for pan mode
       if (e.key === ' ' && !isPanning) {
         e.preventDefault();
@@ -972,10 +985,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const activeElement = document.activeElement;
-        if (activeElement?.tagName !== 'INPUT' && activeElement?.tagName !== 'TEXTAREA') {
-          deleteSelected();
-        }
+        deleteSelected();
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
