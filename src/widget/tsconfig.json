@@ -22,10 +22,11 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
+    "types": ["bun"],
     "paths": {
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["./**/*.ts", "./**/*.tsx"],
+  "include": ["./**/*.ts", "./**/*.tsx", "../shared/**/*.ts"],
   "exclude": ["node_modules"]
 }

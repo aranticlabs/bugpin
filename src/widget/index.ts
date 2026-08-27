@@ -10,11 +10,12 @@ import {
   setLocale,
 } from './i18n/index.js';
 import { detectLocale } from './i18n/detect.js';
-
-// Start error capture immediately when widget loads (before any async operations)
-// This patches console and fetch to capture errors/network issues
-import { startErrorCapture } from './capture/context.js';
-startErrorCapture();
+import {
+  clearUserActivity,
+  startErrorCapture,
+  startUserActivityCapture,
+  stopUserActivityCapture,
+} from './capture/context.js';
 
 // Widget styles (will be injected into Shadow DOM)
 import styles from './styles/main.css?inline';
@@ -77,6 +78,9 @@ async function fetchConfig(
           enableScreenshot: cfg.features?.screenshot ?? true,
           enableAnnotation: cfg.features?.annotation ?? true,
           enableConsoleCapture: cfg.features?.consoleCapture ?? true,
+          enableNetworkCapture: cfg.features?.networkCapture ?? true,
+          enableStorageKeysCapture: cfg.features?.storageKeysCapture ?? false,
+          userActivityCapture: cfg.features?.userActivityCapture ?? 'automatic',
           captureMethod: cfg.captureMethod,
           useScreenCaptureAPI: cfg.useScreenCaptureAPI,
           maxScreenshotSize: cfg.maxScreenshotSizeMb
@@ -102,7 +106,12 @@ async function fetchConfig(
   } catch (error) {
     console.warn('[BugPin] Failed to fetch widget config, using defaults', error);
   }
-  return {};
+  return {
+    enableConsoleCapture: false,
+    enableNetworkCapture: false,
+    enableStorageKeysCapture: false,
+    userActivityCapture: 'disabled',
+  };
 }
 
 interface InitLanguageInputs {
@@ -160,6 +169,17 @@ function createWidget(config: WidgetConfig, languageInputs: InitLanguageInputs =
   document.body.appendChild(container);
 
   applyLanguage(config, languageInputs);
+
+  startErrorCapture({
+    consoleCapture: config.enableConsoleCapture,
+    networkCapture: config.enableNetworkCapture,
+  });
+  if (config.userActivityCapture === 'automatic') {
+    startUserActivityCapture();
+  } else {
+    stopUserActivityCapture();
+    clearUserActivity();
+  }
 
   // Render Preact app
   render(h(App, { config }), root);
@@ -262,6 +282,10 @@ const BugPin = {
       ...fetchedConfig,
       ...rest,
       serverUrl,
+      enableConsoleCapture: fetchedConfig.enableConsoleCapture ?? false,
+      enableNetworkCapture: fetchedConfig.enableNetworkCapture ?? false,
+      enableStorageKeysCapture: fetchedConfig.enableStorageKeysCapture ?? false,
+      userActivityCapture: fetchedConfig.userActivityCapture ?? 'disabled',
     };
     createWidget(fullConfig, { initLanguage });
   },

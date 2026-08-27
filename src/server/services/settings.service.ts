@@ -16,6 +16,7 @@ import type {
   BrandingSettings,
   AdminButtonColors,
   ThemeColors,
+  PrivacySettings,
 } from '@shared/types';
 
 // Types
@@ -30,6 +31,8 @@ export interface UpdateSettingsInput {
   updateCheckEnabled?: boolean;
   // Security settings
   enforceHttps?: boolean;
+  // Privacy settings
+  privacy?: Partial<PrivacySettings>;
   // SMTP settings
   smtpEnabled?: boolean;
   smtpConfig?: {
@@ -202,6 +205,13 @@ export const settingsService = {
     // Security settings
     if (input.enforceHttps !== undefined) {
       updates.enforceHttps = input.enforceHttps;
+    }
+    if (input.privacy !== undefined) {
+      const currentSettings = await settingsRepo.getAll();
+      updates.privacy = {
+        ...currentSettings.privacy,
+        ...input.privacy,
+      };
     }
 
     // SMTP settings

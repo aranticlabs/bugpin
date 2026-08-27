@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { normalizeLocale, resolveSubmitLocale } from './locale';
+import { normalizeLocale, resolveSubmitLocale } from '../../../src/server/utils/locale';
 
 describe('normalizeLocale', () => {
   describe('supported primary tags', () => {

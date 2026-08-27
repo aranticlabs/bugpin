@@ -30,7 +30,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
 
           <div>
             <p className="text-sm font-semibold text-foreground">Copyright</p>
-            <p className="text-sm text-muted-foreground">© {currentYear} Arantic Digital</p>
+            <p className="text-sm text-muted-foreground">© {currentYear} Arantic Digital GmbH</p>
           </div>
 
           <div>
@@ -68,7 +68,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
           <div>
             <p className="text-sm font-semibold text-foreground">Trademark</p>
             <p className="text-sm text-muted-foreground">
-              BugPin is a trademark of Arantic Digital
+              BugPin is a trademark of Arantic Digital GmbH
             </p>
             <a
               href={TRADEMARK_URL}

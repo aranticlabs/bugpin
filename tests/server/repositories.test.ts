@@ -3,12 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { config } from '../../src/server/config';
-import {
-  initDatabase,
-  initSchema,
-  closeDatabase,
-  getDb,
-} from '../../src/server/database/database';
+import { initDatabase, initSchema, closeDatabase, getDb } from '../../src/server/database/database';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
@@ -235,7 +230,7 @@ describe('sessionsRepo', () => {
 
     const extended = await sessionsRepo.extend(
       session.id,
-      new Date(Date.now() + 120_000).toISOString(),
+      new Date(Date.now() + 120_000).toISOString()
     );
     expect(extended).toBe(true);
 
@@ -262,6 +257,7 @@ describe('settingsRepo', () => {
     const settings = await settingsRepo.getAll();
     expect(settings.appName).toBe('BugPin');
     expect(settings.notifications.notifyOnNewReport).toBe(true);
+    expect(settings.privacy).toEqual({ euPrivacyMode: false });
   });
 
   it('updates and reads settings', async () => {

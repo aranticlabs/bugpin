@@ -85,6 +85,27 @@ describe('settings routes', () => {
     expect(res.status).toBe(200);
   });
 
+  it('accepts strict privacy settings and rejects invalid values', async () => {
+    const app = createApp();
+    const accepted = await app.request('http://localhost/settings', {
+      method: 'PUT',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        privacy: {
+          euPrivacyMode: true,
+        },
+      }),
+    });
+    expect(accepted.status).toBe(200);
+
+    const rejected = await app.request('http://localhost/settings', {
+      method: 'PUT',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ privacy: { euPrivacyMode: 'yes' } }),
+    });
+    expect(rejected.status).toBe(400);
+  });
+
   it('returns 400 when settings update fails', async () => {
     settingsService.update = async () => Result.fail('Nope', 'UPDATE_FAILED');
     const app = createApp();

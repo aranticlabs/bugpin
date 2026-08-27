@@ -1,15 +1,15 @@
 {
   "name": "@arantic/bugpin-widget",
   "description": "Embeddable visual bug reporting widget - Capture screenshots, annotate issues, and submit bug reports",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "license": "MIT",
   "type": "module",
   "main": "dist/widget.cjs.js",
   "module": "dist/widget.esm.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/widget/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/widget/index.d.ts",
       "import": "./dist/widget.esm.js",
       "require": "./dist/widget.cjs.js"
     },
@@ -30,7 +30,7 @@
     "bugpin",
     "self-hosted"
   ],
-  "author": "Arantic Digital",
+  "author": "Arantic Digital GmbH",
   "repository": {
     "type": "git",
     "url": "https://github.com/aranticlabs/bugpin.git",
@@ -45,7 +45,8 @@
   },
   "scripts": {
     "dev": "vite build --watch",
-    "build": "vite build",
+    "build": "vite build && bun run build:types",
+    "build:types": "tsc --project tsconfig.build.json && bun run scripts/rewrite-declaration-aliases.ts",
     "build:watch": "vite build --watch",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -54,23 +55,21 @@
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "fabric": "^7.3.1",
+    "fabric": "^7.4.0",
     "html-to-image": "^1.11.13",
     "idb": "^8.0.3",
-    "lucide-preact": "^1.16.0",
-    "preact": "^10.29.1",
+    "lucide-preact": "^1.33.0",
+    "preact": "^10.29.8",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.0.0",
-    "@preact/preset-vite": "^2.10.5",
-    "@tailwindcss/vite": "^4.3.0",
-    "@types/jsdom": "^21.1.7",
-    "jsdom": "^29.1.1",
-    "preact-render-to-string": "^6.6.7",
-    "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3",
-    "vite": "^6.4.2",
-    "vite-plugin-dts": "^5.0.0"
+    "@preact/preset-vite": "^2.10.6",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/jsdom": "^30.0.0",
+    "jsdom": "^30.0.1",
+    "preact-render-to-string": "^6.7.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
   }
 }

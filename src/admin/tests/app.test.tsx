@@ -48,8 +48,8 @@ vi.mock('../pages/console/Users', () => ({
   Users: () => <div>Users Page</div>,
 }));
 
-vi.mock('../pages/console/Security', () => ({
-  Security: () => <div>Security Page</div>,
+vi.mock('../pages/console/SecurityPrivacy', () => ({
+  SecurityPrivacy: () => <div>Security & Privacy Page</div>,
 }));
 
 vi.mock('../pages/console/Branding', () => ({
@@ -97,6 +97,14 @@ describe('App routes', () => {
     renderWithRouter(<App />, { initialEntries: ['/projects'] });
 
     expect(await screen.findByText('Projects Page')).toBeInTheDocument();
+  });
+
+  it('renders the Security & Privacy route for administrators', async () => {
+    mockUseAuth.mockReturnValue({ user: { role: 'admin' }, isLoading: false });
+
+    renderWithRouter(<App />, { initialEntries: ['/security-privacy'] });
+
+    expect(await screen.findByText('Security & Privacy Page')).toBeInTheDocument();
   });
 
   it('redirects non-admin users away from admin routes', async () => {

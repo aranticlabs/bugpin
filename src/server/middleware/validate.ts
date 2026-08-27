@@ -7,12 +7,10 @@ const localeEnumValues = SUPPORTED_LOCALES as readonly [string, ...string[]];
 
 const projectLanguageSchema = z.object({
   mode: z.enum(['auto', 'manual'], {
-    errorMap: () => ({ message: 'language.mode must be "auto" or "manual"' }),
+    error: 'language.mode must be "auto" or "manual"',
   }),
   defaultLanguage: z.enum(localeEnumValues, {
-    errorMap: () => ({
-      message: `language.defaultLanguage must be one of: ${SUPPORTED_LOCALES.join(', ')}`,
-    }),
+    error: `language.defaultLanguage must be one of: ${SUPPORTED_LOCALES.join(', ')}`,
   }),
 });
 
@@ -26,7 +24,12 @@ for (const code of SUPPORTED_LOCALES) {
 const localizedStringSchema = z
   .object({
     en: z
-      .string({ required_error: 'en is required when providing a localized string' })
+      .string({
+        error: (issue) =>
+          issue.input === undefined
+            ? 'en is required when providing a localized string'
+            : undefined,
+      })
       .min(1, 'en must not be empty when providing a localized string'),
     ...localizedStringShape,
   })
@@ -164,6 +167,10 @@ const projectSettingsSchema = z
     widgetLauncherButton: widgetLauncherButtonProjectSchema.optional(),
     widgetDialog: widgetDialogColorsSchema.optional(),
     screenshot: projectScreenshotSchema.optional(),
+    activityCapture: z.boolean().optional(),
+    consoleCapture: z.boolean().optional(),
+    networkCapture: z.boolean().optional(),
+    storageKeysCapture: z.boolean().optional(),
     security: projectSecuritySchema.optional(),
     branding: projectBrandingSchema.optional(),
     fields: projectFieldsSchema.optional(),
@@ -359,7 +366,7 @@ export const schemas = {
   // Create project request
   createProject: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    settings: z.record(z.unknown()).optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
   }),
 
   // Update project request
@@ -427,6 +434,12 @@ export const schemas = {
   updateSettings: z.object({
     appName: z.string().min(1).max(100).optional(),
     appUrl: z.string().optional(),
+    privacy: z
+      .object({
+        euPrivacyMode: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     widgetLauncherButton: widgetLauncherButtonGlobalSchema.optional(),
     smtpEnabled: z.boolean().optional(),
     smtpConfig: z
@@ -481,13 +494,13 @@ export const schemas = {
     projectId: z.string().min(1, 'Project ID is required'),
     type: z.enum(['github', 'jira', 'slack', 'linear', 'webhook']),
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    config: z.record(z.unknown()),
+    config: z.record(z.string(), z.unknown()),
   }),
 
   // Update integration request
   updateIntegration: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
-    config: z.record(z.unknown()).optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
     isActive: z.boolean().optional(),
   }),
 
@@ -525,7 +538,7 @@ export const schemas = {
   // Set integration sync mode
   setSyncMode: z.object({
     syncMode: z.enum(['manual', 'automatic'], {
-      errorMap: () => ({ message: 'syncMode must be "manual" or "automatic"' }),
+      error: 'syncMode must be "manual" or "automatic"',
     }),
   }),
 

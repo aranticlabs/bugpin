@@ -10,13 +10,24 @@ if (!globalThis.cancelAnimationFrame) {
   globalThis.cancelAnimationFrame = (() => undefined) as typeof cancelAnimationFrame;
 }
 
-import { describe, it, expect } from 'bun:test';
+import { afterAll, beforeAll, describe, it, expect } from 'bun:test';
+import { installDom } from '../helpers/dom';
 import { renderToString } from 'preact-render-to-string';
 import { Icon } from '../../components/Icon';
 import { WidgetLauncherButton } from '../../components/WidgetLauncherButton';
 import { ScreenshotManager, type CapturedMedia } from '../../components/ScreenshotManager';
 import { WidgetDialog } from '../../components/WidgetDialog';
 import type { WidgetConfig } from '../../config';
+
+let restoreDom: (() => void) | null = null;
+
+beforeAll(() => {
+  restoreDom = installDom();
+});
+
+afterAll(() => {
+  restoreDom?.();
+});
 
 const baseConfig: WidgetConfig = {
   apiKey: 'proj_key',
@@ -58,6 +69,9 @@ const baseConfig: WidgetConfig = {
   enableScreenshot: true,
   enableAnnotation: true,
   enableConsoleCapture: true,
+  enableNetworkCapture: true,
+  enableStorageKeysCapture: false,
+  userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,

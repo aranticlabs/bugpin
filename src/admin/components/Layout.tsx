@@ -11,6 +11,7 @@ interface RouteCrumbConfig {
   label: string;
   subTabs?: { hash: string; label: string }[];
   defaultHash?: string;
+  showDefaultSubTab?: boolean;
 }
 
 const routeCrumbs: Record<string, RouteCrumbConfig> = {
@@ -33,7 +34,15 @@ const routeCrumbs: Record<string, RouteCrumbConfig> = {
     ],
   },
   '/users': { label: 'Users' },
-  '/security': { label: 'Security' },
+  '/security-privacy': {
+    label: 'Security & Privacy',
+    defaultHash: 'security',
+    showDefaultSubTab: true,
+    subTabs: [
+      { hash: 'security', label: 'Security' },
+      { hash: 'privacy', label: 'Privacy' },
+    ],
+  },
   '/branding': { label: 'Branding' },
   '/license': { label: 'License' },
   '/button': { label: 'Button' },
@@ -75,8 +84,10 @@ export function Layout() {
   const renderBreadcrumb = () => {
     if (!routeMatch) return null;
     const { path, config } = routeMatch;
-    const activeSubTab = config.subTabs?.find((t) => t.hash === activeHash);
-    const showSub = !!activeSubTab && activeSubTab.hash !== config.defaultHash;
+    const resolvedHash = activeHash || (config.showDefaultSubTab ? config.defaultHash : undefined);
+    const activeSubTab = config.subTabs?.find((t) => t.hash === resolvedHash);
+    const showSub =
+      !!activeSubTab && (config.showDefaultSubTab || activeSubTab.hash !== config.defaultHash);
 
     return (
       <nav className="flex items-center gap-1 text-sm">

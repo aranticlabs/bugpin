@@ -1,7 +1,7 @@
 BugPin
-Copyright 2026 Arantic Digital
+Copyright 2026 Arantic Digital GmbH
 
-This product includes software developed at Arantic Digital (https://www.arantic.com).
+This product includes software developed at Arantic Digital GmbH (https://arantic.com).
 
 == Main Project ==
 
@@ -21,3 +21,9 @@ limitations under the License.
 
 The widget component is licensed under the MIT License.
 See src/widget/LICENSE for the full license text.
+
+== Enterprise Edition ==
+
+Enterprise Edition features are proprietary and are not open-source software.
+They are covered by the BugPin Business License.
+See [LICENSE-EE](LICENSE-EE) for the full license text.

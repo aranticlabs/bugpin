@@ -21,6 +21,7 @@ function createBaseSettings(): AppSettings {
     retentionDays: 90,
     rateLimitPerMinute: 10,
     sessionMaxAgeDays: 7,
+    privacy: { euPrivacyMode: false },
     smtpEnabled: false,
     smtpConfig: {},
     s3Enabled: false,
@@ -149,6 +150,14 @@ describe('settingsService.update', () => {
     if (!result.success) {
       expect(result.code).toBe('INVALID_S3_CONFIG');
     }
+  });
+
+  it('passes privacy settings to the repository', async () => {
+    const privacy = { euPrivacyMode: true };
+    const result = await settingsService.update({ privacy });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.privacy).toEqual(privacy);
   });
 
   it('accepts valid SMTP config and trims inputs', async () => {

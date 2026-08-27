@@ -1,7 +1,8 @@
 {
   "name": "bugpin",
   "description": "Self-hosted visual bug reporting tool",
-  "version": "1.2.0",
+  "version": "1.2.1",
+  "packageManager": "bun@1.4.0",
   "license": "AGPL-3.0-only",
   "private": false,
   "type": "module",
@@ -25,7 +26,7 @@
     "typecheck:admin": "bun run --cwd src/admin typecheck",
     "typecheck:widget": "bun run --cwd src/widget typecheck",
     "test": "bun run test:server && bun run test:admin && bun run test:widget",
-    "test:server": "bun test tests/server",
+    "test:server": "bun test tests/server tests/shared",
     "test:admin": "bun run --cwd src/admin test",
     "test:widget": "bun run --cwd src/widget test",
     "migrate": "bun run --cwd src/server migrate",
@@ -35,11 +36,11 @@
     "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "@types/node": "^25.9.5",
-    "knip": "^5.88.1",
+    "@types/bun": "1.4.0",
+    "@types/node": "^26.2.0",
+    "knip": "^6.32.2",
     "prettier": "^3.9.6",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "overrides": {
     "fast-xml-builder": "^1.2.0",

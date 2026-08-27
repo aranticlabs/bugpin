@@ -8,8 +8,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { Login } from '../../pages/Login';
 
-const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
-
 function renderLogin() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -20,7 +18,7 @@ function renderLogin() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter future={routerFuture}>
+      <MemoryRouter>
         <AuthProvider>
           <Login />
         </AuthProvider>

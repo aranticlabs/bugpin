@@ -20,9 +20,10 @@ describe('AppSidebar', () => {
 
     expect(await screen.findByText('Admin User')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Reports')).toBeInTheDocument();
-    expect(screen.getByText('Projects')).toBeInTheDocument();
+    expect(await screen.findByText('Reports (17)')).toBeInTheDocument();
+    expect(await screen.findByText('Projects (2)')).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.getByText('Security & Privacy')).toBeInTheDocument();
 
     const userButton = screen.getByText('Admin User').closest('button');
     expect(userButton).not.toBeNull();
@@ -60,7 +61,8 @@ describe('AppSidebar', () => {
     );
 
     expect(await screen.findByText('Viewer User')).toBeInTheDocument();
-    expect(screen.queryByText('Projects')).not.toBeInTheDocument();
+    expect(await screen.findByText('Reports (17)')).toBeInTheDocument();
+    expect(screen.queryByText(/Projects/)).not.toBeInTheDocument();
     expect(screen.queryByText('Settings')).not.toBeInTheDocument();
   });
 });
