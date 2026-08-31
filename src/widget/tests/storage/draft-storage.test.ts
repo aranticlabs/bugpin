@@ -1,49 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { JSDOM } from 'jsdom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { installDom } from '../helpers/dom';
 
 describe('draft storage', () => {
   const TEST_API_KEY = 'test-api-key-123';
   let restoreDom: (() => void) | null = null;
 
   beforeEach(() => {
-    // Set up jsdom with localStorage support
-    dom = new JSDOM('<!doctype html><html><body></body></html>', {
-      url: 'https://example.com',
-    });
-
-    // Store original globals
-    const originalWindow = globalThis.window;
-    const originalDocument = globalThis.document;
-    const originalLocalStorage = globalThis.localStorage;
-
-    // Install DOM globals
-    globalThis.window = dom.window as unknown as typeof globalThis.window;
-    globalThis.document = dom.window.document as unknown as typeof globalThis.document;
-    globalThis.localStorage = dom.window.localStorage;
+    restoreDom = installDom();
     installFakeIndexedDB();
-
-    cleanup = () => {
-      dom.window.close();
-      if (originalWindow === undefined) {
-        delete (globalThis as Record<string, unknown>).window;
-      } else {
-        globalThis.window = originalWindow;
-      }
-      if (originalDocument === undefined) {
-        delete (globalThis as Record<string, unknown>).document;
-      } else {
-        globalThis.document = originalDocument;
-      }
-      if (originalLocalStorage === undefined) {
-        delete (globalThis as Record<string, unknown>).localStorage;
-      } else {
-        globalThis.localStorage = originalLocalStorage;
-      }
-    };
-
-    // Clear storage
-    dom.window.localStorage.clear();
+    globalThis.localStorage.clear();
   });
 
   afterEach(() => {
@@ -183,7 +149,7 @@ describe('draft storage', () => {
 
     await draftStorage.save(apiKey, formData, 'media', media, ' Owner@Example.com ');
 
-    const stored = JSON.parse(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)!);
+    const stored = JSON.parse(localStorage.getItem(`bugpin-draft-${apiKey}`)!);
     expect(stored.ownerEmail).toBe('owner@example.com');
 
     const loaded = await draftStorage.load(apiKey, 'owner@example.COM');
@@ -218,7 +184,7 @@ describe('draft storage', () => {
       await draftStorage.save(apiKey, formData, 'media', media, ownerEmail);
 
       expect(await draftStorage.load(apiKey, 'new@example.com')).toBeNull();
-      expect(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+      expect(localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
       expect(await draftStorage.has(apiKey)).toBe(false);
     }
   });
