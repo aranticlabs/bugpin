@@ -31,10 +31,7 @@ export type ReportSource = 'widget' | 'manual';
 export const UNASSIGNED_FILTER = '__unassigned__';
 
 export type ReportHistoryAction =
-  | 'created'
-  | 'status_changed'
-  | 'priority_changed'
-  | 'assignee_changed';
+  'created' | 'status_changed' | 'priority_changed' | 'assignee_changed';
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
@@ -593,9 +590,7 @@ export interface SlackIntegrationConfig {
 }
 
 export type IntegrationConfig =
-  | GitHubIntegrationConfig
-  | JiraIntegrationConfig
-  | SlackIntegrationConfig;
+  GitHubIntegrationConfig | JiraIntegrationConfig | SlackIntegrationConfig;
 
 // Notification Types
 

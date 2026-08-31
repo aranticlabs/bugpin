@@ -3,6 +3,7 @@ import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
 import { versionRoutes } from '../../../src/server/routes/api/version';
 import { authService } from '../../../src/server/services/auth.service';
 import { updateCheckService } from '../../../src/server/services/update-check.service';
+import { widgetPackageCompatibilityService } from '../../../src/server/services/widget-package-compatibility.service';
 import { Result } from '../../../src/server/utils/result';
 import type { Session, User, UserRole } from '../../../src/shared/types';
 
@@ -29,6 +30,9 @@ const baseSession: Session = {
 
 const originalAuthService = { ...authService };
 const originalGetStatus = updateCheckService.getStatus.bind(updateCheckService);
+const originalWidgetPackageGetStatus = widgetPackageCompatibilityService.getStatus.bind(
+  widgetPackageCompatibilityService
+);
 
 beforeEach(() => {
   updateCheckService.getStatus = async () =>
@@ -41,11 +45,26 @@ beforeEach(() => {
       lastCheckedAt: '2026-05-01T08:00:00Z',
       checkEnabled: true,
     });
+  widgetPackageCompatibilityService.getStatus = async () =>
+    Result.ok({
+      minimumSupportedVersion: '1.1.3',
+      incompatible: true,
+      warningId: 'warning_1',
+      affectedProjects: [
+        {
+          projectId: 'proj_1',
+          projectName: 'Checkout',
+          observedVersions: ['1.1.2'],
+          deploymentCount: 2,
+        },
+      ],
+    });
 });
 
 afterEach(() => {
   Object.assign(authService, originalAuthService);
   updateCheckService.getStatus = originalGetStatus;
+  widgetPackageCompatibilityService.getStatus = originalWidgetPackageGetStatus;
 });
 
 function createApp() {
@@ -103,6 +122,19 @@ describe('GET /version', () => {
       publishedAt: '2026-04-22T10:14:00Z',
       lastCheckedAt: '2026-05-01T08:00:00Z',
       checkEnabled: true,
+      widgetPackage: {
+        minimumSupportedVersion: '1.1.3',
+        incompatible: true,
+        warningId: 'warning_1',
+        affectedProjects: [
+          {
+            projectId: 'proj_1',
+            projectName: 'Checkout',
+            observedVersions: ['1.1.2'],
+            deploymentCount: 2,
+          },
+        ],
+      },
     });
   });
 
@@ -125,10 +157,20 @@ describe('GET /version', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.checkEnabled).toBe(false);
+    expect(body.widgetPackage.incompatible).toBe(true);
   });
 
   it('returns 500 when the service fails', async () => {
     updateCheckService.getStatus = async () => Result.fail('boom', 'UPDATE_CHECK_ERROR');
+    const app = requestWithRole('admin');
+    const res = await app.request('http://localhost/version', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(500);
+  });
+
+  it('returns 500 when widget compatibility status fails', async () => {
+    widgetPackageCompatibilityService.getStatus = async () => Result.fail('boom', 'STATUS_ERROR');
     const app = requestWithRole('admin');
     const res = await app.request('http://localhost/version', {
       headers: { cookie: 'session=sess_1' },

@@ -69,9 +69,7 @@ export function ReportHistoryTimeline({ entries, isLoading }: ReportHistoryTimel
 
   if (entries.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-4">
-        No activity recorded yet.
-      </p>
+      <p className="text-sm text-muted-foreground text-center py-4">No activity recorded yet.</p>
     );
   }
 

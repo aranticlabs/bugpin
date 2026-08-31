@@ -26,13 +26,17 @@ export function parseVersion(input: string): ParsedVersion | null {
 }
 
 export function isNewer(latest: string, current: string): boolean {
-  const a = parseVersion(latest);
-  const b = parseVersion(current);
+  return compareVersions(latest, current) > 0;
+}
+
+export function compareVersions(first: string, second: string): number {
+  const a = parseVersion(first);
+  const b = parseVersion(second);
   if (!a || !b) {
-    return false;
+    return 0;
   }
 
-  if (a.major !== b.major) return a.major > b.major;
-  if (a.minor !== b.minor) return a.minor > b.minor;
-  return a.patch > b.patch;
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
 }

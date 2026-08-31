@@ -1,6 +1,5 @@
 export type Result<T> =
-  | { success: true; value: T }
-  | { success: false; error: string; code?: string };
+  { success: true; value: T } | { success: false; error: string; code?: string };
 
 export const Result = {
   /**

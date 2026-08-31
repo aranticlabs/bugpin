@@ -5,6 +5,10 @@ import { projectsRepo } from '../../../src/server/database/repositories/projects
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
+import {
+  widgetPackageCompatibilityService,
+  type WidgetVersionObservationInput,
+} from '../../../src/server/services/widget-package-compatibility.service';
 import { Result } from '../../../src/server/utils/result';
 import { logger } from '../../../src/server/utils/logger';
 import type { Project, Report, AppSettings } from '../../../src/shared/types';
@@ -93,12 +97,17 @@ const baseSettings: Partial<AppSettings> = {
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalReportsService = { ...reportsService };
+const originalWidgetPackageCompatibilityService = { ...widgetPackageCompatibilityService };
 const originalLogger = { ...logger };
 
 let projectResult: Project | null = baseProject;
+let observedWidgetVersions: WidgetVersionObservationInput[] = [];
+let warningMessages: string[] = [];
 
 beforeEach(() => {
   projectResult = baseProject;
+  observedWidgetVersions = [];
+  warningMessages = [];
 
   // Invalidate settings cache so mocked settingsRepo.getAll takes effect
   settingsCacheService.invalidate();
@@ -106,9 +115,15 @@ beforeEach(() => {
   projectsRepo.findByApiKey = async () => projectResult;
   settingsRepo.getAll = async () => baseSettings as AppSettings;
   reportsService.create = async () => Result.ok(baseReport);
+  widgetPackageCompatibilityService.observe = async (input) => {
+    observedWidgetVersions.push(input);
+    return Result.ok(undefined);
+  };
 
   logger.info = () => undefined;
-  logger.warn = () => undefined;
+  logger.warn = (message) => {
+    warningMessages.push(message);
+  };
   logger.error = () => undefined;
   logger.debug = () => undefined;
 });
@@ -117,6 +132,7 @@ afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(reportsService, originalReportsService);
+  Object.assign(widgetPackageCompatibilityService, originalWidgetPackageCompatibilityService);
   Object.assign(logger, originalLogger);
 });
 
@@ -528,6 +544,65 @@ describe('widget routes', () => {
   });
 
   describe('GET /widget/config/:apiKey', () => {
+    it('records valid npm package metadata without changing the response', async () => {
+      const app = createApp();
+      const res = await app.request(
+        'http://localhost/widget/config/test_api_key_123?widgetVersion=1.1.3&integration=npm',
+        {
+          headers: {
+            origin: 'https://app.example.com',
+            referer: 'https://app.example.com/account',
+          },
+        }
+      );
+      await Promise.resolve();
+
+      expect(res.status).toBe(200);
+      expect(observedWidgetVersions).toEqual([
+        {
+          projectId: 'prj_1',
+          version: '1.1.3',
+          origin: 'https://app.example.com',
+          referer: 'https://app.example.com/account',
+        },
+      ]);
+    });
+
+    it('ignores hosted, missing, malformed, oversized, and unsupported metadata', async () => {
+      const app = createApp();
+      const urls = [
+        'http://localhost/widget/config/test_api_key_123',
+        'http://localhost/widget/config/test_api_key_123?integration=npm',
+        'http://localhost/widget/config/test_api_key_123?widgetVersion=1.1&integration=npm',
+        `http://localhost/widget/config/test_api_key_123?widgetVersion=${'1'.repeat(33)}&integration=npm`,
+        'http://localhost/widget/config/test_api_key_123?widgetVersion=1.1.3&integration=hosted',
+      ];
+
+      for (const url of urls) {
+        const res = await app.request(url);
+        expect(res.status).toBe(200);
+      }
+      await Promise.resolve();
+
+      expect(observedWidgetVersions).toEqual([]);
+    });
+
+    it('logs persistence failures without changing widget configuration', async () => {
+      widgetPackageCompatibilityService.observe = async () =>
+        Result.fail('database unavailable', 'OBSERVATION_ERROR');
+
+      const app = createApp();
+      const res = await app.request(
+        'http://localhost/widget/config/test_api_key_123?widgetVersion=1.1.3&integration=npm'
+      );
+      const body = await res.json();
+      await Promise.resolve();
+
+      expect(res.status).toBe(200);
+      expect(body.config.projectName).toBe('Test Project');
+      expect(warningMessages).toContain('Failed to record widget package version');
+    });
+
     it('returns automatic activity capture when EU Privacy Mode is off', async () => {
       settingsRepo.getAll = async () =>
         ({

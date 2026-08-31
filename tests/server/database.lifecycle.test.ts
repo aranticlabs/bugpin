@@ -140,7 +140,9 @@ describe('database lifecycle', () => {
         .query("SELECT name FROM pragma_table_info('reports') WHERE name = 'source'")
         .get() as { name?: string } | undefined;
       const sourceIndex = db
-        .query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_reports_source'")
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_reports_source'"
+        )
         .get() as { name?: string } | undefined;
 
       expect(sourceColumn?.name).toBe('source');
@@ -156,6 +158,62 @@ describe('database lifecycle', () => {
     await initDatabase();
     await initSchema();
     await runMigrations();
+
+    const table = getDb()
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'widget_version_observations'"
+      )
+      .get() as { name?: string } | undefined;
+    expect(table?.name).toBe('widget_version_observations');
+  });
+
+  it('adds widget observations to an existing pre-migration database', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-widget-migration-'));
+
+    Object.assign(config, {
+      dataDir: baseDir,
+      dbPath: path.join(baseDir, 'bugpin.db'),
+      uploadsDir: path.join(baseDir, 'uploads'),
+      screenshotsDir: path.join(baseDir, 'uploads', 'screenshots'),
+      attachmentsDir: path.join(baseDir, 'uploads', 'attachments'),
+      brandingDir: path.join(baseDir, 'uploads', 'branding'),
+      avatarsDir: path.join(baseDir, 'uploads', 'avatars'),
+    });
+
+    try {
+      await initDatabase();
+      const db = getDb();
+      db.exec(`
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE migrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          applied_at TEXT DEFAULT (datetime('now')) NOT NULL
+        );
+      `);
+      for (const name of [
+        '001_add_reporter_messages.sql',
+        '002_add_report_source.sql',
+        '003_add_reporter_locale.sql',
+        '004_add_report_history.sql',
+      ]) {
+        db.run('INSERT INTO migrations (name) VALUES (?)', [name]);
+      }
+
+      await runMigrations();
+
+      const table = db
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'widget_version_observations'"
+        )
+        .get() as { name?: string } | undefined;
+      expect(table?.name).toBe('widget_version_observations');
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
   });
 
   it('skips migrations when directory is missing', async () => {
@@ -197,8 +255,7 @@ describe('database lifecycle', () => {
     try {
       await runMigrations();
       const applied = db.query('SELECT name FROM migrations WHERE name = ?').get(migrationName) as
-        | { name?: string }
-        | undefined;
+        { name?: string } | undefined;
       expect(applied?.name).toBe(migrationName);
     } finally {
       fs.rmSync(migrationPath, { force: true });
@@ -242,10 +299,10 @@ describe('database lifecycle', () => {
             0,
             new Date().toISOString(),
             new Date().toISOString(),
-          ],
+          ]
         );
         throw new Error('boom');
-      }),
+      })
     ).toThrow();
 
     const count = db.query('SELECT COUNT(*) as count FROM projects').get() as { count: number };

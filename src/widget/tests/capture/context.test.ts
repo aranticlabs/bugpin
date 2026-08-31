@@ -88,8 +88,7 @@ const sharedPerformance = {
 };
 
 let captureContext:
-  | (() => ReturnType<typeof import('../../capture/context').captureContext>)
-  | null = null;
+  (() => ReturnType<typeof import('../../capture/context').captureContext>) | null = null;
 let startErrorCapture: (() => void) | null = null;
 
 function configureDom(options?: {

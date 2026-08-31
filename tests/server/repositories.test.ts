@@ -3,7 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { config } from '../../src/server/config';
-import { initDatabase, initSchema, closeDatabase, getDb } from '../../src/server/database/database';
+import {
+  initDatabase,
+  initSchema,
+  runMigrations,
+  closeDatabase,
+  getDb,
+} from '../../src/server/database/database';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
@@ -18,6 +24,7 @@ import {
   notificationPreferencesRepo,
   projectNotificationDefaultsRepo,
 } from '../../src/server/database/repositories/notification-preferences.repo';
+import { widgetVersionObservationsRepo } from '../../src/server/database/repositories/widget-version-observations.repo';
 
 const originalConfig = { ...config };
 let tempDir = '';
@@ -35,6 +42,7 @@ beforeAll(async () => {
   });
   await initDatabase();
   await initSchema();
+  await runMigrations();
 });
 
 afterAll(() => {
@@ -47,6 +55,7 @@ afterAll(() => {
 
 function resetDb() {
   const db = getDb();
+  db.exec('DELETE FROM widget_version_observations');
   db.exec('DELETE FROM report_history');
   db.exec('DELETE FROM files');
   db.exec('DELETE FROM reports');
@@ -126,6 +135,135 @@ describe('projectsRepo', () => {
 
     const fetched = await projectsRepo.findById(project.id);
     expect(fetched?.settings.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
+  });
+});
+
+describe('widgetVersionObservationsRepo', () => {
+  const key = (value: number) => value.toString().padStart(64, '0');
+
+  it('replaces a deployment observation and removes stale rows on reads', async () => {
+    const project = await createProject('Observed');
+    const now = new Date();
+    const staleBefore = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    await widgetVersionObservationsRepo.upsert(
+      {
+        projectId: project.id,
+        deploymentKey: key(1),
+        version: '1.0.0',
+        lastSeenAt: now.toISOString(),
+      },
+      staleBefore,
+      100
+    );
+    await widgetVersionObservationsRepo.upsert(
+      {
+        projectId: project.id,
+        deploymentKey: key(1),
+        version: '1.0.1',
+        lastSeenAt: new Date(now.getTime() + 1_000).toISOString(),
+      },
+      staleBefore,
+      100
+    );
+
+    getDb().run(
+      `INSERT INTO widget_version_observations
+         (project_id, deployment_key, version, last_seen_at)
+       VALUES (?, ?, ?, ?)`,
+      [
+        project.id,
+        key(2),
+        '1.0.0',
+        new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+      ]
+    );
+
+    const observations = await widgetVersionObservationsRepo.listRecent(staleBefore);
+
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({
+      projectId: project.id,
+      projectName: 'Observed',
+      deploymentKey: key(1),
+      version: '1.0.1',
+    });
+    const stored = getDb()
+      .query('SELECT COUNT(*) AS count FROM widget_version_observations')
+      .get() as { count: number };
+    expect(stored.count).toBe(1);
+  });
+
+  it('keeps only the 100 most recent deployments per project', async () => {
+    const project = await createProject('Bounded');
+    const now = Date.now();
+    const staleBefore = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    for (let index = 0; index < 105; index += 1) {
+      await widgetVersionObservationsRepo.upsert(
+        {
+          projectId: project.id,
+          deploymentKey: key(index),
+          version: '1.0.0',
+          lastSeenAt: new Date(now + index).toISOString(),
+        },
+        staleBefore,
+        100
+      );
+    }
+
+    const observations = await widgetVersionObservationsRepo.listRecent(staleBefore);
+    expect(observations).toHaveLength(100);
+    expect(observations.some((entry) => entry.deploymentKey === key(0))).toBe(false);
+    expect(observations.some((entry) => entry.deploymentKey === key(104))).toBe(true);
+  });
+
+  it('excludes inactive and soft-deleted projects', async () => {
+    const active = await createProject('Active');
+    const inactive = await createProject('Inactive');
+    const deleted = await createProject('Deleted');
+    const now = new Date();
+    const staleBefore = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    for (const [index, project] of [active, inactive, deleted].entries()) {
+      await widgetVersionObservationsRepo.upsert(
+        {
+          projectId: project.id,
+          deploymentKey: key(index),
+          version: '1.0.0',
+          lastSeenAt: now.toISOString(),
+        },
+        staleBefore,
+        100
+      );
+    }
+    await projectsRepo.update(inactive.id, { isActive: false });
+    await projectsRepo.delete(deleted.id);
+
+    const observations = await widgetVersionObservationsRepo.listRecent(staleBefore);
+    expect(observations.map((entry) => entry.projectId)).toEqual([active.id]);
+  });
+
+  it('deletes observations when a project is hard-deleted', async () => {
+    const project = await createProject('Cascade');
+    const now = new Date();
+    await widgetVersionObservationsRepo.upsert(
+      {
+        projectId: project.id,
+        deploymentKey: key(1),
+        version: '1.0.0',
+        lastSeenAt: now.toISOString(),
+      },
+      new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      100
+    );
+
+    getDb().run('DELETE FROM projects WHERE id = ?', [project.id]);
+
+    const stored = getDb()
+      .query('SELECT COUNT(*) AS count FROM widget_version_observations WHERE project_id = ?')
+      .get(project.id) as { count: number };
+    expect(stored.count).toBe(0);
   });
 });
 
