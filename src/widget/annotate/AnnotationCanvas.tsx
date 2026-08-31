@@ -24,15 +24,7 @@ import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 
 export type AnnotationTool =
-  | 'select'
-  | 'pan'
-  | 'pen'
-  | 'line'
-  | 'arrow'
-  | 'rectangle'
-  | 'circle'
-  | 'text'
-  | 'pixelate';
+  'select' | 'pan' | 'pen' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'pixelate';
 
 interface Point {
   x: number;

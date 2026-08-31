@@ -44,6 +44,13 @@ import {
 } from 'lucide-react';
 
 const STORAGE_KEY = 'bugpin_test_api_key';
+const REPORTER_NAME_STORAGE_KEY = 'bugpin_test_reporter_name';
+const REPORTER_EMAIL_STORAGE_KEY = 'bugpin_test_reporter_email';
+const REPORTER_LOGGED_OUT_STORAGE_KEY = 'bugpin_test_reporter_logged_out';
+const TEST_REPORTER = {
+  name: 'Widget Test User',
+  email: 'widget-test@example.com',
+};
 
 const LOCALE_OPTIONS: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -178,9 +185,19 @@ export function TestWidgetPage() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showReporterModal, setShowReporterModal] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [screenshotMode, setScreenshotMode] = useState(false);
   const [widgetLocale, setWidgetLocale] = useState('en');
+  const [reporter] = useState(() => ({
+    name: localStorage.getItem(REPORTER_NAME_STORAGE_KEY) ?? TEST_REPORTER.name,
+    email: localStorage.getItem(REPORTER_EMAIL_STORAGE_KEY) ?? TEST_REPORTER.email,
+  }));
+  const [reporterNameInput, setReporterNameInput] = useState(reporter.name);
+  const [reporterEmailInput, setReporterEmailInput] = useState(reporter.email);
+  const [reporterLoggedIn] = useState(
+    () => localStorage.getItem(REPORTER_LOGGED_OUT_STORAGE_KEY) !== 'true'
+  );
 
   const { resolvedTheme, setTheme } = useTheme();
 
@@ -219,6 +236,10 @@ export function TestWidgetPage() {
     const script = document.createElement('script');
     script.src = '/widget.js?v=' + Date.now();
     script.setAttribute('data-api-key', apiKey);
+    if (reporterLoggedIn) {
+      script.setAttribute('data-reporter-name', reporter.name);
+      script.setAttribute('data-reporter-email', reporter.email);
+    }
     document.body.appendChild(script);
 
     // Set up test storage data for Storage Keys demo
@@ -244,7 +265,7 @@ export function TestWidgetPage() {
         scriptToRemove.remove();
       }
     };
-  }, [apiKey]);
+  }, [apiKey, reporter.email, reporter.name, reporterLoggedIn]);
 
   const handleSaveApiKey = () => {
     const trimmedKey = apiKeyInput.trim();
@@ -276,6 +297,22 @@ export function TestWidgetPage() {
       setShowApiKeyModal(false);
       setApiKeyInput('');
     }
+  };
+
+  const handleSaveReporter = () => {
+    localStorage.setItem(REPORTER_NAME_STORAGE_KEY, reporterNameInput);
+    localStorage.setItem(REPORTER_EMAIL_STORAGE_KEY, reporterEmailInput);
+    localStorage.removeItem(REPORTER_LOGGED_OUT_STORAGE_KEY);
+    window.location.reload();
+  };
+
+  const handleToggleReporter = () => {
+    if (reporterLoggedIn) {
+      localStorage.setItem(REPORTER_LOGGED_OUT_STORAGE_KEY, 'true');
+    } else {
+      localStorage.removeItem(REPORTER_LOGGED_OUT_STORAGE_KEY);
+    }
+    window.location.reload();
   };
 
   const toggleTheme = () => {
@@ -350,6 +387,42 @@ export function TestWidgetPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showReporterModal} onOpenChange={setShowReporterModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Test reporter</DialogTitle>
+            <DialogDescription>
+              Set the identity passed to the widget, or use logged-out mode to omit it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="test-reporter-name">Name</Label>
+              <Input
+                id="test-reporter-name"
+                value={reporterNameInput}
+                onChange={(event) => setReporterNameInput(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="test-reporter-email">Email</Label>
+              <Input
+                id="test-reporter-email"
+                type="email"
+                value={reporterEmailInput}
+                onChange={(event) => setReporterEmailInput(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setShowReporterModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveReporter}>Apply and reload</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* API Key Notice Banner */}
       {apiKey && (
         <div
@@ -365,6 +438,28 @@ export function TestWidgetPage() {
             onClick={handleChangeApiKey}
           >
             Change
+          </Button>
+          <span className="ml-3">
+            Test reporter:{' '}
+            <code className="bg-white/15 px-1.5 py-0.5 rounded font-mono text-xs">
+              {reporterLoggedIn ? `${reporter.name} · ${reporter.email}` : 'Logged out'}
+            </code>
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-3 h-7 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"
+            onClick={() => setShowReporterModal(true)}
+          >
+            Edit reporter
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-2 h-7 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"
+            onClick={handleToggleReporter}
+          >
+            {reporterLoggedIn ? 'Test logged out' : 'Use reporter'}
           </Button>
         </div>
       )}

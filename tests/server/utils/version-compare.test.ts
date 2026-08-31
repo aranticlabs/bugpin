@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { isNewer, parseVersion } from '../../../src/server/utils/version-compare';
+import { compareVersions, isNewer, parseVersion } from '../../../src/server/utils/version-compare';
 
 describe('isNewer', () => {
   it('returns true when patch is greater', () => {
@@ -82,5 +82,19 @@ describe('parseVersion', () => {
 
   it('returns null for non-string input', () => {
     expect(parseVersion(undefined as unknown as string)).toBeNull();
+  });
+});
+
+describe('compareVersions', () => {
+  it('sorts valid versions numerically', () => {
+    expect(['1.10.0', '2.0.0', '1.2.9'].sort(compareVersions)).toEqual([
+      '1.2.9',
+      '1.10.0',
+      '2.0.0',
+    ]);
+  });
+
+  it('treats invalid versions as equal', () => {
+    expect(compareVersions('invalid', '1.0.0')).toBe(0);
   });
 });

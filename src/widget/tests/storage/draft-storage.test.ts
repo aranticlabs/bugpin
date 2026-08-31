@@ -1,54 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { JSDOM } from 'jsdom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { installDom } from '../helpers/dom';
 
 describe('draft storage', () => {
   const TEST_API_KEY = 'test-api-key-123';
-  let dom: JSDOM;
-  let cleanup: () => void;
+  let restoreDom: (() => void) | null = null;
 
   beforeEach(() => {
-    // Set up jsdom with localStorage support
-    dom = new JSDOM('<!doctype html><html><body></body></html>', {
-      url: 'https://example.com',
-    });
-
-    // Store original globals
-    const originalWindow = globalThis.window;
-    const originalDocument = globalThis.document;
-    const originalLocalStorage = globalThis.localStorage;
-
-    // Install DOM globals
-    globalThis.window = dom.window as unknown as typeof globalThis.window;
-    globalThis.document = dom.window.document as unknown as typeof globalThis.document;
-    globalThis.localStorage = dom.window.localStorage;
+    restoreDom = installDom();
     installFakeIndexedDB();
-
-    cleanup = () => {
-      dom.window.close();
-      if (originalWindow === undefined) {
-        delete (globalThis as Record<string, unknown>).window;
-      } else {
-        globalThis.window = originalWindow;
-      }
-      if (originalDocument === undefined) {
-        delete (globalThis as Record<string, unknown>).document;
-      } else {
-        globalThis.document = originalDocument;
-      }
-      if (originalLocalStorage === undefined) {
-        delete (globalThis as Record<string, unknown>).localStorage;
-      } else {
-        globalThis.localStorage = originalLocalStorage;
-      }
-    };
-
-    // Clear storage
-    dom.window.localStorage.clear();
+    globalThis.localStorage.clear();
   });
 
   afterEach(() => {
-    cleanup?.();
+    restoreDom?.();
+    restoreDom = null;
   });
 
   it('saves form data to localStorage', async () => {
@@ -63,16 +29,11 @@ describe('draft storage', () => {
       reporterName: 'Test User',
     };
 
-    // Save the draft (ignoring IndexedDB errors for now - we're testing localStorage)
-    try {
-      await draftStorage.save(TEST_API_KEY, formData, 'details', []);
-    } catch {
-      // IndexedDB may fail in jsdom, that's OK for this test
-    }
+    await draftStorage.save(TEST_API_KEY, formData, 'details', []);
 
     // Check localStorage directly
     const key = `bugpin-draft-${TEST_API_KEY}`;
-    const stored = dom.window.localStorage.getItem(key);
+    const stored = localStorage.getItem(key);
     expect(stored).not.toBeNull();
 
     const parsed = JSON.parse(stored!);
@@ -101,20 +62,9 @@ describe('draft storage', () => {
       activeTab: 'media',
       savedAt: new Date().toISOString(),
     };
-    dom.window.localStorage.setItem(key, JSON.stringify(draftData));
+    localStorage.setItem(key, JSON.stringify(draftData));
 
-    // Load the draft (may fail on IndexedDB but form data should load)
-    let loaded;
-    try {
-      loaded = await draftStorage.load(TEST_API_KEY);
-    } catch {
-      // If IndexedDB fails, manually check localStorage was read
-      loaded = {
-        formData: draftData.formData,
-        activeTab: draftData.activeTab,
-        media: [],
-      };
-    }
+    const loaded = await draftStorage.load(TEST_API_KEY);
 
     expect(loaded).not.toBeNull();
     expect(loaded?.formData.title).toBe('Stored Bug');
@@ -127,7 +77,7 @@ describe('draft storage', () => {
 
     // Set up a draft
     const key = `bugpin-draft-${TEST_API_KEY}`;
-    dom.window.localStorage.setItem(
+    localStorage.setItem(
       key,
       JSON.stringify({
         formData: { title: 'To Delete' },
@@ -137,17 +87,12 @@ describe('draft storage', () => {
     );
 
     // Verify it exists
-    expect(dom.window.localStorage.getItem(key)).not.toBeNull();
+    expect(localStorage.getItem(key)).not.toBeNull();
 
-    // Clear the draft
-    try {
-      await draftStorage.clear(TEST_API_KEY);
-    } catch {
-      // IndexedDB may fail, but localStorage should still be cleared
-    }
+    await draftStorage.clear(TEST_API_KEY);
 
     // Verify it's gone
-    expect(dom.window.localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
   });
 
   it('keeps drafts separate per API key', async () => {
@@ -169,16 +114,12 @@ describe('draft storage', () => {
       reporterName: '',
     };
 
-    try {
-      await draftStorage.save('api-key-1', formData1, 'details', []);
-      await draftStorage.save('api-key-2', formData2, 'details', []);
-    } catch {
-      // IndexedDB may fail
-    }
+    await draftStorage.save('api-key-1', formData1, 'details', []);
+    await draftStorage.save('api-key-2', formData2, 'details', []);
 
     // Check they're stored separately
-    const stored1 = JSON.parse(dom.window.localStorage.getItem('bugpin-draft-api-key-1')!);
-    const stored2 = JSON.parse(dom.window.localStorage.getItem('bugpin-draft-api-key-2')!);
+    const stored1 = JSON.parse(localStorage.getItem('bugpin-draft-api-key-1')!);
+    const stored2 = JSON.parse(localStorage.getItem('bugpin-draft-api-key-2')!);
 
     expect(stored1.formData.title).toBe('Bug for Project 1');
     expect(stored1.formData.priority).toBe('low');
@@ -208,7 +149,7 @@ describe('draft storage', () => {
 
     await draftStorage.save(apiKey, formData, 'media', media, ' Owner@Example.com ');
 
-    const stored = JSON.parse(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)!);
+    const stored = JSON.parse(localStorage.getItem(`bugpin-draft-${apiKey}`)!);
     expect(stored.ownerEmail).toBe('owner@example.com');
 
     const loaded = await draftStorage.load(apiKey, 'owner@example.COM');
@@ -243,7 +184,7 @@ describe('draft storage', () => {
       await draftStorage.save(apiKey, formData, 'media', media, ownerEmail);
 
       expect(await draftStorage.load(apiKey, 'new@example.com')).toBeNull();
-      expect(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+      expect(localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
       expect(await draftStorage.has(apiKey)).toBe(false);
     }
   });

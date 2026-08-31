@@ -4,7 +4,22 @@ import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 
 const STALE_TIME_MS = 60 * 60 * 1000;
-const DISMISS_KEY = 'bugpin.updateBanner.dismissedVersion';
+const UPDATE_DISMISS_KEY = 'bugpin.updateBanner.dismissedVersion';
+const WIDGET_DISMISS_KEY = 'bugpin.widgetPackageWarning.dismissedId';
+
+interface IncompatibleWidgetProject {
+  projectId: string;
+  projectName: string;
+  observedVersions: string[];
+  deploymentCount: number;
+}
+
+interface WidgetPackageCompatibilityStatus {
+  minimumSupportedVersion: string;
+  incompatible: boolean;
+  warningId: string | null;
+  affectedProjects: IncompatibleWidgetProject[];
+}
 
 interface VersionResponse {
   success: boolean;
@@ -15,23 +30,33 @@ interface VersionResponse {
   publishedAt: string | null;
   lastCheckedAt: string | null;
   checkEnabled: boolean;
+  widgetPackage: WidgetPackageCompatibilityStatus;
 }
 
-function readDismissedVersion(): string | null {
+function readDismissal(key: string): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return window.localStorage.getItem(DISMISS_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeDismissedVersion(value: string): void {
+function writeDismissal(key: string, value: string): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(DISMISS_KEY, value);
+    window.localStorage.setItem(key, value);
   } catch {
     // localStorage may be unavailable (private mode, quota); the banner stays dismissed for the session via state.
+  }
+}
+
+function clearDismissal(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // localStorage may be unavailable; state still reflects the server response.
   }
 }
 
@@ -54,21 +79,48 @@ export function useUpdateCheck() {
   const releaseUrl = query.data?.releaseUrl ?? null;
   const updateAvailable = query.data?.updateAvailable ?? false;
   const checkEnabled = query.data?.checkEnabled ?? false;
+  const widgetPackage = query.data?.widgetPackage ?? {
+    minimumSupportedVersion: '',
+    incompatible: false,
+    warningId: null,
+    affectedProjects: [],
+  };
 
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(() =>
-    readDismissedVersion()
+    readDismissal(UPDATE_DISMISS_KEY)
+  );
+  const [dismissedWidgetWarningId, setDismissedWidgetWarningId] = useState<string | null>(() =>
+    readDismissal(WIDGET_DISMISS_KEY)
   );
 
   useEffect(() => {
-    setDismissedVersion(readDismissedVersion());
+    setDismissedVersion(readDismissal(UPDATE_DISMISS_KEY));
   }, [latest]);
 
+  useEffect(() => {
+    if (!query.data) return;
+    if (!widgetPackage.incompatible || !widgetPackage.warningId) {
+      clearDismissal(WIDGET_DISMISS_KEY);
+      setDismissedWidgetWarningId(null);
+      return;
+    }
+    setDismissedWidgetWarningId(readDismissal(WIDGET_DISMISS_KEY));
+  }, [query.data, widgetPackage.incompatible, widgetPackage.warningId]);
+
   const isDismissed = latest !== null && dismissedVersion === latest;
+  const isWidgetWarningDismissed =
+    widgetPackage.warningId !== null && dismissedWidgetWarningId === widgetPackage.warningId;
 
   const dismiss = () => {
     if (!latest) return;
-    writeDismissedVersion(latest);
+    writeDismissal(UPDATE_DISMISS_KEY, latest);
     setDismissedVersion(latest);
+  };
+
+  const dismissWidgetWarning = () => {
+    if (!widgetPackage.warningId) return;
+    writeDismissal(WIDGET_DISMISS_KEY, widgetPackage.warningId);
+    setDismissedWidgetWarningId(widgetPackage.warningId);
   };
 
   return {
@@ -79,5 +131,8 @@ export function useUpdateCheck() {
     releaseUrl,
     isDismissed,
     dismiss,
+    widgetPackage,
+    isWidgetWarningDismissed,
+    dismissWidgetWarning,
   };
 }

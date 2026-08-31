@@ -10,6 +10,8 @@ import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { resolveSubmitLocale } from '../../utils/locale.js';
 import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
+import { widgetPackageCompatibilityService } from '../../services/widget-package-compatibility.service.js';
+import { parseVersion } from '../../utils/version-compare.js';
 import type { LauncherTextBundle, ReportMetadata } from '@shared/types';
 
 const widget = new Hono();
@@ -343,6 +345,31 @@ widget.get('/config/:apiKey', async (c) => {
   }
 
   const project = projectResult.value;
+
+  const integration = c.req.query('integration');
+  const widgetVersion = c.req.query('widgetVersion');
+  if (
+    integration === 'npm' &&
+    widgetVersion !== undefined &&
+    widgetVersion.length <= 32 &&
+    parseVersion(widgetVersion) !== null
+  ) {
+    void widgetPackageCompatibilityService
+      .observe({
+        projectId: project.id,
+        version: widgetVersion,
+        origin: c.req.header('origin'),
+        referer: c.req.header('referer'),
+      })
+      .then((result) => {
+        if (!result.success) {
+          logger.warn('Failed to record widget package version', {
+            projectId: project.id,
+            error: result.error,
+          });
+        }
+      });
+  }
 
   // Get global app settings
   const settingsResult = await settingsService.getAll();
