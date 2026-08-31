@@ -83,9 +83,9 @@ export const reportHistoryRepo = {
 
   async findUserNameById(userId: string): Promise<string | undefined> {
     const db = getDb();
-    const row = db.query('SELECT name FROM users WHERE id = ?').get(userId) as
-      | { name: string }
-      | null;
+    const row = db.query('SELECT name FROM users WHERE id = ?').get(userId) as {
+      name: string;
+    } | null;
     return row?.name;
   },
 };

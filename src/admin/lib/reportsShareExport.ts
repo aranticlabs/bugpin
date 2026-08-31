@@ -11,10 +11,7 @@ export interface ReportShareRow {
   URL: string;
 }
 
-export function buildReportShareRows(
-  reports: Report[],
-  origin?: string
-): ReportShareRow[] {
+export function buildReportShareRows(reports: Report[], origin?: string): ReportShareRow[] {
   return reports.map((report) => ({
     Title: report.title,
     Description: report.description ?? '',
@@ -40,9 +37,7 @@ export function buildReportsCsv(reports: Report[], origin?: string): string {
   const header = ['Title', 'Description', 'URL'];
   const lines = [
     header.join(','),
-    ...rows.map((row) =>
-      [row.Title, row.Description, row.URL].map(escapeCsvValue).join(',')
-    ),
+    ...rows.map((row) => [row.Title, row.Description, row.URL].map(escapeCsvValue).join(',')),
   ];
   return lines.join('\n');
 }

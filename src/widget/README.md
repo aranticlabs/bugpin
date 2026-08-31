@@ -31,6 +31,10 @@ BugPin.init({
 });
 ```
 
+Starting with version 1.1.3, `BugPin.init()` reports the package version to the configured BugPin
+server so administrators can see compatibility warnings. Hosted `/widget.js` integrations do not
+send package metadata.
+
 ## Configuration
 
 The widget automatically fetches its configuration from the BugPin server based on your API key. All visual settings (theme, position, colors, button text) are managed in the BugPin Admin Console.
@@ -52,8 +56,6 @@ The widget automatically fetches its configuration from the BugPin server based 
 
 ### Prefill Reporter Details
 
-Pass the current user's details when initializing the widget:
-
 ```javascript
 BugPin.init({
   apiKey: 'your-project-api-key',
@@ -63,7 +65,7 @@ BugPin.init({
 });
 ```
 
-For automatic script-tag initialization, use the equivalent attributes:
+For automatic script-tag initialization:
 
 ```html
 <script
@@ -74,8 +76,7 @@ For automatic script-tag initialization, use the equivalent attributes:
 ></script>
 ```
 
-The host application remains responsible for supplying the logged-in user's values. Both fields
-remain editable in the report form.
+The reporter can still edit both fields before submitting.
 
 ## Privacy and diagnostic capture
 
