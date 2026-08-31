@@ -153,16 +153,7 @@ async function clearMediaDraft(apiKey: string): Promise<void> {
  * Check if a draft exists
  */
 async function hasDraft(apiKey: string): Promise<boolean> {
-  const formDraft = loadFormDraft(apiKey);
-  if (formDraft) return true;
-
-  try {
-    const database = await initDB();
-    const mediaDraft = await database.get(MEDIA_STORE, apiKey);
-    return mediaDraft !== undefined && mediaDraft.media.length > 0;
-  } catch {
-    return false;
-  }
+  return loadFormDraft(apiKey) !== null;
 }
 
 /**
@@ -197,27 +188,18 @@ async function loadDraft(
   const formDraft = loadFormDraft(apiKey);
   const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
 
-  if (formDraft && formDraft.ownerEmail !== normalizedOwnerEmail) {
+  // Form drafts carry ownerEmail. Media in IndexedDB does not, so a missing
+  // localStorage record cannot be attributed to the current reporter.
+  if (!formDraft || formDraft.ownerEmail !== normalizedOwnerEmail) {
     await clearDraft(apiKey);
     return null;
   }
 
   const media = await loadMediaDraft(apiKey);
 
-  // Return null if no draft exists
-  if (!formDraft && media.length === 0) {
-    return null;
-  }
-
   return {
-    formData: formDraft?.formData || {
-      title: '',
-      description: '',
-      priority: 'medium',
-      reporterEmail: '',
-      reporterName: '',
-    },
-    activeTab: formDraft?.activeTab || 'details',
+    formData: formDraft.formData,
+    activeTab: formDraft.activeTab,
     media,
   };
 }
