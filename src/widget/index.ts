@@ -217,6 +217,8 @@ async function initFromScriptTag(scriptElement: HTMLScriptElement): Promise<void
     ...fetchedConfig,
     apiKey,
     serverUrl,
+    reporterName: scriptElement.getAttribute('data-reporter-name') ?? undefined,
+    reporterEmail: scriptElement.getAttribute('data-reporter-email') ?? undefined,
     // Data attributes override API config
     ...(scriptElement.getAttribute('data-position') && {
       position: scriptElement.getAttribute('data-position') as WidgetConfig['position'],

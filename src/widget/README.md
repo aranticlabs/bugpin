@@ -44,9 +44,38 @@ The widget automatically fetches its configuration from the BugPin server based 
 
 ### Optional Options
 
-| Option     | Type     | Description                                                                                                                     |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `language` | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
+| Option          | Type     | Description                                                                                                                     |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `language`      | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
+| `reporterName`  | `string` | Prefills the editable reporter name field.                                                                                      |
+| `reporterEmail` | `string` | Prefills the editable reporter email field.                                                                                     |
+
+### Prefill Reporter Details
+
+Pass the current user's details when initializing the widget:
+
+```javascript
+BugPin.init({
+  apiKey: 'your-project-api-key',
+  serverUrl: 'https://your-bugpin-server.com',
+  reporterName: currentUser.name,
+  reporterEmail: currentUser.email,
+});
+```
+
+For automatic script-tag initialization, use the equivalent attributes:
+
+```html
+<script
+  src="https://your-bugpin-server.com/widget.js"
+  data-api-key="your-project-api-key"
+  data-reporter-name="{{ currentUser.name }}"
+  data-reporter-email="{{ currentUser.email }}"
+></script>
+```
+
+The host application remains responsible for supplying the logged-in user's values. Both fields
+remain editable in the report form.
 
 ## Privacy and diagnostic capture
 

@@ -21,6 +21,7 @@ interface DraftMediaDB extends DBSchema {
 interface DraftFormData {
   formData: FormData;
   activeTab: string;
+  ownerEmail?: string;
   savedAt: string;
 }
 
@@ -57,11 +58,22 @@ function getFormDraftKey(apiKey: string): string {
 /**
  * Save form data to localStorage
  */
-function saveFormDraft(apiKey: string, formData: FormData, activeTab: string): void {
+function normalizeOwnerEmail(ownerEmail?: string): string | undefined {
+  const normalized = ownerEmail?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function saveFormDraft(
+  apiKey: string,
+  formData: FormData,
+  activeTab: string,
+  ownerEmail?: string
+): void {
   try {
     const draft: DraftFormData = {
       formData,
       activeTab,
+      ownerEmail: normalizeOwnerEmail(ownerEmail),
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(getFormDraftKey(apiKey), JSON.stringify(draft));
@@ -160,10 +172,11 @@ async function saveDraft(
   apiKey: string,
   formData: FormData,
   activeTab: string,
-  media: CapturedMedia[]
+  media: CapturedMedia[],
+  ownerEmail?: string
 ): Promise<void> {
   // Save form data to localStorage (fast, synchronous)
-  saveFormDraft(apiKey, formData, activeTab);
+  saveFormDraft(apiKey, formData, activeTab, ownerEmail);
 
   // Save media to IndexedDB (can handle large data)
   if (media.length > 0) {
@@ -178,9 +191,17 @@ async function saveDraft(
  * Load complete draft (form data + media)
  */
 async function loadDraft(
-  apiKey: string
+  apiKey: string,
+  ownerEmail?: string
 ): Promise<{ formData: FormData; activeTab: string; media: CapturedMedia[] } | null> {
   const formDraft = loadFormDraft(apiKey);
+  const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (normalizedOwnerEmail && formDraft?.ownerEmail !== normalizedOwnerEmail) {
+    await clearDraft(apiKey);
+    return null;
+  }
+
   const media = await loadMediaDraft(apiKey);
 
   // Return null if no draft exists

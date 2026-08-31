@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 type DomGlobals = {
   window: typeof globalThis.window;
   document: typeof globalThis.document;
+  localStorage: typeof globalThis.localStorage;
   navigator: typeof globalThis.navigator;
   HTMLElement: typeof globalThis.HTMLElement;
   Node: typeof globalThis.Node;
@@ -19,6 +20,7 @@ export function installDom(url = 'https://example.com'): () => void {
   const hadGlobal = {
     window: Object.prototype.hasOwnProperty.call(globalThis, 'window'),
     document: Object.prototype.hasOwnProperty.call(globalThis, 'document'),
+    localStorage: Object.prototype.hasOwnProperty.call(globalThis, 'localStorage'),
     navigator: Object.prototype.hasOwnProperty.call(globalThis, 'navigator'),
     HTMLElement: Object.prototype.hasOwnProperty.call(globalThis, 'HTMLElement'),
     Node: Object.prototype.hasOwnProperty.call(globalThis, 'Node'),
@@ -37,6 +39,7 @@ export function installDom(url = 'https://example.com'): () => void {
   const original: DomGlobals = {
     window: globalThis.window,
     document: globalThis.document,
+    localStorage: globalThis.localStorage,
     navigator: globalThis.navigator,
     HTMLElement: globalThis.HTMLElement,
     Node: globalThis.Node,
@@ -54,6 +57,7 @@ export function installDom(url = 'https://example.com'): () => void {
 
   globalThis.window = window as unknown as typeof globalThis.window;
   globalThis.document = window.document as unknown as typeof globalThis.document;
+  globalThis.localStorage = window.localStorage;
   globalThis.navigator = window.navigator as unknown as typeof globalThis.navigator;
   globalThis.HTMLElement = window.HTMLElement as typeof HTMLElement;
   globalThis.Node = window.Node as typeof Node;
@@ -78,6 +82,11 @@ export function installDom(url = 'https://example.com'): () => void {
       delete (globalThis as Record<string, unknown>).document;
     } else {
       globalThis.document = original.document;
+    }
+    if (!hadGlobal.localStorage && original.localStorage === undefined) {
+      delete (globalThis as Record<string, unknown>).localStorage;
+    } else {
+      globalThis.localStorage = original.localStorage;
     }
     if (!hadGlobal.navigator && original.navigator === undefined) {
       delete (globalThis as Record<string, unknown>).navigator;
