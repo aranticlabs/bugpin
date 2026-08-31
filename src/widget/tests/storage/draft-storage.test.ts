@@ -247,4 +247,48 @@ describe('draft storage', () => {
       expect(await draftStorage.has(apiKey)).toBe(false);
     }
   });
+
+  it('clears owned drafts when the current session has no reporter email', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-guest-after-owner`;
+    const formData = {
+      title: 'Private draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: 'old@example.com',
+      reporterName: 'Old User',
+    };
+    const media = [
+      {
+        id: 'media-1',
+        dataUrl: 'data:image/png;base64,abc',
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+      },
+    ];
+
+    await draftStorage.save(apiKey, formData, 'media', media, 'old@example.com');
+
+    expect(await draftStorage.load(apiKey)).toBeNull();
+    expect(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+    expect(await draftStorage.has(apiKey)).toBe(false);
+  });
+
+  it('restores unowned drafts for sessions without a reporter email', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-guest-legacy`;
+    const formData = {
+      title: 'Guest draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: '',
+      reporterName: '',
+    };
+
+    await draftStorage.save(apiKey, formData, 'details', []);
+
+    const loaded = await draftStorage.load(apiKey);
+    expect(loaded?.formData.title).toBe('Guest draft');
+  });
 });

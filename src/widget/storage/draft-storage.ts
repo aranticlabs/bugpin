@@ -197,7 +197,7 @@ async function loadDraft(
   const formDraft = loadFormDraft(apiKey);
   const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
 
-  if (normalizedOwnerEmail && formDraft?.ownerEmail !== normalizedOwnerEmail) {
+  if (formDraft && formDraft.ownerEmail !== normalizedOwnerEmail) {
     await clearDraft(apiKey);
     return null;
   }
