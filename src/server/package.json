@@ -1,7 +1,7 @@
 {
   "name": "@bugpin/server",
   "description": "BugPin server - Bun + Hono backend",
-  "version": "1.2.2",
+  "version": "1.2.2-dev",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "index.ts",
