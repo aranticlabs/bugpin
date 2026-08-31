@@ -24,6 +24,14 @@ const INITIAL_FORM_DATA: FormData = {
   reporterName: '',
 };
 
+function getInitialFormData(config: WidgetConfig): FormData {
+  return {
+    ...INITIAL_FORM_DATA,
+    reporterEmail: config.reporterEmail ?? '',
+    reporterName: config.reporterName ?? '',
+  };
+}
+
 type AppDependencies = {
   WidgetDialog: typeof WidgetDialog;
   AnnotationCanvas: typeof AnnotationCanvas;
@@ -56,7 +64,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
-  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] = useState<FormData>(() => getInitialFormData(config));
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showScreenCaptureConsent, setShowScreenCaptureConsent] = useState(false);
@@ -69,7 +77,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   // Load draft when widget opens
   useEffect(() => {
     if (step === 'form' && !draftLoaded) {
-      draftStorage.load(config.apiKey).then((draft) => {
+      draftStorage.load(config.apiKey, config.reporterEmail).then((draft) => {
         if (draft) {
           setFormData(draft.formData);
           setActiveTab(draft.activeTab);
@@ -78,7 +86,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         setDraftLoaded(true);
       });
     }
-  }, [step, draftLoaded, config.apiKey]);
+  }, [step, draftLoaded, config.apiKey, config.reporterEmail]);
 
   // Apply theme-based CSS variables for dialog styling (uses dialog colors, not launcher colors)
   useEffect(() => {
@@ -132,8 +140,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const hasContent =
     formData.title.trim() ||
     formData.description.trim() ||
-    formData.reporterEmail.trim() ||
-    formData.reporterName.trim() ||
+    formData.reporterEmail.trim() !== (config.reporterEmail ?? '').trim() ||
+    formData.reporterName.trim() !== (config.reporterName ?? '').trim() ||
     media.length > 0;
 
   const resetUserActivity = useCallback(() => {
@@ -155,26 +163,26 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   // Close and keep draft
   const handleCloseKeepDraft = useCallback(() => {
-    draftStorage.save(config.apiKey, formData, activeTab, media);
+    draftStorage.save(config.apiKey, formData, activeTab, media, config.reporterEmail);
     resetUserActivity();
     setShowCloseConfirm(false);
     setStep('closed');
     setAnnotatingMediaId(null);
     setDraftLoaded(false);
-  }, [config.apiKey, formData, activeTab, media, resetUserActivity]);
+  }, [config.apiKey, config.reporterEmail, formData, activeTab, media, resetUserActivity]);
 
   // Close and discard draft
   const handleCloseDiscardDraft = useCallback(() => {
     resetUserActivity();
     setMedia([]);
     setActiveTab('details');
-    setFormData(INITIAL_FORM_DATA);
+    setFormData(getInitialFormData(config));
     draftStorage.clear(config.apiKey);
     setShowCloseConfirm(false);
     setStep('closed');
     setAnnotatingMediaId(null);
     setDraftLoaded(false);
-  }, [config.apiKey, resetUserActivity]);
+  }, [config.apiKey, config.reporterEmail, config.reporterName, resetUserActivity]);
 
   // Direct close (used after successful submission)
   const handleCloseWidget = useCallback(
@@ -184,7 +192,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         // Clear state and draft (after successful submission)
         setMedia([]);
         setActiveTab('details');
-        setFormData(INITIAL_FORM_DATA);
+        setFormData(getInitialFormData(config));
         draftStorage.clear(config.apiKey);
       }
       setShowCloseConfirm(false);
@@ -192,7 +200,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       setAnnotatingMediaId(null);
       setDraftLoaded(false);
     },
-    [config.apiKey, resetUserActivity]
+    [config.apiKey, config.reporterEmail, config.reporterName, resetUserActivity]
   );
 
   // Listen for external open/close events

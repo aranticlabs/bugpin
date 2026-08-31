@@ -10,6 +10,8 @@ export interface WidgetLanguageConfig {
 export interface WidgetConfig {
   apiKey: string;
   serverUrl: string;
+  reporterName?: string;
+  reporterEmail?: string;
   language?: WidgetLanguageConfig;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   buttonText: LauncherTextBundle;
