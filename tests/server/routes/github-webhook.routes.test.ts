@@ -357,4 +357,30 @@ describe('github-webhook routes', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  describe('API router mount order', () => {
+    it('reaches the GitHub handler when mounted before authenticated /webhooks', async () => {
+      const { webhooksRoutes } = await import('../../../src/server/routes/api/webhooks');
+      const app = new Hono();
+      app.route('/webhooks/github', githubWebhookRoutes);
+      app.route('/webhooks', webhooksRoutes);
+
+      const res = await app.request('http://localhost/webhooks/github/int_1', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-github-event': 'ping',
+          'x-github-delivery': 'delivery_1',
+        },
+        body: JSON.stringify({ zen: 'test' }),
+      });
+
+      const body = (await res.json()) as { error?: string; message?: string };
+
+      expect(body.error).not.toBe('UNAUTHORIZED');
+      expect(body.message).not.toBe('Authentication required');
+      expect(res.status).toBe(401);
+      expect(body.error).toBe('Missing signature');
+    });
+  });
 });
