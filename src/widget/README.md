@@ -31,6 +31,10 @@ BugPin.init({
 });
 ```
 
+Starting with version 1.1.3, `BugPin.init()` reports the package version to the configured BugPin
+server so administrators can see compatibility warnings. Hosted `/widget.js` integrations do not
+send package metadata.
+
 ## Configuration
 
 The widget automatically fetches its configuration from the BugPin server based on your API key. All visual settings (theme, position, colors, button text) are managed in the BugPin Admin Console.
@@ -44,9 +48,35 @@ The widget automatically fetches its configuration from the BugPin server based 
 
 ### Optional Options
 
-| Option     | Type     | Description                                                                                                                     |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `language` | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
+| Option          | Type     | Description                                                                                                                     |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `language`      | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
+| `reporterName`  | `string` | Prefills the editable reporter name field.                                                                                      |
+| `reporterEmail` | `string` | Prefills the editable reporter email field.                                                                                     |
+
+### Prefill Reporter Details
+
+```javascript
+BugPin.init({
+  apiKey: 'your-project-api-key',
+  serverUrl: 'https://your-bugpin-server.com',
+  reporterName: currentUser.name,
+  reporterEmail: currentUser.email,
+});
+```
+
+For automatic script-tag initialization:
+
+```html
+<script
+  src="https://your-bugpin-server.com/widget.js"
+  data-api-key="your-project-api-key"
+  data-reporter-name="{{ currentUser.name }}"
+  data-reporter-email="{{ currentUser.email }}"
+></script>
+```
+
+The reporter can still edit both fields before submitting.
 
 ## Privacy and diagnostic capture
 

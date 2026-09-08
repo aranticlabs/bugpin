@@ -131,8 +131,7 @@ describe('ScreenshotManager uploads', () => {
 
     expect(onUpload).toHaveBeenCalledTimes(1);
     const uploaded = (onUpload.mock.calls as unknown[][])[0]?.[0] as
-      | { width?: number; height?: number }
-      | undefined;
+      { width?: number; height?: number } | undefined;
     expect(uploaded?.width).toBe(320);
     expect(uploaded?.height).toBe(240);
 

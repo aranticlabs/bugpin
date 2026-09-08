@@ -78,10 +78,7 @@ describe('buildReportShareRows', () => {
 
   it('falls back to empty description and still includes permalink', () => {
     expect(
-      buildReportShareRows(
-        [makeReport({ description: undefined })],
-        'http://localhost:7300'
-      )
+      buildReportShareRows([makeReport({ description: undefined })], 'http://localhost:7300')
     ).toEqual([
       {
         Title: 'Checkout broken',

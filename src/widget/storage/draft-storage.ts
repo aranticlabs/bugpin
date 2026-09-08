@@ -21,6 +21,7 @@ interface DraftMediaDB extends DBSchema {
 interface DraftFormData {
   formData: FormData;
   activeTab: string;
+  ownerEmail?: string;
   savedAt: string;
 }
 
@@ -57,11 +58,22 @@ function getFormDraftKey(apiKey: string): string {
 /**
  * Save form data to localStorage
  */
-function saveFormDraft(apiKey: string, formData: FormData, activeTab: string): void {
+function normalizeOwnerEmail(ownerEmail?: string): string | undefined {
+  const normalized = ownerEmail?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function saveFormDraft(
+  apiKey: string,
+  formData: FormData,
+  activeTab: string,
+  ownerEmail?: string
+): void {
   try {
     const draft: DraftFormData = {
       formData,
       activeTab,
+      ownerEmail: normalizeOwnerEmail(ownerEmail),
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(getFormDraftKey(apiKey), JSON.stringify(draft));
@@ -141,16 +153,7 @@ async function clearMediaDraft(apiKey: string): Promise<void> {
  * Check if a draft exists
  */
 async function hasDraft(apiKey: string): Promise<boolean> {
-  const formDraft = loadFormDraft(apiKey);
-  if (formDraft) return true;
-
-  try {
-    const database = await initDB();
-    const mediaDraft = await database.get(MEDIA_STORE, apiKey);
-    return mediaDraft !== undefined && mediaDraft.media.length > 0;
-  } catch {
-    return false;
-  }
+  return loadFormDraft(apiKey) !== null;
 }
 
 /**
@@ -160,10 +163,11 @@ async function saveDraft(
   apiKey: string,
   formData: FormData,
   activeTab: string,
-  media: CapturedMedia[]
+  media: CapturedMedia[],
+  ownerEmail?: string
 ): Promise<void> {
   // Save form data to localStorage (fast, synchronous)
-  saveFormDraft(apiKey, formData, activeTab);
+  saveFormDraft(apiKey, formData, activeTab, ownerEmail);
 
   // Save media to IndexedDB (can handle large data)
   if (media.length > 0) {
@@ -178,25 +182,24 @@ async function saveDraft(
  * Load complete draft (form data + media)
  */
 async function loadDraft(
-  apiKey: string
+  apiKey: string,
+  ownerEmail?: string
 ): Promise<{ formData: FormData; activeTab: string; media: CapturedMedia[] } | null> {
   const formDraft = loadFormDraft(apiKey);
-  const media = await loadMediaDraft(apiKey);
+  const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
 
-  // Return null if no draft exists
-  if (!formDraft && media.length === 0) {
+  // Form drafts carry ownerEmail. Media in IndexedDB does not, so a missing
+  // localStorage record cannot be attributed to the current reporter.
+  if (!formDraft || formDraft.ownerEmail !== normalizedOwnerEmail) {
+    await clearDraft(apiKey);
     return null;
   }
 
+  const media = await loadMediaDraft(apiKey);
+
   return {
-    formData: formDraft?.formData || {
-      title: '',
-      description: '',
-      priority: 'medium',
-      reporterEmail: '',
-      reporterName: '',
-    },
-    activeTab: formDraft?.activeTab || 'details',
+    formData: formDraft.formData,
+    activeTab: formDraft.activeTab,
     media,
   };
 }

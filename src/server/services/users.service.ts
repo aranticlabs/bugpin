@@ -227,8 +227,7 @@ export const usersService = {
       updatedIsActive && (!existing.invitationSentAt || !!existing.invitationAcceptedAt);
     let selectedProjectIds: Set<string> | undefined;
     let projectsForDefaults:
-      | Array<Awaited<ReturnType<typeof projectsRepo.findAll>>[number]>
-      | undefined;
+      Array<Awaited<ReturnType<typeof projectsRepo.findAll>>[number]> | undefined;
 
     if (input.defaultProjectIds !== undefined) {
       const projects = await projectsRepo.findAll();

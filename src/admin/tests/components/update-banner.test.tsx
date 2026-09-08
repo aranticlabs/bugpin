@@ -6,8 +6,22 @@ import { server } from '../mocks/server';
 import { mockUsers } from '../mocks/handlers';
 
 const RELEASE_URL = 'https://github.com/aranticlabs/bugpin/releases/tag/v1.0.7';
+const PACKAGE_URL = 'https://www.npmjs.com/package/@arantic/bugpin-widget?activeTab=versions';
 
 const STORAGE_KEY = 'bugpin.updateBanner.dismissedVersion';
+const WIDGET_STORAGE_KEY = 'bugpin.widgetPackageWarning.dismissedId';
+
+interface WidgetPackageResponseBody {
+  minimumSupportedVersion: string;
+  incompatible: boolean;
+  warningId: string | null;
+  affectedProjects: Array<{
+    projectId: string;
+    projectName: string;
+    observedVersions: string[];
+    deploymentCount: number;
+  }>;
+}
 
 interface VersionResponseBody {
   current?: string;
@@ -17,7 +31,29 @@ interface VersionResponseBody {
   publishedAt?: string | null;
   lastCheckedAt?: string | null;
   checkEnabled?: boolean;
+  widgetPackage?: WidgetPackageResponseBody;
 }
+
+const cleanWidgetPackage: WidgetPackageResponseBody = {
+  minimumSupportedVersion: '1.1.3',
+  incompatible: false,
+  warningId: null,
+  affectedProjects: [],
+};
+
+const incompatibleWidgetPackage: WidgetPackageResponseBody = {
+  minimumSupportedVersion: '1.1.3',
+  incompatible: true,
+  warningId: 'warning_1',
+  affectedProjects: [
+    {
+      projectId: 'proj_checkout',
+      projectName: 'Checkout',
+      observedVersions: ['1.1.1', '1.1.2'],
+      deploymentCount: 2,
+    },
+  ],
+};
 
 function mockVersion(overrides: VersionResponseBody = {}) {
   server.use(
@@ -31,6 +67,7 @@ function mockVersion(overrides: VersionResponseBody = {}) {
         publishedAt: '2026-04-22T10:14:00Z',
         lastCheckedAt: '2026-05-01T08:00:00Z',
         checkEnabled: true,
+        widgetPackage: cleanWidgetPackage,
         ...overrides,
       })
     )
@@ -152,5 +189,127 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       expect(container.firstChild).toBeNull();
     });
+  });
+
+  it('shows widget compatibility when remote update checks are disabled', async () => {
+    mockUserRole('admin');
+    mockVersion({
+      checkEnabled: false,
+      updateAvailable: false,
+      latest: null,
+      widgetPackage: incompatibleWidgetPackage,
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(
+      await screen.findByText(/1 project uses a widget version unsupported by this BugPin server/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2 affected deployments/i)).toBeInTheDocument();
+    expect(screen.getByText(/Checkout \(v1\.1\.1\)/i)).toBeInTheDocument();
+  });
+
+  it('shows at most three affected projects and links to package versions', async () => {
+    mockUserRole('admin');
+    mockVersion({
+      updateAvailable: false,
+      widgetPackage: {
+        ...incompatibleWidgetPackage,
+        affectedProjects: [
+          incompatibleWidgetPackage.affectedProjects[0]!,
+          {
+            projectId: 'proj_portal',
+            projectName: 'Customer Portal',
+            observedVersions: ['1.0.9'],
+            deploymentCount: 1,
+          },
+          {
+            projectId: 'proj_docs',
+            projectName: 'Docs',
+            observedVersions: ['1.1.0'],
+            deploymentCount: 1,
+          },
+          {
+            projectId: 'proj_shop',
+            projectName: 'Shop',
+            observedVersions: ['1.1.2'],
+            deploymentCount: 1,
+          },
+        ],
+      },
+    });
+
+    const { container } = renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(/4 projects use/i)).toBeInTheDocument();
+    expect(container.textContent).toContain('+1 more');
+    expect(container.textContent).not.toContain('Shop (v1.1.2)');
+    const link = screen.getByRole('link', { name: /View package versions/i });
+    expect(link).toHaveAttribute('href', PACKAGE_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('dismisses the widget warning independently from the update notice', async () => {
+    mockUserRole('admin');
+    mockVersion({ widgetPackage: incompatibleWidgetPackage });
+
+    const user = userEvent.setup();
+    renderWithProviders(<UpdateBanner />);
+
+    const dismiss = await screen.findByRole('button', {
+      name: /Dismiss widget package compatibility warning/i,
+    });
+    await user.click(dismiss);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/widget version unsupported/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/A new version of BugPin is available/i)).toBeInTheDocument();
+    expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBe('warning_1');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('shows a changed widget warning after an earlier dismissal', async () => {
+    window.localStorage.setItem(WIDGET_STORAGE_KEY, 'warning_1');
+    mockUserRole('admin');
+    mockVersion({
+      updateAvailable: false,
+      widgetPackage: { ...incompatibleWidgetPackage, warningId: 'warning_2' },
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(/widget version unsupported/i)).toBeInTheDocument();
+  });
+
+  it('clears the widget dismissal when incompatibility is gone', async () => {
+    window.localStorage.setItem(WIDGET_STORAGE_KEY, 'warning_1');
+    mockUserRole('admin');
+    mockVersion({ updateAvailable: false, widgetPackage: cleanWidgetPackage });
+
+    renderWithProviders(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBeNull();
+    });
+  });
+
+  it('does not request compatibility status for non-admin users', async () => {
+    let versionRequests = 0;
+    mockUserRole('viewer');
+    server.use(
+      http.get('/api/version', () => {
+        versionRequests += 1;
+        return HttpResponse.json({ success: true, widgetPackage: incompatibleWidgetPackage });
+      })
+    );
+
+    const { container } = renderWithProviders(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(container.firstChild).toBeNull();
+    });
+    expect(versionRequests).toBe(0);
   });
 });

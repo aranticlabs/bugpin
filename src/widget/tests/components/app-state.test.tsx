@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { render } from 'preact';
 import type { WidgetConfig } from '../../config';
+import type { FormData as WidgetFormData } from '../../components/WidgetDialog';
 import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 
@@ -202,6 +203,123 @@ describe('App state transitions', () => {
     // For this test, verify the state is preserved in the component
     expect(lastDialogProps?.media).toBeDefined();
     expect((lastDialogProps?.formData as { title?: string })?.title).toBe('Bug title');
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('prefills reporter fields without treating defaults as unsaved content', async () => {
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?reporter-prefill');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const config = {
+      ...baseConfig,
+      reporterName: 'Current User',
+      reporterEmail: 'current@example.com',
+    };
+
+    render(<App config={config} deps={appDeps} />, container);
+
+    const launcher = container.querySelector(
+      'button[aria-label="Report issue"]'
+    ) as HTMLButtonElement;
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await flush();
+
+    expect(lastDialogProps?.formData).toEqual({
+      title: '',
+      description: '',
+      priority: 'medium',
+      reporterEmail: 'current@example.com',
+      reporterName: 'Current User',
+    });
+
+    const onClose = lastDialogProps?.onClose as () => void;
+    onClose();
+    await flush();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await flush();
+
+    const onFormDataChange = lastDialogProps?.onFormDataChange as (data: unknown) => void;
+    onFormDataChange({
+      title: '',
+      description: '',
+      priority: 'medium',
+      reporterEmail: 'current@example.com',
+      reporterName: 'Edited User',
+    });
+    await flush();
+
+    (lastDialogProps?.onClose as () => void)();
+    await flush();
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+
+    const discardButton = container.querySelector('[role="dialog"] button') as HTMLButtonElement;
+    discardButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await flush();
+    expect(lastDialogProps?.formData).toEqual(
+      expect.objectContaining({
+        reporterEmail: 'current@example.com',
+        reporterName: 'Current User',
+      })
+    );
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('submits prefilled reporter values and restores them after success', async () => {
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?reporter-submit');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const config = {
+      ...baseConfig,
+      reporterName: 'Current User',
+      reporterEmail: 'current@example.com',
+    };
+
+    render(<App config={config} deps={appDeps} />, container);
+    const launcher = container.querySelector(
+      'button[aria-label="Report issue"]'
+    ) as HTMLButtonElement;
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await flush();
+
+    const prefilledForm = lastDialogProps?.formData as WidgetFormData;
+    const onSubmit = lastDialogProps?.onSubmit as (
+      data: typeof prefilledForm,
+      media: unknown[]
+    ) => Promise<void>;
+    await onSubmit({ ...prefilledForm, title: 'Bug title' }, []);
+    await flush();
+
+    expect(submitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reporterEmail: 'current@example.com',
+        reporterName: 'Current User',
+      })
+    );
+
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await flush();
+    expect(lastDialogProps?.formData).toEqual(
+      expect.objectContaining({
+        reporterEmail: 'current@example.com',
+        reporterName: 'Current User',
+      })
+    );
 
     render(null, container);
     container.remove();
