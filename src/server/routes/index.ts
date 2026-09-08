@@ -38,6 +38,7 @@ export function createApiRouter(): Hono {
   api.route('/integrations', integrationsRoutes);
   api.route('/notification-preferences', notificationPreferences);
   api.route('/license', licenseRoutes);
+  api.route('/webhooks/github', githubWebhookRoutes);
 
   // Mount EE routes first if available (they take priority over CE routes)
   // EE routes handle the actual feature implementation when licensed
@@ -76,9 +77,6 @@ export function createApiRouter(): Hono {
 
   // Mount widget routes (public)
   api.route('/widget', widgetRoutes);
-
-  // Mount GitHub webhook routes (public, no auth)
-  api.route('/webhooks/github', githubWebhookRoutes);
 
   // Mount public files routes (public, no auth)
   api.route('/public/files', publicFilesRoutes);
