@@ -1,40 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { JSDOM } from 'jsdom';
+import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { installDom } from '../helpers/dom';
 
 describe('draft storage', () => {
   const TEST_API_KEY = 'test-api-key-123';
-  let dom: JSDOM;
-  let cleanup: () => void;
+  let restoreDom: (() => void) | null = null;
 
   beforeEach(() => {
-    // Set up jsdom with localStorage support
-    dom = new JSDOM('<!doctype html><html><body></body></html>', {
-      url: 'https://example.com',
-    });
-
-    // Store original globals
-    const originalWindow = globalThis.window;
-    const originalDocument = globalThis.document;
-    const originalLocalStorage = globalThis.localStorage;
-
-    // Install DOM globals
-    globalThis.window = dom.window as unknown as typeof globalThis.window;
-    globalThis.document = dom.window.document as unknown as typeof globalThis.document;
-    globalThis.localStorage = dom.window.localStorage;
-
-    cleanup = () => {
-      dom.window.close();
-      if (originalWindow) globalThis.window = originalWindow;
-      if (originalDocument) globalThis.document = originalDocument;
-      if (originalLocalStorage) globalThis.localStorage = originalLocalStorage;
-    };
-
-    // Clear storage
-    dom.window.localStorage.clear();
+    restoreDom = installDom();
+    installFakeIndexedDB();
+    globalThis.localStorage.clear();
   });
 
   afterEach(() => {
-    cleanup?.();
+    restoreDom?.();
+    restoreDom = null;
   });
 
   it('saves form data to localStorage', async () => {
@@ -49,16 +29,11 @@ describe('draft storage', () => {
       reporterName: 'Test User',
     };
 
-    // Save the draft (ignoring IndexedDB errors for now - we're testing localStorage)
-    try {
-      await draftStorage.save(TEST_API_KEY, formData, 'details', []);
-    } catch {
-      // IndexedDB may fail in jsdom, that's OK for this test
-    }
+    await draftStorage.save(TEST_API_KEY, formData, 'details', []);
 
     // Check localStorage directly
     const key = `bugpin-draft-${TEST_API_KEY}`;
-    const stored = dom.window.localStorage.getItem(key);
+    const stored = localStorage.getItem(key);
     expect(stored).not.toBeNull();
 
     const parsed = JSON.parse(stored!);
@@ -87,20 +62,9 @@ describe('draft storage', () => {
       activeTab: 'media',
       savedAt: new Date().toISOString(),
     };
-    dom.window.localStorage.setItem(key, JSON.stringify(draftData));
+    localStorage.setItem(key, JSON.stringify(draftData));
 
-    // Load the draft (may fail on IndexedDB but form data should load)
-    let loaded;
-    try {
-      loaded = await draftStorage.load(TEST_API_KEY);
-    } catch {
-      // If IndexedDB fails, manually check localStorage was read
-      loaded = {
-        formData: draftData.formData,
-        activeTab: draftData.activeTab,
-        media: [],
-      };
-    }
+    const loaded = await draftStorage.load(TEST_API_KEY);
 
     expect(loaded).not.toBeNull();
     expect(loaded?.formData.title).toBe('Stored Bug');
@@ -113,7 +77,7 @@ describe('draft storage', () => {
 
     // Set up a draft
     const key = `bugpin-draft-${TEST_API_KEY}`;
-    dom.window.localStorage.setItem(
+    localStorage.setItem(
       key,
       JSON.stringify({
         formData: { title: 'To Delete' },
@@ -123,17 +87,12 @@ describe('draft storage', () => {
     );
 
     // Verify it exists
-    expect(dom.window.localStorage.getItem(key)).not.toBeNull();
+    expect(localStorage.getItem(key)).not.toBeNull();
 
-    // Clear the draft
-    try {
-      await draftStorage.clear(TEST_API_KEY);
-    } catch {
-      // IndexedDB may fail, but localStorage should still be cleared
-    }
+    await draftStorage.clear(TEST_API_KEY);
 
     // Verify it's gone
-    expect(dom.window.localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
   });
 
   it('keeps drafts separate per API key', async () => {
@@ -155,20 +114,150 @@ describe('draft storage', () => {
       reporterName: '',
     };
 
-    try {
-      await draftStorage.save('api-key-1', formData1, 'details', []);
-      await draftStorage.save('api-key-2', formData2, 'details', []);
-    } catch {
-      // IndexedDB may fail
-    }
+    await draftStorage.save('api-key-1', formData1, 'details', []);
+    await draftStorage.save('api-key-2', formData2, 'details', []);
 
     // Check they're stored separately
-    const stored1 = JSON.parse(dom.window.localStorage.getItem('bugpin-draft-api-key-1')!);
-    const stored2 = JSON.parse(dom.window.localStorage.getItem('bugpin-draft-api-key-2')!);
+    const stored1 = JSON.parse(localStorage.getItem('bugpin-draft-api-key-1')!);
+    const stored2 = JSON.parse(localStorage.getItem('bugpin-draft-api-key-2')!);
 
     expect(stored1.formData.title).toBe('Bug for Project 1');
     expect(stored1.formData.priority).toBe('low');
     expect(stored2.formData.title).toBe('Bug for Project 2');
     expect(stored2.formData.priority).toBe('high');
+  });
+
+  it('restores drafts owned by the same normalized reporter email', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-owner-match`;
+    const formData = {
+      title: 'Owned draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: 'edited@example.com',
+      reporterName: 'Edited User',
+    };
+    const media = [
+      {
+        id: 'media-1',
+        dataUrl: 'data:image/png;base64,abc',
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+      },
+    ];
+
+    await draftStorage.save(apiKey, formData, 'media', media, ' Owner@Example.com ');
+
+    const stored = JSON.parse(localStorage.getItem(`bugpin-draft-${apiKey}`)!);
+    expect(stored.ownerEmail).toBe('owner@example.com');
+
+    const loaded = await draftStorage.load(apiKey, 'owner@example.COM');
+    expect(loaded?.formData.reporterEmail).toBe('edited@example.com');
+    expect(loaded?.media).toHaveLength(1);
+  });
+
+  it('clears drafts and media owned by another or unknown reporter', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const formData = {
+      title: 'Private draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: 'old@example.com',
+      reporterName: 'Old User',
+    };
+    const media = [
+      {
+        id: 'media-1',
+        dataUrl: 'data:image/png;base64,abc',
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+      },
+    ];
+
+    for (const [suffix, ownerEmail] of [
+      ['mismatch', 'old@example.com'],
+      ['legacy', undefined],
+    ] as const) {
+      const apiKey = `${TEST_API_KEY}-${suffix}`;
+      await draftStorage.save(apiKey, formData, 'media', media, ownerEmail);
+
+      expect(await draftStorage.load(apiKey, 'new@example.com')).toBeNull();
+      expect(localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+      expect(await draftStorage.has(apiKey)).toBe(false);
+    }
+  });
+
+  it('clears owned drafts when the current session has no reporter email', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-guest-after-owner`;
+    const formData = {
+      title: 'Private draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: 'old@example.com',
+      reporterName: 'Old User',
+    };
+    const media = [
+      {
+        id: 'media-1',
+        dataUrl: 'data:image/png;base64,abc',
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+      },
+    ];
+
+    await draftStorage.save(apiKey, formData, 'media', media, 'old@example.com');
+
+    expect(await draftStorage.load(apiKey)).toBeNull();
+    expect(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+    expect(await draftStorage.has(apiKey)).toBe(false);
+  });
+
+  it('clears leftover IndexedDB media when the form draft is missing', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-orphaned-media`;
+    const formData = {
+      title: 'Private draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: 'old@example.com',
+      reporterName: 'Old User',
+    };
+    const media = [
+      {
+        id: 'media-1',
+        dataUrl: 'data:image/png;base64,abc',
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+      },
+    ];
+
+    await draftStorage.save(apiKey, formData, 'media', media, 'old@example.com');
+    dom.window.localStorage.removeItem(`bugpin-draft-${apiKey}`);
+
+    expect(await draftStorage.load(apiKey, 'new@example.com')).toBeNull();
+    expect(await draftStorage.has(apiKey)).toBe(false);
+    expect(await draftStorage.load(apiKey, 'old@example.com')).toBeNull();
+  });
+
+  it('restores unowned drafts for sessions without a reporter email', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-guest-legacy`;
+    const formData = {
+      title: 'Guest draft',
+      description: '',
+      priority: 'medium' as const,
+      reporterEmail: '',
+      reporterName: '',
+    };
+
+    await draftStorage.save(apiKey, formData, 'details', []);
+
+    const loaded = await draftStorage.load(apiKey);
+    expect(loaded?.formData.title).toBe('Guest draft');
   });
 });

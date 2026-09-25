@@ -16,6 +16,7 @@ import {
   startUserActivityCapture,
   stopUserActivityCapture,
 } from './capture/context.js';
+import { buildWidgetConfigUrl } from './api/config-url.js';
 
 // Widget styles (will be injected into Shadow DOM)
 import styles from './styles/main.css?inline';
@@ -28,10 +29,11 @@ let isInitialized = false;
  */
 async function fetchConfig(
   apiKey: string,
-  serverUrl: string
+  serverUrl: string,
+  integration?: 'npm'
 ): Promise<Partial<WidgetConfig> | null> {
   try {
-    const response = await fetch(`${serverUrl}/api/widget/config/${apiKey}`);
+    const response = await fetch(buildWidgetConfigUrl(apiKey, serverUrl, integration));
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.config) {
@@ -217,6 +219,8 @@ async function initFromScriptTag(scriptElement: HTMLScriptElement): Promise<void
     ...fetchedConfig,
     apiKey,
     serverUrl,
+    reporterName: scriptElement.getAttribute('data-reporter-name') ?? undefined,
+    reporterEmail: scriptElement.getAttribute('data-reporter-email') ?? undefined,
     // Data attributes override API config
     ...(scriptElement.getAttribute('data-position') && {
       position: scriptElement.getAttribute('data-position') as WidgetConfig['position'],
@@ -267,7 +271,7 @@ const BugPin = {
     }
   ): Promise<void> => {
     const serverUrl = config.serverUrl || defaultConfig.serverUrl;
-    const fetchedConfig = await fetchConfig(config.apiKey, serverUrl);
+    const fetchedConfig = await fetchConfig(config.apiKey, serverUrl, 'npm');
 
     // If null, project is paused - skip widget initialization
     if (fetchedConfig === null) {
