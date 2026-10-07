@@ -14,7 +14,7 @@
     },
     "src/admin": {
       "name": "@bugpin/admin",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
@@ -80,11 +80,11 @@
     },
     "src/server": {
       "name": "@bugpin/server",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1115.0",
         "hono": "^4.13.3",
-        "nodemailer": "^9.0.5",
+        "nodemailer": "^10.0.2",
         "sharp": "^0.35.3",
         "zod": "^4.4.3",
       },
@@ -1111,7 +1111,7 @@
 
     "node-releases": ["node-releases@2.0.53", "", {}, "sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ=="],
 
-    "nodemailer": ["nodemailer@9.1.1", "", {}, "sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ=="],
+    "nodemailer": ["nodemailer@10.0.16", "", {}, "sha512-VL9xKErxN+el77o8eBOuYKUPMyEx7F9hfnDCuiUKJRp9v3wnWMOudYgP/SWbwSHy8rUL4cylobuXtki1LpQS7A=="],
 
     "normalize-wheel": ["normalize-wheel@1.0.1", "", {}, "sha512-1OnlAPZ3zgrk8B91HyRj+eVv+kS5u+Z0SCsak6Xil/kmgEia50ga7zfkumayonZrImffAxPU/5WcyGhzetHNPA=="],
 
