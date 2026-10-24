@@ -1,7 +1,7 @@
 # BugPin Dockerfile
 # Multi-stage build for optimized production image
 
-ARG BUN_VERSION=1.4.0
+ARG BUN_VERSION=1.4.4
 
 # =============================================================================
 # Stage 1: Builder
