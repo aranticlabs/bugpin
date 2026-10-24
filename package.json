@@ -2,7 +2,7 @@
   "name": "bugpin",
   "description": "Self-hosted visual bug reporting tool",
   "version": "1.2.5",
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.4",
   "license": "AGPL-3.0-only",
   "private": false,
   "type": "module",
@@ -40,7 +40,7 @@
     "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
   },
   "devDependencies": {
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.4",
     "@types/node": "^26.2.0",
     "knip": "^6.32.2",
     "prettier": "^3.9.6",
