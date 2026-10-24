@@ -130,12 +130,26 @@ export function ageCheckOutcome(
 }
 
 async function fetchMetadata(name: string): Promise<unknown> {
-  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`Registry returned HTTP ${response.status}`);
-  return response.json();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (error) {
+      if (attempt === 2) throw error;
+      await Bun.sleep(250 * 2 ** attempt);
+      continue;
+    }
+    if (response.ok) return response.json();
+    if ((response.status !== 429 && response.status < 500) || attempt === 2) {
+      throw new Error(`Registry returned HTTP ${response.status}`);
+    }
+    await response.body?.cancel();
+    await Bun.sleep(250 * 2 ** attempt);
+  }
+  throw new Error('Registry request failed');
 }
 
 export async function checkDependencyAge(
@@ -197,7 +211,9 @@ if (import.meta.main) {
       }
       const youngPackages = issues.flatMap(({ release }) =>
         release
-          ? [`${release.name}@${release.version} (${release.ageHours.toFixed(1)}h old; minimum 72h)`]
+          ? [
+              `${release.name}@${release.version} (${release.ageHours.toFixed(1)}h old; minimum 72h)`,
+            ]
           : []
       );
       await Bun.write(

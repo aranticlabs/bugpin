@@ -35,7 +35,9 @@ jobs:
 
       - name: Resolve pinned EE revision
         id: ee-revision
-        run: echo "sha=$(git rev-parse HEAD:ee)" >> "$GITHUB_OUTPUT"
+        run: |
+          sha=$(git rev-parse --verify HEAD:ee)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout pinned EE lockfile
         uses: actions/checkout@v4

@@ -25,7 +25,12 @@ function lockfile(...specs: string[]): string {
   });
 }
 
-async function runAgeCLI(metadata: unknown, requestApproval: boolean, eeSpecs = ['example@2.0.0']) {
+async function runAgeCLI(
+  metadata: unknown,
+  requestApproval: boolean,
+  eeSpecs = ['example@2.0.0'],
+  registrySource?: string
+) {
   const directory = mkdtempSync(join(tmpdir(), 'bugpin age approval-'));
   directories.push(directory);
   await Bun.write(join(directory, 'bun.lock'), lockfile('example@1.0.0'));
@@ -37,7 +42,7 @@ async function runAgeCLI(metadata: unknown, requestApproval: boolean, eeSpecs = 
   const preload = join(directory, 'registry.ts');
   await Bun.write(
     preload,
-    `globalThis.fetch = async () => Response.json(${JSON.stringify(metadata)});`
+    registrySource ?? `globalThis.fetch = async () => Response.json(${JSON.stringify(metadata)});`
   );
   const script = new URL('../../src/server/scripts/check-dependency-age.ts', import.meta.url);
   const child = Bun.spawn(
@@ -86,6 +91,95 @@ test('only verified young releases are eligible for admin approval', () => {
     now
   );
   expect(ageCheckOutcome(future)).toBe('failed');
+});
+
+test('registry retries recover from throttling, server errors, and network timeouts', async () => {
+  for (const failure of ['429', '503', 'timeout']) {
+    const result = await runAgeCLI(
+      {},
+      true,
+      undefined,
+      `
+      let calls = 0;
+      globalThis.fetch = async () => {
+        console.error('registry-request');
+        if (++calls === 1) {
+          ${failure === 'timeout' ? "throw new DOMException('Timed out', 'TimeoutError');" : `return new Response('', { status: ${failure} });`}
+        }
+        return Response.json({ time: { '1.0.0': '2026-01-01T00:00:00Z', '2.0.0': '2026-01-01T00:00:00Z' } });
+      };
+    `
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.match(/registry-request/g)).toHaveLength(2);
+    expect(result.output).toContain('approval_required=false');
+  }
+});
+
+test('exhausted retries and permanent registry failures still block approval', async () => {
+  for (const [status, requests] of [
+    [503, 3],
+    [429, 3],
+    ['timeout', 3],
+    ['invalid-json', 1],
+    [404, 1],
+    [403, 1],
+  ] as const) {
+    const result = await runAgeCLI(
+      {},
+      true,
+      undefined,
+      `
+      globalThis.fetch = async () => {
+        console.error('registry-request');
+        ${status === 'timeout' ? "throw new DOMException('Timed out', 'TimeoutError');" : status === 'invalid-json' ? "return new Response('invalid-json');" : `return new Response('', { status: ${status} });`}
+      };
+    `
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.match(/registry-request/g)).toHaveLength(requests);
+    expect(result.output).not.toContain('approval_required=');
+    expect(result.summary).toBe('CE and EE revisions\n');
+  }
+});
+
+test('EE revision lookup stops before emitting an output when Git fails', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as { jobs: { validate: { steps: Array<{ name?: string; run?: string }> } } };
+  const step = policy.jobs.validate.steps.find(
+    (step) => step.name === 'Resolve pinned EE revision'
+  );
+  if (!step?.run) throw new Error('Missing EE revision lookup');
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin ee revision-'));
+  directories.push(directory);
+  for (const [cwd, expected] of [
+    [decodeURIComponent(new URL('../../', import.meta.url).pathname), 0],
+    [directory, 1],
+  ] as const) {
+    const output = join(directory, 'revision');
+    await Bun.write(output, '');
+    const child = Bun.spawn(['bash', '-e', '-c', step.run], {
+      cwd,
+      env: { ...process.env, GITHUB_OUTPUT: output },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (expected === 0) {
+      expect(code).toBe(0);
+      expect(await Bun.file(output).text()).toMatch(/^sha=[a-f0-9]{40}\n$/);
+    } else {
+      expect(code).not.toBe(0);
+      expect(await Bun.file(output).text()).toBe('');
+    }
+  }
 });
 
 test('strict mode blocks young EE releases while CI mode requests approval for them', async () => {
@@ -262,17 +356,26 @@ test('approval protection fails when the environment is unavailable or a reviewe
 case "$2" in
   */environments/*)
     if [ "$MOCK_ENVIRONMENT" = missing ]; then exit 1; fi
-    echo admin-user
+    printf '%s\n' "$MOCK_ENVIRONMENT" | jq -er "$4"
     ;;
+  */collaborators/non-admin/permission) echo write ;;
   *) echo "$MOCK_PERMISSION" ;;
 esac
 `
   );
   chmodSync(gh, 0o755);
+  const environmentWith = (reviewers: Array<{ type: string; reviewer: { login: string } }>) =>
+    JSON.stringify({ protection_rules: [{ type: 'required_reviewers', reviewers }] });
+  const admin = { type: 'User', reviewer: { login: 'admin-user' } };
   for (const [environment, permission, expected] of [
-    ['present', 'admin', 0],
+    [environmentWith([admin]), 'admin', 0],
     ['missing', 'admin', 1],
-    ['present', 'write', 1],
+    [environmentWith([admin]), 'write', 1],
+    [environmentWith([]), 'admin', 1],
+    [JSON.stringify({ protection_rules: [] }), 'admin', 1],
+    [environmentWith([{ type: 'Team', reviewer: { login: 'admin-team' } }]), 'admin', 1],
+    [environmentWith([admin, { type: 'Team', reviewer: { login: 'admin-team' } }]), 'admin', 1],
+    [environmentWith([admin, { type: 'User', reviewer: { login: 'non-admin' } }]), 'admin', 1],
   ] as const) {
     const child = Bun.spawn(['bash', '-e', '-c', guard.run], {
       env: {
@@ -290,7 +393,8 @@ esac
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
-    expect(code).toBe(expected);
+    if (expected === 0) expect(code).toBe(0);
+    else expect(code).not.toBe(0);
   }
 });
 
@@ -421,7 +525,7 @@ test('the required PR job checks both locks and checks out EE at the recorded su
   expect(check).toBeGreaterThan(checkout);
   expect(steps[checkout].with?.ref).toBe('${{ steps.ee-revision.outputs.sha }}');
   expect(steps[checkout].with?.['persist-credentials']).toBe(false);
-  expect(steps.some((step) => step.run?.includes('git rev-parse HEAD:ee'))).toBe(true);
+  expect(steps.some((step) => step.run?.includes('git rev-parse --verify HEAD:ee'))).toBe(true);
 });
 
 test('merges lockfiles and reports registry failures without skipping remaining packages', async () => {
