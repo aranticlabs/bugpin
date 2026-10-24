@@ -6,6 +6,7 @@ import {
   ageCheckOutcome,
   checkDependencyAge,
   checkReleaseTimes,
+  dependencyAgeSummary,
   readLockedPackages,
 } from '../../src/server/scripts/check-dependency-age';
 
@@ -24,13 +25,15 @@ function lockfile(...specs: string[]): string {
   });
 }
 
-async function runAgeCLI(metadata: unknown, requestApproval: boolean) {
+async function runAgeCLI(metadata: unknown, requestApproval: boolean, eeSpecs = ['example@2.0.0']) {
   const directory = mkdtempSync(join(tmpdir(), 'bugpin age approval-'));
   directories.push(directory);
   await Bun.write(join(directory, 'bun.lock'), lockfile('example@1.0.0'));
-  await Bun.write(join(directory, 'ee/bun.lock'), lockfile('example@2.0.0'));
+  await Bun.write(join(directory, 'ee/bun.lock'), lockfile(...eeSpecs));
   const output = join(directory, 'output');
   await Bun.write(output, 'existing=value\n');
+  const summary = join(directory, 'summary');
+  await Bun.write(summary, 'CE and EE revisions\n');
   const preload = join(directory, 'registry.ts');
   await Bun.write(
     preload,
@@ -47,7 +50,7 @@ async function runAgeCLI(metadata: unknown, requestApproval: boolean) {
     ],
     {
       cwd: directory,
-      env: { ...process.env, GITHUB_OUTPUT: output },
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
       stdout: 'pipe',
       stderr: 'pipe',
     }
@@ -57,7 +60,13 @@ async function runAgeCLI(metadata: unknown, requestApproval: boolean) {
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
-  return { exitCode, stdout, stderr, output: await Bun.file(output).text() };
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    output: await Bun.file(output).text(),
+    summary: await Bun.file(summary).text(),
+  };
 }
 
 test('only verified young releases are eligible for admin approval', () => {
@@ -87,7 +96,9 @@ test('strict mode blocks young EE releases while CI mode requests approval for t
   expect(strict.output).toBe('existing=value\n');
   const pending = await runAgeCLI(metadata, true);
   expect(pending.exitCode).toBe(0);
-  expect(pending.output).toBe('existing=value\napproval_required=true\n');
+  expect(pending.output).toBe(
+    'existing=value\napproval_required=true\nyoung_packages=["example@2.0.0"]\n'
+  );
 });
 
 test('CI mode requires no approval for mature versions but cannot waive invalid metadata', async () => {
@@ -97,6 +108,7 @@ test('CI mode requires no approval for mature versions but cannot waive invalid 
   );
   expect(mature.exitCode).toBe(0);
   expect(mature.output).toContain('approval_required=false');
+  expect(mature.output).toContain('young_packages=[]');
   for (const metadata of [
     { time: { '1.0.0': '2026-01-01T00:00:00Z' } },
     { time: { '1.0.0': 'invalid', '2.0.0': new Date().toISOString() } },
@@ -113,6 +125,41 @@ test('CI mode requires no approval for mature versions but cannot waive invalid 
   }
 });
 
+test('approval titles receive every young version, including scoped packages', async () => {
+  const pending = await runAgeCLI(
+    { time: { '1.0.0': '2026-01-01T00:00:00Z', '1.4.4': new Date().toISOString() } },
+    true,
+    ['@types/bun@1.4.4', 'bun-types@1.4.4']
+  );
+  expect(pending.exitCode).toBe(0);
+  expect(pending.output).toContain('young_packages=["@types/bun@1.4.4","bun-types@1.4.4"]');
+  expect(pending.stderr).toContain('published ');
+  expect(pending.stderr).toContain('eligible at ');
+  expect(pending.summary).toContain('[@types/bun](');
+  expect(pending.summary).toContain('[bun-types](');
+  expect(pending.summary).not.toContain('example');
+});
+
+test('age report shows exact release details and escapes registry descriptions', () => {
+  const issues = checkReleaseTimes(
+    '@types/bun',
+    new Set(['1.4.4']),
+    {
+      time: { '1.4.4': '2026-10-23T00:00:00Z' },
+      versions: { '1.4.4': { description: 'Bun types | <details>\n[link]' } },
+    },
+    now
+  );
+  const summary = dependencyAgeSummary(issues);
+  expect(summary).toContain('https://www.npmjs.com/package/%40types%2Fbun/v/1.4.4');
+  expect(summary).toContain(
+    '| 1.4.4 | Bun types &#124; &#60;details&#62; &#91;link&#93; | 36.0 h |'
+  );
+  expect(summary).toContain('2026-10-23T00:00:00.000Z');
+  expect(summary).toContain('2026-10-26T00:00:00.000Z');
+  expect(dependencyAgeSummary([])).toBe('No npm releases younger than 72 hours.\n');
+});
+
 test('workflow enforcement cannot pass on rejected, missing, canceled, or skipped approvals', async () => {
   const policy = Bun.YAML.parse(
     await Bun.file(
@@ -121,10 +168,21 @@ test('workflow enforcement cannot pass on rejected, missing, canceled, or skippe
   ) as {
     jobs: {
       enforce: { steps: Array<{ run: string }> };
-      'approve-young-releases': { environment: string; if: string; needs: string };
+      'approve-young-releases': {
+        name: string;
+        environment: { name: string; url: string };
+        if: string;
+        needs: string;
+      };
     };
   };
-  expect(policy.jobs['approve-young-releases'].environment).toBe('dependency-age-override');
+  expect(policy.jobs['approve-young-releases'].environment.name).toBe('dependency-age-override');
+  expect(policy.jobs['approve-young-releases'].environment.url).toBe(
+    '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary'
+  );
+  expect(policy.jobs['approve-young-releases'].name).toBe(
+    "Approve young releases: ${{ join(fromJSON(needs.validate.outputs.young_packages || '[]'), ', ') }}"
+  );
   expect(policy.jobs['approve-young-releases'].needs).toBe('validate');
   expect(policy.jobs['approve-young-releases'].if).toBe(
     "needs.validate.outputs.approval_required == 'true'"
@@ -238,7 +296,7 @@ esac
 test('accepts a release at exactly 72 hours and rejects it one millisecond earlier', () => {
   const metadata = { time: { '1.0.0': '2026-10-21T12:00:00Z' } };
   expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now)).toEqual([]);
-  expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now - 1)).toEqual([
+  expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now - 1)).toMatchObject([
     {
       kind: 'age',
       message:

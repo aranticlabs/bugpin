@@ -3,6 +3,14 @@ export const MINIMUM_RELEASE_AGE_MS = 72 * 60 * 60 * 1000;
 interface DependencyAgeIssue {
   kind: 'age' | 'validation';
   message: string;
+  release?: {
+    name: string;
+    version: string;
+    description: string;
+    publishedAt: string;
+    eligibleAt: string;
+    ageHours: number;
+  };
 }
 
 const sheetjs = 'xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz';
@@ -66,15 +74,52 @@ export function checkReleaseTimes(
       ];
     }
     if (now - published < MINIMUM_RELEASE_AGE_MS) {
+      const versionMetadata =
+        isRecord(metadata) && isRecord(metadata.versions) ? metadata.versions[version] : undefined;
       return [
         {
           kind: 'age' as const,
           message: `${name}@${version}: published ${timestamp}; eligible at ${new Date(published + MINIMUM_RELEASE_AGE_MS).toISOString()}`,
+          release: {
+            name,
+            version,
+            description:
+              isRecord(versionMetadata) && typeof versionMetadata.description === 'string'
+                ? versionMetadata.description
+                : 'No description provided',
+            publishedAt: new Date(published).toISOString(),
+            eligibleAt: new Date(published + MINIMUM_RELEASE_AGE_MS).toISOString(),
+            ageHours: (now - published) / (60 * 60 * 1000),
+          },
         },
       ];
     }
     return [];
   });
+}
+
+export function dependencyAgeSummary(issues: DependencyAgeIssue[]): string {
+  const rows = issues.flatMap((issue) => {
+    if (issue.kind !== 'age' || !issue.release) return [];
+    const release = issue.release;
+    const cell = (value: string) =>
+      value
+        .replace(/[&<>|`\[\]\\]/g, (character) => `&#${character.charCodeAt(0)};`)
+        .replace(/[\r\n]+/g, ' ');
+    const url = `https://www.npmjs.com/package/${encodeURIComponent(release.name)}/v/${encodeURIComponent(release.version)}`;
+    return [
+      `| [${cell(release.name)}](${url}) | ${cell(release.version)} | ${cell(release.description)} | ${release.ageHours.toFixed(1)} h | ${release.publishedAt} | ${release.eligibleAt} |`,
+    ];
+  });
+  if (rows.length === 0) return 'No npm releases younger than 72 hours.\n';
+  return [
+    '### Packages below the 72-hour minimum',
+    '',
+    '| Package | Version | Description | Age at check | Published (UTC) | Reaches 72 hours (UTC) |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...rows,
+    '',
+  ].join('\n');
 }
 
 export function ageCheckOutcome(
@@ -143,9 +188,16 @@ if (import.meta.main) {
     if (requestApproval && outcome !== 'failed') {
       const output = process.env.GITHUB_OUTPUT;
       if (!output) throw new Error('--request-approval requires GITHUB_OUTPUT.');
+      const summary = process.env.GITHUB_STEP_SUMMARY;
+      if (summary) {
+        await Bun.write(
+          summary,
+          `${await Bun.file(summary).text()}\n${dependencyAgeSummary(issues)}`
+        );
+      }
       await Bun.write(
         output,
-        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\n`
+        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\nyoung_packages=${JSON.stringify(issues.map((issue) => issue.message.split(': ')[0]))}\n`
       );
     }
     if (outcome === 'failed' || (outcome === 'approval-required' && !requestApproval)) {

@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       approval_required: ${{ steps.age.outputs.approval_required }}
+      young_packages: ${{ steps.age.outputs.young_packages }}
     steps:
       - name: Checkout exact CE revision
         uses: actions/checkout@v4
@@ -62,15 +63,14 @@ jobs:
           EE_SHA: ${{ steps.ee-revision.outputs.sha }}
         run: |
           set -euo pipefail
-          bun run check:dependency-age --request-approval 2>&1 | tee "$RUNNER_TEMP/dependency-age.log"
           {
             echo "## CE and EE dependency age review"
+            echo
             echo "CE: $GITHUB_SHA"
+            echo
             echo "EE: $EE_SHA"
-            echo '```text'
-            cat "$RUNNER_TEMP/dependency-age.log"
-            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          bun run check:dependency-age --request-approval
 
       - name: Verify admin approval protection
         if: steps.age.outputs.approval_required == 'true'
@@ -93,10 +93,14 @@ jobs:
           done
 
   approve-young-releases:
+    name: >-
+      Approve young releases: ${{ join(fromJSON(needs.validate.outputs.young_packages || '[]'), ', ') }}
     needs: validate
     if: needs.validate.outputs.approval_required == 'true'
     runs-on: ubuntu-latest
-    environment: dependency-age-override
+    environment:
+      name: dependency-age-override
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary
     steps:
       - name: Record age exception for this run
         env:
