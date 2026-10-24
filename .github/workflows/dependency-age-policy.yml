@@ -1,0 +1,128 @@
+name: CE and EE Dependency Age Policy
+
+on:
+  workflow_call:
+    secrets:
+      EE_ACCESS_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      approval_required: ${{ steps.age.outputs.approval_required }}
+      young_packages: ${{ steps.age.outputs.young_packages }}
+    steps:
+      - name: Checkout exact CE revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify EE access
+        env:
+          EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$EE_ACCESS_TOKEN" ]; then
+            echo "::error::EE_ACCESS_TOKEN is required to verify the private EE lockfile. Fork contributions must be checked from a trusted maintainer branch."
+            exit 1
+          fi
+
+      - name: Resolve pinned EE revision
+        id: ee-revision
+        run: |
+          sha=$(git rev-parse --verify HEAD:ee)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned EE lockfile
+        uses: actions/checkout@v4
+        with:
+          repository: aranticlabs/bugpin-ee
+          ref: ${{ steps.ee-revision.outputs.sha }}
+          token: ${{ secrets.EE_ACCESS_TOKEN }}
+          path: ee
+          persist-credentials: false
+          sparse-checkout: bun.lock
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+
+      - name: Test release age checks
+        run: bun test tests/server/dependency-age.test.ts
+
+      - name: Check dependency release age
+        id: age
+        shell: bash
+        env:
+          EE_SHA: ${{ steps.ee-revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## CE and EE dependency age review"
+            echo
+            echo "CE: $GITHUB_SHA"
+            echo
+            echo "EE: $EE_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+          bun run check:dependency-age --request-approval
+
+      - name: Verify admin approval protection
+        if: steps.age.outputs.approval_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          reviewers=$(gh api "repos/$GITHUB_REPOSITORY/environments/dependency-age-override" --jq '
+            [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]]
+            | if length > 0 and all(.[]; .type == "User")
+              then .[].reviewer.login
+              else error("The age override environment must require repository admin reviewers") end')
+          for reviewer in $reviewers; do
+            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$reviewer/permission" --jq '.permission')
+            if [ "$permission" != admin ]; then
+              echo "::error::The age override reviewer $reviewer is not a repository admin."
+              exit 1
+            fi
+          done
+
+  approve-young-releases:
+    name: >-
+      Approve young releases: ${{ join(fromJSON(needs.validate.outputs.young_packages || '[]'), ', ') }}
+    needs: validate
+    if: needs.validate.outputs.approval_required == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: dependency-age-override
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary
+    steps:
+      - name: Record age exception for this run
+        env:
+          APPROVED_SHA: ${{ github.sha }}
+        run: echo "Admin-approved release age exception for CE $APPROVED_SHA and its pinned EE revision in this workflow run."
+
+  enforce:
+    needs: [validate, approve-young-releases]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce validation and age approval
+        env:
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+          APPROVAL_REQUIRED: ${{ needs.validate.outputs.approval_required }}
+          APPROVAL_RESULT: ${{ needs.approve-young-releases.result }}
+        run: |
+          test "$VALIDATION_RESULT" = success
+          if [ "$APPROVAL_REQUIRED" = true ]; then
+            test "$APPROVAL_RESULT" = success
+          else
+            test "$APPROVAL_REQUIRED" = false
+          fi

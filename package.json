@@ -1,7 +1,7 @@
 {
   "name": "bugpin",
   "description": "Self-hosted visual bug reporting tool",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "packageManager": "bun@1.4.4",
   "license": "AGPL-3.0-only",
   "private": false,
@@ -37,7 +37,8 @@
     "reset-password": "bun run --cwd src/server reset-password",
     "knip": "knip",
     "format": "prettier --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
+    "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "check:dependency-age": "bun run src/server/scripts/check-dependency-age.ts bun.lock ee/bun.lock"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
@@ -50,14 +51,18 @@
     "fast-xml-builder": "^1.2.0",
     "fast-xml-parser": "^5.7.2",
     "tar": "^7.5.13",
-    "dompurify": "^3.4.2",
-    "smol-toml": "^1.6.1",
+    "dompurify": "^3.4.17",
+    "smol-toml": "^1.9.0",
     "brace-expansion": "^2.0.3",
-    "follow-redirects": "^1.16.0",
+    "follow-redirects": "^1.16.1",
     "markdown-it": "^14.1.1",
     "postcss": "^8.5.13",
     "rollup": "^4.60.2",
     "minimatch": "^9.0.9",
-    "picomatch": "^4.0.4"
+    "picomatch": "^4.0.4",
+    "source-map-js": "^1.2.2",
+    "undici": "^8.12.2",
+    "zod": "^4.6.6",
+    "prosemirror-view": "^1.42.6"
   }
 }

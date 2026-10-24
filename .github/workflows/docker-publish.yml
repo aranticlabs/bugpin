@@ -12,7 +12,16 @@ env:
   IMAGE_NAME: bugpin
 
 jobs:
+  age-policy:
+    uses: ./.github/workflows/dependency-age-policy.yml
+    permissions:
+      contents: read
+      actions: read
+    secrets:
+      EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
+
   build-and-push:
+    needs: age-policy
     runs-on: ubuntu-latest
     # Runs on: version tags only (v1.0.0 for production, v1.0.0-dev for development)
     permissions:
@@ -23,8 +32,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           submodules: true
           token: ${{ secrets.EE_ACCESS_TOKEN }}
+          persist-credentials: false
 
       - name: Check if dev or beta tag
         id: check
@@ -91,6 +102,7 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -103,4 +115,4 @@ jobs:
           platforms: linux/amd64 # Add linux/arm64 if needed
 
       - name: Image digest
-        run: echo "Image pushed with digest ${{ steps.meta.outputs.digest }}"
+        run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"

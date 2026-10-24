@@ -102,7 +102,17 @@ function NavGroup({ label, items, location, onItemClick }: NavGroupProps) {
               <SidebarMenuButton asChild isActive={isActive} tooltip={itemLabel}>
                 <Link to={item.url} onClick={onItemClick}>
                   <item.icon />
-                  <span>{itemLabel}</span>
+                  <span>
+                    {item.title}
+                    {item.count !== undefined && (
+                      <>
+                        {' '}
+                        <span className="font-normal tabular-nums text-muted-foreground">
+                          ({item.count})
+                        </span>
+                      </>
+                    )}
+                  </span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

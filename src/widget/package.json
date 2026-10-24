@@ -1,7 +1,7 @@
 {
   "name": "@arantic/bugpin-widget",
   "description": "Embeddable visual bug reporting widget - Capture screenshots, annotate issues, and submit bug reports",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "license": "MIT",
   "type": "module",
   "main": "dist/widget.cjs.js",
@@ -70,6 +70,6 @@
     "preact-render-to-string": "^6.7.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.4"
   }
 }

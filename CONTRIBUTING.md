@@ -156,6 +156,16 @@ See [docs/CODING-PRINCIPLES.md](docs/CODING-PRINCIPLES.md) for complete naming c
 
 ### Development Commands
 
+Dependency ranges may use `^`; commit the updated `bun.lock` with dependency changes.
+CI checks that npm releases are at least 72 hours old. Run
+`bun run check:dependency-age` with EE initialized, or
+`bun run src/server/scripts/check-dependency-age.ts bun.lock` for a CE-only check.
+
+If release age is the only failure, wait until the reported eligibility time or
+ask a repository admin to approve that run through **Review deployments**.
+Other failures still block CI. Fork PRs blocked by private EE access need help
+from a maintainer.
+
 ```bash
 # Install dependencies
 bun install
