@@ -197,7 +197,7 @@ if (import.meta.main) {
       }
       const youngPackages = issues.flatMap(({ release }) =>
         release
-          ? [`${release.name}@${release.version} (${release.ageHours.toFixed(1)}h / 72h)`]
+          ? [`${release.name}@${release.version} (${release.ageHours.toFixed(1)}h old; minimum 72h)`]
           : []
       );
       await Bun.write(
