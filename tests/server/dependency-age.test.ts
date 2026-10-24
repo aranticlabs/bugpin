@@ -116,6 +116,41 @@ test('registry retries recover from throttling, server errors, and network timeo
   }
 });
 
+test('429 retries honor bounded Retry-After seconds and HTTP dates, otherwise using backoff', async () => {
+  for (const [status, header, delay] of [
+    [429, '2', 2000],
+    [429, '0', 0],
+    [429, '3600', 30_000],
+    [429, 'Sat, 24 Oct 2026 12:00:07 GMT', 7000],
+    [429, 'Sun, 25 Oct 2026 12:00:00 GMT', 30_000],
+    [429, 'Fri, 23 Oct 2026 12:00:00 GMT', 0],
+    [429, '', 250],
+    [429, 'invalid', 250],
+    [429, '-1', 250],
+    [503, '2', 250],
+  ] as const) {
+    const result = await runAgeCLI(
+      {},
+      true,
+      undefined,
+      `
+      Date.now = () => Date.parse('2026-10-24T12:00:00Z');
+      Bun.sleep = async (delay) => console.error('retry-delay=' + delay);
+      let calls = 0;
+      globalThis.fetch = async () => {
+        if (++calls === 1) return new Response('', {
+          status: ${status}, headers: { 'Retry-After': ${JSON.stringify(header)} }
+        });
+        return Response.json({ time: { '1.0.0': '2026-01-01T00:00:00Z', '2.0.0': '2026-01-01T00:00:00Z' } });
+      };
+    `
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.trim()).toBe('retry-delay=' + delay);
+    expect(result.output).toContain('approval_required=false');
+  }
+});
+
 test('exhausted retries and permanent registry failures still block approval', async () => {
   for (const [status, requests] of [
     [503, 3],

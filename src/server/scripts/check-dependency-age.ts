@@ -147,7 +147,16 @@ async function fetchMetadata(name: string): Promise<unknown> {
       throw new Error(`Registry returned HTTP ${response.status}`);
     }
     await response.body?.cancel();
-    await Bun.sleep(250 * 2 ** attempt);
+    const retryAfter = response.status === 429 ? response.headers.get('Retry-After')?.trim() : null;
+    const delay =
+      retryAfter && /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : retryAfter && /GMT$/.test(retryAfter)
+          ? Date.parse(retryAfter) - Date.now()
+          : NaN;
+    await Bun.sleep(
+      Number.isFinite(delay) ? Math.min(30_000, Math.max(0, delay)) : 250 * 2 ** attempt
+    );
   }
   throw new Error('Registry request failed');
 }
