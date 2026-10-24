@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  ageCheckOutcome,
   checkDependencyAge,
   checkReleaseTimes,
   readLockedPackages,
@@ -23,11 +24,226 @@ function lockfile(...specs: string[]): string {
   });
 }
 
+async function runAgeCLI(metadata: unknown, requestApproval: boolean) {
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin age approval-'));
+  directories.push(directory);
+  await Bun.write(join(directory, 'bun.lock'), lockfile('example@1.0.0'));
+  await Bun.write(join(directory, 'ee/bun.lock'), lockfile('example@2.0.0'));
+  const output = join(directory, 'output');
+  await Bun.write(output, 'existing=value\n');
+  const preload = join(directory, 'registry.ts');
+  await Bun.write(
+    preload,
+    `globalThis.fetch = async () => Response.json(${JSON.stringify(metadata)});`
+  );
+  const script = new URL('../../src/server/scripts/check-dependency-age.ts', import.meta.url);
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--preload',
+      preload,
+      decodeURIComponent(script.pathname),
+      ...(requestApproval ? ['--request-approval'] : []),
+    ],
+    {
+      cwd: directory,
+      env: { ...process.env, GITHUB_OUTPUT: output },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }
+  );
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { exitCode, stdout, stderr, output: await Bun.file(output).text() };
+}
+
+test('only verified young releases are eligible for admin approval', () => {
+  expect(ageCheckOutcome([])).toBe('passed');
+  expect(ageCheckOutcome([{ kind: 'age', message: 'young' }])).toBe('approval-required');
+  expect(ageCheckOutcome([{ kind: 'validation', message: 'invalid' }])).toBe('failed');
+  expect(
+    ageCheckOutcome([
+      { kind: 'age', message: 'young' },
+      { kind: 'validation', message: 'invalid' },
+    ])
+  ).toBe('failed');
+  const future = checkReleaseTimes(
+    'example',
+    new Set(['1.0.0']),
+    { time: { '1.0.0': '2026-10-25T00:00:00Z' } },
+    now
+  );
+  expect(ageCheckOutcome(future)).toBe('failed');
+});
+
+test('strict mode blocks young EE releases while CI mode requests approval for them', async () => {
+  const metadata = { time: { '1.0.0': '2026-01-01T00:00:00Z', '2.0.0': new Date().toISOString() } };
+  const strict = await runAgeCLI(metadata, false);
+  expect(strict.exitCode).toBe(1);
+  expect(strict.stderr).toContain('example@2.0.0:');
+  expect(strict.output).toBe('existing=value\n');
+  const pending = await runAgeCLI(metadata, true);
+  expect(pending.exitCode).toBe(0);
+  expect(pending.output).toBe('existing=value\napproval_required=true\n');
+});
+
+test('CI mode requires no approval for mature versions but cannot waive invalid metadata', async () => {
+  const mature = await runAgeCLI(
+    { time: { '1.0.0': '2026-01-01T00:00:00Z', '2.0.0': '2026-01-01T00:00:00Z' } },
+    true
+  );
+  expect(mature.exitCode).toBe(0);
+  expect(mature.output).toContain('approval_required=false');
+  for (const metadata of [
+    { time: { '1.0.0': '2026-01-01T00:00:00Z' } },
+    { time: { '1.0.0': 'invalid', '2.0.0': new Date().toISOString() } },
+    {
+      time: {
+        '1.0.0': '2026-01-01T00:00:00Z',
+        '2.0.0': new Date(Date.now() + 60_000).toISOString(),
+      },
+    },
+  ]) {
+    const invalid = await runAgeCLI(metadata, true);
+    expect(invalid.exitCode).toBe(1);
+    expect(invalid.output).not.toContain('approval_required=');
+  }
+});
+
+test('workflow enforcement cannot pass on rejected, missing, canceled, or skipped approvals', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as {
+    jobs: {
+      enforce: { steps: Array<{ run: string }> };
+      'approve-young-releases': { environment: string; if: string; needs: string };
+    };
+  };
+  expect(policy.jobs['approve-young-releases'].environment).toBe('dependency-age-override');
+  expect(policy.jobs['approve-young-releases'].needs).toBe('validate');
+  expect(policy.jobs['approve-young-releases'].if).toBe(
+    "needs.validate.outputs.approval_required == 'true'"
+  );
+  for (const [validation, required, approval, expected] of [
+    ['success', 'false', 'skipped', 0],
+    ['success', 'true', 'success', 0],
+    ['failure', 'true', 'success', 1],
+    ['success', 'true', 'failure', 1],
+    ['success', 'true', 'cancelled', 1],
+    ['success', 'true', 'skipped', 1],
+    ['success', '', 'skipped', 1],
+  ] as const) {
+    const child = Bun.spawn(['bash', '-e', '-c', policy.jobs.enforce.steps[0].run], {
+      env: {
+        ...process.env,
+        VALIDATION_RESULT: validation,
+        APPROVAL_REQUIRED: required,
+        APPROVAL_RESULT: approval,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await child.exited).toBe(expected);
+  }
+});
+
+test('PR and Docker workflows share the age policy without skipping build validation', async () => {
+  const read = async (name: string) =>
+    Bun.YAML.parse(
+      await Bun.file(new URL(`../../.github/workflows/${name}`, import.meta.url)).text()
+    ) as {
+      jobs: Record<
+        string,
+        { uses?: string; needs?: string; if?: string; steps?: Array<{ run?: string }> }
+      >;
+    };
+  const pr = await read('dependency-age.yml');
+  const docker = await read('docker-publish.yml');
+  expect(pr.jobs['age-policy'].uses).toBe('./.github/workflows/dependency-age-policy.yml');
+  expect(docker.jobs['age-policy'].uses).toBe(pr.jobs['age-policy'].uses);
+  expect(pr.jobs['dependency-age'].needs).toBe('age-policy');
+  expect(pr.jobs['dependency-age'].if).toBe('${{ always() }}');
+  expect(docker.jobs['build-and-push'].needs).toBe('age-policy');
+  expect(
+    docker.jobs['build-and-push'].steps?.some(
+      (step) => step.run === 'bun install --frozen-lockfile'
+    )
+  ).toBe(true);
+  expect(
+    docker.jobs['build-and-push'].steps?.some(
+      (step) => step.run?.includes('bun run typecheck') && step.run?.includes('bun run test')
+    )
+  ).toBe(true);
+});
+
+test('approval protection fails when the environment is unavailable or a reviewer is not an admin', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as {
+    jobs: { validate: { steps: Array<{ name?: string; run?: string; if?: string }> } };
+  };
+  const guard = policy.jobs.validate.steps.find(
+    (step) => step.name === 'Verify admin approval protection'
+  );
+  expect(guard?.if).toBe("steps.age.outputs.approval_required == 'true'");
+  if (!guard?.run) throw new Error('Missing approval protection verification');
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin approval protection-'));
+  directories.push(directory);
+  const gh = join(directory, 'gh');
+  await Bun.write(
+    gh,
+    `#!/bin/sh
+case "$2" in
+  */environments/*)
+    if [ "$MOCK_ENVIRONMENT" = missing ]; then exit 1; fi
+    echo admin-user
+    ;;
+  *) echo "$MOCK_PERMISSION" ;;
+esac
+`
+  );
+  chmodSync(gh, 0o755);
+  for (const [environment, permission, expected] of [
+    ['present', 'admin', 0],
+    ['missing', 'admin', 1],
+    ['present', 'write', 1],
+  ] as const) {
+    const child = Bun.spawn(['bash', '-e', '-c', guard.run], {
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        GITHUB_REPOSITORY: 'aranticlabs/bugpin',
+        MOCK_ENVIRONMENT: environment,
+        MOCK_PERMISSION: permission,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(expected);
+  }
+});
+
 test('accepts a release at exactly 72 hours and rejects it one millisecond earlier', () => {
   const metadata = { time: { '1.0.0': '2026-10-21T12:00:00Z' } };
   expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now)).toEqual([]);
   expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now - 1)).toEqual([
-    'example@1.0.0: published 2026-10-21T12:00:00Z; eligible at 2026-10-24T12:00:00.000Z',
+    {
+      kind: 'age',
+      message:
+        'example@1.0.0: published 2026-10-21T12:00:00Z; eligible at 2026-10-24T12:00:00.000Z',
+    },
   ]);
 });
 
@@ -39,13 +255,13 @@ test('rejects future releases and checks each locked version independently', () 
     now
   );
   expect(issues).toHaveLength(1);
-  expect(issues[0]).toStartWith('example@1.1.0:');
+  expect(issues[0].message).toStartWith('example@1.1.0:');
 });
 
 test('fails closed for missing or malformed registry timestamps', () => {
   for (const metadata of [null, {}, { time: null }, { time: { '1.0.0': 'invalid' } }]) {
     expect(checkReleaseTimes('example', new Set(['1.0.0']), metadata, now)).toEqual([
-      'example@1.0.0: missing or invalid publication timestamp',
+      { kind: 'validation', message: 'example@1.0.0: missing or invalid publication timestamp' },
     ]);
   }
 });
@@ -127,17 +343,21 @@ test('the required PR job checks both locks and checks out EE at the recorded su
   expect(command.split(/\s+/)).toContain('bun.lock');
   expect(command.split(/\s+/)).toContain('ee/bun.lock');
   const workflow = Bun.YAML.parse(
-    await Bun.file(new URL('../../.github/workflows/dependency-age.yml', import.meta.url)).text()
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
   ) as {
     jobs: {
-      'dependency-age': {
+      validate: {
         steps: Array<{ uses?: string; run?: string; with?: Record<string, unknown> }>;
       };
     };
   };
-  const steps = workflow.jobs['dependency-age'].steps;
+  const steps = workflow.jobs.validate.steps;
   const checkout = steps.findIndex((step) => step.with?.repository === 'aranticlabs/bugpin-ee');
-  const check = steps.findIndex((step) => step.run === 'bun run check:dependency-age');
+  const check = steps.findIndex((step) =>
+    step.run?.includes('bun run check:dependency-age --request-approval')
+  );
   expect(checkout).toBeGreaterThan(-1);
   expect(check).toBeGreaterThan(checkout);
   expect(steps[checkout].with?.ref).toBe('${{ steps.ee-revision.outputs.sha }}');
@@ -164,6 +384,6 @@ test('merges lockfiles and reports registry failures without skipping remaining 
   );
   expect(requested.sort()).toEqual(['example', 'other', 'unavailable']);
   expect(issues).toHaveLength(2);
-  expect(issues[0]).toStartWith('example@1.1.0:');
-  expect(issues[1]).toBe('unavailable: Registry unavailable');
+  expect(issues[0].message).toStartWith('example@1.1.0:');
+  expect(issues[1]).toEqual({ kind: 'validation', message: 'unavailable: Registry unavailable' });
 });

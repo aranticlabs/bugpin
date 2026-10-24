@@ -10,48 +10,20 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  age-policy:
+    uses: ./.github/workflows/dependency-age-policy.yml
+    secrets:
+      EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
+
   dependency-age:
+    needs: age-policy
+    if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Verify EE access
+      - name: Enforce validation and admin approval
         env:
-          EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
-        run: |
-          if [ -z "$EE_ACCESS_TOKEN" ]; then
-            echo "::error::EE_ACCESS_TOKEN is required to verify the private EE lockfile. Fork contributions must be checked from a trusted maintainer branch."
-            exit 1
-          fi
-
-      - name: Resolve pinned EE revision
-        id: ee-revision
-        run: echo "sha=$(git rev-parse HEAD:ee)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout pinned EE lockfile
-        uses: actions/checkout@v4
-        with:
-          repository: aranticlabs/bugpin-ee
-          ref: ${{ steps.ee-revision.outputs.sha }}
-          token: ${{ secrets.EE_ACCESS_TOKEN }}
-          path: ee
-          persist-credentials: false
-          sparse-checkout: bun.lock
-          sparse-checkout-cone-mode: false
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: '1.4.4'
-
-      - name: Test release age checks
-        run: bun test tests/server/dependency-age.test.ts
-
-      - name: Check dependency release age
-        run: bun run check:dependency-age
+          POLICY_RESULT: ${{ needs.age-policy.result }}
+        run: test "$POLICY_RESULT" = success

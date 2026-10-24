@@ -1,5 +1,10 @@
 export const MINIMUM_RELEASE_AGE_MS = 72 * 60 * 60 * 1000;
 
+interface DependencyAgeIssue {
+  kind: 'age' | 'validation';
+  message: string;
+}
+
 const sheetjs = 'xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -39,21 +44,44 @@ export function checkReleaseTimes(
   versions: Set<string>,
   metadata: unknown,
   now: number
-): string[] {
+): DependencyAgeIssue[] {
   const times = isRecord(metadata) && isRecord(metadata.time) ? metadata.time : {};
-  return [...versions].flatMap((version) => {
+  return [...versions].flatMap<DependencyAgeIssue>((version) => {
     const timestamp = times[version];
     const published = typeof timestamp === 'string' ? Date.parse(timestamp) : NaN;
     if (!Number.isFinite(published)) {
-      return [`${name}@${version}: missing or invalid publication timestamp`];
+      return [
+        {
+          kind: 'validation' as const,
+          message: `${name}@${version}: missing or invalid publication timestamp`,
+        },
+      ];
+    }
+    if (published > now) {
+      return [
+        {
+          kind: 'validation' as const,
+          message: `${name}@${version}: publication timestamp is in the future`,
+        },
+      ];
     }
     if (now - published < MINIMUM_RELEASE_AGE_MS) {
       return [
-        `${name}@${version}: published ${timestamp}; eligible at ${new Date(published + MINIMUM_RELEASE_AGE_MS).toISOString()}`,
+        {
+          kind: 'age' as const,
+          message: `${name}@${version}: published ${timestamp}; eligible at ${new Date(published + MINIMUM_RELEASE_AGE_MS).toISOString()}`,
+        },
       ];
     }
     return [];
   });
+}
+
+export function ageCheckOutcome(
+  issues: DependencyAgeIssue[]
+): 'passed' | 'approval-required' | 'failed' {
+  if (issues.some((issue) => issue.kind === 'validation')) return 'failed';
+  return issues.length > 0 ? 'approval-required' : 'passed';
 }
 
 async function fetchMetadata(name: string): Promise<unknown> {
@@ -69,7 +97,7 @@ export async function checkDependencyAge(
   lockfiles: string[],
   getMetadata: (name: string) => Promise<unknown> = fetchMetadata,
   now = Date.now()
-): Promise<string[]> {
+): Promise<DependencyAgeIssue[]> {
   const packages = new Map<string, Set<string>>();
   for (const path of lockfiles) {
     for (const [name, versions] of readLockedPackages(await Bun.file(path).text())) {
@@ -80,7 +108,7 @@ export async function checkDependencyAge(
   }
 
   const queue = [...packages];
-  const issues: string[] = [];
+  const issues: DependencyAgeIssue[] = [];
   await Promise.all(
     Array.from({ length: Math.min(8, queue.length) }, async () => {
       while (queue.length > 0) {
@@ -90,7 +118,10 @@ export async function checkDependencyAge(
         try {
           issues.push(...checkReleaseTimes(name, versions, await getMetadata(name), now));
         } catch (error) {
-          issues.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+          issues.push({
+            kind: 'validation',
+            message: `${name}: ${error instanceof Error ? error.message : String(error)}`,
+          });
         }
       }
     })
@@ -98,15 +129,26 @@ export async function checkDependencyAge(
   console.log(
     `Checked ${packages.size} registry packages against the 72-hour minimum release age.`
   );
-  return issues.sort();
+  return issues.sort((first, second) => first.message.localeCompare(second.message));
 }
 
 if (import.meta.main) {
   try {
-    const paths = process.argv.slice(2);
+    const args = process.argv.slice(2);
+    const requestApproval = args.includes('--request-approval');
+    const paths = args.filter((arg) => arg !== '--request-approval');
     const issues = await checkDependencyAge(paths.length > 0 ? paths : ['bun.lock', 'ee/bun.lock']);
-    if (issues.length > 0) {
-      console.error(issues.join('\n'));
+    const outcome = ageCheckOutcome(issues);
+    if (issues.length > 0) console.error(issues.map((issue) => issue.message).join('\n'));
+    if (requestApproval && outcome !== 'failed') {
+      const output = process.env.GITHUB_OUTPUT;
+      if (!output) throw new Error('--request-approval requires GITHUB_OUTPUT.');
+      await Bun.write(
+        output,
+        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\n`
+      );
+    }
+    if (outcome === 'failed' || (outcome === 'approval-required' && !requestApproval)) {
       process.exitCode = 1;
     }
   } catch (error) {
