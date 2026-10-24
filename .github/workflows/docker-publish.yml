@@ -40,6 +40,9 @@ jobs:
         with:
           bun-version: '1.4.4'
 
+      - name: Check dependency release age
+        run: bun run check:dependency-age
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 

@@ -1,4 +1,4 @@
-import type { Context, Next } from 'hono';
+import type { Context, MiddlewareHandler, Next } from 'hono';
 import type { EEPlugin, EEFeature, ProjectLicenseService } from '../types/ee-plugin.js';
 import { registerEEHooks, resetEEHooks } from './ee-hooks.js';
 import { logger } from './logger.js';
@@ -264,7 +264,7 @@ export function getLicenseStatus() {
  * Middleware that requires EE license
  * Returns 402 Payment Required if not licensed
  */
-export function requireEELicense() {
+export function requireEELicense(): MiddlewareHandler {
   return async (c: Context, next: Next) => {
     if (!isEELicensed()) {
       return c.json(
@@ -284,7 +284,7 @@ export function requireEELicense() {
  * Middleware that requires a specific EE feature
  * Returns 402 Payment Required if feature not licensed
  */
-export function requireEEFeature(feature: EEFeature) {
+export function requireEEFeature(feature: EEFeature): MiddlewareHandler {
   return async (c: Context, next: Next) => {
     if (!isEEAvailable()) {
       return c.json(

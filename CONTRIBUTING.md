@@ -156,6 +156,26 @@ See [docs/CODING-PRINCIPLES.md](docs/CODING-PRINCIPLES.md) for complete naming c
 
 ### Development Commands
 
+Dependency ranges may use `^`; `bun.lock` records the exact versions used by CI and
+Docker builds. Bun filters newly resolved npm releases to a minimum age of 72 hours.
+Run `bun run check:dependency-age` to check every locked npm release in CE and an
+initialized EE submodule, including transitive dependencies. Missing lockfiles
+fail the check. For a CE-only local check, run
+`bun run src/server/scripts/check-dependency-age.ts bun.lock`.
+
+The release age check runs on pull requests and before Docker publishing. It fails
+when a release is younger than 72 hours or its publication timestamp cannot be
+verified. Rerun it after the reported eligibility time. The pinned SheetJS tarball
+is excluded because its release is hosted outside npm; other non-registry sources
+are rejected. Release age does not establish that a package is uncompromised, so
+dependency updates still need security review. Configure the `dependency-age` job
+as a required status check in GitHub branch protection to enforce it before merging.
+
+The PR workflow reads EE's lockfile at the exact submodule revision recorded by
+CE, using `EE_ACCESS_TOKEN`. Without access to the private EE repository, the check
+fails. Fork contributions must be checked from a trusted maintainer branch because
+GitHub does not provide this secret to fork PRs.
+
 ```bash
 # Install dependencies
 bun install
