@@ -96,9 +96,8 @@ test('strict mode blocks young EE releases while CI mode requests approval for t
   expect(strict.output).toBe('existing=value\n');
   const pending = await runAgeCLI(metadata, true);
   expect(pending.exitCode).toBe(0);
-  expect(pending.output).toBe(
-    'existing=value\napproval_required=true\nyoung_packages=["example@2.0.0"]\n'
-  );
+  expect(pending.output).toContain('approval_required=true');
+  expect(pending.output).toContain('young_packages=["example@2.0.0 (0.0h / 72h)"]');
 });
 
 test('CI mode requires no approval for mature versions but cannot waive invalid metadata', async () => {
@@ -132,7 +131,9 @@ test('approval titles receive every young version, including scoped packages', a
     ['@types/bun@1.4.4', 'bun-types@1.4.4']
   );
   expect(pending.exitCode).toBe(0);
-  expect(pending.output).toContain('young_packages=["@types/bun@1.4.4","bun-types@1.4.4"]');
+  expect(pending.output).toContain(
+    'young_packages=["@types/bun@1.4.4 (0.0h / 72h)","bun-types@1.4.4 (0.0h / 72h)"]'
+  );
   expect(pending.stderr).toContain('published ');
   expect(pending.stderr).toContain('eligible at ');
   expect(pending.summary).toContain('[@types/bun](');

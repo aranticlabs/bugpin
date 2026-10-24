@@ -195,9 +195,14 @@ if (import.meta.main) {
           `${await Bun.file(summary).text()}\n${dependencyAgeSummary(issues)}`
         );
       }
+      const youngPackages = issues.flatMap(({ release }) =>
+        release
+          ? [`${release.name}@${release.version} (${release.ageHours.toFixed(1)}h / 72h)`]
+          : []
+      );
       await Bun.write(
         output,
-        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\nyoung_packages=${JSON.stringify(issues.map((issue) => issue.message.split(': ')[0]))}\n`
+        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\nyoung_packages=${JSON.stringify(youngPackages)}\n`
       );
     }
     if (outcome === 'failed' || (outcome === 'approval-required' && !requestApproval)) {
