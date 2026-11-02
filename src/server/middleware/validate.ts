@@ -108,6 +108,9 @@ const projectScreenshotSchema = z
     maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
     maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
     maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+    enableScreenRecording: z.boolean().optional(),
+    allowRecordingMicrophone: z.boolean().optional(),
+    maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
   })
   .strict();
 
@@ -551,6 +554,9 @@ export const schemas = {
           maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
           maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
           maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+          enableScreenRecording: z.boolean().optional(),
+          allowRecordingMicrophone: z.boolean().optional(),
+          maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
         })
         .optional(),
       maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),

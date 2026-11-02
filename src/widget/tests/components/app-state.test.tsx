@@ -80,12 +80,15 @@ const baseConfig: WidgetConfig = {
   enableConsoleCapture: true,
   enableNetworkCapture: true,
   enableStorageKeysCapture: false,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
   userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  maxRecordingDurationSeconds: 180,
 };
 
 const originalSetTimeout = globalThis.setTimeout;

@@ -232,6 +232,18 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb ?? 50;
   const maxVideoUploadMbPerDay =
     projScreenshot?.maxVideoUploadMbPerDay ?? globalScreenshot.maxVideoUploadMbPerDay ?? 2048;
+  const enableScreenRecording =
+    projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording ?? false;
+  if (!enableScreenRecording && mediaFiles.some((file) => file.isRecording)) {
+    return c.json(
+      {
+        success: false,
+        error: 'SCREEN_RECORDING_DISABLED',
+        message: 'Screen recording is disabled for this project.',
+      },
+      403
+    );
+  }
   const imageLimitMb = Math.max(maxScreenshotMb, maxImageMb);
   const maxFileSizeBytes = imageLimitMb * 1024 * 1024;
   const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
@@ -472,6 +484,12 @@ widget.get('/config/:apiKey', async (c) => {
     projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb;
   const maxVideoUploadSizeMb =
     projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb;
+  const enableScreenRecording =
+    projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording;
+  const allowRecordingMicrophone =
+    projScreenshot?.allowRecordingMicrophone ?? globalScreenshot.allowRecordingMicrophone;
+  const maxRecordingDurationSeconds =
+    projScreenshot?.maxRecordingDurationSeconds ?? globalScreenshot.maxRecordingDurationSeconds;
   const theme = projButton?.theme ?? globalButton.theme;
   const position = projButton?.position ?? globalButton.position;
   const buttonShape = projButton?.buttonShape ?? globalButton.buttonShape;
@@ -554,6 +572,8 @@ widget.get('/config/:apiKey', async (c) => {
         networkCapture: diagnosticPolicy.networkCapture,
         storageKeysCapture: diagnosticPolicy.storageKeysCapture,
         userActivityCapture: diagnosticPolicy.userActivityCapture,
+        screenRecording: enableScreenRecording,
+        recordingMicrophone: enableScreenRecording && allowRecordingMicrophone,
       },
       theme,
       position,
@@ -598,6 +618,7 @@ widget.get('/config/:apiKey', async (c) => {
       maxScreenshotSizeMb,
       maxImageUploadSizeMb,
       maxVideoUploadSizeMb,
+      maxRecordingDurationSeconds,
       language: {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,

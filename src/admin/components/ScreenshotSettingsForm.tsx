@@ -36,6 +36,14 @@ export function ScreenshotSettingsForm({
     value.maxVideoUploadSizeMb ?? globalSettings?.screenshot.maxVideoUploadSizeMb ?? 50;
   const effectiveMaxVideoUploadMbPerDay =
     value.maxVideoUploadMbPerDay ?? globalSettings?.screenshot.maxVideoUploadMbPerDay ?? 2048;
+  const effectiveEnableScreenRecording =
+    value.enableScreenRecording ?? globalSettings?.screenshot.enableScreenRecording ?? false;
+  const effectiveAllowRecordingMicrophone =
+    value.allowRecordingMicrophone ?? globalSettings?.screenshot.allowRecordingMicrophone ?? false;
+  const effectiveMaxRecordingDurationSeconds =
+    value.maxRecordingDurationSeconds ??
+    globalSettings?.screenshot.maxRecordingDurationSeconds ??
+    180;
 
   return (
     <div className="space-y-4">
@@ -63,6 +71,9 @@ export function ScreenshotSettingsForm({
                   maxImageUploadSizeMb: undefined,
                   maxVideoUploadSizeMb: undefined,
                   maxVideoUploadMbPerDay: undefined,
+                  enableScreenRecording: undefined,
+                  allowRecordingMicrophone: undefined,
+                  maxRecordingDurationSeconds: undefined,
                 });
               }
             }}
@@ -152,6 +163,89 @@ export function ScreenshotSettingsForm({
             <p className="text-xs text-muted-foreground">
               Maximum video data accepted per project in 24 hours. Use 0 to disable the limit.
             </p>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="enable-screen-recording">Enable Screen Recording</Label>
+                <p className="text-xs text-muted-foreground">
+                  Let reporters record and attach their screen from the widget
+                </p>
+              </div>
+              <Switch
+                id="enable-screen-recording"
+                checked={effectiveEnableScreenRecording}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    ...value,
+                    enableScreenRecording: checked,
+                    ...(checked ? {} : { allowRecordingMicrophone: false }),
+                  })
+                }
+                disabled={disabled}
+              />
+            </div>
+
+            {effectiveEnableScreenRecording && (
+              <div className="space-y-4 rounded-lg border p-3">
+                <div className="space-y-2">
+                  <Label htmlFor="max-recording-duration">Max. Recording Duration (seconds)</Label>
+                  <Input
+                    id="max-recording-duration"
+                    type="number"
+                    min={10}
+                    max={600}
+                    value={effectiveMaxRecordingDurationSeconds}
+                    onChange={(e) => {
+                      const parsedValue = Number.parseInt(e.target.value, 10);
+                      onChange({
+                        ...value,
+                        maxRecordingDurationSeconds: Number.isNaN(parsedValue)
+                          ? effectiveMaxRecordingDurationSeconds
+                          : parsedValue,
+                      });
+                    }}
+                    disabled={disabled}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Recording stops automatically after 10 to 600 seconds.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5 pr-4">
+                    <Label htmlFor="allow-recording-microphone">Allow Microphone Recording</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Reporters still choose whether to include their microphone for each recording.
+                    </p>
+                  </div>
+                  <Switch
+                    id="allow-recording-microphone"
+                    checked={effectiveAllowRecordingMicrophone}
+                    onCheckedChange={(checked) =>
+                      onChange({ ...value, allowRecordingMicrophone: checked })
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+
+                <Alert>
+                  <AlertDescription className="text-sm">
+                    Your reverse proxy must accept uploads up to the configured video size and allow
+                    enough time for slower uploads.{' '}
+                    <a
+                      href="https://docs.bugpin.io/installation/reverse-proxy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 underline"
+                    >
+                      Reverse proxy guide <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
           </div>
 
           {/* Screen Capture API Toggle */}

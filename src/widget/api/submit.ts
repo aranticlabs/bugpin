@@ -188,7 +188,10 @@ export async function fetchWidgetConfig(
     networkCapture: boolean;
     storageKeysCapture: boolean;
     userActivityCapture: UserActivityCapturePolicy;
+    screenRecording?: boolean;
+    recordingMicrophone?: boolean;
   };
+  maxRecordingDurationSeconds?: number;
   theme: string;
   position: string;
 }> {

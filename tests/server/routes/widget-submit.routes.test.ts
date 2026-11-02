@@ -89,6 +89,13 @@ const baseSettings: Partial<AppSettings> = {
   },
   screenshot: {
     useScreenCaptureAPI: false,
+    maxScreenshotSize: 10,
+    maxImageUploadSizeMb: 10,
+    maxVideoUploadSizeMb: 50,
+    maxVideoUploadMbPerDay: 2048,
+    enableScreenRecording: false,
+    allowRecordingMicrophone: false,
+    maxRecordingDurationSeconds: 180,
   },
   language: {
     mode: 'auto',
@@ -383,7 +390,7 @@ describe('widget routes', () => {
       expect(submittedMimeType).toBe('video/mp4');
     });
 
-    it('accepts MOV uploads', async () => {
+    it('accepts uploaded MOV videos while screen recording is disabled', async () => {
       let submittedMimeType: string | undefined;
       reportsService.create = async (input) => {
         submittedMimeType = input.files?.[0]?.mimeType;
@@ -419,6 +426,13 @@ describe('widget routes', () => {
     });
 
     it('marks only files from the recording field for remuxing', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { enableScreenRecording: true },
+        },
+      };
       let submittedFiles: Array<{ filename: string; isRecording?: boolean }> = [];
       reportsService.create = async (input) => {
         submittedFiles =
@@ -448,6 +462,26 @@ describe('widget routes', () => {
         { filename: 'recording-2.mp4', isRecording: true },
         { filename: 'legacy.png', isRecording: false },
       ]);
+    });
+
+    it('rejects recording fields while screen recording is disabled', async () => {
+      const form = new FormData();
+      form.set('data', JSON.stringify(validSubmitBody));
+      form.set(
+        'recording',
+        new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])], 'recording.mp4', {
+          type: 'video/mp4',
+        })
+      );
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: 'SCREEN_RECORDING_DISABLED' });
     });
 
     it('rejects video when the project daily quota would be exceeded', async () => {
@@ -934,6 +968,31 @@ describe('widget routes', () => {
       expect(body.config.features).toBeDefined();
       expect(body.config.theme).toBeDefined();
       expect(body.config.position).toBeDefined();
+      expect(body.config.features.screenRecording).toBe(false);
+      expect(body.config.features.recordingMicrophone).toBe(false);
+      expect(body.config.maxRecordingDurationSeconds).toBe(180);
+    });
+
+    it('resolves project screen recording settings over global settings', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: {
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 90,
+          },
+        },
+      };
+
+      const res = await createApp().request('http://localhost/widget/config/test_api_key_123');
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.config.features.screenRecording).toBe(true);
+      expect(body.config.features.recordingMicrophone).toBe(true);
+      expect(body.config.maxRecordingDurationSeconds).toBe(90);
     });
 
     it('returns project-specific settings when available', async () => {
@@ -987,6 +1046,16 @@ describe('widget routes', () => {
         ...baseProject,
         settings: {},
       };
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          screenshot: {
+            ...baseSettings.screenshot,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 240,
+          },
+        }) as AppSettings;
 
       const app = createApp();
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
@@ -995,6 +1064,9 @@ describe('widget routes', () => {
       const body = await res.json();
       expect(body.config.theme).toBe('system');
       expect(body.config.position).toBe('bottom-right');
+      expect(body.config.features.screenRecording).toBe(true);
+      expect(body.config.features.recordingMicrophone).toBe(true);
+      expect(body.config.maxRecordingDurationSeconds).toBe(240);
     });
 
     it('exposes the global language block when project has no override', async () => {

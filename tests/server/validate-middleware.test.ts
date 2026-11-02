@@ -145,7 +145,13 @@ describe('validate middleware', () => {
     expect(
       schemas.updateProject.safeParse({
         settings: {
-          screenshot: { maxVideoUploadSizeMb: 100, maxVideoUploadMbPerDay: 0 },
+          screenshot: {
+            maxVideoUploadSizeMb: 100,
+            maxVideoUploadMbPerDay: 0,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 600,
+          },
         },
       }).success
     ).toBe(true);
@@ -154,17 +160,33 @@ describe('validate middleware', () => {
         settings: { screenshot: { maxVideoUploadSizeMb: 101 } },
       }).success
     ).toBe(false);
+    expect(
+      schemas.updateProject.safeParse({
+        settings: { screenshot: { maxRecordingDurationSeconds: 601 } },
+      }).success
+    ).toBe(false);
   });
 
   it('validates global video upload limits', () => {
     expect(
       schemas.updateSettings.safeParse({
-        screenshot: { maxVideoUploadSizeMb: 100, maxVideoUploadMbPerDay: 1048576 },
+        screenshot: {
+          maxVideoUploadSizeMb: 100,
+          maxVideoUploadMbPerDay: 1048576,
+          enableScreenRecording: false,
+          allowRecordingMicrophone: false,
+          maxRecordingDurationSeconds: 10,
+        },
       }).success
     ).toBe(true);
     expect(
       schemas.updateSettings.safeParse({
         screenshot: { maxVideoUploadMbPerDay: 1048577 },
+      }).success
+    ).toBe(false);
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: { maxRecordingDurationSeconds: 9 },
       }).success
     ).toBe(false);
   });

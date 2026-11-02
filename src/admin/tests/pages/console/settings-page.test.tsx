@@ -168,6 +168,9 @@ describe('Settings Page', () => {
               maxImageUploadSizeMb: 10,
               maxVideoUploadSizeMb: 50,
               maxVideoUploadMbPerDay: 2048,
+              enableScreenRecording: false,
+              allowRecordingMicrophone: false,
+              maxRecordingDurationSeconds: 180,
             },
             notifications: {
               emailEnabled: false,

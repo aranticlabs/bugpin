@@ -132,6 +132,10 @@ describe('settingsService.update', () => {
       screenshot: { maxVideoUploadMbPerDay: 1048577 },
     });
     expect(videoQuota.success).toBe(false);
+    const recordingDuration = await settingsService.update({
+      screenshot: { maxRecordingDurationSeconds: 9 },
+    });
+    expect(recordingDuration.success).toBe(false);
   });
 
   it('rejects invalid branding color', async () => {

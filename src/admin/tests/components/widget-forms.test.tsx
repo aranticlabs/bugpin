@@ -37,6 +37,9 @@ describe('ScreenshotSettingsForm', () => {
             maxImageUploadSizeMb: 10,
             maxVideoUploadSizeMb: 50,
             maxVideoUploadMbPerDay: 4096,
+            enableScreenRecording: false,
+            allowRecordingMicrophone: false,
+            maxRecordingDurationSeconds: 180,
           },
         }}
       />
@@ -48,6 +51,26 @@ describe('ScreenshotSettingsForm', () => {
 
     fireEvent.change(input, { target: { value: '' } });
     expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 4096 });
+  });
+
+  it('shows recording controls only when recording is enabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(<ScreenshotSettingsForm value={{}} onChange={onChange} />);
+
+    expect(screen.queryByLabelText(/allow microphone recording/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ enableScreenRecording: true });
+
+    rerender(
+      <ScreenshotSettingsForm
+        value={{ enableScreenRecording: true, maxRecordingDurationSeconds: 180 }}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByLabelText(/allow microphone recording/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/max\. recording duration/i)).toHaveAttribute('max', '600');
+    expect(screen.getByRole('link', { name: /reverse proxy guide/i })).toBeInTheDocument();
   });
 });
 

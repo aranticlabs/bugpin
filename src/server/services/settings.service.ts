@@ -148,6 +148,18 @@ export const settingsService = {
       }
     }
 
+    if (input.screenshot?.maxRecordingDurationSeconds !== undefined) {
+      if (
+        input.screenshot.maxRecordingDurationSeconds < 10 ||
+        input.screenshot.maxRecordingDurationSeconds > 600
+      ) {
+        return Result.fail(
+          'Max recording duration must be between 10 and 600 seconds',
+          'INVALID_RECORDING_DURATION'
+        );
+      }
+    }
+
     // Validate rateLimitPerMinute if provided
     if (input.rateLimitPerMinute !== undefined) {
       if (input.rateLimitPerMinute < 1 || input.rateLimitPerMinute > 1000) {

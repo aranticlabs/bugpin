@@ -483,6 +483,7 @@ export function ReportDetail() {
                           <video
                             src={fileUrl}
                             controls
+                            preload="metadata"
                             className="w-full rounded-lg border bg-black"
                           />
                         ) : (

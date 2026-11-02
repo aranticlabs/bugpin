@@ -397,6 +397,9 @@ describe('settingsRepo', () => {
     expect(settings.notifications.notifyOnNewReport).toBe(true);
     expect(settings.privacy).toEqual({ euPrivacyMode: false });
     expect(settings.screenshot.maxVideoUploadMbPerDay).toBe(2048);
+    expect(settings.screenshot.enableScreenRecording).toBe(false);
+    expect(settings.screenshot.allowRecordingMicrophone).toBe(false);
+    expect(settings.screenshot.maxRecordingDurationSeconds).toBe(180);
   });
 
   it('updates and reads settings', async () => {

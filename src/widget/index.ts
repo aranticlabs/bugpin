@@ -83,6 +83,8 @@ async function fetchConfig(
           enableConsoleCapture: cfg.features?.consoleCapture ?? true,
           enableNetworkCapture: cfg.features?.networkCapture ?? true,
           enableStorageKeysCapture: cfg.features?.storageKeysCapture ?? false,
+          enableScreenRecording: cfg.features?.screenRecording ?? false,
+          allowRecordingMicrophone: cfg.features?.recordingMicrophone ?? false,
           userActivityCapture: cfg.features?.userActivityCapture ?? 'automatic',
           captureMethod: cfg.captureMethod,
           useScreenCaptureAPI: cfg.useScreenCaptureAPI,
@@ -95,6 +97,7 @@ async function fetchConfig(
           maxVideoUploadSize: cfg.maxVideoUploadSizeMb
             ? cfg.maxVideoUploadSizeMb * 1024 * 1024
             : undefined,
+          maxRecordingDurationSeconds: cfg.maxRecordingDurationSeconds ?? 180,
           language: cfg.language,
         };
       }
@@ -290,6 +293,9 @@ const BugPin = {
       enableConsoleCapture: fetchedConfig.enableConsoleCapture ?? false,
       enableNetworkCapture: fetchedConfig.enableNetworkCapture ?? false,
       enableStorageKeysCapture: fetchedConfig.enableStorageKeysCapture ?? false,
+      enableScreenRecording: fetchedConfig.enableScreenRecording ?? false,
+      allowRecordingMicrophone: fetchedConfig.allowRecordingMicrophone ?? false,
+      maxRecordingDurationSeconds: fetchedConfig.maxRecordingDurationSeconds ?? 180,
       userActivityCapture: fetchedConfig.userActivityCapture ?? 'disabled',
     };
     createWidget(fullConfig, { initLanguage });

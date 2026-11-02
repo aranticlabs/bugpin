@@ -121,6 +121,9 @@ const baseProject: Project = {
       maxImageUploadSizeMb: 10,
       maxVideoUploadSizeMb: 50,
       maxVideoUploadMbPerDay: 2048,
+      enableScreenRecording: true,
+      allowRecordingMicrophone: true,
+      maxRecordingDurationSeconds: 120,
     },
     security: {
       allowedOrigins: ['example.com'],

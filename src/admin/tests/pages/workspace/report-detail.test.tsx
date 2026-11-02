@@ -91,7 +91,7 @@ describe('ReportDetail', () => {
     );
 
     expect(await screen.findByText('Screenshots (2)')).toBeInTheDocument();
-    expect(document.querySelector('video')).not.toBeNull();
+    expect(document.querySelector('video')).toHaveAttribute('preload', 'metadata');
 
     await user.click(screen.getByRole('img', { name: 'screen.png' }));
     expect(await screen.findByText('Open in new tab')).toBeInTheDocument();

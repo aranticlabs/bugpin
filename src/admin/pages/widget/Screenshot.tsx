@@ -21,6 +21,9 @@ export function Screenshot() {
     maxImageUploadSizeMb: 10,
     maxVideoUploadSizeMb: 50,
     maxVideoUploadMbPerDay: 2048,
+    enableScreenRecording: false,
+    allowRecordingMicrophone: false,
+    maxRecordingDurationSeconds: 180,
     useScreenCaptureAPI: false,
   });
 
@@ -39,6 +42,9 @@ export function Screenshot() {
         maxImageUploadSizeMb: settings.screenshot.maxImageUploadSizeMb || 10,
         maxVideoUploadSizeMb: settings.screenshot.maxVideoUploadSizeMb || 50,
         maxVideoUploadMbPerDay: settings.screenshot.maxVideoUploadMbPerDay ?? 2048,
+        enableScreenRecording: settings.screenshot.enableScreenRecording ?? false,
+        allowRecordingMicrophone: settings.screenshot.allowRecordingMicrophone ?? false,
+        maxRecordingDurationSeconds: settings.screenshot.maxRecordingDurationSeconds ?? 180,
         useScreenCaptureAPI: settings.screenshot.useScreenCaptureAPI || false,
       });
     }
@@ -66,6 +72,9 @@ export function Screenshot() {
         maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
         maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
         maxVideoUploadMbPerDay: formData.maxVideoUploadMbPerDay ?? 2048,
+        enableScreenRecording: formData.enableScreenRecording ?? false,
+        allowRecordingMicrophone: formData.allowRecordingMicrophone ?? false,
+        maxRecordingDurationSeconds: formData.maxRecordingDurationSeconds ?? 180,
         useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
       },
     });

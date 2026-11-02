@@ -102,6 +102,8 @@ describe('Settings sections', () => {
 
     const screenCaptureSwitch = screen.getByRole('switch', { name: /use screen capture api/i });
     await user.click(screenCaptureSwitch);
+    await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
+    await user.click(screen.getByRole('switch', { name: /allow microphone recording/i }));
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -112,6 +114,9 @@ describe('Settings sections', () => {
           maxImageUploadSizeMb: 10,
           maxVideoUploadSizeMb: 50,
           maxVideoUploadMbPerDay: 2048,
+          enableScreenRecording: true,
+          allowRecordingMicrophone: true,
+          maxRecordingDurationSeconds: 180,
           useScreenCaptureAPI: true,
         },
       });

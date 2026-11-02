@@ -226,6 +226,9 @@ export interface ScreenshotSettings {
   maxImageUploadSizeMb?: number;
   maxVideoUploadSizeMb?: number;
   maxVideoUploadMbPerDay?: number;
+  enableScreenRecording?: boolean;
+  allowRecordingMicrophone?: boolean;
+  maxRecordingDurationSeconds?: number;
 }
 
 // Project language settings
@@ -494,6 +497,9 @@ export interface GlobalScreenshotSettings {
   maxImageUploadSizeMb: number;
   maxVideoUploadSizeMb: number;
   maxVideoUploadMbPerDay: number;
+  enableScreenRecording: boolean;
+  allowRecordingMicrophone: boolean;
+  maxRecordingDurationSeconds: number;
 }
 
 // Settings Types
