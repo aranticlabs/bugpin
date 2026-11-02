@@ -576,6 +576,7 @@ export interface GitHubIntegrationConfig {
   webhookId?: string; // GitHub webhook ID for bi-directional sync
   webhookSecret?: string; // Secret for verifying GitHub webhook payloads
   fileTransferMode?: 'link' | 'upload'; // 'link' (default) or 'upload' files to GitHub repo
+  publicVideoLinks?: boolean;
 }
 
 export interface JiraIntegrationConfig {

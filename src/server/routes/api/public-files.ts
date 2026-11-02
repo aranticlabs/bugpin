@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { createStoredFileHandle } from '../../storage/files.js';
-import { filesRepo } from '../../database/repositories/files.repo.js';
+import { publicFilesService } from '../../services/public-files.service.js';
 import { logger } from '../../utils/logger.js';
 import { createFileResponse } from '../../utils/range.js';
 
@@ -14,33 +13,30 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
   const { reportId, filename } = c.req.param();
 
   try {
-    // Find all files for the report
-    const files = await filesRepo.findByReportId(reportId);
-    const fileRecord = files.find((f) => f.filename === filename);
-
-    if (!fileRecord) {
+    const result = await publicFilesService.get(reportId, filename);
+    if (!result.success) {
+      if (result.code === 'FORBIDDEN') {
+        return c.json({ error: result.error }, 403);
+      }
       logger.warn('File not found', { reportId, filename });
-      return c.json({ error: 'File not found' }, 404);
+      return c.json({ error: result.error }, 404);
     }
 
-    // Only allow screenshots and attachments (not avatars or branding)
-    if (fileRecord.type !== 'screenshot' && fileRecord.type !== 'attachment') {
-      return c.json({ error: 'File type not accessible publicly' }, 403);
-    }
-
+    const { file, handle } = result.value;
     const response = await createFileResponse({
-      handle: createStoredFileHandle(fileRecord.path),
+      handle,
       rangeHeader: c.req.header('range'),
-      size: fileRecord.sizeBytes,
-      mimeType: fileRecord.mimeType,
-      cacheControl: 'public, max-age=31536000, immutable',
+      size: file.sizeBytes,
+      mimeType: file.mimeType,
+      cacheControl:
+        file.type === 'video' ? 'private, max-age=86400' : 'public, max-age=31536000, immutable',
     });
 
     if (!response) {
       logger.error('Failed to read file from storage', {
         reportId,
         filename,
-        path: fileRecord.path,
+        path: file.path,
       });
       return c.json({ error: 'File not found in storage' }, 404);
     }

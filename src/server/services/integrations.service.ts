@@ -316,6 +316,7 @@ export const integrationsService = {
               labels: config.labels,
               assignees: config.assignees,
               fileTransferMode: config.fileTransferMode,
+              publicVideoLinks: config.publicVideoLinks,
             },
             options
           );
