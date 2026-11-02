@@ -126,6 +126,56 @@ describe('ScreenshotManager uploads', () => {
     container.remove();
   });
 
+  it('accepts MOV and rejects AVI during file selection', async () => {
+    const onUpload = mock(() => undefined);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    render(
+      <ScreenshotManager
+        media={[]}
+        onCapture={() => undefined}
+        onUpload={onUpload}
+        onRemove={() => undefined}
+        onAnnotate={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        reduceQuality={false}
+        onReduceQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />,
+      container
+    );
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: buildFileList(
+        new File([new Uint8Array([1])], 'clip.mov', { type: 'video/quicktime' })
+      ),
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.textContent).not.toContain('Unsupported video format');
+
+    Object.defineProperty(input, 'files', {
+      value: buildFileList(
+        new File([new Uint8Array([1])], 'clip.avi', { type: 'video/x-msvideo' })
+      ),
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.textContent).toContain('Unsupported video format');
+    expect(onUpload).not.toHaveBeenCalled();
+
+    render(null, container);
+    container.remove();
+  });
+
   it('uploads a valid image and records dimensions', async () => {
     const onUpload = mock(() => undefined);
     const container = document.createElement('div');

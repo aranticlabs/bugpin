@@ -51,7 +51,6 @@ function getExtensionFromMimeType(mimeType: string): string {
     'video/mp4': 'mp4',
     'video/webm': 'webm',
     'video/quicktime': 'mov',
-    'video/x-msvideo': 'avi',
   };
   return mimeMap[mimeType] || 'bin';
 }

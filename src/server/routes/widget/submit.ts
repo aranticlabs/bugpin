@@ -10,7 +10,7 @@ import { dynamicRateLimiter, apiKeyGenerator } from '../../middleware/rate-limit
 import { logger } from '../../utils/logger.js';
 import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
-import { filesRepo } from '../../database/repositories/files.repo.js';
+import { videoQuotaService } from '../../services/video-quota.service.js';
 import { resolveSubmitLocale } from '../../utils/locale.js';
 import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
 import { widgetPackageCompatibilityService } from '../../services/widget-package-compatibility.service.js';
@@ -22,36 +22,9 @@ const widget = new Hono();
 
 const MAX_DISPLAY_LENGTH = 128;
 const CONTROL_CHARS_PATTERN = /[\x00-\x1F\x7F]/g;
-const reservedVideoBytesByProject = new Map<string, number>();
 
 function sanitizeForDisplay(value: string): string {
   return value.replace(CONTROL_CHARS_PATTERN, '').slice(0, MAX_DISPLAY_LENGTH);
-}
-
-async function reserveVideoQuota(
-  projectId: string,
-  incomingBytes: number,
-  limitBytes: number
-): Promise<(() => void) | null> {
-  const storedBytes = await filesRepo.getVideoSizeByProjectSince(
-    projectId,
-    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  );
-  const reservedBytes = reservedVideoBytesByProject.get(projectId) ?? 0;
-  if (storedBytes + reservedBytes + incomingBytes > limitBytes) {
-    return null;
-  }
-
-  reservedVideoBytesByProject.set(projectId, reservedBytes + incomingBytes);
-  return () => {
-    const remainingBytes =
-      (reservedVideoBytesByProject.get(projectId) ?? incomingBytes) - incomingBytes;
-    if (remainingBytes > 0) {
-      reservedVideoBytesByProject.set(projectId, remainingBytes);
-    } else {
-      reservedVideoBytesByProject.delete(projectId);
-    }
-  };
 }
 
 // Validation Schemas
@@ -323,40 +296,50 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     (total, file) => total + (file.mimeType.startsWith('video/') ? file.data.length : 0),
     0
   );
-  let releaseVideoQuota: (() => void) | undefined;
-  if (maxVideoUploadMbPerDay > 0 && incomingVideoBytes > 0) {
-    const reservation = await reserveVideoQuota(
-      projectResult.value.id,
-      incomingVideoBytes,
-      maxVideoUploadMbPerDay * 1024 * 1024
-    );
-    if (!reservation) {
+  const reservationResult = await videoQuotaService.reserve(
+    projectResult.value.id,
+    incomingVideoBytes,
+    maxVideoUploadMbPerDay * 1024 * 1024
+  );
+  if (!reservationResult.success) {
+    if (reservationResult.code === 'VIDEO_QUOTA_EXCEEDED') {
       return c.json(
         {
           success: false,
-          error: 'VIDEO_QUOTA_EXCEEDED',
-          message: 'The daily video upload limit has been reached for this project.',
+          error: reservationResult.code,
+          message: reservationResult.error,
         },
         429
       );
     }
-    releaseVideoQuota = reservation;
+
+    logger.error('Failed to check video upload quota', {
+      projectId: projectResult.value.id,
+      error: reservationResult.error,
+    });
+    return c.json(
+      {
+        success: false,
+        error: reservationResult.code,
+        message: 'Unable to verify the video upload limit.',
+      },
+      500
+    );
   }
 
-  const globalSettingsResult = await settingsService.getAll();
-  const globalLanguage = globalSettingsResult.success
-    ? globalSettingsResult.value.language
-    : undefined;
-  const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
-  const reporterLocale = resolveSubmitLocale({
-    claimed: data.locale,
-    projectMode: effectiveLanguage?.mode,
-    projectDefault: effectiveLanguage?.defaultLanguage,
-  });
+  try {
+    const globalSettingsResult = await settingsService.getAll();
+    const globalLanguage = globalSettingsResult.success
+      ? globalSettingsResult.value.language
+      : undefined;
+    const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
+    const reporterLocale = resolveSubmitLocale({
+      claimed: data.locale,
+      projectMode: effectiveLanguage?.mode,
+      projectDefault: effectiveLanguage?.defaultLanguage,
+    });
 
-  // Create report via service
-  const result = await reportsService
-    .create({
+    const result = await reportsService.create({
       apiKey,
       title: data.title,
       description: data.description,
@@ -371,21 +354,23 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
       reporterEmail: data.reporterEmail || undefined,
       reporterName: data.reporterName || undefined,
       reporterLocale,
-    })
-    .finally(() => releaseVideoQuota?.());
+    });
 
-  if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 400);
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 400);
+    }
+
+    return c.json(
+      {
+        success: true,
+        reportId: result.value.id,
+        message: 'Bug report submitted successfully',
+      },
+      201
+    );
+  } finally {
+    reservationResult.value();
   }
-
-  return c.json(
-    {
-      success: true,
-      reportId: result.value.id,
-      message: 'Bug report submitted successfully',
-    },
-    201
-  );
 });
 
 // Get Widget Config

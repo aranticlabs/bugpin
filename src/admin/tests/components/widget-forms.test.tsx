@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import { WidgetDialogSettingsForm } from '../../components/WidgetDialogSettingsForm';
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
 
@@ -21,6 +22,34 @@ vi.mock('../../components/ThemeColorPicker', () => ({
     </button>
   ),
 }));
+
+describe('ScreenshotSettingsForm', () => {
+  it('keeps zero explicit and does not disable the quota when cleared', () => {
+    const onChange = vi.fn();
+    render(
+      <ScreenshotSettingsForm
+        value={{}}
+        onChange={onChange}
+        globalSettings={{
+          screenshot: {
+            useScreenCaptureAPI: false,
+            maxScreenshotSize: 10,
+            maxImageUploadSizeMb: 10,
+            maxVideoUploadSizeMb: 50,
+            maxVideoUploadMbPerDay: 4096,
+          },
+        }}
+      />
+    );
+
+    const input = screen.getByLabelText(/daily video upload limit/i);
+    fireEvent.change(input, { target: { value: '0' } });
+    expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 0 });
+
+    fireEvent.change(input, { target: { value: '' } });
+    expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 4096 });
+  });
+});
 
 describe('WidgetDialogSettingsForm', () => {
   it('allows toggling custom settings off and resets to defaults', async () => {

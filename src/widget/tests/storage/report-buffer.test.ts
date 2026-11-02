@@ -189,6 +189,51 @@ describe('report buffer', () => {
     Date.now = originalNow;
   });
 
+  it('submits a quota-limited buffered report without its video', async () => {
+    const { bufferReport, syncPendingReports, getPendingCount, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+
+    await bufferReport({
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+      media: [
+        { dataUrl: 'data:image/png;base64,iVBORw0KGgo=', mimeType: 'image/png' },
+        { dataUrl: 'data:video/mp4;base64,AAAAAGZ0eXA=', mimeType: 'video/mp4' },
+      ],
+    });
+
+    globalThis.navigator = { onLine: true } as Navigator;
+    const mediaTypes: string[][] = [];
+    let requestCount = 0;
+    globalThis.fetch = (async (_input, init) => {
+      const formData = init?.body as FormData;
+      mediaTypes.push(
+        formData.getAll('media').map((value) => (value instanceof File ? value.type : ''))
+      );
+      requestCount++;
+      if (requestCount === 1) {
+        return new Response(
+          JSON.stringify({
+            error: 'VIDEO_QUOTA_EXCEEDED',
+            message: 'The daily video upload limit has been reached for this project.',
+          }),
+          { status: 429 }
+        );
+      }
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+
+    const result = await syncPendingReports();
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(mediaTypes).toEqual([['image/png', 'video/mp4'], ['image/png']]);
+    expect(await getPendingCount()).toBe(0);
+  });
+
   it('starts and stops auto sync', async () => {
     const { startAutoSync, stopAutoSync } = await import('../../storage/report-buffer');
     // Importing api/submit starts auto sync, so another test file may have left an interval running.

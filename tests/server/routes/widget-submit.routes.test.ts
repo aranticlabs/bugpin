@@ -5,6 +5,7 @@ import { projectsRepo } from '../../../src/server/database/repositories/projects
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
+import { settingsService } from '../../../src/server/services/settings.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import {
   widgetPackageCompatibilityService,
@@ -98,6 +99,7 @@ const baseSettings: Partial<AppSettings> = {
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalReportsService = { ...reportsService };
+const originalSettingsService = { ...settingsService };
 const originalFilesRepo = { ...filesRepo };
 const originalWidgetPackageCompatibilityService = { ...widgetPackageCompatibilityService };
 const originalLogger = { ...logger };
@@ -135,6 +137,7 @@ afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(reportsService, originalReportsService);
+  Object.assign(settingsService, originalSettingsService);
   Object.assign(filesRepo, originalFilesRepo);
   Object.assign(widgetPackageCompatibilityService, originalWidgetPackageCompatibilityService);
   Object.assign(logger, originalLogger);
@@ -159,9 +162,14 @@ const validSubmitBody = {
   },
 };
 
-function createVideoSubmitForm(size = 8, mimeType = 'video/mp4', filename = 'clip.mp4'): FormData {
+function createVideoSubmitForm(
+  size = 8,
+  mimeType = 'video/mp4',
+  filename = 'clip.mp4',
+  signature = [0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]
+): FormData {
   const bytes = new Uint8Array(size);
-  bytes.set([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+  bytes.set(signature);
   const form = new FormData();
   form.set('data', JSON.stringify(validSubmitBody));
   form.set('media', new File([bytes], filename, { type: mimeType }));
@@ -391,6 +399,24 @@ describe('widget routes', () => {
       expect(submittedMimeType).toBe('video/quicktime');
     });
 
+    it('accepts WebM uploads with an EBML signature', async () => {
+      let submittedFile: { mimeType: string; data: Buffer | Uint8Array } | undefined;
+      reportsService.create = async (input) => {
+        submittedFile = input.files?.[0];
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/webm', 'clip.webm', [0x1a, 0x45, 0xdf, 0xa3]),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedFile?.mimeType).toBe('video/webm');
+      expect(Array.from(submittedFile?.data.slice(0, 4) ?? [])).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    });
+
     it('rejects video when the project daily quota would be exceeded', async () => {
       projectResult = {
         ...baseProject,
@@ -482,6 +508,55 @@ describe('widget routes', () => {
 
       expect(secondResponse.status).toBe(429);
       expect((await firstResponse).status).toBe(201);
+    });
+
+    it('allows uploads that exactly reach the project quota', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = async () => 512 * 1024;
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(512 * 1024),
+      });
+
+      expect(res.status).toBe(201);
+    });
+
+    it('releases reserved quota when report preparation throws', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = async () => 0;
+      settingsService.getAll = async () => {
+        throw new Error('database unavailable');
+      };
+
+      const first = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      expect(first.status).toBe(500);
+
+      settingsService.getAll = async () => Result.ok(baseSettings as AppSettings);
+      const second = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+
+      expect(second.status).toBe(201);
     });
 
     it('removes user activity when EU Privacy Mode disables capture', async () => {

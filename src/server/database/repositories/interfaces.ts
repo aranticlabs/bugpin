@@ -170,6 +170,7 @@ export interface IFilesRepository {
   findByReportId(reportId: string): Promise<FileRecord[]>;
   delete(id: string): Promise<boolean>;
   deleteByReportId(reportId: string): Promise<number>;
+  getVideoSizeByProjectSince(projectId: string, since: string): Promise<number>;
 }
 
 // Webhook Repository Interface

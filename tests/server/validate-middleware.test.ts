@@ -140,4 +140,32 @@ describe('validate middleware', () => {
     const payload = await (response as Response).json();
     expect(payload.details[0]).toMatchObject({ field: 'body' });
   });
+
+  it('validates project video upload limits', () => {
+    expect(
+      schemas.updateProject.safeParse({
+        settings: {
+          screenshot: { maxVideoUploadSizeMb: 100, maxVideoUploadMbPerDay: 0 },
+        },
+      }).success
+    ).toBe(true);
+    expect(
+      schemas.updateProject.safeParse({
+        settings: { screenshot: { maxVideoUploadSizeMb: 101 } },
+      }).success
+    ).toBe(false);
+  });
+
+  it('validates global video upload limits', () => {
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: { maxVideoUploadSizeMb: 100, maxVideoUploadMbPerDay: 1048576 },
+      }).success
+    ).toBe(true);
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: { maxVideoUploadMbPerDay: 1048577 },
+      }).success
+    ).toBe(false);
+  });
 });

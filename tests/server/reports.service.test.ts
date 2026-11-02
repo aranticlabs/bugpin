@@ -401,6 +401,27 @@ describe('reportsService.create', () => {
     expect(fileCreateTypes).toEqual(['video']);
   });
 
+  it('keeps videos allowed by a project override above the global limit', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { screenshot: { maxVideoUploadSizeMb: 100 } },
+    };
+    settingsCacheService.getAll = async () =>
+      ({ screenshot: { maxVideoUploadSizeMb: 50 } }) as AppSettings;
+    const video = Buffer.alloc(51 * 1024 * 1024);
+    validMp4Buffer.copy(video);
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Large project video',
+      metadata: baseMetadata,
+      files: [{ filename: 'clip.mp4', mimeType: 'video/mp4', data: video }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['video']);
+  });
+
   it('creates manual reports without reporter submission confirmation', async () => {
     projectsRepo.findById = async () => baseProject;
 

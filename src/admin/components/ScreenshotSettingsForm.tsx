@@ -138,9 +138,15 @@ export function ScreenshotSettingsForm({
               min={0}
               max={1048576}
               value={effectiveMaxVideoUploadMbPerDay}
-              onChange={(e) =>
-                onChange({ ...value, maxVideoUploadMbPerDay: parseInt(e.target.value) || 0 })
-              }
+              onChange={(e) => {
+                const parsedValue = Number.parseInt(e.target.value, 10);
+                onChange({
+                  ...value,
+                  maxVideoUploadMbPerDay: Number.isNaN(parsedValue)
+                    ? effectiveMaxVideoUploadMbPerDay
+                    : parsedValue,
+                });
+              }}
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">

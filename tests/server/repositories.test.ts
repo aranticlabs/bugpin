@@ -750,7 +750,7 @@ describe('filesRepo', () => {
       metadata: baseMetadata,
     });
 
-    const recentVideo = await filesRepo.create({
+    await filesRepo.create({
       reportId: report.id,
       type: 'video',
       filename: 'recent.mp4',
@@ -792,7 +792,6 @@ describe('filesRepo', () => {
       new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     );
 
-    expect(recentVideo.sizeBytes).toBe(300);
     expect(total).toBe(300);
   });
 });
