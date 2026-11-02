@@ -27,3 +27,12 @@ See src/widget/LICENSE for the full license text.
 Enterprise Edition features are proprietary and are not open-source software.
 They are covered by the BugPin Business License.
 See [LICENSE-EE](LICENSE-EE) for the full license text.
+
+== Third-Party Software ==
+
+Mediabunny is licensed under the Mozilla Public License, Version 2.0 (MPL 2.0).
+
+Source code: https://github.com/Vanilagy/mediabunny
+License: https://www.mozilla.org/en-US/MPL/2.0/
+
+The corresponding source code is available from the project repository.

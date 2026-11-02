@@ -166,13 +166,14 @@ function createVideoSubmitForm(
   size = 8,
   mimeType = 'video/mp4',
   filename = 'clip.mp4',
-  signature = [0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]
+  signature = [0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70],
+  field: 'media' | 'recording' = 'media'
 ): FormData {
   const bytes = new Uint8Array(size);
   bytes.set(signature);
   const form = new FormData();
   form.set('data', JSON.stringify(validSubmitBody));
-  form.set('media', new File([bytes], filename, { type: mimeType }));
+  form.set(field, new File([bytes], filename, { type: mimeType }));
   return form;
 }
 
@@ -415,6 +416,38 @@ describe('widget routes', () => {
       expect(res.status).toBe(201);
       expect(submittedFile?.mimeType).toBe('video/webm');
       expect(Array.from(submittedFile?.data.slice(0, 4) ?? [])).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    });
+
+    it('marks only files from the recording field for remuxing', async () => {
+      let submittedFiles: Array<{ filename: string; isRecording?: boolean }> = [];
+      reportsService.create = async (input) => {
+        submittedFiles =
+          input.files?.map(({ filename, isRecording }) => ({ filename, isRecording })) ?? [];
+        return Result.ok(baseReport);
+      };
+
+      const mp4 = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const form = new FormData();
+      form.set('data', JSON.stringify(validSubmitBody));
+      form.append('media', new File([mp4], 'upload.mp4', { type: 'video/mp4' }));
+      form.append('recording', new File([mp4], 'recording-1.mp4', { type: 'video/mp4' }));
+      form.append('recording', new File([mp4], 'recording-2.mp4', { type: 'video/mp4' }));
+      form.append('screenshot', new File([png], 'legacy.png', { type: 'image/png' }));
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedFiles).toEqual([
+        { filename: 'upload.mp4', isRecording: false },
+        { filename: 'recording-1.mp4', isRecording: true },
+        { filename: 'recording-2.mp4', isRecording: true },
+        { filename: 'legacy.png', isRecording: false },
+      ]);
     });
 
     it('rejects video when the project daily quota would be exceeded', async () => {

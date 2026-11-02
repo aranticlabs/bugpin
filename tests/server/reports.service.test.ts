@@ -15,8 +15,10 @@ import { usersService } from '../../src/server/services/users.service';
 import { reportHistoryService } from '../../src/server/services/report-history.service';
 import { Result } from '../../src/server/utils/result';
 import { config } from '../../src/server/config';
+import { logger } from '../../src/server/utils/logger';
 import type { Report, ReportMetadata, Project, AppSettings } from '../../src/shared/types';
 import type { EEHooks } from '../../src/server/types/ee-plugin';
+import type { CreateFileData } from '../../src/server/database/repositories/interfaces';
 
 // Valid file buffers with correct magic bytes for validation
 const validPngBuffer = Buffer.from(
@@ -84,6 +86,7 @@ const originalSyncQueueService = { ...syncQueueService };
 const originalUsersService = { ...usersService };
 const originalReportHistoryService = { ...reportHistoryService };
 const originalSettingsCacheGetAll = settingsCacheService.getAll.bind(settingsCacheService);
+const originalLoggerWarn = logger.warn;
 const originalConfig = { ...config };
 let tempDir = '';
 
@@ -103,6 +106,8 @@ let notifyAssignmentCalls = 0;
 let notifyReporterAssignmentCalls = 0;
 let syncQueueCalls: Array<{ reportId: string; integrationId: string }> = [];
 let fileCreateTypes: string[] = [];
+let fileCreateRecords: CreateFileData[] = [];
+let warningCalls: Array<{ message: string; context?: Record<string, unknown> }> = [];
 
 beforeEach(() => {
   reportById = baseReport;
@@ -121,6 +126,11 @@ beforeEach(() => {
   notifyReporterAssignmentCalls = 0;
   syncQueueCalls = [];
   fileCreateTypes = [];
+  fileCreateRecords = [];
+  warningCalls = [];
+  logger.warn = (message, context) => {
+    warningCalls.push({ message, context });
+  };
 
   projectsRepo.findByApiKey = async () => projectByApiKey;
   reportsRepo.create = async (input) => {
@@ -141,6 +151,7 @@ beforeEach(() => {
   filesRepo.findByReportId = async () => [];
   filesRepo.create = async (input) => {
     fileCreateTypes.push(input.type);
+    fileCreateRecords.push(input);
     return {
       id: 'file_1',
       ...input,
@@ -214,6 +225,7 @@ afterEach(() => {
   Object.assign(usersService, originalUsersService);
   Object.assign(reportHistoryService, originalReportHistoryService);
   settingsCacheService.getAll = originalSettingsCacheGetAll;
+  logger.warn = originalLoggerWarn;
   resetEEHooks();
 });
 
@@ -399,6 +411,132 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(true);
     expect(fileCreateTypes).toEqual(['video']);
+  });
+
+  it('stores the original recording and logs a warning when remuxing fails', async () => {
+    const corruptRecording = validMp4Buffer.subarray(0, 8);
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Short recording',
+      metadata: baseMetadata,
+      files: [
+        {
+          filename: 'recording.mp4',
+          mimeType: 'video/mp4',
+          data: corruptRecording,
+          isRecording: true,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateRecords).toHaveLength(1);
+    expect(fileCreateRecords[0]?.sizeBytes).toBe(corruptRecording.length);
+    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(corruptRecording);
+    expect(warningCalls).toContainEqual({
+      message: 'Recording remux failed, storing original',
+      context: expect.objectContaining({ code: 'REMUX_FAILED' }),
+    });
+  });
+
+  it('stores a remuxed recording with MP4 metadata first', async () => {
+    const recording = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux/chrome-with-audio.mp4')
+    ).bytes();
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Browser recording',
+      metadata: baseMetadata,
+      files: [
+        {
+          filename: 'recording.mp4',
+          mimeType: 'video/mp4',
+          data: recording,
+          isRecording: true,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateRecords).toHaveLength(1);
+    const saved = Buffer.from(await Bun.file(fileCreateRecords[0]!.path).arrayBuffer());
+    expect(saved.indexOf('moov')).toBeGreaterThan(0);
+    expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
+  });
+
+  it('stores a remuxed WebM recording', async () => {
+    const recording = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux/firefox-with-audio.webm')
+    ).bytes();
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Firefox recording',
+      metadata: baseMetadata,
+      files: [
+        {
+          filename: 'recording.webm',
+          mimeType: 'video/webm',
+          data: recording,
+          isRecording: true,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    const saved = await Bun.file(fileCreateRecords[0]!.path).bytes();
+    expect(Array.from(saved.subarray(0, 4))).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    expect(saved).not.toEqual(recording);
+  });
+
+  it('stores an uploaded video byte-identically when it is not a recording', async () => {
+    const video = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux/chrome-with-audio.mp4')
+    ).bytes();
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Uploaded video',
+      metadata: baseMetadata,
+      files: [{ filename: 'upload.mp4', mimeType: 'video/mp4', data: video }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(video);
+  });
+
+  it('falls back one failed recording without affecting another recording', async () => {
+    const recording = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux/chrome-with-audio.mp4')
+    ).bytes();
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Multiple recordings',
+      metadata: baseMetadata,
+      files: [
+        {
+          filename: 'failed.mp4',
+          mimeType: 'video/mp4',
+          data: validMp4Buffer,
+          isRecording: true,
+        },
+        {
+          filename: 'complete.mp4',
+          mimeType: 'video/mp4',
+          data: recording,
+          isRecording: true,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateRecords).toHaveLength(2);
+    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(validMp4Buffer);
+    const saved = Buffer.from(await Bun.file(fileCreateRecords[1]!.path).arrayBuffer());
+    expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
+    expect(saved).not.toEqual(recording);
   });
 
   it('keeps videos allowed by a project override above the global limit', async () => {

@@ -20,6 +20,7 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { normalizeUrl } from '../utils/validators.js';
+import { remuxRecording } from './video-remux.service.js';
 import type {
   Report,
   ReportFilter,
@@ -40,6 +41,7 @@ export interface MediaFile {
   data: Buffer | Uint8Array;
   filename: string;
   mimeType: string;
+  isRecording?: boolean;
 }
 
 export interface CreateReportInput {
@@ -186,12 +188,26 @@ async function saveSubmittedFiles(
     }
 
     try {
+      let data = file.data;
+      if (file.isRecording) {
+        const remuxResult = await remuxRecording(file);
+        if (remuxResult.success) {
+          data = remuxResult.value;
+        } else {
+          logger.warn('Recording remux failed, storing original', {
+            filename: file.filename,
+            reason: remuxResult.error,
+            code: remuxResult.code,
+          });
+        }
+      }
+
       const savedFile = await saveFile({
         reportId,
         type: fileType,
         filename: file.filename,
         mimeType: file.mimeType,
-        data: file.data,
+        data,
       });
 
       await filesRepo.create({

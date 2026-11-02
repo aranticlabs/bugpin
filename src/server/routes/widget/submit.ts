@@ -150,7 +150,7 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
   // Parse request body
   const contentType = c.req.header('content-type') ?? '';
   let body: Record<string, unknown>;
-  let mediaFiles: File[] = [];
+  let mediaFiles: Array<{ file: File; isRecording: boolean }> = [];
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await c.req.parseBody({ all: true });
@@ -174,15 +174,28 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     const mediaField = formData['media'];
     if (mediaField) {
       if (Array.isArray(mediaField)) {
-        mediaFiles = mediaField.filter((f): f is File => f instanceof File);
+        mediaFiles = mediaField
+          .filter((f): f is File => f instanceof File)
+          .map((file) => ({ file, isRecording: false }));
       } else if (mediaField instanceof File) {
-        mediaFiles = [mediaField];
+        mediaFiles = [{ file: mediaField, isRecording: false }];
       }
+    }
+
+    const recordingField = formData['recording'];
+    if (Array.isArray(recordingField)) {
+      mediaFiles.push(
+        ...recordingField
+          .filter((file): file is File => file instanceof File)
+          .map((file) => ({ file, isRecording: true }))
+      );
+    } else if (recordingField instanceof File) {
+      mediaFiles.push({ file: recordingField, isRecording: true });
     }
 
     // Also check for legacy 'screenshot' field for backwards compatibility
     if (formData['screenshot'] instanceof File) {
-      mediaFiles.push(formData['screenshot']);
+      mediaFiles.push({ file: formData['screenshot'], isRecording: false });
     }
   } else {
     body = await c.req.json();
@@ -224,8 +237,13 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
   const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
   const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
 
-  const media: Array<{ data: Buffer; filename: string; mimeType: string }> = [];
-  for (const file of mediaFiles) {
+  const media: Array<{
+    data: Buffer;
+    filename: string;
+    mimeType: string;
+    isRecording: boolean;
+  }> = [];
+  for (const { file, isRecording } of mediaFiles) {
     const mimeType = normalizeMimeType(file.type);
     // Reject unsupported types before copying file contents.
     if (!allowedTypes.includes(mimeType)) {
@@ -277,6 +295,7 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
         data: buffer,
         filename: file.name,
         mimeType,
+        isRecording,
       });
     } catch (error) {
       logger.error('Failed to process media file', error, { filename: file.name });
