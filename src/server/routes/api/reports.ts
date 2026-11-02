@@ -5,6 +5,7 @@ import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import type { ReportStatus, ReportPriority } from '@shared/types';
 import { normalizeMimeType } from '@shared/mime';
+import { createFileResponse } from '../../utils/range.js';
 
 const reports = new Hono();
 
@@ -321,15 +322,16 @@ reports.get('/:reportId/files/:fileId', async (c) => {
     return c.json({ success: false, error: result.code, message: result.error }, 404);
   }
 
-  const { file, data } = result.value;
-
-  return new Response(data, {
-    headers: {
-      'Content-Type': file.mimeType,
-      'Content-Length': file.sizeBytes.toString(),
-      'Cache-Control': 'private, max-age=86400', // 24 hours
-    },
+  const { file, handle } = result.value;
+  const response = await createFileResponse({
+    handle,
+    rangeHeader: c.req.header('range'),
+    size: file.sizeBytes,
+    mimeType: file.mimeType,
+    cacheControl: 'private, max-age=86400',
   });
+
+  return response ?? c.json({ success: false, error: 'NOT_FOUND', message: 'File not found' }, 404);
 });
 
 // Retry GitHub Sync (Admin only)

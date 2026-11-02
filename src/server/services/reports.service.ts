@@ -4,7 +4,8 @@ import { filesRepo } from '../database/repositories/files.repo.js';
 import {
   saveFile,
   deleteReportFiles,
-  readStoredFile,
+  createStoredFileHandle,
+  type StoredFileHandle,
   validateFile,
   validateFileContent,
 } from '../storage/files.js';
@@ -878,24 +879,13 @@ export const reportsService = {
     return Result.ok(files);
   },
 
-  /**
-   * Serve a file (returns file metadata and binary data)
-   */
-  async serveFile(
-    fileId: string
-  ): Promise<Result<{ file: FileRecord; data: Buffer | Uint8Array }>> {
+  async serveFile(fileId: string): Promise<Result<{ file: FileRecord; handle: StoredFileHandle }>> {
     const file = await filesRepo.findById(fileId);
 
     if (!file) {
       return Result.fail('File not found', 'NOT_FOUND');
     }
 
-    const data = await readStoredFile(file.path);
-
-    if (!data) {
-      return Result.fail('File not found on disk', 'NOT_FOUND');
-    }
-
-    return Result.ok({ file, data });
+    return Result.ok({ file, handle: createStoredFileHandle(file.path) });
   },
 };

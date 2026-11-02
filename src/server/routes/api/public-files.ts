@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import { readStoredFile } from '../../storage/files.js';
+import { createStoredFileHandle } from '../../storage/files.js';
 import { filesRepo } from '../../database/repositories/files.repo.js';
 import { logger } from '../../utils/logger.js';
+import { createFileResponse } from '../../utils/range.js';
 
 export const publicFilesRoutes = new Hono();
 
@@ -27,10 +28,15 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
       return c.json({ error: 'File type not accessible publicly' }, 403);
     }
 
-    // Read file from storage
-    const fileBuffer = await readStoredFile(fileRecord.path);
+    const response = await createFileResponse({
+      handle: createStoredFileHandle(fileRecord.path),
+      rangeHeader: c.req.header('range'),
+      size: fileRecord.sizeBytes,
+      mimeType: fileRecord.mimeType,
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
 
-    if (!fileBuffer) {
+    if (!response) {
       logger.error('Failed to read file from storage', {
         reportId,
         filename,
@@ -39,14 +45,7 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
       return c.json({ error: 'File not found in storage' }, 404);
     }
 
-    // Return file with appropriate headers
-    return new Response(fileBuffer, {
-      headers: {
-        'Content-Type': fileRecord.mimeType,
-        'Content-Length': fileBuffer.length.toString(),
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
-    });
+    return response;
   } catch (error) {
     logger.error('Error serving public file', error);
     return c.json({ error: 'Internal server error' }, 500);

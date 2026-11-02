@@ -385,6 +385,55 @@ function isS3Url(path: string): boolean {
   return path.startsWith('https://') || path.startsWith('http://') || path.startsWith('s3://');
 }
 
+export interface StoredFileHandle {
+  kind: 'local' | 'remote';
+  read(): Promise<Blob | Uint8Array | null>;
+  readRange(start: number, end: number): Promise<Blob | Uint8Array | null>;
+}
+
+export function createStoredFileHandle(filePath: string): StoredFileHandle {
+  if (!isS3Url(filePath)) {
+    const resolvedPath = path.resolve(config.projectRoot, filePath);
+    return {
+      kind: 'local',
+      async read() {
+        const file = Bun.file(resolvedPath);
+        return (await file.exists()) ? file : null;
+      },
+      async readRange(start, end) {
+        const file = Bun.file(resolvedPath);
+        return (await file.exists()) ? file.slice(start, end + 1) : null;
+      },
+    };
+  }
+
+  return {
+    kind: 'remote',
+    async read() {
+      const provider = getEEHooks().getStorageProvider();
+      if (!provider) return null;
+      const result = await provider.read(filePath);
+      if (!result.success) {
+        logger.error('Failed to read stored object', { path: filePath, error: result.error });
+        return null;
+      }
+      return result.value;
+    },
+    async readRange(start, end) {
+      const provider = getEEHooks().getStorageProvider();
+      if (!provider) return null;
+      const result = provider.readRange
+        ? await provider.readRange(filePath, start, end)
+        : await provider.read(filePath);
+      if (!result.success) {
+        logger.error('Failed to read stored object', { path: filePath, error: result.error });
+        return null;
+      }
+      return provider.readRange ? result.value : result.value.subarray(start, end + 1);
+    },
+  };
+}
+
 export async function readStoredFile(filePath: string): Promise<Buffer | null> {
   if (!isS3Url(filePath)) return readFile(path.resolve(config.projectRoot, filePath));
   const provider = getEEHooks().getStorageProvider();

@@ -16,7 +16,11 @@ import {
   deleteAllAvatars,
   validateFile,
   validateFileContent,
+  createStoredFileHandle,
 } from '../../src/server/storage/files';
+import { getEEHooks, registerEEHooks } from '../../src/server/utils/ee-hooks';
+import { Result } from '../../src/server/utils/result';
+import type { StorageProvider } from '../../src/server/types/ee-plugin';
 
 const originalFindFiles = filesRepo.findByReportId;
 const originalConfig = { ...config };
@@ -208,6 +212,27 @@ describe('file storage', () => {
     fs.mkdirSync(dirPath, { recursive: true });
     expect(readFile(dirPath)).toBeNull();
     expect(await deleteFile(dirPath)).toBe(false);
+  });
+
+  it('falls back to a whole-object read for older storage providers', async () => {
+    const originalHooks = getEEHooks();
+    let reads = 0;
+    const provider = {
+      read: async () => {
+        reads++;
+        return Result.ok(new TextEncoder().encode('0123456789'));
+      },
+    } as StorageProvider;
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+
+    try {
+      const data = await createStoredFileHandle('s3://bucket/file').readRange(2, 5);
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(data as Uint8Array).toString()).toBe('2345');
+      expect(reads).toBe(1);
+    } finally {
+      registerEEHooks(originalHooks);
+    }
   });
 });
 
