@@ -20,6 +20,7 @@
     "build:server": "bun run --cwd src/server build",
     "build:admin": "bun run --cwd src/admin build",
     "build:widget": "bun run --cwd src/widget build",
+    "check:widget-size": "bun run build:widget && bun run src/widget/scripts/check-bundle-size.ts",
     "start": "bun run src/server/index.ts",
     "typecheck": "bun run typecheck:server && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee",
     "typecheck:server": "bun run --cwd src/server typecheck",
