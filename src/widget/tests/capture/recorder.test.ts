@@ -278,9 +278,9 @@ describe('screen recorder', () => {
     const videoRecorder = FakeMediaRecorder.instances[0];
     expect(videoRecorder?.options.mimeType).toBe('video/webm');
     expect(FakeMediaRecorder.supportChecks).toEqual([
+      'video/webm;codecs=vp9',
       'video/mp4;codecs=avc1.64003e',
       'video/mp4',
-      'video/webm;codecs=vp9',
       'video/webm;codecs=vp8',
       'video/webm',
     ]);
@@ -308,10 +308,10 @@ describe('screen recorder', () => {
     const audioRecorder = FakeMediaRecorder.instances[1];
     expect(audioRecorder?.options.mimeType).toBe('video/webm');
     expect(FakeMediaRecorder.supportChecks).toEqual([
+      'video/webm;codecs=vp9,opus',
       'video/mp4;codecs=avc1.64003e,mp4a.40.2',
       'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
       'video/mp4;codecs=avc1.64003e,opus',
-      'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
     ]);

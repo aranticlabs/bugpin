@@ -1,20 +1,27 @@
 import { FunctionComponent } from 'preact';
-import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks';
 import { WidgetConfig } from '../config.js';
 import { WidgetLauncherButton } from './WidgetLauncherButton.js';
 import { WidgetDialog, FormData } from './WidgetDialog.js';
+import { RecordingBar, type RecordingBarPosition } from './RecordingBar.js';
+import { shouldSkipRecordingConsent, type ConsentMode } from './ScreenCaptureConsentDialog.js';
 import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
 import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
+import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
 import { draftStorage } from '../storage/draft-storage.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
+import { useScreenRecording, type RecordingDependencies } from '../hooks/use-screen-recording.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 
-type WidgetStep = 'closed' | 'form' | 'annotating';
+type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording';
+
+const BYTES_PER_MB = 1024 * 1024;
+const DRAFT_SAVE_FAILED_MESSAGE = 'Failed to save the draft. Keep the widget open and try again.';
 
 const INITIAL_FORM_DATA: FormData = {
   title: '',
@@ -39,7 +46,8 @@ type AppDependencies = {
   captureContext: typeof captureContext;
   submitReport: typeof submitReport;
   clearUserActivity: typeof clearUserActivity;
-};
+  isRecordingSupported: typeof isRecordingSupported;
+} & RecordingDependencies;
 
 interface AppProps {
   config: WidgetConfig;
@@ -53,6 +61,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const captureContextFn = deps?.captureContext ?? captureContext;
   const submitReportFn = deps?.submitReport ?? submitReport;
   const clearUserActivityFn = deps?.clearUserActivity ?? clearUserActivity;
+  const isRecordingSupportedFn = deps?.isRecordingSupported ?? isRecordingSupported;
   useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const effectiveTheme = useEffectiveTheme(config.theme);
@@ -74,7 +83,82 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     sizeMb: number;
     limitMb: number;
   } | null>(null);
+  const [consentMode, setConsentMode] = useState<ConsentMode>('screenshot');
+  const [includeMicrophone, setIncludeMicrophone] = useState(false);
+  const [hasPendingRecording, setHasPendingRecording] = useState(false);
+  const [recordingBarPosition, setRecordingBarPosition] = useState<RecordingBarPosition | null>(
+    null
+  );
+  const [oversizedRecording, setOversizedRecording] = useState<{
+    id: string;
+    sizeMb: number;
+    limitMb: number;
+  } | null>(null);
   const uploadControllerRef = useRef<AbortController | null>(null);
+  const isRecordingStep = step === 'recording';
+  const recordingEnabled = useMemo(
+    () => config.enableScreenRecording && isRecordingSupportedFn(),
+    [config.enableScreenRecording, isRecordingSupportedFn]
+  );
+
+  const handleRecordingExit = (result: RecordingResult | null, failed: boolean) => {
+    setStep('form');
+    setActiveTab('recording');
+    setIncludeMicrophone(false);
+    if (!result) return;
+
+    if (result.blob.size === 0) {
+      if (!failed) setToast({ message: t('recording.error.empty'), type: 'error' });
+      return;
+    }
+
+    const id = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    setMedia((prev) => [
+      ...prev,
+      {
+        id,
+        blob: result.blob,
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: result.mimeType,
+        width: result.width,
+        height: result.height,
+        durationMs: result.durationMs,
+        source: 'recording',
+      },
+    ]);
+
+    if (result.blob.size > config.maxVideoUploadSize) {
+      setOversizedRecording({
+        id,
+        sizeMb: Math.round((result.blob.size / BYTES_PER_MB) * 10) / 10,
+        limitMb: Math.round(config.maxVideoUploadSize / BYTES_PER_MB),
+      });
+    }
+  };
+
+  const recording = useScreenRecording({
+    maxDurationMs: config.maxRecordingDurationSeconds * 1000,
+    maxVideoSize: config.maxVideoUploadSize,
+    dependencies: deps,
+    prepare: async () => {
+      try {
+        await draftStorage.save(config.apiKey, formData, 'recording', media, config.reporterEmail);
+        return true;
+      } catch (error) {
+        console.error('[BugPin] Failed to save draft:', error);
+        setToast({ message: DRAFT_SAVE_FAILED_MESSAGE, type: 'error' });
+        return false;
+      }
+    },
+    onEnter: () => {
+      setOversizedRecording(null);
+      setStep('recording');
+    },
+    onExit: handleRecordingExit,
+    onNotice: (message, type) => setToast({ message, type }),
+  });
+  const { start: startRecordingFlow, stop: stopRecordingFlow } = recording;
 
   // Load draft when widget opens
   useEffect(() => {
@@ -135,8 +219,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   ]);
 
   const handleOpenWidget = useCallback(() => {
+    if (isRecordingStep) return;
+    setHasPendingRecording(false);
     setStep('form');
-  }, []);
+  }, [isRecordingStep]);
 
   // Check if there's any content in the form
   const hasContent =
@@ -175,7 +261,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     } catch (error) {
       console.error('[BugPin] Failed to save draft:', error);
       setToast({
-        message: 'Failed to save the draft. Keep the widget open and try again.',
+        message: DRAFT_SAVE_FAILED_MESSAGE,
         type: 'error',
       });
     }
@@ -185,6 +271,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const handleCloseDiscardDraft = useCallback(() => {
     uploadControllerRef.current?.abort();
     resetUserActivity();
+    setOversizedRecording(null);
     setMedia([]);
     setActiveTab('details');
     setFormData(getInitialFormData(config));
@@ -201,6 +288,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       resetUserActivity();
       if (clearDraftData === true) {
         // Clear state and draft (after successful submission)
+        setOversizedRecording(null);
         setMedia([]);
         setActiveTab('details');
         setFormData(getInitialFormData(config));
@@ -217,7 +305,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   // Listen for external open/close events
   useEffect(() => {
     const handleOpen = () => handleOpenWidget();
-    const handleClose = () => handleRequestClose();
+    const handleClose = () => (isRecordingStep ? stopRecordingFlow() : handleRequestClose());
 
     document.addEventListener('bugpin:open', handleOpen);
     document.addEventListener('bugpin:close', handleClose);
@@ -226,7 +314,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       document.removeEventListener('bugpin:open', handleOpen);
       document.removeEventListener('bugpin:close', handleClose);
     };
-  }, [handleOpenWidget, handleRequestClose]);
+  }, [handleOpenWidget, handleRequestClose, isRecordingStep, stopRecordingFlow]);
 
   const handleCaptureScreenshot = useCallback(async () => {
     if (!config.enableScreenshot) return;
@@ -323,11 +411,27 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     }
   }, [config, captureScreenshotFn, showScreenCaptureConsent, reduceScreenshotQuality]);
 
+  const handleStartRecording = useCallback(() => {
+    if (!shouldSkipRecordingConsent()) {
+      setConsentMode('recording');
+      setShowScreenCaptureConsent(true);
+      return;
+    }
+    void startRecordingFlow(includeMicrophone);
+  }, [includeMicrophone, startRecordingFlow]);
+
   const handleConsentConfirm = useCallback(() => {
+    if (consentMode === 'recording') {
+      setConsentMode('screenshot');
+      setShowScreenCaptureConsent(false);
+      void startRecordingFlow(includeMicrophone);
+      return;
+    }
     handleCaptureScreenshot();
-  }, [handleCaptureScreenshot]);
+  }, [consentMode, handleCaptureScreenshot, includeMicrophone, startRecordingFlow]);
 
   const handleConsentCancel = useCallback(() => {
+    setConsentMode('screenshot');
     setShowScreenCaptureConsent(false);
   }, []);
 
@@ -337,6 +441,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   const handleRemoveMedia = useCallback((id: string) => {
     setMedia((prev) => prev.filter((item) => item.id !== id));
+    setOversizedRecording((current) => (current?.id === id ? null : current));
   }, []);
 
   const handleAnnotateMedia = useCallback((id: string) => {
@@ -446,27 +551,48 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   return (
     <div ref={containerRef} class={`bugpin-container bugpin-theme-${effectiveTheme}`}>
-      <WidgetLauncherButton
-        position={config.position}
-        buttonText={config.buttonText}
-        buttonShape={config.buttonShape}
-        buttonIcon={config.buttonIcon}
-        buttonIconSize={config.buttonIconSize}
-        buttonIconStroke={config.buttonIconStroke}
-        theme={config.theme}
-        lightButtonColor={config.lightButtonColor}
-        lightTextColor={config.lightTextColor}
-        lightButtonHoverColor={config.lightButtonHoverColor}
-        lightTextHoverColor={config.lightTextHoverColor}
-        darkButtonColor={config.darkButtonColor}
-        darkTextColor={config.darkTextColor}
-        darkButtonHoverColor={config.darkButtonHoverColor}
-        darkTextHoverColor={config.darkTextHoverColor}
-        enableHoverScaleEffect={config.enableHoverScaleEffect}
-        tooltipEnabled={config.tooltipEnabled}
-        tooltipText={config.tooltipText}
-        onClick={handleOpenWidget}
-      />
+      {!isRecordingStep && (
+        <WidgetLauncherButton
+          position={config.position}
+          buttonText={config.buttonText}
+          buttonShape={config.buttonShape}
+          buttonIcon={config.buttonIcon}
+          buttonIconSize={config.buttonIconSize}
+          buttonIconStroke={config.buttonIconStroke}
+          theme={config.theme}
+          lightButtonColor={config.lightButtonColor}
+          lightTextColor={config.lightTextColor}
+          lightButtonHoverColor={config.lightButtonHoverColor}
+          lightTextHoverColor={config.lightTextHoverColor}
+          darkButtonColor={config.darkButtonColor}
+          darkTextColor={config.darkTextColor}
+          darkButtonHoverColor={config.darkButtonHoverColor}
+          darkTextHoverColor={config.darkTextHoverColor}
+          enableHoverScaleEffect={config.enableHoverScaleEffect}
+          tooltipEnabled={config.tooltipEnabled}
+          tooltipText={config.tooltipText}
+          hasPendingRecording={hasPendingRecording}
+          onClick={handleOpenWidget}
+        />
+      )}
+
+      {isRecordingStep && (
+        <RecordingBar
+          isCountingDown={recording.status === 'countdown'}
+          countdown={recording.countdown}
+          elapsedMs={recording.elapsedMs}
+          maxDurationMs={config.maxRecordingDurationSeconds * 1000}
+          isPaused={recording.isPaused}
+          hasMicrophone={recording.hasMicrophone}
+          isWholeScreen={recording.isWholeScreen}
+          position={recordingBarPosition}
+          onPositionChange={setRecordingBarPosition}
+          onPause={recording.pause}
+          onResume={recording.resume}
+          onStop={recording.stop}
+          onDiscard={recording.discard}
+        />
+      )}
 
       {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
         <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
@@ -502,12 +628,21 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           formData={formData}
           onFormDataChange={setFormData}
           showScreenCaptureConsent={showScreenCaptureConsent}
+          consentMode={consentMode}
           onConsentConfirm={handleConsentConfirm}
           onConsentCancel={handleConsentCancel}
           reduceScreenshotQuality={reduceScreenshotQuality}
           onReduceScreenshotQualityChange={setReduceScreenshotQuality}
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
+          recordingEnabled={recordingEnabled}
+          allowRecordingMicrophone={config.allowRecordingMicrophone}
+          includeMicrophone={includeMicrophone}
+          onIncludeMicrophoneChange={setIncludeMicrophone}
+          isRecordingStarting={recording.status !== 'idle'}
+          onStartRecording={handleStartRecording}
+          oversizedRecording={oversizedRecording}
+          onDismissOversizedRecording={() => setOversizedRecording(null)}
         />
       )}
 

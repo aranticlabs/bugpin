@@ -10,6 +10,8 @@ const ja: WidgetCatalog = {
   'dialog.tabs.details': '詳細',
   'dialog.tabs.media': 'スクリーンショット',
   'dialog.tabs.mediaWithCount': 'スクリーンショット（{count}件）',
+  'dialog.tabs.recording': '画面録画',
+  'dialog.tabs.recordingWithCount': '画面録画 ({count})',
 
   'dialog.fields.title.label': 'タイトル',
   'dialog.fields.title.placeholder': '問題の概要を簡潔に',
@@ -49,6 +51,11 @@ const ja: WidgetCatalog = {
   'screenCapture.dontShowAgain': '次回から表示しない',
   'screenCapture.back': '戻る',
   'screenCapture.confirm': '撮影',
+  'screenCapture.confirmRecording': '録画を開始',
+  'screenCapture.recording.body':
+    '共有する内容をブラウザが確認します。表示されているものはすべて録画されます。',
+  'screenCapture.recording.windowHint':
+    'このページのウィンドウを選択してください。他のアプリが映る場合があります。',
 
   'screenshot.privacyTip': 'ヒント：送信前に注釈ツールで機密情報を隠してください。',
   'screenshot.capturing': '撮影中...',
@@ -77,6 +84,24 @@ const ja: WidgetCatalog = {
   'screenshot.error.captureTooLarge': 'スクリーンショットは{size}MBです（上限: {limit}MB）。',
   'screenshot.error.captureTooLargeHint':
     '「キャプチャ品質を下げる」を有効にするか、ブラウザウィンドウのサイズを変更してください。',
+
+  'recording.start': '画面を録画',
+  'recording.microphone': 'マイクを含める',
+  'recording.privacyTip': '表示されているものはすべて録画されます。',
+  'recording.countdown': '{seconds} 秒後に録画を開始します',
+  'recording.stop': '停止',
+  'recording.discard': '破棄',
+  'recording.pause': '一時停止',
+  'recording.resume': '再開',
+  'recording.warning.wholeScreen': '画面全体を共有しています。',
+  'recording.notice.noMicrophone': 'マイクなしで録画しています。',
+  'recording.stopped.duration': '{minutes} 分の上限に達したため録画を停止しました。',
+  'recording.stopped.size': '{size}MBの上限に達したため録画を停止しました。',
+  'recording.error.unavailable': '画面録画は利用できません。',
+  'recording.error.failed': '録画に失敗しました。もう一度お試しください。',
+  'recording.error.empty': '録画が空でした。もう一度お試しください。',
+  'recording.oversized': '録画サイズは{size}MBです（最大{limit}MB）。',
+  'recording.oversizedHint': 'ダウンロードするか、より短いクリップを録画してください。',
 
   'toast.success.submit': 'バグレポートを送信しました！',
   'toast.error.submit': 'レポートの送信に失敗しました',

@@ -10,6 +10,8 @@ const es: WidgetCatalog = {
   'dialog.tabs.details': 'Detalles',
   'dialog.tabs.media': 'Capturas',
   'dialog.tabs.mediaWithCount': 'Capturas ({count})',
+  'dialog.tabs.recording': 'Grabación de pantalla',
+  'dialog.tabs.recordingWithCount': 'Grabación de pantalla ({count})',
 
   'dialog.fields.title.label': 'Título',
   'dialog.fields.title.placeholder': 'Breve descripción del problema',
@@ -50,6 +52,11 @@ const es: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'No volver a mostrar',
   'screenCapture.back': 'Atrás',
   'screenCapture.confirm': 'Tomar captura',
+  'screenCapture.confirmRecording': 'Iniciar grabación',
+  'screenCapture.recording.body':
+    'Tu navegador te preguntará qué quieres compartir. Se grabará todo lo que sea visible.',
+  'screenCapture.recording.windowHint':
+    'Elige la ventana con esta página. Otras aplicaciones pueden ser visibles.',
 
   'screenshot.privacyTip':
     'Consejo: usa la herramienta de anotación para ocultar datos sensibles antes de enviar.',
@@ -79,6 +86,24 @@ const es: WidgetCatalog = {
   'screenshot.error.captureTooLarge': 'La captura ocupa {size} MB (máx. {limit} MB).',
   'screenshot.error.captureTooLargeHint':
     'Activa «Reducir calidad de captura» o cambia el tamaño de la ventana del navegador.',
+
+  'recording.start': 'Grabar pantalla',
+  'recording.microphone': 'Incluir micrófono',
+  'recording.privacyTip': 'Se grabará todo lo que sea visible.',
+  'recording.countdown': 'La grabación empieza en {seconds}',
+  'recording.stop': 'Detener',
+  'recording.discard': 'Descartar',
+  'recording.pause': 'Pausar',
+  'recording.resume': 'Reanudar',
+  'recording.warning.wholeScreen': 'Estás compartiendo toda la pantalla.',
+  'recording.notice.noMicrophone': 'Grabando sin micrófono.',
+  'recording.stopped.duration': 'Grabación detenida en el límite de {minutes} minutos.',
+  'recording.stopped.size': 'Grabación detenida en el límite de {size} MB.',
+  'recording.error.unavailable': 'La grabación de pantalla no está disponible.',
+  'recording.error.failed': 'La grabación ha fallado. Inténtalo de nuevo.',
+  'recording.error.empty': 'La grabación estaba vacía. Inténtalo de nuevo.',
+  'recording.oversized': 'La grabación ocupa {size} MB (máx. {limit} MB).',
+  'recording.oversizedHint': 'Descárgala o graba un clip más corto.',
 
   'toast.success.submit': '¡Informe enviado correctamente!',
   'toast.error.submit': 'No se ha podido enviar el informe',

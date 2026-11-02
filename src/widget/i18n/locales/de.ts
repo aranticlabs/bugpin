@@ -10,6 +10,8 @@ const de: WidgetCatalog = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
   'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
+  'dialog.tabs.recording': 'Bildschirmaufnahme',
+  'dialog.tabs.recordingWithCount': 'Bildschirmaufnahme ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Kurze Beschreibung des Problems',
@@ -50,6 +52,11 @@ const de: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Nicht mehr anzeigen',
   'screenCapture.back': 'Zurück',
   'screenCapture.confirm': 'Screenshot aufnehmen',
+  'screenCapture.confirmRecording': 'Aufnahme starten',
+  'screenCapture.recording.body':
+    'Dein Browser fragt, was geteilt werden soll. Alles Sichtbare wird aufgezeichnet.',
+  'screenCapture.recording.windowHint':
+    'Wähle das Fenster mit dieser Seite. Andere Apps können sichtbar sein.',
 
   'screenshot.privacyTip':
     'Tipp: Nutze das Anmerkungswerkzeug, um sensible Daten vor dem Senden zu verbergen.',
@@ -79,6 +86,24 @@ const de: WidgetCatalog = {
   'screenshot.error.captureTooLarge': 'Screenshot ist {size} MB (max. {limit} MB).',
   'screenshot.error.captureTooLargeHint':
     'Aktiviere „Aufnahmequalität reduzieren" oder verkleinere das Browserfenster.',
+
+  'recording.start': 'Bildschirm aufnehmen',
+  'recording.microphone': 'Mikrofon einbeziehen',
+  'recording.privacyTip': 'Alles Sichtbare wird aufgezeichnet.',
+  'recording.countdown': 'Aufnahme startet in {seconds}',
+  'recording.stop': 'Stoppen',
+  'recording.discard': 'Verwerfen',
+  'recording.pause': 'Pausieren',
+  'recording.resume': 'Fortsetzen',
+  'recording.warning.wholeScreen': 'Du teilst deinen gesamten Bildschirm.',
+  'recording.notice.noMicrophone': 'Aufnahme ohne Mikrofon.',
+  'recording.stopped.duration': 'Aufnahme beim Limit von {minutes} Minuten gestoppt.',
+  'recording.stopped.size': 'Aufnahme beim Limit von {size} MB gestoppt.',
+  'recording.error.unavailable': 'Bildschirmaufnahme ist nicht verfügbar.',
+  'recording.error.failed': 'Aufnahme fehlgeschlagen. Bitte versuche es erneut.',
+  'recording.error.empty': 'Die Aufnahme war leer. Bitte versuche es erneut.',
+  'recording.oversized': 'Die Aufnahme ist {size} MB groß (max. {limit} MB).',
+  'recording.oversizedHint': 'Lade sie herunter oder nimm einen kürzeren Clip auf.',
 
   'toast.success.submit': 'Fehlerbericht erfolgreich gesendet!',
   'toast.error.submit': 'Bericht konnte nicht gesendet werden',

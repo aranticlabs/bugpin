@@ -10,6 +10,8 @@ const fr: WidgetCatalog = {
   'dialog.tabs.details': 'Détails',
   'dialog.tabs.media': "Captures d'écran",
   'dialog.tabs.mediaWithCount': "Captures d'écran ({count})",
+  'dialog.tabs.recording': "Enregistrement d'écran",
+  'dialog.tabs.recordingWithCount': "Enregistrement d'écran ({count})",
 
   'dialog.fields.title.label': 'Titre',
   'dialog.fields.title.placeholder': 'Brève description du problème',
@@ -50,6 +52,11 @@ const fr: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Ne plus afficher',
   'screenCapture.back': 'Retour',
   'screenCapture.confirm': 'Prendre la capture',
+  'screenCapture.confirmRecording': "Démarrer l'enregistrement",
+  'screenCapture.recording.body':
+    'Votre navigateur vous demandera quoi partager. Tout ce qui est visible sera enregistré.',
+  'screenCapture.recording.windowHint':
+    "Choisissez la fenêtre contenant cette page. D'autres applications peuvent être visibles.",
 
   'screenshot.privacyTip':
     "Conseil : utilisez l'outil d'annotation pour masquer les données sensibles avant d'envoyer.",
@@ -79,6 +86,24 @@ const fr: WidgetCatalog = {
   'screenshot.error.captureTooLarge': "La capture d'écran fait {size} Mo (max. {limit} Mo).",
   'screenshot.error.captureTooLargeHint':
     'Activez « Réduire la qualité de capture » ou redimensionnez la fenêtre du navigateur.',
+
+  'recording.start': "Enregistrer l'écran",
+  'recording.microphone': 'Inclure le microphone',
+  'recording.privacyTip': 'Tout ce qui est visible sera enregistré.',
+  'recording.countdown': "L'enregistrement démarre dans {seconds}",
+  'recording.stop': 'Arrêter',
+  'recording.discard': 'Supprimer',
+  'recording.pause': 'Pause',
+  'recording.resume': 'Reprendre',
+  'recording.warning.wholeScreen': 'Vous partagez tout votre écran.',
+  'recording.notice.noMicrophone': 'Enregistrement sans microphone.',
+  'recording.stopped.duration': 'Enregistrement arrêté à la limite de {minutes} minutes.',
+  'recording.stopped.size': 'Enregistrement arrêté à la limite de {size} Mo.',
+  'recording.error.unavailable': "L'enregistrement d'écran n'est pas disponible.",
+  'recording.error.failed': "L'enregistrement a échoué. Veuillez réessayer.",
+  'recording.error.empty': "L'enregistrement était vide. Veuillez réessayer.",
+  'recording.oversized': "L'enregistrement fait {size} Mo (max. {limit} Mo).",
+  'recording.oversizedHint': 'Téléchargez-le ou enregistrez un clip plus court.',
 
   'toast.success.submit': 'Rapport de bug envoyé avec succès !',
   'toast.error.submit': "Échec de l'envoi du rapport",

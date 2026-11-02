@@ -8,6 +8,8 @@ const en = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
   'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
+  'dialog.tabs.recording': 'Screen Recording',
+  'dialog.tabs.recordingWithCount': 'Screen Recording ({count})',
 
   'dialog.fields.title.label': 'Title',
   'dialog.fields.title.placeholder': 'Brief description of the issue',
@@ -48,6 +50,11 @@ const en = {
   'screenCapture.dontShowAgain': "Don't show this again",
   'screenCapture.back': 'Back',
   'screenCapture.confirm': 'Take Screenshot',
+  'screenCapture.confirmRecording': 'Start Recording',
+  'screenCapture.recording.body':
+    'Your browser will ask what to share. Everything visible will be recorded.',
+  'screenCapture.recording.windowHint':
+    'Choose the window with this page. Other apps may be visible.',
 
   'screenshot.privacyTip':
     'Tip: Use the annotation tool to hide any sensitive data before submitting.',
@@ -77,6 +84,24 @@ const en = {
   'screenshot.error.captureTooLarge': 'Captured screenshot is {size}MB (max. {limit}MB).',
   'screenshot.error.captureTooLargeHint':
     'Enabling "Reduce capture quality" or resize the browser window.',
+
+  'recording.start': 'Record Screen',
+  'recording.microphone': 'Include microphone',
+  'recording.privacyTip': 'Everything visible will be recorded.',
+  'recording.countdown': 'Recording starts in {seconds}',
+  'recording.stop': 'Stop',
+  'recording.discard': 'Discard',
+  'recording.pause': 'Pause',
+  'recording.resume': 'Resume',
+  'recording.warning.wholeScreen': 'You are sharing your whole screen.',
+  'recording.notice.noMicrophone': 'Recording without microphone.',
+  'recording.stopped.duration': 'Recording stopped at the {minutes} minute limit.',
+  'recording.stopped.size': 'Recording stopped at the {size}MB limit.',
+  'recording.error.unavailable': 'Screen recording is not available.',
+  'recording.error.failed': 'Recording failed. Please try again.',
+  'recording.error.empty': 'The recording was empty. Please try again.',
+  'recording.oversized': 'Recording is {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Download it, or record a shorter clip.',
 
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',

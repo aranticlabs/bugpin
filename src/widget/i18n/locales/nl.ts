@@ -10,6 +10,8 @@ const nl: WidgetCatalog = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Schermafbeeldingen',
   'dialog.tabs.mediaWithCount': 'Schermafbeeldingen ({count})',
+  'dialog.tabs.recording': 'Schermopname',
+  'dialog.tabs.recordingWithCount': 'Schermopname ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Korte beschrijving van het probleem',
@@ -51,6 +53,11 @@ const nl: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Dit niet meer tonen',
   'screenCapture.back': 'Terug',
   'screenCapture.confirm': 'Schermafbeelding maken',
+  'screenCapture.confirmRecording': 'Opname starten',
+  'screenCapture.recording.body':
+    'Uw browser vraagt wat u wilt delen. Alles wat zichtbaar is, wordt opgenomen.',
+  'screenCapture.recording.windowHint':
+    'Kies het venster met deze pagina. Andere apps kunnen zichtbaar zijn.',
 
   'screenshot.privacyTip':
     'Tip: gebruik het annotatiegereedschap om gevoelige gegevens te verbergen voordat u verzendt.',
@@ -80,6 +87,24 @@ const nl: WidgetCatalog = {
   'screenshot.error.captureTooLarge': 'Schermafbeelding is {size}MB (max. {limit}MB).',
   'screenshot.error.captureTooLargeHint':
     'Schakel "Opnamekwaliteit verlagen" in of pas de grootte van het browservenster aan.',
+
+  'recording.start': 'Scherm opnemen',
+  'recording.microphone': 'Microfoon opnemen',
+  'recording.privacyTip': 'Alles wat zichtbaar is, wordt opgenomen.',
+  'recording.countdown': 'Opname start over {seconds}',
+  'recording.stop': 'Stoppen',
+  'recording.discard': 'Verwijderen',
+  'recording.pause': 'Pauzeren',
+  'recording.resume': 'Hervatten',
+  'recording.warning.wholeScreen': 'U deelt uw volledige scherm.',
+  'recording.notice.noMicrophone': 'Opname zonder microfoon.',
+  'recording.stopped.duration': 'Opname gestopt bij de limiet van {minutes} minuten.',
+  'recording.stopped.size': 'Opname gestopt bij de limiet van {size}MB.',
+  'recording.error.unavailable': 'Schermopname is niet beschikbaar.',
+  'recording.error.failed': 'Opname mislukt. Probeer het opnieuw.',
+  'recording.error.empty': 'De opname was leeg. Probeer het opnieuw.',
+  'recording.oversized': 'De opname is {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Download de opname of maak een kortere clip.',
 
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',

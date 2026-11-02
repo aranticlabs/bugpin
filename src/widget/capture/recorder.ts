@@ -28,18 +28,18 @@ export interface RecordingSession {
 }
 
 const VIDEO_CANDIDATES = [
+  'video/webm;codecs=vp9',
   'video/mp4;codecs=avc1.64003e',
   'video/mp4',
-  'video/webm;codecs=vp9',
   'video/webm;codecs=vp8',
   'video/webm',
 ] as const;
 
 const AUDIO_CANDIDATES = [
+  'video/webm;codecs=vp9,opus',
   'video/mp4;codecs=avc1.64003e,mp4a.40.2',
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
   'video/mp4;codecs=avc1.64003e,opus',
-  'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm',
 ] as const;

@@ -54,6 +54,23 @@ const DEFAULT_MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
+export function downloadMedia(item: CapturedMedia): void {
+  const extension = getExtensionFromMimeType(item.mimeType);
+  const stamp = item.timestamp.toISOString().replace(/[:.]/g, '-');
+  const kind = item.mimeType.startsWith('video/') ? 'recording' : 'screenshot';
+  const anchor = document.createElement('a');
+  const objectUrl = item.blob ? URL.createObjectURL(item.blob) : null;
+  anchor.href = item.blob ? (objectUrl as string) : item.dataUrl;
+  anchor.download = `bugpin-${kind}-${stamp}.${extension}`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  if (objectUrl) {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
+}
+
 const MediaPreview: FunctionComponent<{ item: CapturedMedia }> = ({ item }) => {
   const objectUrl = useObjectUrl(item.blob);
   const source = item.blob ? objectUrl : item.dataUrl;
@@ -231,23 +248,6 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
     fileInputRef.current?.click();
   }, []);
 
-  const handleDownload = useCallback((item: CapturedMedia) => {
-    const extension = getExtensionFromMimeType(item.mimeType);
-    const stamp = item.timestamp.toISOString().replace(/[:.]/g, '-');
-    const filename = `bugpin-${isVideo(item.mimeType) ? 'recording' : 'screenshot'}-${stamp}.${extension}`;
-    const anchor = document.createElement('a');
-    const objectUrl = item.blob ? URL.createObjectURL(item.blob) : null;
-    anchor.href = item.blob ? (objectUrl as string) : item.dataUrl;
-    anchor.download = filename;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    if (objectUrl) {
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-    }
-  }, []);
-
   const formatTimestamp = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -404,7 +404,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                       variant="ghost"
                       size="icon"
                       class="w-7 h-7 bg-background hover:bg-foreground/10 text-foreground"
-                      onClick={() => handleDownload(item)}
+                      onClick={() => downloadMedia(item)}
                       title={t('screenshot.action.download')}
                     >
                       <Download class="w-4 h-4" />

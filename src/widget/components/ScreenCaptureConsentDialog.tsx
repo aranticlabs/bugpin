@@ -5,13 +5,30 @@ import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 
 const STORAGE_KEY = 'bugpin-skip-screen-capture-consent';
+const RECORDING_STORAGE_KEY = 'bugpin-skip-recording-consent';
+
+export type ConsentMode = 'screenshot' | 'recording';
 
 interface ScreenCaptureConsentDialogProps {
+  mode?: ConsentMode;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
+export function shouldSkipRecordingConsent(): boolean {
+  try {
+    return localStorage.getItem(RECORDING_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function needsWindowHint(): boolean {
+  return !/Chrom(e|ium)\//.test(navigator.userAgent);
+}
+
 export const ScreenCaptureConsentDialog: FunctionComponent<ScreenCaptureConsentDialogProps> = ({
+  mode = 'screenshot',
   onConfirm,
   onCancel,
 }) => {
@@ -20,10 +37,52 @@ export const ScreenCaptureConsentDialog: FunctionComponent<ScreenCaptureConsentD
 
   const handleConfirm = () => {
     if (skipNextTime) {
-      localStorage.setItem(STORAGE_KEY, 'true');
+      try {
+        localStorage.setItem(mode === 'recording' ? RECORDING_STORAGE_KEY : STORAGE_KEY, 'true');
+      } catch {
+        // Blocked storage only means the dialog appears again next time.
+      }
     }
     onConfirm();
   };
+
+  const footer = (
+    <>
+      <label class="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={skipNextTime}
+          onChange={(e) => setSkipNextTime((e.target as HTMLInputElement).checked)}
+          class="w-3.5 h-3.5 accent-primary cursor-pointer"
+        />
+        {t('screenCapture.dontShowAgain')}
+      </label>
+
+      <div class="flex gap-3 w-full max-w-xs">
+        <Button variant="outline" class="flex-1" onClick={onCancel}>
+          {t('screenCapture.back')}
+        </Button>
+        <Button class="flex-1" onClick={handleConfirm}>
+          {mode === 'recording' ? t('screenCapture.confirmRecording') : t('screenCapture.confirm')}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (mode === 'recording') {
+    return (
+      <div class="flex-1 flex flex-col items-center justify-center p-6 gap-5 text-center">
+        <div class="space-y-2 max-w-sm">
+          <h1>{t('screenCapture.title')}</h1>
+          <p class="text-sm text-muted-foreground">{t('screenCapture.recording.body')}</p>
+          {needsWindowHint() && (
+            <p class="text-sm text-muted-foreground">{t('screenCapture.recording.windowHint')}</p>
+          )}
+        </div>
+        {footer}
+      </div>
+    );
+  }
 
   return (
     <div class="flex-1 flex flex-col items-center justify-center p-6 gap-5 text-center">
@@ -262,24 +321,7 @@ export const ScreenCaptureConsentDialog: FunctionComponent<ScreenCaptureConsentD
           </p>
         </div>
       </div>
-      <label class="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={skipNextTime}
-          onChange={(e) => setSkipNextTime((e.target as HTMLInputElement).checked)}
-          class="w-3.5 h-3.5 accent-primary cursor-pointer"
-        />
-        {t('screenCapture.dontShowAgain')}
-      </label>
-
-      <div class="flex gap-3 w-full max-w-xs">
-        <Button variant="outline" class="flex-1" onClick={onCancel}>
-          {t('screenCapture.back')}
-        </Button>
-        <Button class="flex-1" onClick={handleConfirm}>
-          {t('screenCapture.confirm')}
-        </Button>
-      </div>
+      {footer}
     </div>
   );
 };

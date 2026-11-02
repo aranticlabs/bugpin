@@ -1,9 +1,10 @@
 import { FunctionComponent } from 'preact';
 import { useState, useCallback } from 'preact/hooks';
-import { FileText, Image, X } from 'lucide-preact';
+import { FileText, Image, Video, X } from 'lucide-preact';
 import { ScreenshotManager, CapturedMedia } from './ScreenshotManager.js';
 import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
-import { ScreenCaptureConsentDialog } from './ScreenCaptureConsentDialog.js';
+import { ScreenCaptureConsentDialog, type ConsentMode } from './ScreenCaptureConsentDialog.js';
+import { ScreenRecordingPanel } from './ScreenRecordingPanel.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 
@@ -35,6 +36,7 @@ interface WidgetDialogProps {
   formData: FormData;
   onFormDataChange: (data: FormData) => void;
   showScreenCaptureConsent: boolean;
+  consentMode?: ConsentMode;
   onConsentConfirm: () => void;
   onConsentCancel: () => void;
   maxImageSize?: number;
@@ -43,11 +45,20 @@ interface WidgetDialogProps {
   onReduceScreenshotQualityChange: (value: boolean) => void;
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
+  recordingEnabled?: boolean;
+  allowRecordingMicrophone?: boolean;
+  includeMicrophone?: boolean;
+  onIncludeMicrophoneChange?: (value: boolean) => void;
+  isRecordingStarting?: boolean;
+  onStartRecording?: () => void;
+  oversizedRecording?: { sizeMb: number; limitMb: number } | null;
+  onDismissOversizedRecording?: () => void;
 }
 
 const TAB_ICONS = {
   details: <FileText />,
   media: <Image />,
+  recording: <Video />,
 };
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
@@ -69,6 +80,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   formData,
   onFormDataChange,
   showScreenCaptureConsent,
+  consentMode = 'screenshot',
   onConsentConfirm,
   onConsentCancel,
   maxImageSize,
@@ -77,6 +89,14 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onReduceScreenshotQualityChange,
   oversizedCapture,
   onDismissOversizedCapture,
+  recordingEnabled = false,
+  allowRecordingMicrophone = false,
+  includeMicrophone = false,
+  onIncludeMicrophoneChange = () => undefined,
+  isRecordingStarting = false,
+  onStartRecording = () => undefined,
+  oversizedRecording = null,
+  onDismissOversizedRecording = () => undefined,
 }) => {
   useLocale();
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -122,7 +142,9 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
     [formData, media, validate, onSubmit, onActiveTabChange]
   );
 
-  const mediaCount = media.length;
+  const recordings = media.filter((item) => item.source === 'recording');
+  const otherMedia = media.filter((item) => item.source !== 'recording');
+  const mediaCount = otherMedia.length;
   const tabs = [
     { id: 'details', label: t('dialog.tabs.details'), icon: TAB_ICONS.details },
     {
@@ -133,7 +155,20 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
           : t('dialog.tabs.media'),
       icon: TAB_ICONS.media,
     },
+    ...(recordingEnabled
+      ? [
+          {
+            id: 'recording',
+            label:
+              recordings.length > 0
+                ? t('dialog.tabs.recordingWithCount', { count: recordings.length })
+                : t('dialog.tabs.recording'),
+            icon: TAB_ICONS.recording,
+          },
+        ]
+      : []),
   ];
+  const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'details';
 
   return (
     <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
@@ -152,18 +187,22 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         </div>
 
         {showScreenCaptureConsent ? (
-          <ScreenCaptureConsentDialog onConfirm={onConsentConfirm} onCancel={onConsentCancel} />
+          <ScreenCaptureConsentDialog
+            mode={consentMode}
+            onConfirm={onConsentConfirm}
+            onCancel={onConsentCancel}
+          />
         ) : (
           <>
             {/* Tabs */}
             <div class="shrink-0 p-4 pb-0 bg-transparent">
-              <Tabs tabs={tabs} activeTab={activeTab} onTabChange={onActiveTabChange} />
+              <Tabs tabs={tabs} activeTab={currentTab} onTabChange={onActiveTabChange} />
             </div>
 
             {/* Body */}
             <div class="flex-auto min-h-0 flex flex-col">
               {/* Details Tab */}
-              {activeTab === 'details' && (
+              {currentTab === 'details' && (
                 <form
                   class="flex-auto min-h-0 overflow-y-auto p-6 flex flex-col gap-4"
                   onSubmit={handleSubmit}
@@ -261,9 +300,9 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               )}
 
               {/* Media Tab */}
-              {activeTab === 'media' && (
+              {currentTab === 'media' && (
                 <ScreenshotManager
-                  media={media}
+                  media={otherMedia}
                   onCapture={onCaptureScreenshot}
                   onUpload={onAddMedia}
                   onRemove={onRemoveMedia}
@@ -276,6 +315,21 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   onReduceQualityChange={onReduceScreenshotQualityChange}
                   oversizedCapture={oversizedCapture}
                   onDismissOversizedCapture={onDismissOversizedCapture}
+                />
+              )}
+
+              {/* Screen Recording Tab */}
+              {currentTab === 'recording' && (
+                <ScreenRecordingPanel
+                  clips={recordings}
+                  onRecord={onStartRecording}
+                  onRemove={onRemoveMedia}
+                  isStarting={isRecordingStarting}
+                  allowMicrophone={allowRecordingMicrophone}
+                  includeMicrophone={includeMicrophone}
+                  onIncludeMicrophoneChange={onIncludeMicrophoneChange}
+                  oversizedRecording={oversizedRecording}
+                  onDismissOversizedRecording={onDismissOversizedRecording}
                 />
               )}
             </div>

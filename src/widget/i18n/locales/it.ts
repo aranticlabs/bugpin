@@ -10,6 +10,8 @@ const it: WidgetCatalog = {
   'dialog.tabs.details': 'Dettagli',
   'dialog.tabs.media': 'Screenshot',
   'dialog.tabs.mediaWithCount': 'Screenshot ({count})',
+  'dialog.tabs.recording': 'Registrazione schermo',
+  'dialog.tabs.recordingWithCount': 'Registrazione schermo ({count})',
 
   'dialog.fields.title.label': 'Titolo',
   'dialog.fields.title.placeholder': 'Breve descrizione del problema',
@@ -49,6 +51,11 @@ const it: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Non mostrare più',
   'screenCapture.back': 'Indietro',
   'screenCapture.confirm': 'Acquisisci screenshot',
+  'screenCapture.confirmRecording': 'Avvia registrazione',
+  'screenCapture.recording.body':
+    'Il browser chiederà cosa condividere. Tutto ciò che è visibile verrà registrato.',
+  'screenCapture.recording.windowHint':
+    'Scegli la finestra con questa pagina. Altre app potrebbero essere visibili.',
 
   'screenshot.privacyTip':
     'Suggerimento: usa lo strumento di annotazione per nascondere i dati sensibili prima di inviare.',
@@ -78,6 +85,24 @@ const it: WidgetCatalog = {
   'screenshot.error.captureTooLarge': 'Lo screenshot è di {size}MB (max. {limit}MB).',
   'screenshot.error.captureTooLargeHint':
     'Attiva "Riduci qualità di acquisizione" o ridimensiona la finestra del browser.',
+
+  'recording.start': 'Registra schermo',
+  'recording.microphone': 'Includi microfono',
+  'recording.privacyTip': 'Tutto ciò che è visibile verrà registrato.',
+  'recording.countdown': 'La registrazione inizia tra {seconds}',
+  'recording.stop': 'Interrompi',
+  'recording.discard': 'Scarta',
+  'recording.pause': 'Pausa',
+  'recording.resume': 'Riprendi',
+  'recording.warning.wholeScreen': "Stai condividendo l'intero schermo.",
+  'recording.notice.noMicrophone': 'Registrazione senza microfono.',
+  'recording.stopped.duration': 'Registrazione interrotta al limite di {minutes} minuti.',
+  'recording.stopped.size': 'Registrazione interrotta al limite di {size}MB.',
+  'recording.error.unavailable': 'La registrazione dello schermo non è disponibile.',
+  'recording.error.failed': 'Registrazione non riuscita. Riprova.',
+  'recording.error.empty': 'La registrazione era vuota. Riprova.',
+  'recording.oversized': 'La registrazione è di {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Scaricala o registra una clip più breve.',
 
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',
