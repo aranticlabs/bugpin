@@ -98,6 +98,7 @@ describe('Settings sections', () => {
     renderWithQuery(<Screenshot />);
 
     await screen.findByLabelText(/max\.? screenshot size/i);
+    expect(screen.getByLabelText(/max\.? video upload size/i)).toHaveAttribute('max', '100');
 
     const screenCaptureSwitch = screen.getByRole('switch', { name: /use screen capture api/i });
     await user.click(screenCaptureSwitch);

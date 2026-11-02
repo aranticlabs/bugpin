@@ -67,7 +67,7 @@ const en = {
   'screenshot.action.download': 'Download',
   'screenshot.action.remove': 'Remove',
   'screenshot.helperText':
-    'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV, AVI (max {videoSize}MB)',
+    'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Unsupported image format: {type}',
   'screenshot.error.imageTooLarge': 'Image too large. Maximum size is {size}MB.',

@@ -118,7 +118,7 @@ export function ScreenshotSettingsForm({
               id="max-video-upload-size"
               type="number"
               min={1}
-              max={500}
+              max={100}
               value={effectiveMaxVideoUploadSizeMb}
               onChange={(e) =>
                 onChange({ ...value, maxVideoUploadSizeMb: parseInt(e.target.value) || 50 })
@@ -126,7 +126,7 @@ export function ScreenshotSettingsForm({
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">
-              Maximum allowed size for uploaded videos (1-500 MB)
+              Maximum allowed size for uploaded videos (1-100 MB)
             </p>
           </div>
 

@@ -59,6 +59,35 @@ afterEach(() => {
 });
 
 describe('ScreenshotManager uploads', () => {
+  it('advertises only supported image and video types', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    render(
+      <ScreenshotManager
+        media={[]}
+        onCapture={() => undefined}
+        onUpload={() => undefined}
+        onRemove={() => undefined}
+        onAnnotate={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        reduceQuality={false}
+        onReduceQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />,
+      container
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    expect(input?.getAttribute('accept')).toContain('video/quicktime');
+    expect(input?.getAttribute('accept')).not.toContain('video/x-msvideo');
+
+    render(null, container);
+    container.remove();
+  });
+
   it('shows error for unsupported file types', async () => {
     const onUpload = mock(() => undefined);
     const container = document.createElement('div');

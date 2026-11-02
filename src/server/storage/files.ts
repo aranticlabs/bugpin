@@ -19,7 +19,7 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/webp',
 ] as const;
 
-export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm'] as const;
+export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'] as const;
 
 export const ALLOWED_ATTACHMENT_MIME_TYPES = [
   'application/pdf',
@@ -49,6 +49,7 @@ const MAGIC_BYTES: Record<string, { bytes: number[]; offset: number }[]> = {
   ],
   'video/mp4': [{ bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }], // ftyp at offset 4
   'video/webm': [{ bytes: [0x1a, 0x45, 0xdf, 0xa3], offset: 0 }], // EBML header
+  'video/quicktime': [{ bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }], // ftyp at offset 4
 };
 
 function matchesMagicBytes(

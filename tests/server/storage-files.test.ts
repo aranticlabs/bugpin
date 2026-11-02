@@ -257,6 +257,19 @@ describe('validateFile', () => {
     }
   });
 
+  it('accepts MOV and rejects AVI video uploads', () => {
+    const mov = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+
+    expect(validateFile({ data: mov, mimeType: 'video/quicktime', type: 'video' }).success).toBe(
+      true
+    );
+    const avi = validateFile({ data: mov, mimeType: 'video/x-msvideo', type: 'video' });
+    expect(avi.success).toBe(false);
+    if (!avi.success) {
+      expect(avi.code).toBe('INVALID_MIME_TYPE');
+    }
+  });
+
   it('rejects file exceeding size limit', () => {
     const bigBuffer = Buffer.alloc(2 * 1024 * 1024); // 2MB
     // Write PNG header so magic bytes pass

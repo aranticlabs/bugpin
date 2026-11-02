@@ -251,6 +251,11 @@ export const settingsRepo = {
       screenshot: {
         ...DEFAULT_SCREENSHOT,
         ...(settings.screenshot as Partial<GlobalScreenshotSettings>),
+        maxVideoUploadSizeMb: Math.min(
+          (settings.screenshot as Partial<GlobalScreenshotSettings>)?.maxVideoUploadSizeMb ??
+            DEFAULT_SCREENSHOT.maxVideoUploadSizeMb,
+          100
+        ),
       },
       // Notification defaults
       notifications: {

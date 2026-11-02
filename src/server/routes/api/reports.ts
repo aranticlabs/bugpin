@@ -4,6 +4,7 @@ import { syncQueueService } from '../../services/integrations/sync-queue.service
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import type { ReportStatus, ReportPriority } from '@shared/types';
+import { normalizeMimeType } from '@shared/mime';
 
 const reports = new Hono();
 
@@ -105,7 +106,7 @@ reports.post('/', authorize(['admin', 'editor']), async (c) => {
       parsedFiles.push({
         data: Buffer.from(await file.arrayBuffer()),
         filename: file.name,
-        mimeType: file.type,
+        mimeType: normalizeMimeType(file.type),
       });
     } catch {
       return c.json(

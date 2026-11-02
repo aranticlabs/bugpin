@@ -159,12 +159,12 @@ const validSubmitBody = {
   },
 };
 
-function createVideoSubmitForm(size = 8): FormData {
+function createVideoSubmitForm(size = 8, mimeType = 'video/mp4', filename = 'clip.mp4'): FormData {
   const bytes = new Uint8Array(size);
   bytes.set([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
   const form = new FormData();
   form.set('data', JSON.stringify(validSubmitBody));
-  form.set('media', new File([bytes], 'clip.mp4', { type: 'video/mp4' }));
+  form.set('media', new File([bytes], filename, { type: mimeType }));
   return form;
 }
 
@@ -355,6 +355,40 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it('normalizes recorded video MIME parameters before validation and persistence', async () => {
+      let submittedMimeType: string | undefined;
+      reportsService.create = async (input) => {
+        submittedMimeType = input.files?.[0]?.mimeType;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/mp4; codecs=avc1.42000a'),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedMimeType).toBe('video/mp4');
+    });
+
+    it('accepts MOV uploads', async () => {
+      let submittedMimeType: string | undefined;
+      reportsService.create = async (input) => {
+        submittedMimeType = input.files?.[0]?.mimeType;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/quicktime', 'clip.mov'),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedMimeType).toBe('video/quicktime');
     });
 
     it('rejects video when the project daily quota would be exceeded', async () => {

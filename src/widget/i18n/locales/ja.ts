@@ -67,7 +67,7 @@ const ja: WidgetCatalog = {
   'screenshot.action.download': 'ダウンロード',
   'screenshot.action.remove': '削除',
   'screenshot.helperText':
-    '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）／MP4、WebM、MOV、AVI（最大{videoSize}MB）',
+    '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）／MP4、WebM、MOV（最大{videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '対応していない画像形式です：{type}',
   'screenshot.error.imageTooLarge': '画像サイズが大きすぎます。最大{size}MBまでです。',

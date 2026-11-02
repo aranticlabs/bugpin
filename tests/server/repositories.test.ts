@@ -411,6 +411,18 @@ describe('settingsRepo', () => {
     expect(merged.branding.primaryColor).toBe('#123456');
   });
 
+  it('clamps legacy video upload limits on read', async () => {
+    await settingsRepo.set('screenshot', { maxVideoUploadSizeMb: 500 });
+    const settings = await settingsRepo.getAll();
+    expect(settings.screenshot.maxVideoUploadSizeMb).toBe(100);
+
+    const project = await projectsRepo.create({
+      name: 'Legacy video limit',
+      settings: { screenshot: { maxVideoUploadSizeMb: 500 } },
+    });
+    expect(project.settings.screenshot?.maxVideoUploadSizeMb).toBe(100);
+  });
+
   it('replaces legacy "Found a bug?" tooltip with null at the global layer', async () => {
     await settingsRepo.set('widget_launcher_button', {
       buttonText: null,

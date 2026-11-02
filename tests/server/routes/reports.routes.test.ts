@@ -125,8 +125,8 @@ describe('reports routes', () => {
     const res = await app.request(
       'http://localhost/reports?status=open,closed&assignedTo=usr_2&source=manual&limit=10',
       {
-      headers: { cookie: 'session=sess_1' },
-      },
+        headers: { cookie: 'session=sess_1' },
+      }
     );
     expect(res.status).toBe(200);
     expect(listFilter).toMatchObject({
@@ -149,7 +149,7 @@ describe('reports routes', () => {
         priority: 'medium',
         channel: 'email',
         url: 'bugpin.io',
-      }),
+      })
     );
 
     const res = await app.request('http://localhost/reports', {
@@ -164,6 +164,31 @@ describe('reports routes', () => {
       title: 'Manual report',
       channel: 'email',
       url: 'https://bugpin.io',
+    });
+  });
+
+  it('normalizes MIME parameters on manual report files', async () => {
+    const formData = new FormData();
+    formData.append(
+      'data',
+      JSON.stringify({ projectId: 'prj_1', title: 'Manual report', priority: 'medium' })
+    );
+    formData.append(
+      'files',
+      new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])], 'clip.mp4', {
+        type: 'video/mp4;codecs=avc1.64001f',
+      })
+    );
+
+    const res = await createApp().request('http://localhost/reports', {
+      method: 'POST',
+      headers: { cookie: 'session=sess_1' },
+      body: formData,
+    });
+
+    expect(res.status).toBe(201);
+    expect(createManualPayload).toMatchObject({
+      files: [{ mimeType: 'video/mp4' }],
     });
   });
 

@@ -70,7 +70,7 @@ const nl: WidgetCatalog = {
   'screenshot.action.download': 'Downloaden',
   'screenshot.action.remove': 'Verwijderen',
   'screenshot.helperText':
-    'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV, AVI (max {videoSize}MB)',
+    'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',
   'screenshot.error.imageTooLarge': 'Afbeelding te groot. Maximale grootte is {size}MB.',

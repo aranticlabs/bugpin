@@ -120,6 +120,10 @@ describe('settingsService.update', () => {
     expect(retention.success).toBe(false);
     const screenshot = await settingsService.update({ screenshot: { maxScreenshotSize: 0 } });
     expect(screenshot.success).toBe(false);
+    const videoSize = await settingsService.update({
+      screenshot: { maxVideoUploadSizeMb: 101 },
+    });
+    expect(videoSize.success).toBe(false);
     const rateLimit = await settingsService.update({ rateLimitPerMinute: 0 });
     expect(rateLimit.success).toBe(false);
     const sessionMax = await settingsService.update({ sessionMaxAgeDays: 0 });

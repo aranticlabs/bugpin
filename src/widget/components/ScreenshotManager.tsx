@@ -46,7 +46,7 @@ interface ScreenshotManagerProps {
 const DEFAULT_MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const DEFAULT_MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
   media,
@@ -247,7 +247,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
             multiple
             style={{ display: 'none' }}
             onChange={handleFileInput}

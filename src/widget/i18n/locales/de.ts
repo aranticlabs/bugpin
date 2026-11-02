@@ -69,7 +69,7 @@ const de: WidgetCatalog = {
   'screenshot.action.download': 'Herunterladen',
   'screenshot.action.remove': 'Entfernen',
   'screenshot.helperText':
-    'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB) - MP4, WebM, MOV, AVI (max. {videoSize} MB)',
+    'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB) - MP4, WebM, MOV (max. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Nicht unterstütztes Bildformat: {type}',
   'screenshot.error.imageTooLarge': 'Bild zu groß. Maximale Größe: {size} MB.',

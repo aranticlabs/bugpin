@@ -127,10 +127,10 @@ export const settingsService = {
     if (input.screenshot?.maxVideoUploadSizeMb !== undefined) {
       if (
         input.screenshot.maxVideoUploadSizeMb < 1 ||
-        input.screenshot.maxVideoUploadSizeMb > 500
+        input.screenshot.maxVideoUploadSizeMb > 100
       ) {
         return Result.fail(
-          'Max video upload size must be between 1 and 500 MB',
+          'Max video upload size must be between 1 and 100 MB',
           'INVALID_VIDEO_UPLOAD_SIZE'
         );
       }

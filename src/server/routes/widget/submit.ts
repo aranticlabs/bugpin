@@ -16,6 +16,7 @@ import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
 import { widgetPackageCompatibilityService } from '../../services/widget-package-compatibility.service.js';
 import { parseVersion } from '../../utils/version-compare.js';
 import type { LauncherTextBundle, ReportMetadata } from '@shared/types';
+import { normalizeMimeType } from '@shared/mime';
 
 const widget = new Hono();
 
@@ -252,25 +253,26 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
 
   const media: Array<{ data: Buffer; filename: string; mimeType: string }> = [];
   for (const file of mediaFiles) {
-    // Early MIME type check before buffering
-    if (!allowedTypes.includes(file.type)) {
+    const mimeType = normalizeMimeType(file.type);
+    // Reject unsupported types before copying file contents.
+    if (!allowedTypes.includes(mimeType)) {
       logger.warn('Media file rejected: invalid MIME type', {
         filename: file.name,
-        mimeType: file.type,
+        mimeType,
       });
       return c.json(
         {
           success: false,
           error: 'UNSUPPORTED_MEDIA_TYPE',
-          message: `Unsupported media type "${sanitizeForDisplay(file.type)}" for "${sanitizeForDisplay(file.name)}".`,
-          details: { filename: file.name, mimeType: file.type },
+          message: `Unsupported media type "${sanitizeForDisplay(mimeType)}" for "${sanitizeForDisplay(file.name)}".`,
+          details: { filename: file.name, mimeType },
         },
         415
       );
     }
 
-    // Early size check before buffering
-    const isVideo = file.type.startsWith('video/');
+    // Reject oversized files before copying file contents.
+    const isVideo = mimeType.startsWith('video/');
     const sizeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
     if (file.size > sizeLimit) {
       const limitMb = Math.round(sizeLimit / (1024 * 1024));
@@ -301,7 +303,7 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
       media.push({
         data: buffer,
         filename: file.name,
-        mimeType: file.type,
+        mimeType,
       });
     } catch (error) {
       logger.error('Failed to process media file', error, { filename: file.name });

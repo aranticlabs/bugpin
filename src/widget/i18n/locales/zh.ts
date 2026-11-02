@@ -65,7 +65,7 @@ const zh: WidgetCatalog = {
   'screenshot.action.download': '下载',
   'screenshot.action.remove': '移除',
   'screenshot.helperText':
-    '支持格式：PNG、JPG、GIF、WebP（最大 {imageSize}MB） - MP4、WebM、MOV、AVI（最大 {videoSize}MB）',
+    '支持格式：PNG、JPG、GIF、WebP（最大 {imageSize}MB） - MP4、WebM、MOV（最大 {videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '不支持的图片格式：{type}',
   'screenshot.error.imageTooLarge': '图片过大，最大不超过 {size}MB。',
