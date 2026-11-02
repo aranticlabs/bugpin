@@ -5,6 +5,7 @@ import { projectsRepo } from '../../../src/server/database/repositories/projects
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
+import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import {
   widgetPackageCompatibilityService,
   type WidgetVersionObservationInput,
@@ -97,6 +98,7 @@ const baseSettings: Partial<AppSettings> = {
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalReportsService = { ...reportsService };
+const originalFilesRepo = { ...filesRepo };
 const originalWidgetPackageCompatibilityService = { ...widgetPackageCompatibilityService };
 const originalLogger = { ...logger };
 
@@ -115,6 +117,7 @@ beforeEach(() => {
   projectsRepo.findByApiKey = async () => projectResult;
   settingsRepo.getAll = async () => baseSettings as AppSettings;
   reportsService.create = async () => Result.ok(baseReport);
+  filesRepo.getVideoSizeByProjectSince = async () => 0;
   widgetPackageCompatibilityService.observe = async (input) => {
     observedWidgetVersions.push(input);
     return Result.ok(undefined);
@@ -132,6 +135,7 @@ afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(reportsService, originalReportsService);
+  Object.assign(filesRepo, originalFilesRepo);
   Object.assign(widgetPackageCompatibilityService, originalWidgetPackageCompatibilityService);
   Object.assign(logger, originalLogger);
 });
@@ -154,6 +158,15 @@ const validSubmitBody = {
     timestamp: new Date().toISOString(),
   },
 };
+
+function createVideoSubmitForm(size = 8): FormData {
+  const bytes = new Uint8Array(size);
+  bytes.set([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+  const form = new FormData();
+  form.set('data', JSON.stringify(validSubmitBody));
+  form.set('media', new File([bytes], 'clip.mp4', { type: 'video/mp4' }));
+  return form;
+}
 
 describe('widget routes', () => {
   describe('POST /widget/submit', () => {
@@ -342,6 +355,99 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it('rejects video when the project daily quota would be exceeded', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = async () => 1024 * 1024;
+      let createCalled = false;
+      reportsService.create = async () => {
+        createCalled = true;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(),
+      });
+
+      expect(res.status).toBe(429);
+      expect((await res.json()).error).toBe('VIDEO_QUOTA_EXCEEDED');
+      expect(createCalled).toBe(false);
+    });
+
+    it('does not check video usage when the project quota is disabled', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 0 },
+        },
+      };
+      let quotaChecked = false;
+      filesRepo.getVideoSizeByProjectSince = async () => {
+        quotaChecked = true;
+        return Number.MAX_SAFE_INTEGER;
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(),
+      });
+
+      expect(res.status).toBe(201);
+      expect(quotaChecked).toBe(false);
+    });
+
+    it('counts in-flight video uploads against the project quota', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = async () => 0;
+
+      let releaseFirst: (() => void) | undefined;
+      let markFirstStarted: (() => void) | undefined;
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      reportsService.create = async () => {
+        markFirstStarted?.();
+        await firstCanFinish;
+        return Result.ok(baseReport);
+      };
+
+      const app = createApp();
+      const firstResponse = app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      await firstStarted;
+
+      const secondResponse = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      releaseFirst?.();
+
+      expect(secondResponse.status).toBe(429);
+      expect((await firstResponse).status).toBe(201);
     });
 
     it('removes user activity when EU Privacy Mode disables capture', async () => {

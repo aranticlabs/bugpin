@@ -34,6 +34,8 @@ export function ScreenshotSettingsForm({
     value.maxImageUploadSizeMb ?? globalSettings?.screenshot.maxImageUploadSizeMb ?? 10;
   const effectiveMaxVideoUploadSizeMb =
     value.maxVideoUploadSizeMb ?? globalSettings?.screenshot.maxVideoUploadSizeMb ?? 50;
+  const effectiveMaxVideoUploadMbPerDay =
+    value.maxVideoUploadMbPerDay ?? globalSettings?.screenshot.maxVideoUploadMbPerDay ?? 2048;
 
   return (
     <div className="space-y-4">
@@ -60,6 +62,7 @@ export function ScreenshotSettingsForm({
                   maxScreenshotSize: undefined,
                   maxImageUploadSizeMb: undefined,
                   maxVideoUploadSizeMb: undefined,
+                  maxVideoUploadMbPerDay: undefined,
                 });
               }
             }}
@@ -124,6 +127,24 @@ export function ScreenshotSettingsForm({
             />
             <p className="text-xs text-muted-foreground">
               Maximum allowed size for uploaded videos (1-500 MB)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-video-upload-per-day">Daily Video Upload Limit (MB)</Label>
+            <Input
+              id="max-video-upload-per-day"
+              type="number"
+              min={0}
+              max={1048576}
+              value={effectiveMaxVideoUploadMbPerDay}
+              onChange={(e) =>
+                onChange({ ...value, maxVideoUploadMbPerDay: parseInt(e.target.value) || 0 })
+              }
+              disabled={disabled}
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum video data accepted per project in 24 hours. Use 0 to disable the limit.
             </p>
           </div>
 

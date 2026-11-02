@@ -225,6 +225,7 @@ export interface ScreenshotSettings {
   maxScreenshotSize?: number;
   maxImageUploadSizeMb?: number;
   maxVideoUploadSizeMb?: number;
+  maxVideoUploadMbPerDay?: number;
 }
 
 // Project language settings
@@ -492,6 +493,7 @@ export interface GlobalScreenshotSettings {
   maxScreenshotSize: number;
   maxImageUploadSizeMb: number;
   maxVideoUploadSizeMb: number;
+  maxVideoUploadMbPerDay: number;
 }
 
 // Settings Types

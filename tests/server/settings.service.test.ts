@@ -124,6 +124,10 @@ describe('settingsService.update', () => {
     expect(rateLimit.success).toBe(false);
     const sessionMax = await settingsService.update({ sessionMaxAgeDays: 0 });
     expect(sessionMax.success).toBe(false);
+    const videoQuota = await settingsService.update({
+      screenshot: { maxVideoUploadMbPerDay: 1048577 },
+    });
+    expect(videoQuota.success).toBe(false);
   });
 
   it('rejects invalid branding color', async () => {

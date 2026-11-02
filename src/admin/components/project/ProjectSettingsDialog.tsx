@@ -201,6 +201,7 @@ export function ProjectSettingsDialog({
         maxScreenshotSize: screenshotConf?.maxScreenshotSize,
         maxImageUploadSizeMb: screenshotConf?.maxImageUploadSizeMb,
         maxVideoUploadSizeMb: screenshotConf?.maxVideoUploadSizeMb,
+        maxVideoUploadMbPerDay: screenshotConf?.maxVideoUploadMbPerDay,
       });
 
       setDiagnosticSettings({

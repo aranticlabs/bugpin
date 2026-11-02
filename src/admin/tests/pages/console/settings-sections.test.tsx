@@ -110,6 +110,7 @@ describe('Settings sections', () => {
           maxScreenshotSize: 5,
           maxImageUploadSizeMb: 10,
           maxVideoUploadSizeMb: 50,
+          maxVideoUploadMbPerDay: 2048,
           useScreenCaptureAPI: true,
         },
       });

@@ -15,6 +15,7 @@ import {
   deleteAvatar,
   deleteAllAvatars,
   validateFile,
+  validateFileContent,
 } from '../../src/server/storage/files';
 
 const originalFindFiles = filesRepo.findByReportId;
@@ -279,6 +280,18 @@ describe('validateFile', () => {
     if (!result.success) {
       expect(result.code).toBe('INVALID_FILE_CONTENT');
     }
+  });
+
+  it('validates file content without applying a size limit', () => {
+    const largePng = Buffer.alloc(2 * 1024 * 1024);
+    pngBuffer.copy(largePng);
+
+    expect(
+      validateFileContent({ data: largePng, mimeType: 'image/png', type: 'screenshot' }).success
+    ).toBe(true);
+    expect(
+      validateFileContent({ data: jpegBuffer, mimeType: 'image/png', type: 'screenshot' }).success
+    ).toBe(false);
   });
 
   it('rejects PNG magic bytes when declared as JPEG', () => {

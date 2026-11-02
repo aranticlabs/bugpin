@@ -1,7 +1,13 @@
 import { reportsRepo, type CreateReportData } from '../database/repositories/reports.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
-import { saveFile, deleteReportFiles, readStoredFile, validateFile } from '../storage/files.js';
+import {
+  saveFile,
+  deleteReportFiles,
+  readStoredFile,
+  validateFile,
+  validateFileContent,
+} from '../storage/files.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
@@ -123,10 +129,7 @@ function determineFileType(mimeType: string): FileType {
   return 'attachment';
 }
 
-async function validateSubmittedFiles(
-  files: MediaFile[] | undefined,
-  strict: boolean
-): Promise<Result<void>> {
+async function validateSubmittedFiles(files: MediaFile[] | undefined): Promise<Result<void>> {
   if (!files?.length) {
     return Result.ok(undefined);
   }
@@ -145,16 +148,7 @@ async function validateSubmittedFiles(
     });
 
     if (!validation.success) {
-      if (strict) {
-        return Result.fail(validation.error, validation.code);
-      }
-
-      logger.warn('Submitted file rejected', {
-        filename: file.filename,
-        mimeType: file.mimeType,
-        reason: validation.error,
-        code: validation.code,
-      });
+      return Result.fail(validation.error, validation.code);
     }
   }
 
@@ -173,9 +167,21 @@ async function saveSubmittedFiles(
   for (const file of files) {
     const fileType = determineFileType(file.mimeType);
 
-    const validation = await validateSubmittedFiles([file], strict);
-    if (!validation.success) {
-      return validation;
+    if (!strict) {
+      const validation = validateFileContent({
+        data: file.data,
+        mimeType: file.mimeType,
+        type: fileType,
+      });
+      if (!validation.success) {
+        logger.warn('Submitted file rejected', {
+          filename: file.filename,
+          mimeType: file.mimeType,
+          reason: validation.error,
+          code: validation.code,
+        });
+        continue;
+      }
     }
 
     try {
@@ -264,9 +270,11 @@ async function createForProject(
     assignedTo = options.requestedAssignee;
   }
 
-  const fileValidation = await validateSubmittedFiles(input.files, options.strictFileValidation);
-  if (!fileValidation.success) {
-    return fileValidation;
+  if (options.strictFileValidation) {
+    const fileValidation = await validateSubmittedFiles(input.files);
+    if (!fileValidation.success) {
+      return fileValidation;
+    }
   }
 
   const reportData: CreateReportData = {

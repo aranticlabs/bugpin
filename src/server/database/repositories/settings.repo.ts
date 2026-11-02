@@ -72,6 +72,7 @@ const DEFAULT_SCREENSHOT: GlobalScreenshotSettings = {
   maxScreenshotSize: 10,
   maxImageUploadSizeMb: 10,
   maxVideoUploadSizeMb: 50,
+  maxVideoUploadMbPerDay: 2048,
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {

@@ -68,10 +68,10 @@ export interface ValidateFileOptions {
   maxSizeMb?: number;
 }
 
-export function validateFile(options: ValidateFileOptions): Result<void> {
-  const { data, mimeType, type, maxSizeMb } = options;
+export type ValidateFileContentOptions = Omit<ValidateFileOptions, 'maxSizeMb'>;
 
-  // Check MIME type against allowlist
+export function validateFileContent(options: ValidateFileContentOptions): Result<void> {
+  const { data, mimeType, type } = options;
   const allowedTypes: readonly string[] =
     type === 'attachment'
       ? ALLOWED_ATTACHMENT_MIME_TYPES
@@ -87,23 +87,30 @@ export function validateFile(options: ValidateFileOptions): Result<void> {
       'INVALID_MIME_TYPE'
     );
   }
-
-  // Check file size
-  const sizeMb = data.length / (1024 * 1024);
-  const limit = maxSizeMb ?? (type === 'video' ? MAX_VIDEO_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB);
-  if (sizeMb > limit) {
-    return Result.fail(
-      `File size ${sizeMb.toFixed(1)}MB exceeds the ${limit}MB limit`,
-      'FILE_TOO_LARGE'
-    );
-  }
-
-  // Validate magic bytes for types that have signatures
   const signatures = MAGIC_BYTES[mimeType];
   if (signatures && !matchesMagicBytes(data, signatures)) {
     return Result.fail(
       `File content does not match declared MIME type "${mimeType}"`,
       'INVALID_FILE_CONTENT'
+    );
+  }
+
+  return Result.ok(undefined);
+}
+
+export function validateFile(options: ValidateFileOptions): Result<void> {
+  const contentValidation = validateFileContent(options);
+  if (!contentValidation.success) {
+    return contentValidation;
+  }
+
+  const sizeMb = options.data.length / (1024 * 1024);
+  const limit =
+    options.maxSizeMb ?? (options.type === 'video' ? MAX_VIDEO_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB);
+  if (sizeMb > limit) {
+    return Result.fail(
+      `File size ${sizeMb.toFixed(1)}MB exceeds the ${limit}MB limit`,
+      'FILE_TOO_LARGE'
     );
   }
 

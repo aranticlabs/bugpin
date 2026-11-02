@@ -136,6 +136,18 @@ export const settingsService = {
       }
     }
 
+    if (input.screenshot?.maxVideoUploadMbPerDay !== undefined) {
+      if (
+        input.screenshot.maxVideoUploadMbPerDay < 0 ||
+        input.screenshot.maxVideoUploadMbPerDay > 1048576
+      ) {
+        return Result.fail(
+          'Daily video upload limit must be between 0 and 1048576 MB',
+          'INVALID_VIDEO_UPLOAD_QUOTA'
+        );
+      }
+    }
+
     // Validate rateLimitPerMinute if provided
     if (input.rateLimitPerMinute !== undefined) {
       if (input.rateLimitPerMinute < 1 || input.rateLimitPerMinute > 1000) {

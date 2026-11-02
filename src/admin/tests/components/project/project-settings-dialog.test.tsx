@@ -120,6 +120,7 @@ const baseProject: Project = {
       maxScreenshotSize: 5,
       maxImageUploadSizeMb: 10,
       maxVideoUploadSizeMb: 50,
+      maxVideoUploadMbPerDay: 2048,
     },
     security: {
       allowedOrigins: ['example.com'],

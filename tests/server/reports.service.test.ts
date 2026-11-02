@@ -21,11 +21,25 @@ import type { EEHooks } from '../../src/server/types/ee-plugin';
 // Valid file buffers with correct magic bytes for validation
 const validPngBuffer = Buffer.from(
   '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000000020001E221BC330000000049454E44AE426082',
-  'hex',
+  'hex'
 );
 const validMp4Buffer = Buffer.from([
-  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // ftyp at offset 4
-  0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x00, 0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x18,
+  0x66,
+  0x74,
+  0x79,
+  0x70, // ftyp at offset 4
+  0x69,
+  0x73,
+  0x6f,
+  0x6d,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
 ]);
 
 const baseMetadata: ReportMetadata = {
@@ -186,7 +200,8 @@ beforeEach(() => {
 
   reportHistoryService.record = async () => undefined;
 
-  settingsCacheService.getAll = async () => ({ screenshot: { maxScreenshotSize: 10, useScreenCaptureAPI: false } } as AppSettings);
+  settingsCacheService.getAll = async () =>
+    ({ screenshot: { maxScreenshotSize: 10, useScreenCaptureAPI: false } }) as AppSettings;
 });
 
 afterEach(() => {
@@ -363,6 +378,29 @@ describe('reportsService.create', () => {
     expect(fileCreateTypes).toEqual(['screenshot', 'video']);
   });
 
+  it('keeps the report but skips widget files with invalid content', async () => {
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Mixed Media',
+      metadata: baseMetadata,
+      files: [
+        {
+          filename: 'fake.png',
+          mimeType: 'image/png',
+          data: validMp4Buffer,
+        },
+        {
+          filename: 'clip.mp4',
+          mimeType: 'video/mp4',
+          data: validMp4Buffer,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['video']);
+  });
+
   it('creates manual reports without reporter submission confirmation', async () => {
     projectsRepo.findById = async () => baseProject;
 
@@ -373,7 +411,7 @@ describe('reportsService.create', () => {
         reporterEmail: 'reporter@example.com',
         channel: 'email',
       },
-      'usr_1',
+      'usr_1'
     );
 
     expect(result.success).toBe(true);
@@ -402,7 +440,7 @@ describe('reportsService.create', () => {
         title: 'Manual report',
         assignedTo: 'usr_2',
       },
-      'usr_1',
+      'usr_1'
     );
 
     expect(result.success).toBe(false);
@@ -466,7 +504,7 @@ describe('reportsService.update', () => {
     const result = await reportsService.update(
       'rpt_1',
       { status: 'resolved', priority: 'high', assignedTo: 'usr_2' },
-      'usr_1',
+      'usr_1'
     );
     expect(result.success).toBe(true);
     expect(updatePayload).toMatchObject({ resolvedBy: 'usr_1' });

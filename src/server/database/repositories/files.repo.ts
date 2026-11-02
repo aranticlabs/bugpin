@@ -143,6 +143,18 @@ export const filesRepo = {
     return result.total ?? 0;
   },
 
+  async getVideoSizeByProjectSince(projectId: string, since: string): Promise<number> {
+    const result = getDb()
+      .query(
+        `SELECT SUM(files.size_bytes) AS total
+         FROM files
+         JOIN reports ON reports.id = files.report_id
+         WHERE reports.project_id = ? AND files.type = 'video' AND files.created_at >= ?`
+      )
+      .get(projectId, since) as { total: number | null };
+    return result.total ?? 0;
+  },
+
   /**
    * Get all files
    */

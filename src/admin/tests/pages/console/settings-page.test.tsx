@@ -167,6 +167,7 @@ describe('Settings Page', () => {
               maxScreenshotSize: 5,
               maxImageUploadSizeMb: 10,
               maxVideoUploadSizeMb: 50,
+              maxVideoUploadMbPerDay: 2048,
             },
             notifications: {
               emailEnabled: false,
