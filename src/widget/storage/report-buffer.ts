@@ -1,6 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { MediaItem } from '../api/submit.js';
-import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
+import { buildSubmitFormData, type MediaItem } from '../api/submit-form.js';
 
 const DB_NAME = 'bugpin-reports';
 const DB_VERSION = 2; // Bump version for schema change
@@ -52,22 +51,6 @@ interface ReportBufferDB extends DBSchema {
 
 let db: IDBPDatabase<ReportBufferDB> | null = null;
 let syncInterval: ReturnType<typeof setInterval> | null = null;
-
-/**
- * Get file extension from mime type
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeMap: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/quicktime': 'mov',
-  };
-  return mimeMap[mimeType] || 'bin';
-}
 
 /**
  * Initialize the IndexedDB database
@@ -198,37 +181,7 @@ async function submitReport(report: PendingReport): Promise<boolean> {
     // Build URL
     const url = new URL('/api/widget/submit', report.serverUrl);
 
-    // Create form data
-    const formData = new FormData();
-
-    // Add JSON data
-    formData.append(
-      'data',
-      JSON.stringify({
-        title: report.title,
-        description: report.description,
-        priority: report.priority,
-        reporterEmail: report.reporterEmail,
-        reporterName: report.reporterName,
-        locale: report.locale,
-        metadata: report.metadata,
-        mediaCount: report.media?.length || 0,
-        mediaAnnotations: report.media?.map((item) => item.annotations).filter(Boolean),
-      })
-    );
-
-    // Add media files
-    if (report.media && report.media.length > 0) {
-      for (let i = 0; i < report.media.length; i++) {
-        const item = report.media[i];
-        const blob = dataUrlToBlob(item.dataUrl);
-        const ext =
-          getExtensionFromDataUrl(item.dataUrl) || getExtensionFromMimeType(item.mimeType);
-        const isVideo = item.mimeType.startsWith('video/');
-        const prefix = isVideo ? 'video' : 'screenshot';
-        formData.append('media', blob, `${prefix}-${i}.${ext}`);
-      }
-    }
+    const { formData } = buildSubmitFormData(report);
 
     const serverResponse = await fetch(url.toString(), {
       method: 'POST',

@@ -79,6 +79,7 @@ function saveFormDraft(
     localStorage.setItem(getFormDraftKey(apiKey), JSON.stringify(draft));
   } catch (error) {
     console.error('[BugPin] Failed to save form draft:', error);
+    throw error;
   }
 }
 
@@ -120,6 +121,7 @@ async function saveMediaDraft(apiKey: string, media: CapturedMedia[]): Promise<v
     });
   } catch (error) {
     console.error('[BugPin] Failed to save media draft:', error);
+    throw error;
   }
 }
 
@@ -166,16 +168,12 @@ async function saveDraft(
   media: CapturedMedia[],
   ownerEmail?: string
 ): Promise<void> {
-  // Save form data to localStorage (fast, synchronous)
-  saveFormDraft(apiKey, formData, activeTab, ownerEmail);
-
-  // Save media to IndexedDB (can handle large data)
   if (media.length > 0) {
     await saveMediaDraft(apiKey, media);
   } else {
-    // Clear media if empty
     await clearMediaDraft(apiKey);
   }
+  saveFormDraft(apiKey, formData, activeTab, ownerEmail);
 }
 
 /**

@@ -5,8 +5,13 @@ import { installDom } from '../helpers/dom';
 
 const originalFileReader = globalThis.FileReader;
 const originalImage = globalThis.Image;
+const originalCreateObjectURL = globalThis.URL.createObjectURL;
+const originalRevokeObjectURL = globalThis.URL.revokeObjectURL;
 
 let restoreDom: (() => void) | null = null;
+let originalCreateElement: typeof document.createElement;
+let createdObjectUrls: Blob[] = [];
+let revokedObjectUrls: string[] = [];
 
 class MockFileReader {
   result: string | ArrayBuffer | null = null;
@@ -47,8 +52,34 @@ function buildFileList(file: File): FileList {
 
 beforeEach(() => {
   restoreDom = installDom();
+  createdObjectUrls = [];
+  revokedObjectUrls = [];
   globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
   globalThis.Image = MockImage as unknown as typeof Image;
+  globalThis.URL.createObjectURL = ((blob: Blob) => {
+    createdObjectUrls.push(blob);
+    return `blob:test-${createdObjectUrls.length}`;
+  }) as typeof URL.createObjectURL;
+  globalThis.URL.revokeObjectURL = ((url: string) => {
+    revokedObjectUrls.push(url);
+  }) as typeof URL.revokeObjectURL;
+  originalCreateElement = document.createElement.bind(document);
+  document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+    const element = originalCreateElement(tagName, options);
+    if (tagName.toLowerCase() === 'video') {
+      const video = element as HTMLVideoElement;
+      Object.defineProperties(video, {
+        videoWidth: { value: 1280 },
+        videoHeight: { value: 720 },
+        duration: { value: 2.5 },
+        src: {
+          set: () =>
+            queueMicrotask(() => video.onloadedmetadata?.(new window.Event('loadedmetadata'))),
+        },
+      });
+    }
+    return element;
+  }) as typeof document.createElement;
 });
 
 afterEach(() => {
@@ -56,6 +87,8 @@ afterEach(() => {
   restoreDom = null;
   globalThis.FileReader = originalFileReader;
   globalThis.Image = originalImage;
+  globalThis.URL.createObjectURL = originalCreateObjectURL;
+  globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
 });
 
 describe('ScreenshotManager uploads', () => {
@@ -159,6 +192,17 @@ describe('ScreenshotManager uploads', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(container.textContent).not.toContain('Unsupported video format');
+    expect(onUpload).toHaveBeenCalledTimes(1);
+    const uploaded = (onUpload.mock.calls as unknown[][])[0]?.[0] as
+      | { blob?: Blob; dataUrl?: string; width?: number; height?: number; durationMs?: number }
+      | undefined;
+    expect(uploaded?.blob).toBeInstanceOf(Blob);
+    expect(uploaded?.dataUrl).toBeUndefined();
+    expect(uploaded?.width).toBe(1280);
+    expect(uploaded?.height).toBe(720);
+    expect(uploaded?.durationMs).toBe(2500);
+    expect(createdObjectUrls).toHaveLength(1);
+    expect(revokedObjectUrls).toContain('blob:test-1');
 
     Object.defineProperty(input, 'files', {
       value: buildFileList(
@@ -170,7 +214,7 @@ describe('ScreenshotManager uploads', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(container.textContent).toContain('Unsupported video format');
-    expect(onUpload).not.toHaveBeenCalled();
+    expect(onUpload).toHaveBeenCalledTimes(1);
 
     render(null, container);
     container.remove();
@@ -215,6 +259,102 @@ describe('ScreenshotManager uploads', () => {
     expect(uploaded?.height).toBe(240);
 
     render(null, container);
+    container.remove();
+  });
+
+  it('keeps the Blob when uploaded video metadata cannot be read', async () => {
+    const onUpload = mock(() => undefined);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(
+      <ScreenshotManager
+        media={[]}
+        onCapture={() => undefined}
+        onUpload={onUpload}
+        onRemove={() => undefined}
+        onAnnotate={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        reduceQuality={false}
+        onReduceQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />,
+      container
+    );
+    document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+      const element = originalCreateElement(tagName, options);
+      if (tagName.toLowerCase() === 'video') {
+        const video = element as HTMLVideoElement;
+        Object.defineProperty(video, 'src', {
+          set: () =>
+            queueMicrotask(() => {
+              video.onerror?.(new window.Event('error'));
+              video.onerror?.(new window.Event('error'));
+            }),
+        });
+      }
+      return element;
+    }) as typeof document.createElement;
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: buildFileList(new File([new Uint8Array([1])], 'broken.mp4', { type: 'video/mp4' })),
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.textContent).not.toContain('Unsupported video format');
+    expect(onUpload).toHaveBeenCalledTimes(1);
+    const uploaded = (onUpload.mock.calls as unknown[][])[0]?.[0] as
+      { blob?: Blob; width?: number; height?: number; durationMs?: number } | undefined;
+    expect(uploaded?.blob).toBeInstanceOf(Blob);
+    expect(uploaded?.width).toBeUndefined();
+    expect(uploaded?.height).toBeUndefined();
+    expect(uploaded?.durationMs).toBeUndefined();
+    expect(revokedObjectUrls).toContain('blob:test-1');
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('previews Blob-backed videos through an object URL', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' });
+
+    render(
+      <ScreenshotManager
+        media={[
+          {
+            id: 'video-1',
+            blob,
+            timestamp: new Date(),
+            annotated: false,
+            mimeType: 'video/mp4',
+          },
+        ]}
+        onCapture={() => undefined}
+        onUpload={() => undefined}
+        onRemove={() => undefined}
+        onAnnotate={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        reduceQuality={false}
+        onReduceQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />,
+      container
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.querySelector('video')?.getAttribute('src')).toBe('blob:test-1');
+    expect(createdObjectUrls).toEqual([blob]);
+
+    render(null, container);
+    expect(revokedObjectUrls).toContain('blob:test-1');
     container.remove();
   });
 });

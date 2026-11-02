@@ -157,6 +157,38 @@ describe('draft storage', () => {
     expect(loaded?.media).toHaveLength(1);
   });
 
+  it('stores and restores Blob-backed media without conversion', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-blob`;
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' });
+
+    await draftStorage.save(
+      apiKey,
+      {
+        title: 'Video draft',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      'media',
+      [
+        {
+          id: 'video-1',
+          blob,
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: 'video/mp4',
+        },
+      ]
+    );
+
+    const loaded = await draftStorage.load(apiKey);
+    expect(loaded?.media[0]?.blob).toBeInstanceOf(Blob);
+    expect(loaded?.media[0]?.blob?.size).toBe(3);
+    expect(loaded?.media[0]?.dataUrl).toBeUndefined();
+  });
+
   it('clears drafts and media owned by another or unknown reporter', async () => {
     const { draftStorage } = await import('../../storage/draft-storage.js');
     const formData = {

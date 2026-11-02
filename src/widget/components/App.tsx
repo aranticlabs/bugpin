@@ -58,6 +58,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const effectiveTheme = useEffectiveTheme(config.theme);
   const [step, setStep] = useState<WidgetStep>('closed');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [media, setMedia] = useState<CapturedMedia[]>([]);
   const [annotatingMediaId, setAnnotatingMediaId] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     sizeMb: number;
     limitMb: number;
   } | null>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
 
   // Load draft when widget opens
   useEffect(() => {
@@ -162,17 +164,26 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   }, [hasContent, resetUserActivity]);
 
   // Close and keep draft
-  const handleCloseKeepDraft = useCallback(() => {
-    draftStorage.save(config.apiKey, formData, activeTab, media, config.reporterEmail);
-    resetUserActivity();
-    setShowCloseConfirm(false);
-    setStep('closed');
-    setAnnotatingMediaId(null);
-    setDraftLoaded(false);
+  const handleCloseKeepDraft = useCallback(async () => {
+    try {
+      await draftStorage.save(config.apiKey, formData, activeTab, media, config.reporterEmail);
+      resetUserActivity();
+      setShowCloseConfirm(false);
+      setStep('closed');
+      setAnnotatingMediaId(null);
+      setDraftLoaded(false);
+    } catch (error) {
+      console.error('[BugPin] Failed to save draft:', error);
+      setToast({
+        message: 'Failed to save the draft. Keep the widget open and try again.',
+        type: 'error',
+      });
+    }
   }, [config.apiKey, config.reporterEmail, formData, activeTab, media, resetUserActivity]);
 
   // Close and discard draft
   const handleCloseDiscardDraft = useCallback(() => {
+    uploadControllerRef.current?.abort();
     resetUserActivity();
     setMedia([]);
     setActiveTab('details');
@@ -342,6 +353,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
               ? {
                   ...item,
                   dataUrl: annotatedImage,
+                  blob: undefined,
                   annotated: true,
                   annotations: annotationData,
                 }
@@ -363,6 +375,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const handleSubmit = useCallback(
     async (formData: FormData, mediaItems: CapturedMedia[]) => {
       setIsSubmitting(true);
+      setUploadProgress(0);
+      const controller = new AbortController();
+      uploadControllerRef.current = controller;
 
       try {
         // Capture context
@@ -374,22 +389,24 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         });
 
         // Submit report with all media
-        await submitReportFn({
-          apiKey: config.apiKey,
-          serverUrl: config.serverUrl,
-          title: formData.title,
-          description: formData.description,
-          priority: formData.priority,
-          reporterEmail: formData.reporterEmail || undefined,
-          reporterName: formData.reporterName || undefined,
-          locale: getLocale(),
-          media: mediaItems.map((item) => ({
-            dataUrl: item.dataUrl,
-            mimeType: item.mimeType,
-            annotations: item.annotations,
-          })),
-          metadata,
-        });
+        await submitReportFn(
+          {
+            apiKey: config.apiKey,
+            serverUrl: config.serverUrl,
+            title: formData.title,
+            description: formData.description,
+            priority: formData.priority,
+            reporterEmail: formData.reporterEmail || undefined,
+            reporterName: formData.reporterName || undefined,
+            locale: getLocale(),
+            media: mediaItems,
+            metadata,
+          },
+          {
+            signal: controller.signal,
+            onProgress: setUploadProgress,
+          }
+        );
 
         // Show success toast
         setToast({ message: t('toast.success.submit'), type: 'success' });
@@ -397,12 +414,17 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         // Close modal and clear draft
         handleCloseWidget(true);
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('[BugPin] Failed to submit report:', error);
         setToast({
           message: error instanceof Error ? error.message : t('toast.error.submit'),
           type: 'error',
         });
       } finally {
+        uploadControllerRef.current = null;
+        setUploadProgress(null);
         setIsSubmitting(false);
       }
     },
@@ -411,6 +433,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   const handleToastClose = useCallback(() => {
     setToast(null);
+  }, []);
+
+  const handleCancelSubmit = useCallback(() => {
+    uploadControllerRef.current?.abort();
   }, []);
 
   // Get the media item being annotated
@@ -442,7 +468,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         onClick={handleOpenWidget}
       />
 
-      {step === 'annotating' && annotatingMedia && (
+      {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
         <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
           <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
             <AnnotationCanvasComponent
@@ -465,6 +491,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           onAddMedia={handleAddMedia}
           onRemoveMedia={handleRemoveMedia}
           isSubmitting={isSubmitting}
+          uploadProgress={uploadProgress}
+          onCancelSubmit={handleCancelSubmit}
           isCapturing={isCapturing}
           enableAnnotation={config.enableAnnotation}
           maxImageSize={config.maxImageUploadSize}

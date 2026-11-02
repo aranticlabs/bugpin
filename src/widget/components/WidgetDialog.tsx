@@ -25,6 +25,8 @@ interface WidgetDialogProps {
   onAddMedia: (item: CapturedMedia) => void;
   onRemoveMedia: (id: string) => void;
   isSubmitting: boolean;
+  uploadProgress: number | null;
+  onCancelSubmit: () => void;
   isCapturing: boolean;
   enableAnnotation: boolean;
   // Controlled state props (lifted to App for persistence across capture)
@@ -58,6 +60,8 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onAddMedia,
   onRemoveMedia,
   isSubmitting,
+  uploadProgress,
+  onCancelSubmit,
   isCapturing,
   enableAnnotation,
   activeTab,
@@ -277,17 +281,36 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
             </div>
 
             {/* Footer */}
-            <div class="shrink-0 flex gap-3 p-6 border-t border-solid border-border bg-muted">
-              <Button variant="outline" class="flex-1" onClick={onClose} disabled={isSubmitting}>
-                {t('dialog.buttons.cancel')}
-              </Button>
-              <Button class="flex-1" onClick={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <span class="w-4 h-4 border-2 border-solid border-white/30 border-t-white rounded-full animate-[spin_0.8s_linear_infinite]" />
-                ) : (
-                  t('dialog.buttons.submit')
-                )}
-              </Button>
+            <div class="shrink-0 flex flex-col gap-3 p-6 border-t border-solid border-border bg-muted">
+              {isSubmitting && uploadProgress !== null && (
+                <div
+                  class="h-1.5 overflow-hidden rounded-full bg-foreground/15"
+                  role="progressbar"
+                  aria-label="Upload progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(uploadProgress * 100)}
+                >
+                  <div
+                    class="h-full bg-[var(--button-color)] transition-[width]"
+                    style={{ width: `${Math.round(uploadProgress * 100)}%` }}
+                  />
+                </div>
+              )}
+              <div class="flex gap-3">
+                <Button
+                  variant="outline"
+                  class="flex-1"
+                  onClick={isSubmitting ? onCancelSubmit : onClose}
+                >
+                  {t('dialog.buttons.cancel')}
+                </Button>
+                <Button class="flex-1" onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting && uploadProgress !== null
+                    ? `${Math.round(uploadProgress * 100)}%`
+                    : t('dialog.buttons.submit')}
+                </Button>
+              </div>
             </div>
           </>
         )}
