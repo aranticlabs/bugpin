@@ -99,6 +99,7 @@ const es: WidgetCatalog = {
   'recording.notice.noMicrophone': 'Grabando sin micrófono.',
   'recording.stopped.duration': 'Grabación detenida en el límite de {minutes} minutos.',
   'recording.stopped.size': 'Grabación detenida en el límite de {size} MB.',
+  'recording.recovered': 'Grabación guardada. Abre BugPin para continuar.',
   'recording.error.unavailable': 'La grabación de pantalla no está disponible.',
   'recording.error.failed': 'La grabación ha fallado. Inténtalo de nuevo.',
   'recording.error.empty': 'La grabación estaba vacía. Inténtalo de nuevo.',

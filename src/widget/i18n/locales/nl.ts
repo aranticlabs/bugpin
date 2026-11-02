@@ -100,6 +100,7 @@ const nl: WidgetCatalog = {
   'recording.notice.noMicrophone': 'Opname zonder microfoon.',
   'recording.stopped.duration': 'Opname gestopt bij de limiet van {minutes} minuten.',
   'recording.stopped.size': 'Opname gestopt bij de limiet van {size}MB.',
+  'recording.recovered': 'Opname opgeslagen. Open BugPin om door te gaan.',
   'recording.error.unavailable': 'Schermopname is niet beschikbaar.',
   'recording.error.failed': 'Opname mislukt. Probeer het opnieuw.',
   'recording.error.empty': 'De opname was leeg. Probeer het opnieuw.',

@@ -78,6 +78,7 @@ class FakeMediaRecorder {
   static finalChunk = new Blob();
   static failConstruction = false;
   static failStart = false;
+  static reportedMimeType: string | null = null;
 
   static isTypeSupported(mimeType: string): boolean {
     this.supportChecks.push(mimeType);
@@ -103,7 +104,7 @@ class FakeMediaRecorder {
     if (FakeMediaRecorder.failConstruction) throw new Error('constructor failed');
     this.stream = stream;
     this.options = options;
-    this.mimeType = options.mimeType ?? '';
+    this.mimeType = FakeMediaRecorder.reportedMimeType ?? options.mimeType ?? '';
     FakeMediaRecorder.instances.push(this);
   }
 
@@ -176,6 +177,7 @@ beforeEach(() => {
   FakeMediaRecorder.finalChunk = new Blob();
   FakeMediaRecorder.failConstruction = false;
   FakeMediaRecorder.failStart = false;
+  FakeMediaRecorder.reportedMimeType = null;
   globalThis.MediaRecorder = FakeMediaRecorder as unknown as typeof MediaRecorder;
   setMediaDevices({ getDisplayMedia: async () => makeVideoStream().stream });
   globalThis.setInterval = ((callback: TimerHandler) => {
@@ -320,6 +322,19 @@ describe('screen recorder', () => {
     expect(result?.mimeType).toBe('video/webm');
     expect(result?.hasAudio).toBe(true);
     expect(microphone.stopCount).toBeGreaterThan(0);
+  });
+
+  it('uses the MIME type reported by the recorder for recovery metadata', async () => {
+    FakeMediaRecorder.reportedMimeType = 'video/mp4;codecs=avc1.64003e';
+    const { stream } = makeVideoStream();
+    const session = startRecording(stream, null, {
+      maxDurationMs: 10_000,
+      maxBytes: 10_000,
+    });
+
+    expect(session.mimeType).toBe('video/mp4');
+    session.stop();
+    expect((await session.finished)?.mimeType).toBe('video/mp4');
   });
 
   it('reports no audio when the microphone ended before recording started', async () => {

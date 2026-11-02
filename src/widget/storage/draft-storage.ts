@@ -6,6 +6,8 @@ const DB_NAME = 'bugpin-drafts';
 const DB_VERSION = 1;
 const MEDIA_STORE = 'draft-media';
 const DRAFT_KEY_PREFIX = 'bugpin-draft-';
+const MEDIA_SAVED_AT_PREFIX = 'bugpin-draft-media-saved-at-';
+const MEDIA_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface DraftMediaDB extends DBSchema {
   'draft-media': {
@@ -53,6 +55,15 @@ async function initDB(): Promise<IDBPDatabase<DraftMediaDB>> {
  */
 function getFormDraftKey(apiKey: string): string {
   return `${DRAFT_KEY_PREFIX}${apiKey}`;
+}
+
+function getMediaSavedAtKey(apiKey: string): string {
+  return `${MEDIA_SAVED_AT_PREFIX}${apiKey}`;
+}
+
+function isExpired(savedAt: string): boolean {
+  const timestamp = Date.parse(savedAt);
+  return !Number.isFinite(timestamp) || Date.now() - timestamp >= MEDIA_EXPIRY_MS;
 }
 
 /**
@@ -114,11 +125,13 @@ function clearFormDraft(apiKey: string): void {
 async function saveMediaDraft(apiKey: string, media: CapturedMedia[]): Promise<void> {
   try {
     const database = await initDB();
+    const savedAt = new Date().toISOString();
     await database.put(MEDIA_STORE, {
       apiKey,
       media,
-      savedAt: new Date().toISOString(),
+      savedAt,
     });
+    localStorage.setItem(getMediaSavedAtKey(apiKey), savedAt);
   } catch (error) {
     console.error('[BugPin] Failed to save media draft:', error);
     throw error;
@@ -132,6 +145,12 @@ async function loadMediaDraft(apiKey: string): Promise<CapturedMedia[]> {
   try {
     const database = await initDB();
     const data = await database.get(MEDIA_STORE, apiKey);
+    if (!data) return [];
+    if (isExpired(data.savedAt)) {
+      await clearMediaDraft(apiKey);
+      return [];
+    }
+    localStorage.setItem(getMediaSavedAtKey(apiKey), data.savedAt);
     return data?.media || [];
   } catch (error) {
     console.error('[BugPin] Failed to load media draft:', error);
@@ -142,12 +161,26 @@ async function loadMediaDraft(apiKey: string): Promise<CapturedMedia[]> {
 /**
  * Clear media from IndexedDB
  */
-async function clearMediaDraft(apiKey: string): Promise<void> {
+async function clearMediaDraft(apiKey: string): Promise<boolean> {
   try {
     const database = await initDB();
     await database.delete(MEDIA_STORE, apiKey);
+    localStorage.removeItem(getMediaSavedAtKey(apiKey));
+    return true;
   } catch (error) {
     console.error('[BugPin] Failed to clear media draft:', error);
+    return false;
+  }
+}
+
+async function expireMedia(apiKey: string): Promise<boolean> {
+  try {
+    const savedAt = localStorage.getItem(getMediaSavedAtKey(apiKey));
+    if (!savedAt || !isExpired(savedAt)) return false;
+    return await clearMediaDraft(apiKey);
+  } catch (error) {
+    console.error('[BugPin] Failed to expire draft media:', error);
+    return false;
   }
 }
 
@@ -215,4 +248,5 @@ export const draftStorage = {
   load: loadDraft,
   clear: clearDraft,
   has: hasDraft,
+  expireMedia,
 };

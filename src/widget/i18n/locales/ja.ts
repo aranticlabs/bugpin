@@ -97,6 +97,7 @@ const ja: WidgetCatalog = {
   'recording.notice.noMicrophone': 'マイクなしで録画しています。',
   'recording.stopped.duration': '{minutes} 分の上限に達したため録画を停止しました。',
   'recording.stopped.size': '{size}MBの上限に達したため録画を停止しました。',
+  'recording.recovered': '録画を保存しました。BugPin を開いて続行してください。',
   'recording.error.unavailable': '画面録画は利用できません。',
   'recording.error.failed': '録画に失敗しました。もう一度お試しください。',
   'recording.error.empty': '録画が空でした。もう一度お試しください。',

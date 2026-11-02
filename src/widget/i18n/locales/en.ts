@@ -97,6 +97,7 @@ const en = {
   'recording.notice.noMicrophone': 'Recording without microphone.',
   'recording.stopped.duration': 'Recording stopped at the {minutes} minute limit.',
   'recording.stopped.size': 'Recording stopped at the {size}MB limit.',
+  'recording.recovered': 'Recording saved. Open BugPin to continue.',
   'recording.error.unavailable': 'Screen recording is not available.',
   'recording.error.failed': 'Recording failed. Please try again.',
   'recording.error.empty': 'The recording was empty. Please try again.',

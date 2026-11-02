@@ -98,6 +98,7 @@ const it: WidgetCatalog = {
   'recording.notice.noMicrophone': 'Registrazione senza microfono.',
   'recording.stopped.duration': 'Registrazione interrotta al limite di {minutes} minuti.',
   'recording.stopped.size': 'Registrazione interrotta al limite di {size}MB.',
+  'recording.recovered': 'Registrazione salvata. Apri BugPin per continuare.',
   'recording.error.unavailable': 'La registrazione dello schermo non è disponibile.',
   'recording.error.failed': 'Registrazione non riuscita. Riprova.',
   'recording.error.empty': 'La registrazione era vuota. Riprova.',

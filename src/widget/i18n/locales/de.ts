@@ -99,6 +99,7 @@ const de: WidgetCatalog = {
   'recording.notice.noMicrophone': 'Aufnahme ohne Mikrofon.',
   'recording.stopped.duration': 'Aufnahme beim Limit von {minutes} Minuten gestoppt.',
   'recording.stopped.size': 'Aufnahme beim Limit von {size} MB gestoppt.',
+  'recording.recovered': 'Aufnahme gespeichert. Öffne BugPin, um fortzufahren.',
   'recording.error.unavailable': 'Bildschirmaufnahme ist nicht verfügbar.',
   'recording.error.failed': 'Aufnahme fehlgeschlagen. Bitte versuche es erneut.',
   'recording.error.empty': 'Die Aufnahme war leer. Bitte versuche es erneut.',

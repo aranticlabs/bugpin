@@ -6,6 +6,8 @@ import type { RecorderOptions, RecordingResult, RecordingSession } from '../../c
 import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 import { draftStorage } from '../../storage/draft-storage';
+import type { RecordingDependencies } from '../../hooks/use-screen-recording';
+import { submitReport as submitReportApi } from '../../api/submit';
 import { t } from '../../i18n/index';
 
 const CONSENT_KEY = 'bugpin-skip-recording-consent';
@@ -53,6 +55,8 @@ function makeSession() {
     resolveFinished = resolve;
   });
   const session = {
+    mimeType: 'video/webm',
+    hasAudio: false,
     pause: mock(() => undefined),
     resume: mock(() => undefined),
     stop: mock(() => undefined),
@@ -91,6 +95,8 @@ let startRecording: ReturnType<
     (stream: MediaStream, mic: MediaStreamTrack | null, o: RecorderOptions) => RecordingSession
   >
 >;
+let recoveryStore: RecordingDependencies['recordingStore'];
+let submitReport: ReturnType<typeof mock<typeof submitReportApi>>;
 
 let config: WidgetConfig;
 
@@ -112,12 +118,35 @@ async function renderOpenApp(overrides: Partial<WidgetConfig> = {}, supported = 
         requestRecordingStream,
         requestMicrophoneTrack,
         startRecording,
+        recordingStore: recoveryStore,
+        submitReport,
       }}
     />,
     container
   );
   await flush();
   document.dispatchEvent(new window.CustomEvent('bugpin:open'));
+  await flush();
+}
+
+async function renderClosedApp(overrides: Partial<WidgetConfig> = {}, supported = true) {
+  // @ts-expect-error - Query params in import for test isolation
+  const { App } = await import('../../components/App?app-recording');
+  render(
+    <App
+      config={{ ...config, ...overrides }}
+      deps={{
+        WidgetDialog: WidgetDialogStub,
+        isRecordingSupported: () => supported,
+        requestRecordingStream,
+        requestMicrophoneTrack,
+        startRecording,
+        recordingStore: recoveryStore,
+        submitReport,
+      }}
+    />,
+    container
+  );
   await flush();
 }
 
@@ -169,6 +198,15 @@ beforeEach(async () => {
     recorderOptions = options;
     return current.session;
   });
+  recoveryStore = {
+    isStartBlocked: mock(() => false),
+    begin: mock(async () => 'recording-session'),
+    addChunk: mock(async () => undefined),
+    touch: mock(() => undefined),
+    remove: mock(async () => undefined),
+    recover: mock(async () => null),
+  };
+  submitReport = mock(async () => ({ success: true, reportId: 'report-1' }));
   globalThis.window.matchMedia = () =>
     ({
       matches: false,
@@ -189,6 +227,23 @@ afterEach(() => {
 });
 
 describe('App screen recording', () => {
+  it('waits for media expiry before loading an opened draft', async () => {
+    let finishExpiry: (() => void) | undefined;
+    const expiry = new Promise<boolean>((resolve) => {
+      finishExpiry = () => resolve(false);
+    });
+    const expire = spyOn(draftStorage, 'expireMedia').mockImplementation(() => expiry);
+    const load = spyOn(draftStorage, 'load');
+
+    await renderOpenApp({ enableScreenRecording: false });
+    expect(expire).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(0);
+
+    finishExpiry?.();
+    await flush();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it('offers the tab only when enabled and supported', async () => {
     await renderOpenApp();
     expect(dialogProps?.recordingEnabled).toBe(true);
@@ -200,6 +255,67 @@ describe('App screen recording', () => {
 
     await renderOpenApp({}, false);
     expect(dialogProps?.recordingEnabled).toBe(false);
+  });
+
+  it('saves a recovered clip to the draft and clears its launcher badge on open', async () => {
+    recoveryStore.recover = mock(async () => ({
+      sessionId: 'recovered-session',
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'video/webm' }),
+      mimeType: 'video/webm',
+      durationMs: 2000,
+      startedAt: new Date().toISOString(),
+      hasAudio: false,
+    }));
+
+    await renderClosedApp();
+
+    expect(container.querySelector('[data-testid="bugpin-pending-recording"]')).not.toBeNull();
+    expect(toast()).toContain(t('recording.recovered'));
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recovered-session');
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:open'));
+    await flush();
+    expect(container.querySelector('[data-testid="bugpin-pending-recording"]')).toBeNull();
+    expect(clips()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'recording-recovered-session',
+          source: 'recording',
+          recovered: true,
+        }),
+      ])
+    );
+  });
+
+  it('does not submit hidden recording drafts when the feature is disabled', async () => {
+    await renderOpenApp({ enableScreenRecording: false });
+    const hiddenRecording: CapturedMedia = {
+      id: 'hidden-recording',
+      blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+      timestamp: new Date(),
+      annotated: false,
+      mimeType: 'video/webm',
+      source: 'recording',
+    };
+
+    await (
+      dialogProps?.onSubmit as (
+        formData: Record<string, string>,
+        media: CapturedMedia[]
+      ) => Promise<void>
+    )(
+      {
+        title: 'Hidden recording',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      [hiddenRecording]
+    );
+
+    expect(submitReport).toHaveBeenCalledTimes(1);
+    expect(submitReport.mock.calls[0]?.[0].media).toEqual([]);
   });
 
   it('shows consent on first use and requests the stream from the confirm click', async () => {
@@ -272,6 +388,7 @@ describe('App screen recording', () => {
   });
 
   it('adds the clip and restores the form when recording stops', async () => {
+    const save = spyOn(draftStorage, 'save');
     await renderOpenApp();
     await reachRecording();
 
@@ -293,6 +410,45 @@ describe('App screen recording', () => {
       height: 720,
     });
     expect(clips()[0]?.blob?.size).toBe(100);
+    const completedSave = save.mock.calls[save.mock.calls.length - 1];
+    expect(completedSave?.[2]).toBe('recording');
+    expect(completedSave?.[3]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: 'recording' })])
+    );
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
+  });
+
+  it('writes chunks to recovery storage while recording', async () => {
+    await renderOpenApp();
+    await reachRecording();
+
+    recorderOptions?.onTick?.(1250, 3);
+    await recorderOptions?.onChunk?.(new Blob([new Uint8Array([1, 2, 3])]), 0);
+
+    expect(recoveryStore.begin).toHaveBeenCalledWith({
+      apiKey: 'proj_key',
+      ownerEmail: undefined,
+      mimeType: 'video/webm',
+      hasAudio: false,
+    });
+    expect(recoveryStore.addChunk).toHaveBeenCalledWith(
+      'recording-session',
+      0,
+      expect.any(Blob),
+      1250
+    );
+    expect(recoveryStore.touch).toHaveBeenCalledWith('recording-session');
+  });
+
+  it('continues recording when recovery storage is unavailable', async () => {
+    recoveryStore.begin = mock(async () => null);
+    await renderOpenApp();
+    await reachRecording();
+
+    await recorderOptions?.onChunk?.(new Blob([new Uint8Array([1])]), 0);
+
+    expect(startRecording).toHaveBeenCalledTimes(1);
+    expect(recoveryStore.addChunk).toHaveBeenCalledTimes(0);
   });
 
   it('adds no clip when the recording is discarded', async () => {
@@ -307,6 +463,7 @@ describe('App screen recording', () => {
     expect(clips()).toHaveLength(0);
     expect(dialog()).not.toBeNull();
     expect(toast()).toBeNull();
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
   });
 
   it('forwards pause and resume to the session', async () => {
@@ -531,5 +688,17 @@ describe('App screen recording', () => {
     await flush();
 
     expect(current.session.discard).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps recovery storage when the page unloads during recording', async () => {
+    await renderOpenApp();
+    await reachRecording();
+
+    window.dispatchEvent(new window.Event('beforeunload'));
+    render(null, container);
+    current.resolveFinished(null);
+    await Promise.resolve();
+
+    expect(recoveryStore.remove).toHaveBeenCalledTimes(0);
   });
 });

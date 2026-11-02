@@ -99,6 +99,7 @@ const fr: WidgetCatalog = {
   'recording.notice.noMicrophone': 'Enregistrement sans microphone.',
   'recording.stopped.duration': 'Enregistrement arrêté à la limite de {minutes} minutes.',
   'recording.stopped.size': 'Enregistrement arrêté à la limite de {size} Mo.',
+  'recording.recovered': 'Enregistrement sauvegardé. Ouvrez BugPin pour continuer.',
   'recording.error.unavailable': "L'enregistrement d'écran n'est pas disponible.",
   'recording.error.failed': "L'enregistrement a échoué. Veuillez réessayer.",
   'recording.error.empty': "L'enregistrement était vide. Veuillez réessayer.",

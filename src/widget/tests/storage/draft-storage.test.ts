@@ -292,4 +292,75 @@ describe('draft storage', () => {
     const loaded = await draftStorage.load(apiKey);
     expect(loaded?.formData.title).toBe('Guest draft');
   });
+
+  it('expires all draft media after seven days while keeping form text', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-expired-media`;
+    await draftStorage.save(
+      apiKey,
+      {
+        title: 'Keep this text',
+        description: 'The media expires separately',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      'media',
+      [
+        {
+          id: 'screenshot-1',
+          dataUrl: 'data:image/png;base64,AA==',
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: 'image/png',
+        },
+        {
+          id: 'recording-1',
+          blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: 'video/webm',
+          source: 'recording',
+        },
+      ]
+    );
+    localStorage.setItem(
+      `bugpin-draft-media-saved-at-${apiKey}`,
+      new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    );
+
+    expect(await draftStorage.expireMedia(apiKey)).toBe(true);
+    const loaded = await draftStorage.load(apiKey);
+    expect(loaded?.formData.title).toBe('Keep this text');
+    expect(loaded?.media).toEqual([]);
+  });
+
+  it('keeps fresh draft media and records its local expiry timestamp', async () => {
+    const { draftStorage } = await import('../../storage/draft-storage.js');
+    const apiKey = `${TEST_API_KEY}-fresh-media`;
+    await draftStorage.save(
+      apiKey,
+      {
+        title: 'Fresh media',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      'media',
+      [
+        {
+          id: 'screenshot-1',
+          dataUrl: 'data:image/png;base64,AA==',
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: 'image/png',
+        },
+      ]
+    );
+
+    expect(localStorage.getItem(`bugpin-draft-media-saved-at-${apiKey}`)).not.toBeNull();
+    expect(await draftStorage.expireMedia(apiKey)).toBe(false);
+    expect((await draftStorage.load(apiKey))?.media).toHaveLength(1);
+  });
 });

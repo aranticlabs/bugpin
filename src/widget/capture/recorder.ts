@@ -20,6 +20,8 @@ export interface RecorderOptions {
 }
 
 export interface RecordingSession {
+  mimeType: string;
+  hasAudio: boolean;
   pause(): void;
   resume(): void;
   stop(): void;
@@ -232,12 +234,12 @@ export function startRecording(
     if (event.data.size === 0 || finalized || discarded) return;
     chunks.push(event.data);
     bytes += event.data.size;
+    notifyTick();
     try {
       void Promise.resolve(options.onChunk?.(event.data, chunkIndex++)).catch(() => undefined);
     } catch {
       // Chunk persistence is best-effort and must not stop an active recording.
     }
-    notifyTick();
     if (bytes >= options.maxBytes) {
       stopSession('size');
     } else if (elapsedMs() >= options.maxDurationMs) {
@@ -264,6 +266,8 @@ export function startRecording(
   }
 
   return {
+    mimeType: normalizeMimeType(recorder.mimeType || selectedMimeType),
+    hasAudio,
     pause() {
       if (stopping || recorder.state !== 'recording') return;
       updateElapsed();

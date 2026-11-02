@@ -9,6 +9,7 @@ import {
 } from '../capture/recorder.js';
 import type { ToastType } from '../components/ui';
 import { t } from '../i18n/index.js';
+import { recordingStore } from '../storage/recording-store.js';
 
 const COUNTDOWN_SECONDS = 3;
 const COUNTDOWN_STEP_MS = 1000;
@@ -21,15 +22,18 @@ export interface RecordingDependencies {
   requestRecordingStream: typeof requestRecordingStream;
   requestMicrophoneTrack: typeof requestMicrophoneTrack;
   startRecording: typeof startRecording;
+  recordingStore: typeof recordingStore;
 }
 
 interface UseScreenRecordingOptions {
+  apiKey: string;
+  ownerEmail?: string;
   maxDurationMs: number;
   maxVideoSize: number;
   dependencies?: Partial<RecordingDependencies>;
   prepare: () => Promise<boolean>;
   onEnter: () => void;
-  onExit: (result: RecordingResult | null, failed: boolean) => void;
+  onExit: (result: RecordingResult | null, failed: boolean) => void | Promise<void>;
   onNotice: (message: string, type: ToastType) => void;
 }
 
@@ -69,6 +73,8 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   const sessionRef = useRef<RecordingSession | null>(null);
   const failedRef = useRef(false);
   const mountedRef = useRef(true);
+  const unloadingRef = useRef(false);
+  const elapsedRef = useRef(0);
 
   const updateStatus = useCallback((next: RecordingStatus) => {
     statusRef.current = next;
@@ -110,17 +116,36 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     const pending = takePending();
     if (!pending) return;
 
-    const { maxDurationMs, maxVideoSize, dependencies } = optionsRef.current;
+    const { apiKey, ownerEmail, maxDurationMs, maxVideoSize, dependencies } = optionsRef.current;
     const startFn = dependencies?.startRecording ?? startRecording;
+    const store = dependencies?.recordingStore ?? recordingStore;
     failedRef.current = false;
+    elapsedRef.current = 0;
 
     let session: RecordingSession;
+    let storedSession = Promise.resolve<string | null>(null);
     try {
       session = startFn(pending.stream, pending.microphone, {
         maxDurationMs,
         maxBytes: Math.max(maxVideoSize - SIZE_MARGIN_BYTES, maxVideoSize / 2),
-        onTick: (ms) => setElapsedMs(Math.floor(ms / 1000) * 1000),
+        onTick: (ms) => {
+          elapsedRef.current = ms;
+          setElapsedMs(Math.floor(ms / 1000) * 1000);
+          void storedSession.then((sessionId) => {
+            if (sessionId) store.touch(sessionId);
+          });
+        },
         onAutoStop: handleAutoStop,
+        onChunk: async (chunk, index) => {
+          const sessionId = await storedSession;
+          if (sessionId) await store.addChunk(sessionId, index, chunk, elapsedRef.current);
+        },
+      });
+      storedSession = store.begin({
+        apiKey,
+        ownerEmail,
+        mimeType: session.mimeType,
+        hasAudio: session.hasAudio,
       });
     } catch (error) {
       console.error('[BugPin] Failed to start recording:', error);
@@ -132,11 +157,21 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
 
     sessionRef.current = session;
     updateStatus('recording');
-    void session.finished.then((result) => {
+    void session.finished.then(async (result) => {
       sessionRef.current = null;
-      if (!mountedRef.current) return;
+      const sessionId = await storedSession;
+      if (unloadingRef.current) return;
+      if (!mountedRef.current) {
+        if (sessionId) await store.remove(apiKey, sessionId);
+        return;
+      }
       updateStatus('idle');
-      optionsRef.current.onExit(result, failedRef.current);
+      try {
+        await optionsRef.current.onExit(result, failedRef.current);
+        if (sessionId) await store.remove(apiKey, sessionId);
+      } catch (error) {
+        console.error('[BugPin] Failed to save completed recording:', error);
+      }
     });
   }, [handleAutoStop, takePending, updateStatus]);
 
@@ -152,8 +187,16 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
 
   useEffect(() => {
     mountedRef.current = true;
+    const handleBeforeUnload = () => {
+      unloadingRef.current = true;
+      setTimeout(() => {
+        if (mountedRef.current) unloadingRef.current = false;
+      }, 0);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       mountedRef.current = false;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       const pending = takePending();
       if (pending) stopCaptureTracks(pending.stream, pending.microphone);
       sessionRef.current?.discard();
@@ -165,9 +208,14 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   const start = useCallback(
     async (includeMicrophone: boolean) => {
       if (statusRef.current !== 'idle') return;
-      const { dependencies } = optionsRef.current;
+      const { apiKey, dependencies } = optionsRef.current;
       const requestStream = dependencies?.requestRecordingStream ?? requestRecordingStream;
       const requestMicrophone = dependencies?.requestMicrophoneTrack ?? requestMicrophoneTrack;
+      const store = dependencies?.recordingStore ?? recordingStore;
+      if (store.isStartBlocked(apiKey)) {
+        optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
+        return;
+      }
       updateStatus('requesting');
 
       let stream: MediaStream;

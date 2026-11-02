@@ -92,6 +92,7 @@ const zh: WidgetCatalog = {
   'recording.notice.noMicrophone': '正在录制，未使用麦克风。',
   'recording.stopped.duration': '已达到 {minutes} 分钟上限，录制已停止。',
   'recording.stopped.size': '已达到 {size}MB 上限，录制已停止。',
+  'recording.recovered': '录制已保存。打开 BugPin 以继续。',
   'recording.error.unavailable': '屏幕录制不可用。',
   'recording.error.failed': '录制失败，请重试。',
   'recording.error.empty': '录制内容为空，请重试。',
