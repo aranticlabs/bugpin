@@ -1,4 +1,9 @@
 import { normalizeMimeType } from '@shared/mime.js';
+import {
+  DEFAULT_RECORDING_QUALITY,
+  RECORDING_QUALITY_PRESETS,
+  type RecordingQuality,
+} from '@shared/recording-quality.js';
 
 export interface RecordingResult {
   blob: Blob;
@@ -14,6 +19,7 @@ export type AutoStopReason = 'duration' | 'size' | 'ended' | 'error';
 export interface RecorderOptions {
   maxDurationMs: number;
   maxBytes: number;
+  quality?: RecordingQuality;
   onTick?: (elapsedMs: number, bytes: number) => void;
   onAutoStop?: (reason: AutoStopReason) => void;
   onChunk?: (chunk: Blob, index: number) => void;
@@ -67,13 +73,16 @@ export function isRecordingSupported(): boolean {
   );
 }
 
-export function requestRecordingStream(): Promise<MediaStream> {
+export function requestRecordingStream(
+  quality: RecordingQuality = DEFAULT_RECORDING_QUALITY
+): Promise<MediaStream> {
+  const { width, height, frameRate } = RECORDING_QUALITY_PRESETS[quality];
   return navigator.mediaDevices.getDisplayMedia({
     video: {
       displaySurface: 'browser',
-      frameRate: { ideal: 15, max: 30 },
-      width: { max: 1920 },
-      height: { max: 1080 },
+      frameRate: { ideal: frameRate, max: 30 },
+      width: { max: width },
+      height: { max: height },
     },
     audio: false,
     preferCurrentTab: true,
@@ -148,7 +157,8 @@ export function startRecording(
     selectedMimeType = candidate;
     recorder = new MediaRecorder(stream, {
       mimeType: candidate,
-      videoBitsPerSecond: 1_500_000,
+      videoBitsPerSecond:
+        RECORDING_QUALITY_PRESETS[options.quality ?? DEFAULT_RECORDING_QUALITY].videoBitsPerSecond,
       audioBitsPerSecond: 64_000,
       videoKeyFrameIntervalDuration: 2000,
     } as MediaRecorderOptions);

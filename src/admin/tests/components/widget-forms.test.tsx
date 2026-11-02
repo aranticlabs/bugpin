@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import { WidgetDialogSettingsForm } from '../../components/WidgetDialogSettingsForm';
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
@@ -24,10 +25,20 @@ vi.mock('../../components/ThemeColorPicker', () => ({
 }));
 
 describe('ScreenshotSettingsForm', () => {
+  it('leaves video and recording settings to the recording form', () => {
+    render(<ScreenshotSettingsForm value={{}} onChange={vi.fn()} />);
+
+    expect(screen.getByLabelText(/max\. screenshot size/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/max\. video upload size/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /enable screen recording/i })).toBeNull();
+  });
+});
+
+describe('RecordingSettingsForm', () => {
   it('keeps zero explicit and does not disable the quota when cleared', () => {
     const onChange = vi.fn();
     render(
-      <ScreenshotSettingsForm
+      <RecordingSettingsForm
         value={{}}
         onChange={onChange}
         globalSettings={{
@@ -37,9 +48,10 @@ describe('ScreenshotSettingsForm', () => {
             maxImageUploadSizeMb: 10,
             maxVideoUploadSizeMb: 50,
             maxVideoUploadMbPerDay: 4096,
-            enableScreenRecording: false,
+            enableScreenRecording: true,
             allowRecordingMicrophone: false,
             maxRecordingDurationSeconds: 180,
+            recordingQuality: 'standard',
           },
         }}
       />
@@ -53,24 +65,105 @@ describe('ScreenshotSettingsForm', () => {
     expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 4096 });
   });
 
-  it('shows recording controls only when recording is enabled', async () => {
+  it('enables recording controls only when recording is enabled', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(<ScreenshotSettingsForm value={{}} onChange={onChange} />);
+    const { rerender } = render(<RecordingSettingsForm value={{}} onChange={onChange} />);
 
-    expect(screen.queryByLabelText(/allow microphone recording/i)).not.toBeInTheDocument();
+    const controls = () => [
+      screen.getByRole('combobox', { name: /video quality/i }),
+      screen.getByLabelText(/max\. recording duration/i),
+      screen.getByLabelText(/max\. video upload size/i),
+      screen.getByLabelText(/daily video upload limit/i),
+      screen.getByRole('switch', { name: /allow microphone recording/i }),
+    ];
+    controls().forEach((control) => expect(control).toBeDisabled());
+    const banner = () => screen.getByRole('alert');
+    const guide = () => screen.getByRole('link', { name: /reverse proxy guide/i });
+    expect(banner()).toHaveAttribute('aria-disabled', 'true');
+    expect(guide()).toHaveAttribute('tabindex', '-1');
+
     await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
     expect(onChange).toHaveBeenLastCalledWith({ enableScreenRecording: true });
 
     rerender(
-      <ScreenshotSettingsForm
+      <RecordingSettingsForm
         value={{ enableScreenRecording: true, maxRecordingDurationSeconds: 180 }}
         onChange={onChange}
       />
     );
-    expect(screen.getByLabelText(/allow microphone recording/i)).toBeInTheDocument();
+    controls().forEach((control) => expect(control).toBeEnabled());
+    expect(banner()).toHaveAttribute('aria-disabled', 'false');
+    expect(guide()).not.toHaveAttribute('tabindex');
     expect(screen.getByLabelText(/max\. recording duration/i)).toHaveAttribute('max', '600');
     expect(screen.getByRole('link', { name: /reverse proxy guide/i })).toBeInTheDocument();
+  });
+
+  it('shows the video quality with the global default as a fallback', () => {
+    render(
+      <RecordingSettingsForm
+        value={{ enableScreenRecording: true }}
+        onChange={vi.fn()}
+        globalSettings={{
+          screenshot: {
+            useScreenCaptureAPI: false,
+            maxScreenshotSize: 10,
+            maxImageUploadSizeMb: 10,
+            maxVideoUploadSizeMb: 50,
+            maxVideoUploadMbPerDay: 2048,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: false,
+            maxRecordingDurationSeconds: 60,
+            recordingQuality: 'low',
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByRole('combobox', { name: /video quality/i })).toHaveTextContent(
+      'Low (720p, 10 fps, about 6 MB per minute)'
+    );
+  });
+
+  it('warns only when a full recording would pass the upload limit', () => {
+    const value = {
+      enableScreenRecording: true,
+      maxRecordingDurationSeconds: 180,
+      maxVideoUploadSizeMb: 50,
+    };
+    const { rerender } = render(
+      <RecordingSettingsForm
+        value={{ ...value, recordingQuality: 'standard' }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/recordings stop early/i)).not.toBeInTheDocument();
+
+    rerender(
+      <RecordingSettingsForm value={{ ...value, recordingQuality: 'high' }} onChange={vi.fn()} />
+    );
+    expect(screen.getByText(/recordings stop early/i)).toHaveTextContent('about 90 MB');
+  });
+
+  it('clears every recording setting when a project returns to global defaults', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onCustomToggle = vi.fn();
+    render(
+      <RecordingSettingsForm
+        value={{ recordingQuality: 'high' }}
+        onChange={onChange}
+        showCustomToggle
+        onCustomToggle={onCustomToggle}
+      />
+    );
+
+    await user.click(screen.getByRole('switch', { name: /use custom settings/i }));
+
+    expect(onCustomToggle).toHaveBeenCalledWith(false);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ recordingQuality: undefined, enableScreenRecording: undefined })
+    );
   });
 });
 

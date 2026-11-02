@@ -490,6 +490,7 @@ widget.get('/config/:apiKey', async (c) => {
     projScreenshot?.allowRecordingMicrophone ?? globalScreenshot.allowRecordingMicrophone;
   const maxRecordingDurationSeconds =
     projScreenshot?.maxRecordingDurationSeconds ?? globalScreenshot.maxRecordingDurationSeconds;
+  const recordingQuality = projScreenshot?.recordingQuality ?? globalScreenshot.recordingQuality;
   const theme = projButton?.theme ?? globalButton.theme;
   const position = projButton?.position ?? globalButton.position;
   const buttonShape = projButton?.buttonShape ?? globalButton.buttonShape;
@@ -619,6 +620,7 @@ widget.get('/config/:apiKey', async (c) => {
       maxImageUploadSizeMb,
       maxVideoUploadSizeMb,
       maxRecordingDurationSeconds,
+      recordingQuality,
       language: {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,

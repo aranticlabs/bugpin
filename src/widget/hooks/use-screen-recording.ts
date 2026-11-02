@@ -8,6 +8,7 @@ import {
   restrictCaptureToPage,
   startRecording,
 } from '../capture/recorder.js';
+import type { RecordingQuality } from '@shared/recording-quality.js';
 import type { ToastType } from '../components/ui';
 import { getLocale, t } from '../i18n/index.js';
 import { recordingStore } from '../storage/recording-store.js';
@@ -31,6 +32,7 @@ interface UseScreenRecordingOptions {
   ownerEmail?: string;
   maxDurationMs: number;
   maxVideoSize: number;
+  quality: RecordingQuality;
   dependencies?: Partial<RecordingDependencies>;
   prepare: () => Promise<boolean>;
   onEnter: () => void;
@@ -137,7 +139,8 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     const pending = takePending();
     if (!pending) return;
 
-    const { apiKey, ownerEmail, maxDurationMs, maxVideoSize, dependencies } = optionsRef.current;
+    const { apiKey, ownerEmail, maxDurationMs, maxVideoSize, quality, dependencies } =
+      optionsRef.current;
     const startFn = dependencies?.startRecording ?? startRecording;
     const store = dependencies?.recordingStore ?? recordingStore;
     failedRef.current = false;
@@ -149,6 +152,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
       session = startFn(pending.stream, pending.microphone, {
         maxDurationMs,
         maxBytes: Math.max(maxVideoSize - SIZE_MARGIN_BYTES, maxVideoSize / 2),
+        quality,
         onTick: (ms) => {
           elapsedRef.current = ms;
           setElapsedMs(Math.floor(ms / 1000) * 1000);
@@ -229,7 +233,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   const start = useCallback(
     async (includeMicrophone: boolean) => {
       if (statusRef.current !== 'idle') return;
-      const { apiKey, dependencies } = optionsRef.current;
+      const { apiKey, quality, dependencies } = optionsRef.current;
       const requestStream = dependencies?.requestRecordingStream ?? requestRecordingStream;
       const requestMicrophone = dependencies?.requestMicrophoneTrack ?? requestMicrophoneTrack;
       const store = dependencies?.recordingStore ?? recordingStore;
@@ -241,7 +245,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
 
       let stream: MediaStream;
       try {
-        stream = await requestStream();
+        stream = await requestStream(quality);
       } catch (error) {
         updateStatus('idle');
         if (!isPermissionDenial(error)) {

@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
+import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@shared/types';
 
 const webhookEventSchema = z.enum([
@@ -111,6 +112,7 @@ const projectScreenshotSchema = z
     enableScreenRecording: z.boolean().optional(),
     allowRecordingMicrophone: z.boolean().optional(),
     maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+    recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
   })
   .strict();
 
@@ -557,6 +559,7 @@ export const schemas = {
           enableScreenRecording: z.boolean().optional(),
           allowRecordingMicrophone: z.boolean().optional(),
           maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+          recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
         })
         .optional(),
       maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),

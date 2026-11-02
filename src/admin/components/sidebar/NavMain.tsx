@@ -8,6 +8,7 @@ import {
   Bug,
   AppWindow,
   Camera,
+  Video,
   Languages,
   SlidersHorizontal,
   Bell,
@@ -68,6 +69,7 @@ const widgetItems: NavItem[] = [
   { title: 'Button', url: '/button', icon: Bug },
   { title: 'Dialog', url: '/dialog', icon: AppWindow },
   { title: 'Screenshot', url: '/screenshot', icon: Camera },
+  { title: 'Recording', url: '/recording', icon: Video },
   { title: 'Language', url: '/language', icon: Languages },
 ];
 

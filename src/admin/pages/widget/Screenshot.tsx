@@ -19,11 +19,6 @@ export function Screenshot() {
   const [formData, setFormData] = useState<ScreenshotSettings>({
     maxScreenshotSize: 10,
     maxImageUploadSizeMb: 10,
-    maxVideoUploadSizeMb: 50,
-    maxVideoUploadMbPerDay: 2048,
-    enableScreenRecording: false,
-    allowRecordingMicrophone: false,
-    maxRecordingDurationSeconds: 180,
     useScreenCaptureAPI: false,
   });
 
@@ -40,11 +35,6 @@ export function Screenshot() {
       setFormData({
         maxScreenshotSize: settings.screenshot.maxScreenshotSize || 10,
         maxImageUploadSizeMb: settings.screenshot.maxImageUploadSizeMb || 10,
-        maxVideoUploadSizeMb: settings.screenshot.maxVideoUploadSizeMb || 50,
-        maxVideoUploadMbPerDay: settings.screenshot.maxVideoUploadMbPerDay ?? 2048,
-        enableScreenRecording: settings.screenshot.enableScreenRecording ?? false,
-        allowRecordingMicrophone: settings.screenshot.allowRecordingMicrophone ?? false,
-        maxRecordingDurationSeconds: settings.screenshot.maxRecordingDurationSeconds ?? 180,
         useScreenCaptureAPI: settings.screenshot.useScreenCaptureAPI || false,
       });
     }
@@ -66,15 +56,13 @@ export function Screenshot() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!settings) return;
     mutation.mutate({
+      // Screenshot and recording settings share one stored object that is replaced on save.
       screenshot: {
+        ...settings.screenshot,
         maxScreenshotSize: formData.maxScreenshotSize || 10,
         maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
-        maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
-        maxVideoUploadMbPerDay: formData.maxVideoUploadMbPerDay ?? 2048,
-        enableScreenRecording: formData.enableScreenRecording ?? false,
-        allowRecordingMicrophone: formData.allowRecordingMicrophone ?? false,
-        maxRecordingDurationSeconds: formData.maxRecordingDurationSeconds ?? 180,
         useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
       },
     });

@@ -258,6 +258,35 @@ describe('screen recorder', () => {
     });
   });
 
+  it('requests the resolution and frame rate of the chosen quality', async () => {
+    let captured: DisplayMediaStreamOptions | undefined;
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        mediaDevices: {
+          getDisplayMedia: async (options: DisplayMediaStreamOptions) => {
+            captured = options;
+            return {} as MediaStream;
+          },
+        },
+      },
+    });
+
+    await requestRecordingStream('low');
+    expect(captured?.video).toMatchObject({
+      frameRate: { ideal: 10, max: 30 },
+      width: { max: 1280 },
+      height: { max: 720 },
+    });
+
+    await requestRecordingStream('high');
+    expect(captured?.video).toMatchObject({
+      frameRate: { ideal: 30, max: 30 },
+      width: { max: 2560 },
+      height: { max: 1440 },
+    });
+  });
+
   it('returns one microphone track, stops extras, and tolerates denial', async () => {
     const microphone = new FakeTrack('audio');
     const extra = new FakeTrack('audio');
@@ -591,6 +620,21 @@ describe('screen recorder', () => {
     ).toThrow('No supported recording format');
     expect(track.stopCount).toBeGreaterThan(0);
     expect(microphone.stopCount).toBeGreaterThan(0);
+  });
+
+  it('records at the bitrate of the chosen quality', () => {
+    FakeMediaRecorder.supported.add('video/webm');
+    const { stream } = makeVideoStream();
+
+    const session = startRecording(stream, null, {
+      maxDurationMs: 10_000,
+      maxBytes: 10_000,
+      quality: 'high',
+    });
+
+    const [recorder] = FakeMediaRecorder.instances.slice(-1);
+    expect(recorder.options.videoBitsPerSecond).toBe(4_000_000);
+    session.discard();
   });
 });
 

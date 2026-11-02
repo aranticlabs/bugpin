@@ -2,7 +2,6 @@ import { ExternalLink } from 'lucide-react';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
-import { Alert, AlertDescription } from './ui/alert';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
 interface ScreenshotSettingsFormProps {
@@ -32,18 +31,6 @@ export function ScreenshotSettingsForm({
     value.maxScreenshotSize ?? globalSettings?.screenshot.maxScreenshotSize ?? 10;
   const effectiveMaxImageUploadSizeMb =
     value.maxImageUploadSizeMb ?? globalSettings?.screenshot.maxImageUploadSizeMb ?? 10;
-  const effectiveMaxVideoUploadSizeMb =
-    value.maxVideoUploadSizeMb ?? globalSettings?.screenshot.maxVideoUploadSizeMb ?? 50;
-  const effectiveMaxVideoUploadMbPerDay =
-    value.maxVideoUploadMbPerDay ?? globalSettings?.screenshot.maxVideoUploadMbPerDay ?? 2048;
-  const effectiveEnableScreenRecording =
-    value.enableScreenRecording ?? globalSettings?.screenshot.enableScreenRecording ?? false;
-  const effectiveAllowRecordingMicrophone =
-    value.allowRecordingMicrophone ?? globalSettings?.screenshot.allowRecordingMicrophone ?? false;
-  const effectiveMaxRecordingDurationSeconds =
-    value.maxRecordingDurationSeconds ??
-    globalSettings?.screenshot.maxRecordingDurationSeconds ??
-    180;
 
   return (
     <div className="space-y-4">
@@ -69,11 +56,6 @@ export function ScreenshotSettingsForm({
                   useScreenCaptureAPI: undefined,
                   maxScreenshotSize: undefined,
                   maxImageUploadSizeMb: undefined,
-                  maxVideoUploadSizeMb: undefined,
-                  maxVideoUploadMbPerDay: undefined,
-                  enableScreenRecording: undefined,
-                  allowRecordingMicrophone: undefined,
-                  maxRecordingDurationSeconds: undefined,
                 });
               }
             }}
@@ -122,132 +104,6 @@ export function ScreenshotSettingsForm({
             </p>
           </div>
 
-          {/* Max Video Upload File Size */}
-          <div className="space-y-2">
-            <Label htmlFor="max-video-upload-size">Max. Video Upload Size (MB)</Label>
-            <Input
-              id="max-video-upload-size"
-              type="number"
-              min={1}
-              max={100}
-              value={effectiveMaxVideoUploadSizeMb}
-              onChange={(e) =>
-                onChange({ ...value, maxVideoUploadSizeMb: parseInt(e.target.value) || 50 })
-              }
-              disabled={disabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              Maximum allowed size for uploaded videos (1-100 MB)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="max-video-upload-per-day">Daily Video Upload Limit (MB)</Label>
-            <Input
-              id="max-video-upload-per-day"
-              type="number"
-              min={0}
-              max={1048576}
-              value={effectiveMaxVideoUploadMbPerDay}
-              onChange={(e) => {
-                const parsedValue = Number.parseInt(e.target.value, 10);
-                onChange({
-                  ...value,
-                  maxVideoUploadMbPerDay: Number.isNaN(parsedValue)
-                    ? effectiveMaxVideoUploadMbPerDay
-                    : parsedValue,
-                });
-              }}
-              disabled={disabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              Maximum video data accepted per project in 24 hours. Use 0 to disable the limit.
-            </p>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <Label htmlFor="enable-screen-recording">Enable Screen Recording</Label>
-                <p className="text-xs text-muted-foreground">
-                  Let reporters record and attach their screen from the widget
-                </p>
-              </div>
-              <Switch
-                id="enable-screen-recording"
-                checked={effectiveEnableScreenRecording}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...value,
-                    enableScreenRecording: checked,
-                    ...(checked ? {} : { allowRecordingMicrophone: false }),
-                  })
-                }
-                disabled={disabled}
-              />
-            </div>
-
-            {effectiveEnableScreenRecording && (
-              <div className="space-y-4 rounded-lg border p-3">
-                <div className="space-y-2">
-                  <Label htmlFor="max-recording-duration">Max. Recording Duration (seconds)</Label>
-                  <Input
-                    id="max-recording-duration"
-                    type="number"
-                    min={10}
-                    max={600}
-                    value={effectiveMaxRecordingDurationSeconds}
-                    onChange={(e) => {
-                      const parsedValue = Number.parseInt(e.target.value, 10);
-                      onChange({
-                        ...value,
-                        maxRecordingDurationSeconds: Number.isNaN(parsedValue)
-                          ? effectiveMaxRecordingDurationSeconds
-                          : parsedValue,
-                      });
-                    }}
-                    disabled={disabled}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Recording stops automatically after 10 to 600 seconds.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
-                    <Label htmlFor="allow-recording-microphone">Allow Microphone Recording</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Reporters still choose whether to include their microphone for each recording.
-                    </p>
-                  </div>
-                  <Switch
-                    id="allow-recording-microphone"
-                    checked={effectiveAllowRecordingMicrophone}
-                    onCheckedChange={(checked) =>
-                      onChange({ ...value, allowRecordingMicrophone: checked })
-                    }
-                    disabled={disabled}
-                  />
-                </div>
-
-                <Alert>
-                  <AlertDescription className="text-sm">
-                    Your reverse proxy must accept uploads up to the configured video size and allow
-                    enough time for slower uploads.{' '}
-                    <a
-                      href="https://docs.bugpin.io/installation/reverse-proxy"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 underline"
-                    >
-                      Reverse proxy guide <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </AlertDescription>
-                </Alert>
-              </div>
-            )}
-          </div>
-
           {/* Screen Capture API Toggle */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
@@ -264,33 +120,25 @@ export function ScreenshotSettingsForm({
                 disabled={disabled}
               />
             </div>
-            <Alert className="mt-3">
-              <AlertDescription className="text-sm space-y-2">
-                <p>
-                  <strong>Default (DOM Capture):</strong> Captures the page without requiring user
-                  permission. Fast, seamless, and works for most layouts. Does not capture videos,
-                  canvas, or WebGL content accurately.
-                </p>
-                <p>
-                  <strong>Screen Capture API:</strong> Enable for websites (WordPress, Wix, etc.)
-                  that load stylesheets or fonts from external domains (CDNs, Google Fonts, etc.).
-                  These cross-origin resources cannot be captured automatically, resulting in
-                  missing fonts and blank images. Also captures videos, canvas, and WebGL. The
-                  browser will prompt the user for permission before each capture.
-                </p>
-                <p>
-                  <a
-                    href="https://docs.bugpin.io/configuration/widget#screen-capture-api"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
-                    View documentation
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </p>
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>
+                Enable for websites (WordPress, Wix, etc.) that load stylesheets or fonts from
+                external domains (CDNs, Google Fonts, etc.). These cross-origin resources cannot be
+                captured automatically, resulting in missing fonts and blank images. It also shows
+                embedded videos, canvas, and WebGL content correctly in screenshots. The browser
+                will prompt the user for permission before each screenshot. This setting does not
+                affect screen recordings.
+              </p>
+              <a
+                href="https://docs.bugpin.io/configuration/widget#screen-capture-api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                View documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </>
       )}

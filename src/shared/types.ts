@@ -1,3 +1,5 @@
+import type { RecordingQuality } from './recording-quality';
+
 // Locale Types
 
 export type LocaleCode = 'en' | 'de' | 'fr' | 'nl' | 'es' | 'it' | 'ja' | 'zh';
@@ -229,6 +231,7 @@ export interface ScreenshotSettings {
   enableScreenRecording?: boolean;
   allowRecordingMicrophone?: boolean;
   maxRecordingDurationSeconds?: number;
+  recordingQuality?: RecordingQuality;
 }
 
 // Project language settings
@@ -500,6 +503,7 @@ export interface GlobalScreenshotSettings {
   enableScreenRecording: boolean;
   allowRecordingMicrophone: boolean;
   maxRecordingDurationSeconds: number;
+  recordingQuality: RecordingQuality;
 }
 
 // Settings Types

@@ -1,3 +1,4 @@
+import { DEFAULT_RECORDING_QUALITY, type RecordingQuality } from '@shared/recording-quality.js';
 import type { LauncherTextBundle, LocaleCode, UserActivityCapturePolicy } from '@shared/types';
 
 export type { LauncherTextBundle };
@@ -66,6 +67,7 @@ export interface WidgetConfig {
   maxImageUploadSize: number;
   maxVideoUploadSize: number;
   maxRecordingDurationSeconds: number;
+  recordingQuality: RecordingQuality;
 }
 
 export const defaultConfig: WidgetConfig = {
@@ -123,4 +125,5 @@ export const defaultConfig: WidgetConfig = {
   maxImageUploadSize: 10 * 1024 * 1024, // 10MB
   maxVideoUploadSize: 50 * 1024 * 1024, // 50MB
   maxRecordingDurationSeconds: 180,
+  recordingQuality: DEFAULT_RECORDING_QUALITY,
 };

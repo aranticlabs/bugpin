@@ -80,6 +80,7 @@ const baseConfig: WidgetConfig = {
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
   maxRecordingDurationSeconds: 180,
+  recordingQuality: 'standard',
 };
 
 const mediaItem: CapturedMedia = {

@@ -1,3 +1,4 @@
+import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { getDb } from '../database.js';
 import type {
   AppSettings,
@@ -76,6 +77,7 @@ const DEFAULT_SCREENSHOT: GlobalScreenshotSettings = {
   enableScreenRecording: false,
   allowRecordingMicrophone: false,
   maxRecordingDurationSeconds: 180,
+  recordingQuality: DEFAULT_RECORDING_QUALITY,
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {

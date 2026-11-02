@@ -1,6 +1,7 @@
 import { PageContext } from '../capture/context.js';
 import { bufferReport, startAutoSync } from '../storage/report-buffer.js';
 import { buildSubmitFormData, MAX_SUBMIT_FORM_BYTES, type MediaItem } from './submit-form.js';
+import type { RecordingQuality } from '@shared/recording-quality.js';
 import type { UserActivityCapturePolicy } from '@shared/types';
 import { t } from '../i18n/index.js';
 
@@ -194,6 +195,7 @@ export async function fetchWidgetConfig(
     recordingMicrophone?: boolean;
   };
   maxRecordingDurationSeconds?: number;
+  recordingQuality?: RecordingQuality;
   theme: string;
   position: string;
 }> {

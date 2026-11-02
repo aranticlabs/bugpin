@@ -172,6 +172,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     ownerEmail: config.reporterEmail,
     maxDurationMs: config.maxRecordingDurationSeconds * 1000,
     maxVideoSize: config.maxVideoUploadSize,
+    quality: config.recordingQuality,
     dependencies: deps,
     prepare: async () => {
       try {

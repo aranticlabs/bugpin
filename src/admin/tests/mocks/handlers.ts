@@ -598,6 +598,7 @@ export const handlers = [
           enableScreenRecording: false,
           allowRecordingMicrophone: false,
           maxRecordingDurationSeconds: 180,
+          recordingQuality: 'standard',
         },
         notifications: {
           emailEnabled: false,

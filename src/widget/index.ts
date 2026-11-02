@@ -1,4 +1,5 @@
 import { h, render } from 'preact';
+import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality.js';
 import type { LocaleCode } from '@shared/types';
 import { App } from './components/App.js';
 import { WidgetConfig, defaultConfig } from './config.js';
@@ -98,6 +99,7 @@ async function fetchConfig(
             ? cfg.maxVideoUploadSizeMb * 1024 * 1024
             : undefined,
           maxRecordingDurationSeconds: cfg.maxRecordingDurationSeconds ?? 180,
+          recordingQuality: cfg.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
           language: cfg.language,
         };
       }
@@ -296,6 +298,7 @@ const BugPin = {
       enableScreenRecording: fetchedConfig.enableScreenRecording ?? false,
       allowRecordingMicrophone: fetchedConfig.allowRecordingMicrophone ?? false,
       maxRecordingDurationSeconds: fetchedConfig.maxRecordingDurationSeconds ?? 180,
+      recordingQuality: fetchedConfig.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
       userActivityCapture: fetchedConfig.userActivityCapture ?? 'disabled',
     };
     createWidget(fullConfig, { initLanguage });
