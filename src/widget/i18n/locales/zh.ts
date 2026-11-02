@@ -10,8 +10,8 @@ const zh: WidgetCatalog = {
   'dialog.tabs.details': '详情',
   'dialog.tabs.media': '截图',
   'dialog.tabs.mediaWithCount': '截图（{count}）',
-  'dialog.tabs.recording': '视频',
-  'dialog.tabs.recordingWithCount': '视频 ({count})',
+  'dialog.tabs.recording': '录屏',
+  'dialog.tabs.recordingWithCount': '录屏 ({count})',
 
   'dialog.fields.title.label': '标题',
   'dialog.fields.title.placeholder': '简要描述问题',

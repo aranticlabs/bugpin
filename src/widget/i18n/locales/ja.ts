@@ -10,8 +10,8 @@ const ja: WidgetCatalog = {
   'dialog.tabs.details': '詳細',
   'dialog.tabs.media': 'スクリーンショット',
   'dialog.tabs.mediaWithCount': 'スクリーンショット（{count}件）',
-  'dialog.tabs.recording': '動画',
-  'dialog.tabs.recordingWithCount': '動画 ({count})',
+  'dialog.tabs.recording': '録画',
+  'dialog.tabs.recordingWithCount': '録画 ({count})',
 
   'dialog.fields.title.label': 'タイトル',
   'dialog.fields.title.placeholder': '問題の概要を簡潔に',

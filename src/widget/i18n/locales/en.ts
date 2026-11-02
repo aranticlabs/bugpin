@@ -8,8 +8,8 @@ const en = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
   'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
-  'dialog.tabs.recording': 'Videos',
-  'dialog.tabs.recordingWithCount': 'Videos ({count})',
+  'dialog.tabs.recording': 'Recordings',
+  'dialog.tabs.recordingWithCount': 'Recordings ({count})',
 
   'dialog.fields.title.label': 'Title',
   'dialog.fields.title.placeholder': 'Brief description of the issue',

@@ -10,8 +10,8 @@ const es: WidgetCatalog = {
   'dialog.tabs.details': 'Detalles',
   'dialog.tabs.media': 'Capturas',
   'dialog.tabs.mediaWithCount': 'Capturas ({count})',
-  'dialog.tabs.recording': 'Vídeos',
-  'dialog.tabs.recordingWithCount': 'Vídeos ({count})',
+  'dialog.tabs.recording': 'Grabaciones',
+  'dialog.tabs.recordingWithCount': 'Grabaciones ({count})',
 
   'dialog.fields.title.label': 'Título',
   'dialog.fields.title.placeholder': 'Breve descripción del problema',

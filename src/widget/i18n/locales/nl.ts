@@ -10,8 +10,8 @@ const nl: WidgetCatalog = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Schermafbeeldingen',
   'dialog.tabs.mediaWithCount': 'Schermafbeeldingen ({count})',
-  'dialog.tabs.recording': "Video's",
-  'dialog.tabs.recordingWithCount': "Video's ({count})",
+  'dialog.tabs.recording': 'Opnames',
+  'dialog.tabs.recordingWithCount': 'Opnames ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Korte beschrijving van het probleem',
