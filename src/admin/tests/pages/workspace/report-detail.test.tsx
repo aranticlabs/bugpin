@@ -91,7 +91,11 @@ describe('ReportDetail', () => {
     );
 
     expect(await screen.findByText('Screenshots (2)')).toBeInTheDocument();
-    expect(document.querySelector('video')).toHaveAttribute('preload', 'metadata');
+    const video = document.querySelector('video');
+    expect(video).toHaveAttribute('preload', 'metadata');
+    expect(video).toHaveStyle({ maxHeight: '200px' });
+    expect(video).toHaveClass('object-contain');
+    expect(screen.getByRole('img', { name: 'screen.png' })).toHaveStyle({ maxHeight: '200px' });
 
     await user.click(screen.getByRole('img', { name: 'screen.png' }));
     expect(await screen.findByText('Open in new tab')).toBeInTheDocument();

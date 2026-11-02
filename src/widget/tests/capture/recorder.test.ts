@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
+  canRestrictCapture,
   isRecordingSupported,
   requestMicrophoneTrack,
   requestRecordingStream,
+  restrictCaptureToPage,
   startRecording,
 } from '../../capture/recorder';
 
@@ -589,5 +591,67 @@ describe('screen recorder', () => {
     ).toThrow('No supported recording format');
     expect(track.stopCount).toBeGreaterThan(0);
     expect(microphone.stopCount).toBeGreaterThan(0);
+  });
+});
+
+describe('restrictCaptureToPage', () => {
+  const originalDocument = globalThis.document;
+  const documentElement = { tagName: 'HTML' };
+  const scope = globalThis as unknown as { RestrictionTarget?: unknown; document: unknown };
+
+  const restrictableTrack = (restrictTo: (target: unknown) => Promise<void>) =>
+    Object.assign(new FakeTrack('video'), { restrictTo }) as unknown as MediaStreamTrack;
+
+  beforeEach(() => {
+    scope.document = { documentElement };
+    scope.RestrictionTarget = {
+      fromElement: async (element: unknown) => ({ element }),
+    };
+  });
+
+  afterEach(() => {
+    scope.document = originalDocument;
+    delete scope.RestrictionTarget;
+  });
+
+  it('restricts the track to the root element', async () => {
+    const targets: unknown[] = [];
+    await restrictCaptureToPage(
+      restrictableTrack(async (target) => {
+        targets.push(target);
+      })
+    );
+
+    expect(canRestrictCapture()).toBe(true);
+    expect(targets).toEqual([{ element: documentElement }]);
+  });
+
+  it('keeps recording unrestricted when the track cannot be restricted', async () => {
+    const track = restrictableTrack(async () => {
+      throw new DOMException('Not self-capture', 'NotSupportedError');
+    });
+
+    await expect(restrictCaptureToPage(track)).resolves.toBeUndefined();
+    expect(track.readyState).toBe('live');
+  });
+
+  it('does nothing without Element Capture', async () => {
+    delete scope.RestrictionTarget;
+    let called = false;
+
+    await restrictCaptureToPage(
+      restrictableTrack(async () => {
+        called = true;
+      })
+    );
+
+    expect(canRestrictCapture()).toBe(false);
+    expect(called).toBe(false);
+  });
+
+  it('ignores tracks without restrictTo', async () => {
+    await expect(
+      restrictCaptureToPage(new FakeTrack('video') as unknown as MediaStreamTrack)
+    ).resolves.toBeUndefined();
   });
 });

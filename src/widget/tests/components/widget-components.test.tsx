@@ -190,15 +190,10 @@ describe('widget components', () => {
     expect(html).toContain('Add more');
   });
 
-  it('renders screenshot manager with video and annotation disabled', () => {
-    const videoItem: CapturedMedia = {
-      ...mediaItem,
-      id: 'media_video',
-      mimeType: 'video/mp4',
-    };
+  it('renders screenshot manager without annotation actions when disabled', () => {
     const html = renderToString(
       <ScreenshotManager
-        media={[videoItem]}
+        media={[mediaItem]}
         onCapture={() => undefined}
         onUpload={() => undefined}
         onRemove={() => undefined}
@@ -211,7 +206,7 @@ describe('widget components', () => {
         onDismissOversizedCapture={() => undefined}
       />
     );
-    expect(html).toContain('Video');
+    expect(html).toContain('Screenshot');
     expect(html).not.toContain('title="Annotate"');
   });
 

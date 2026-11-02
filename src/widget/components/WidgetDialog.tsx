@@ -142,31 +142,26 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
     [formData, media, validate, onSubmit, onActiveTabChange]
   );
 
-  const recordings = media.filter((item) => item.source === 'recording');
-  const otherMedia = media.filter((item) => item.source !== 'recording');
-  const mediaCount = otherMedia.length;
+  const images = media.filter((item) => item.mimeType.startsWith('image/'));
+  const videos = media.filter((item) => item.mimeType.startsWith('video/'));
   const tabs = [
     { id: 'details', label: t('dialog.tabs.details'), icon: TAB_ICONS.details },
     {
       id: 'media',
       label:
-        mediaCount > 0
-          ? t('dialog.tabs.mediaWithCount', { count: mediaCount })
+        images.length > 0
+          ? t('dialog.tabs.mediaWithCount', { count: images.length })
           : t('dialog.tabs.media'),
       icon: TAB_ICONS.media,
     },
-    ...(recordingEnabled
-      ? [
-          {
-            id: 'recording',
-            label:
-              recordings.length > 0
-                ? t('dialog.tabs.recordingWithCount', { count: recordings.length })
-                : t('dialog.tabs.recording'),
-            icon: TAB_ICONS.recording,
-          },
-        ]
-      : []),
+    {
+      id: 'recording',
+      label:
+        videos.length > 0
+          ? t('dialog.tabs.recordingWithCount', { count: videos.length })
+          : t('dialog.tabs.recording'),
+      icon: TAB_ICONS.recording,
+    },
   ];
   const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'details';
 
@@ -302,7 +297,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               {/* Media Tab */}
               {currentTab === 'media' && (
                 <ScreenshotManager
-                  media={otherMedia}
+                  media={images}
                   onCapture={onCaptureScreenshot}
                   onUpload={onAddMedia}
                   onRemove={onRemoveMedia}
@@ -310,7 +305,6 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   isCapturing={isCapturing}
                   enableAnnotation={enableAnnotation}
                   maxImageSize={maxImageSize}
-                  maxVideoSize={maxVideoSize}
                   reduceQuality={reduceScreenshotQuality}
                   onReduceQualityChange={onReduceScreenshotQualityChange}
                   oversizedCapture={oversizedCapture}
@@ -318,13 +312,16 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 />
               )}
 
-              {/* Screen Recording Tab */}
+              {/* Videos Tab */}
               {currentTab === 'recording' && (
                 <ScreenRecordingPanel
-                  clips={recordings}
+                  clips={videos}
+                  recordingEnabled={recordingEnabled}
                   onRecord={onStartRecording}
+                  onUpload={onAddMedia}
                   onRemove={onRemoveMedia}
                   isStarting={isRecordingStarting}
+                  maxVideoSize={maxVideoSize}
                   allowMicrophone={allowRecordingMicrophone}
                   includeMicrophone={includeMicrophone}
                   onIncludeMicrophoneChange={onIncludeMicrophoneChange}

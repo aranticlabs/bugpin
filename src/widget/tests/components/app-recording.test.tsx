@@ -482,6 +482,38 @@ describe('App screen recording', () => {
     expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
   });
 
+  it('waits for completed recording cleanup before allowing another recording', async () => {
+    let finishCleanup: (() => void) | undefined;
+    recoveryStore.remove = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCleanup = resolve;
+        })
+    );
+    await renderOpenApp();
+    await reachRecording();
+
+    current.resolveFinished(makeResult(100));
+    await flush();
+
+    expect(dialogProps?.isRecordingStarting).toBe(true);
+    startFromDialog();
+    await flush();
+    expect(startRecording).toHaveBeenCalledTimes(1);
+
+    finishCleanup?.();
+    await flush();
+    expect(dialogProps?.isRecordingStarting).toBe(false);
+
+    track = new FakeTrack();
+    current = makeSession();
+    startFromDialog();
+    for (let i = 0; i < 100 && startRecording.mock.calls.length < 2; i++) {
+      await flush();
+    }
+    expect(startRecording).toHaveBeenCalledTimes(2);
+  });
+
   it('writes chunks to recovery storage while recording', async () => {
     await renderOpenApp();
     await reachRecording();

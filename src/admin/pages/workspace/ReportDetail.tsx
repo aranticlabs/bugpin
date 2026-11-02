@@ -484,7 +484,8 @@ export function ReportDetail() {
                             src={fileUrl}
                             controls
                             preload="metadata"
-                            className="w-full rounded-lg border bg-black"
+                            className="w-full rounded-lg border bg-black object-contain"
+                            style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
                           />
                         ) : (
                           <button

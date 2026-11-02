@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import {
-  requestMicrophoneTrack,
-  requestRecordingStream,
-  startRecording,
   type AutoStopReason,
   type RecordingResult,
   type RecordingSession,
+  requestMicrophoneTrack,
+  requestRecordingStream,
+  restrictCaptureToPage,
+  startRecording,
 } from '../capture/recorder.js';
 import type { ToastType } from '../components/ui';
 import { getLocale, t } from '../i18n/index.js';
@@ -186,12 +187,13 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
         if (sessionId) await store.remove(apiKey, sessionId);
         return;
       }
-      updateStatus('idle');
       try {
         await optionsRef.current.onExit(result, failedRef.current, sessionId ?? undefined);
         if (sessionId) await store.remove(apiKey, sessionId);
       } catch (error) {
         console.error('[BugPin] Failed to save completed recording:', error);
+      } finally {
+        updateStatus('idle');
       }
     });
   }, [handleAutoStop, takePending, updateStatus]);
@@ -254,8 +256,10 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
         optionsRef.current.onNotice(t('recording.notice.noMicrophone'), 'info');
       }
 
-      const prepared = mountedRef.current && (await optionsRef.current.prepare());
       const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) await restrictCaptureToPage(videoTrack);
+
+      const prepared = mountedRef.current && (await optionsRef.current.prepare());
       if (!prepared || !mountedRef.current || videoTrack?.readyState === 'ended') {
         stopCaptureTracks(stream, microphone);
         if (mountedRef.current) updateStatus('idle');

@@ -29,6 +29,7 @@ async function mount(node: ComponentChild): Promise<void> {
 
 const button = (label: string) =>
   container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement | null;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function clip(id: string, source?: 'recording'): CapturedMedia {
   return {
@@ -39,6 +40,16 @@ function clip(id: string, source?: 'recording'): CapturedMedia {
     mimeType: 'video/webm',
     durationMs: 65_000,
     source,
+  };
+}
+
+function image(id: string): CapturedMedia {
+  return {
+    id,
+    dataUrl: 'data:image/png;base64,media',
+    timestamp: new Date('2026-11-02T10:00:00Z'),
+    annotated: false,
+    mimeType: 'image/png',
   };
 }
 
@@ -135,6 +146,8 @@ describe('RecordingBar', () => {
 
     expect(bar.style.left).toBe('50%');
     expect(bar.style.transform).toBe('translateX(-50%)');
+    expect(bar.classList.contains('rounded-xl')).toBe(true);
+    expect(container.querySelector('[data-recording-drag-handle]')).not.toBeNull();
   });
 
   it('shows elapsed and maximum time outside any live region', async () => {
@@ -174,6 +187,171 @@ describe('RecordingBar', () => {
     expect(container.querySelectorAll('svg').length).toBe(svgCount + 1);
   });
 
+  it('keeps the tools hidden during the countdown', async () => {
+    await mount(<RecordingBar {...barProps} isCountingDown />);
+
+    expect(button(t('recording.tool.pen'))).toBeNull();
+    expect(button(t('recording.tool.laser'))).toBeNull();
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'p' }));
+    await settle();
+    expect(container.querySelector('[data-recording-pen]')?.classList).toContain(
+      'pointer-events-none'
+    );
+  });
+
+  it('opens in the top layer so a restricted capture leaves it out', async () => {
+    const showPopover = mock(noop);
+    const original = window.HTMLElement.prototype.showPopover;
+    window.HTMLElement.prototype.showPopover = showPopover;
+    await mount(<RecordingBar {...barProps} />);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    window.HTMLElement.prototype.showPopover = original;
+
+    const bar = container.querySelector('[data-bugpin-exclude]') as HTMLElement;
+    expect(bar.getAttribute('popover')).toBe('manual');
+    expect(showPopover).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeats the page background only when the capture can be restricted', async () => {
+    const backdrop = () => container.querySelector('[data-recording-backdrop]') as HTMLElement;
+    await mount(<RecordingBar {...barProps} />);
+    expect(backdrop()).toBeNull();
+
+    const scope = globalThis as unknown as { RestrictionTarget?: unknown };
+    scope.RestrictionTarget = { fromElement: async () => ({}) };
+    document.body.style.backgroundColor = 'rgb(12, 34, 56)';
+    render(null, container);
+    await mount(<RecordingBar {...barProps} />);
+    delete scope.RestrictionTarget;
+
+    expect(backdrop()?.style.backgroundColor).toBe('rgb(12, 34, 56)');
+  });
+
+  it('frames the page in red and turns the frame gray while paused', async () => {
+    await mount(<RecordingBar {...barProps} />);
+    const frame = () => container.querySelector('[data-recording-frame]') as HTMLElement;
+    expect(frame().style.boxShadow).toContain('#dc2626');
+
+    await mount(<RecordingBar {...barProps} isPaused />);
+    expect(frame().style.boxShadow).toContain('#737373');
+  });
+
+  describe('tools', () => {
+    const press = async (key: string, target: EventTarget = window) => {
+      target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+      await settle();
+    };
+    const pressed = (label: string) => button(label)?.getAttribute('aria-pressed');
+    const afterPaint = () => new Promise((resolve) => setTimeout(resolve, 150));
+    const pen = () => container.querySelector('[data-recording-pen]') as HTMLCanvasElement;
+    const draw = async () => {
+      const event = (type: string, clientX: number) =>
+        new window.MouseEvent(type, { bubbles: true, button: 0, clientX, clientY: 10 });
+      pen().dispatchEvent(event('pointerdown', 10));
+      pen().dispatchEvent(event('pointermove', 40));
+      pen().dispatchEvent(event('pointerup', 40));
+      await settle();
+    };
+
+    it('starts on the cursor with click effects on', async () => {
+      await mount(<RecordingBar {...barProps} />);
+
+      expect(pressed(t('recording.tool.cursor'))).toBe('true');
+      expect(pressed(t('recording.tool.pen'))).toBe('false');
+      expect(pressed(t('recording.tool.clickEffects'))).toBe('true');
+      expect(pen().classList.contains('pointer-events-none')).toBe(true);
+    });
+
+    it('lets the pen capture the page and shows its options only while active', async () => {
+      await mount(<RecordingBar {...barProps} />);
+      expect(button(t('recording.color.red'))).toBeNull();
+
+      button(t('recording.tool.pen'))?.click();
+      await settle();
+
+      expect(pen().classList.contains('pointer-events-none')).toBe(false);
+      expect(pressed(t('recording.color.red'))).toBe('true');
+
+      button(t('recording.color.green'))?.click();
+      await settle();
+      expect(pressed(t('recording.color.green'))).toBe('true');
+      expect(pressed(t('recording.color.red'))).toBe('false');
+    });
+
+    it('enables undo and clear once a stroke exists', async () => {
+      await mount(<RecordingBar {...barProps} />);
+      await press('p');
+      expect(button(t('recording.tool.undo'))?.disabled).toBe(true);
+      expect(button(t('recording.tool.clear'))?.disabled).toBe(true);
+
+      await draw();
+      expect(button(t('recording.tool.undo'))?.disabled).toBe(false);
+
+      button(t('recording.tool.undo'))?.click();
+      await settle();
+      expect(button(t('recording.tool.undo'))?.disabled).toBe(true);
+
+      await draw();
+      await draw();
+      button(t('recording.tool.clear'))?.click();
+      await settle();
+      expect(button(t('recording.tool.clear'))?.disabled).toBe(true);
+    });
+
+    it('undoes a stroke with the keyboard', async () => {
+      await mount(<RecordingBar {...barProps} />);
+      await press('p');
+      await draw();
+
+      window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', metaKey: true }));
+      await settle();
+
+      expect(button(t('recording.tool.undo'))?.disabled).toBe(true);
+    });
+
+    it('switches tools with the keyboard', async () => {
+      await mount(<RecordingBar {...barProps} />);
+
+      await press('l');
+      expect(pressed(t('recording.tool.laser'))).toBe('true');
+      await press('Escape');
+      expect(pressed(t('recording.tool.cursor'))).toBe('true');
+      await press('p');
+      expect(pressed(t('recording.tool.pen'))).toBe('true');
+      await press('v');
+      expect(pressed(t('recording.tool.cursor'))).toBe('true');
+      await press('c');
+      expect(pressed(t('recording.tool.clickEffects'))).toBe('false');
+    });
+
+    it('ignores shortcuts while typing in a field', async () => {
+      await mount(<RecordingBar {...barProps} />);
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+
+      await press('p', input);
+
+      expect(pressed(t('recording.tool.cursor'))).toBe('true');
+    });
+
+    it('hides the page cursor only while the laser is active', async () => {
+      const cursorStyles = () =>
+        [...document.head.querySelectorAll('style')].filter((style) =>
+          style.textContent?.includes('cursor: none')
+        );
+      await mount(<RecordingBar {...barProps} />);
+      expect(cursorStyles()).toHaveLength(0);
+
+      await press('l');
+      await afterPaint();
+      expect(cursorStyles()).toHaveLength(1);
+
+      await press('v');
+      await afterPaint();
+      expect(cursorStyles()).toHaveLength(0);
+    });
+  });
+
   describe('dragging', () => {
     let latest: RecordingBarPosition | null;
 
@@ -184,12 +362,12 @@ describe('RecordingBar', () => {
     };
 
     const bar = () => container.querySelector('[data-bugpin-exclude]') as HTMLElement;
+    const handle = () => container.querySelector('[data-recording-drag-handle]') as HTMLElement;
     const pointer = (target: Element, type: string, clientX: number, clientY: number) => {
       target.dispatchEvent(
         new window.MouseEvent(type, { bubbles: true, button: 0, clientX, clientY })
       );
     };
-    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
     beforeEach(() => {
       latest = null;
@@ -202,7 +380,7 @@ describe('RecordingBar', () => {
       bar().getBoundingClientRect = () =>
         ({ left: 100, top: 100, width: 300, height: 50 }) as DOMRect;
 
-      pointer(bar(), 'pointerdown', 110, 110);
+      pointer(handle(), 'pointerdown', 110, 110);
       pointer(bar(), 'pointermove', 210, 310);
       await settle();
       expect(latest).toEqual({ x: 200, y: 300 });
@@ -221,7 +399,7 @@ describe('RecordingBar', () => {
       await mount(<Harness initial={null} />);
       bar().getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 50 }) as DOMRect;
 
-      pointer(bar(), 'pointerdown', 10, 10);
+      pointer(handle(), 'pointerdown', 10, 10);
       pointer(bar(), 'pointerup', 10, 10);
       pointer(bar(), 'pointermove', 300, 300);
       await settle();
@@ -259,7 +437,9 @@ describe('RecordingBar', () => {
 describe('ScreenRecordingPanel', () => {
   const panelProps = {
     clips: [],
+    recordingEnabled: true,
     onRecord: noop,
+    onUpload: noop,
     onRemove: noop,
     isStarting: false,
     allowMicrophone: false,
@@ -276,7 +456,25 @@ describe('ScreenRecordingPanel', () => {
     await mount(<ScreenRecordingPanel {...panelProps} allowMicrophone />);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
+    expect(checkbox.classList.contains('sr-only')).toBe(true);
+    expect(checkbox.nextElementSibling?.getAttribute('aria-hidden')).toBe('true');
     expect(container.textContent).toContain(t('recording.microphone'));
+  });
+
+  it('matches the screenshot panel control layout', async () => {
+    await mount(<ScreenRecordingPanel {...panelProps} allowMicrophone />);
+
+    const recordButton = [...container.querySelectorAll('button')].find(
+      (item) => item.textContent === t('recording.start')
+    );
+    const microphone = container.querySelector('input[type="checkbox"]');
+    const privacyTip = [...container.querySelectorAll('p')].find(
+      (item) => item.textContent === t('recording.privacyTip')
+    );
+
+    expect(recordButton?.classList.contains('flex-1')).toBe(true);
+    expect(microphone?.closest('div')?.classList.contains('justify-end')).toBe(true);
+    expect(privacyTip?.classList.contains('text-center')).toBe(false);
   });
 
   it('disables the record button while starting', async () => {
@@ -288,14 +486,41 @@ describe('ScreenRecordingPanel', () => {
   it('lists clips with duration and size, and removes them', async () => {
     const onRemove = mock(noop);
     await mount(
-      <ScreenRecordingPanel {...panelProps} clips={[clip('a', 'recording')]} onRemove={onRemove} />
+      <ScreenRecordingPanel
+        {...panelProps}
+        clips={[clip('a', 'recording'), clip('b', 'recording')]}
+        onRemove={onRemove}
+      />
     );
 
     expect(container.textContent).toContain('1:05 · 1.0 MB');
-    const video = container.querySelector('video');
+    expect(container.querySelector('ul')?.classList.contains('grid-cols-2')).toBe(true);
+    expect(container.querySelector('ul')?.parentElement?.classList.contains('border-2')).toBe(
+      false
+    );
+    expect(container.querySelectorAll('li')).toHaveLength(3);
+    const video = container.querySelector('video') as HTMLVideoElement;
     expect(video?.controls).toBe(true);
     expect(video?.muted).toBe(false);
     expect(video?.getAttribute('src')).toBe('blob:recording-1');
+
+    let paused = true;
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => paused });
+    video.play = mock(async () => {
+      paused = false;
+      video.dispatchEvent(new window.Event('play'));
+    });
+    video.pause = mock(() => {
+      paused = true;
+      video.dispatchEvent(new window.Event('pause'));
+    });
+
+    button(t('recording.play'))?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(video.play).toHaveBeenCalledTimes(1);
+    button(t('recording.pause'))?.click();
+    expect(video.pause).toHaveBeenCalledTimes(1);
+
     button(t('screenshot.action.remove'))?.click();
     expect(onRemove.mock.calls[0]).toEqual(['a'] as never);
     expect(button(t('screenshot.action.download'))).not.toBeNull();
@@ -318,6 +543,22 @@ describe('ScreenRecordingPanel', () => {
     expect(onRemove.mock.calls[0]).toEqual(['a'] as never);
   });
 
+  it('opens and closes a larger recording preview', async () => {
+    await mount(<ScreenRecordingPanel {...panelProps} clips={[clip('a', 'recording')]} />);
+
+    button(t('recording.expand'))?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const preview = container.querySelector('[data-testid="recording-preview-dialog"]');
+    expect(preview?.getAttribute('role')).toBe('dialog');
+    expect(preview?.getAttribute('aria-modal')).toBe('true');
+    expect(preview?.querySelector('video')).not.toBeNull();
+
+    button(t('aria.close'))?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector('[data-testid="recording-preview-dialog"]')).toBeNull();
+  });
+
   it('shows and dismisses the oversized banner', async () => {
     const onDismiss = mock(noop);
     await mount(
@@ -333,6 +574,17 @@ describe('ScreenRecordingPanel', () => {
     );
     button(t('aria.close'))?.click();
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps video uploads available when screen recording is disabled', async () => {
+    await mount(<ScreenRecordingPanel {...panelProps} recordingEnabled={false} />);
+
+    expect(container.textContent).not.toContain(t('recording.start'));
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toBe(
+      'video/mp4,video/webm,video/quicktime'
+    );
+    expect(container.textContent).toContain(t('screenshot.dropzone.title'));
   });
 });
 
@@ -382,17 +634,21 @@ describe('WidgetDialog recording tab', () => {
   const tabLabels = () =>
     [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
 
-  it('hides the tab when recording is not available', async () => {
+  it('keeps the videos tab available when recording is not available', async () => {
     await mount(<WidgetDialog {...dialogProps} media={[]} activeTab="details" />);
 
-    expect(tabLabels()).toEqual([t('dialog.tabs.details'), t('dialog.tabs.media')]);
+    expect(tabLabels()).toEqual([
+      t('dialog.tabs.details'),
+      t('dialog.tabs.media'),
+      t('dialog.tabs.recording'),
+    ]);
   });
 
-  it('counts recordings and other media separately', async () => {
+  it('counts images and videos separately', async () => {
     await mount(
       <WidgetDialog
         {...dialogProps}
-        media={[clip('upload'), clip('one', 'recording'), clip('two', 'recording')]}
+        media={[image('shot'), clip('upload'), clip('recording', 'recording')]}
         activeTab="details"
         recordingEnabled
       />
@@ -405,24 +661,36 @@ describe('WidgetDialog recording tab', () => {
     ]);
   });
 
-  it('shows recordings only in the recording tab', async () => {
-    const media = [clip('upload'), clip('one', 'recording')];
+  it('shows videos only in the videos tab and images only in screenshots', async () => {
+    const media = [image('shot'), clip('upload'), clip('recording', 'recording')];
     await mount(
       <WidgetDialog {...dialogProps} media={media} activeTab="recording" recordingEnabled />
     );
     expect(container.textContent).toContain(t('recording.start'));
-    expect(container.querySelectorAll('li')).toHaveLength(1);
+    expect(container.querySelectorAll('video')).toHaveLength(2);
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(container.querySelector('ul')?.parentElement?.classList.contains('border-2')).toBe(
+      false
+    );
 
     await mount(<WidgetDialog {...dialogProps} media={media} activeTab="media" recordingEnabled />);
     expect(container.textContent).not.toContain(t('recording.start'));
-    expect(container.querySelectorAll('video')).toHaveLength(1);
+    expect(container.querySelectorAll('video')).toHaveLength(0);
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(
+      container
+        .querySelector('img')
+        ?.closest('.grid')
+        ?.parentElement?.classList.contains('border-2')
+    ).toBe(false);
   });
 
-  it('falls back to details when a draft points at an unavailable tab', async () => {
+  it('opens the videos upload area when recording is unavailable', async () => {
     await mount(<WidgetDialog {...dialogProps} media={[]} activeTab="recording" />);
 
-    expect(container.querySelector('#bugpin-title-input')).not.toBeNull();
+    expect(container.querySelector('#bugpin-title-input')).toBeNull();
     expect(container.textContent).not.toContain(t('recording.start'));
+    expect(container.textContent).toContain(t('screenshot.dropzone.title'));
   });
 });
 

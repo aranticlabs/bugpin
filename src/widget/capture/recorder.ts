@@ -83,6 +83,35 @@ export function requestRecordingStream(): Promise<MediaStream> {
   } as DisplayMediaStreamOptions);
 }
 
+interface RestrictableVideoTrack extends MediaStreamTrack {
+  restrictTo?: (target: unknown) => Promise<void>;
+}
+
+interface RestrictionTargetFactory {
+  fromElement(element: Element): Promise<unknown>;
+}
+
+const restrictionTargetFactory = () =>
+  (globalThis as { RestrictionTarget?: RestrictionTargetFactory }).RestrictionTarget;
+
+export function canRestrictCapture(): boolean {
+  return !!restrictionTargetFactory();
+}
+
+// Element Capture records the root stacking context only, and top-layer elements paint
+// outside it, so the recording bar stays on screen but out of the video. Browsers without
+// Element Capture, and captures of anything but the current tab, record unrestricted.
+export async function restrictCaptureToPage(track: MediaStreamTrack): Promise<void> {
+  const factory = restrictionTargetFactory();
+  const restrictableTrack = track as RestrictableVideoTrack;
+  if (!factory || !restrictableTrack.restrictTo) return;
+  try {
+    await restrictableTrack.restrictTo(await factory.fromElement(document.documentElement));
+  } catch {
+    // An unrestricted recording still works; it just includes the recording bar.
+  }
+}
+
 export async function requestMicrophoneTrack(): Promise<MediaStreamTrack | null> {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({

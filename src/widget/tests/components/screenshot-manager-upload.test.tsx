@@ -4,7 +4,9 @@ import {
   downloadMedia,
   formatVideoMeta,
   ScreenshotManager,
+  type CapturedMedia,
 } from '../../components/ScreenshotManager';
+import { ScreenRecordingPanel } from '../../components/ScreenRecordingPanel';
 import { installDom } from '../helpers/dom';
 import { setLocale, t } from '../../i18n/index';
 
@@ -53,6 +55,36 @@ function buildFileList(file: File): FileList {
     length: 1,
     item: (index: number) => (index === 0 ? file : null),
   } as unknown as FileList;
+}
+
+function dropFile(target: Element, file: File): void {
+  const event = new window.Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: { files: buildFileList(file) } });
+  target.dispatchEvent(event);
+}
+
+function renderVideoPanel(
+  container: HTMLElement,
+  clips: CapturedMedia[] = [],
+  onUpload: (item: CapturedMedia) => void = () => undefined,
+  onRemove: (id: string) => void = () => undefined
+): void {
+  render(
+    <ScreenRecordingPanel
+      clips={clips}
+      recordingEnabled={false}
+      onRecord={() => undefined}
+      onUpload={onUpload}
+      onRemove={onRemove}
+      isStarting={false}
+      allowMicrophone={false}
+      includeMicrophone={false}
+      onIncludeMicrophoneChange={() => undefined}
+      oversizedRecording={null}
+      onDismissOversizedRecording={() => undefined}
+    />,
+    container
+  );
 }
 
 beforeEach(() => {
@@ -149,7 +181,7 @@ describe('ScreenshotManager uploads', () => {
     ]);
   });
 
-  it('advertises only supported image and video types', () => {
+  it('advertises only supported image types', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -171,8 +203,7 @@ describe('ScreenshotManager uploads', () => {
     );
 
     const input = container.querySelector('input[type="file"]');
-    expect(input?.getAttribute('accept')).toContain('video/quicktime');
-    expect(input?.getAttribute('accept')).not.toContain('video/x-msvideo');
+    expect(input?.getAttribute('accept')).toBe('image/png,image/jpeg,image/gif,image/webp');
 
     render(null, container);
     container.remove();
@@ -221,22 +252,7 @@ describe('ScreenshotManager uploads', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
-    render(
-      <ScreenshotManager
-        media={[]}
-        onCapture={() => undefined}
-        onUpload={onUpload}
-        onRemove={() => undefined}
-        onAnnotate={() => undefined}
-        isCapturing={false}
-        enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
-        oversizedCapture={null}
-        onDismissOversizedCapture={() => undefined}
-      />,
-      container
-    );
+    renderVideoPanel(container, [], onUpload);
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, 'files', {
@@ -319,15 +335,17 @@ describe('ScreenshotManager uploads', () => {
     container.remove();
   });
 
-  it('keeps the Blob when uploaded video metadata cannot be read', async () => {
-    const onUpload = mock(() => undefined);
+  it('accepts files from the matching image and video drop zones', async () => {
+    const imageUpload = mock(() => undefined);
+    const videoUpload = mock(() => undefined);
     const container = document.createElement('div');
     document.body.appendChild(container);
+
     render(
       <ScreenshotManager
         media={[]}
         onCapture={() => undefined}
-        onUpload={onUpload}
+        onUpload={imageUpload}
         onRemove={() => undefined}
         onAnnotate={() => undefined}
         isCapturing={false}
@@ -339,6 +357,30 @@ describe('ScreenshotManager uploads', () => {
       />,
       container
     );
+    const imageDropZone = container.querySelector('.border-dashed');
+    if (!imageDropZone) throw new Error('Image drop zone missing');
+    dropFile(imageDropZone, new File([new Uint8Array([1])], 'shot.png', { type: 'image/png' }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    renderVideoPanel(container, [], videoUpload);
+    const videoDropZone = container.querySelector('.border-dashed');
+    if (!videoDropZone) throw new Error('Video drop zone missing');
+    dropFile(videoDropZone, new File([new Uint8Array([1])], 'clip.mp4', { type: 'video/mp4' }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(imageUpload).toHaveBeenCalledTimes(1);
+    expect(videoUpload).toHaveBeenCalledTimes(1);
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('keeps the Blob when uploaded video metadata cannot be read', async () => {
+    const onUpload = mock(() => undefined);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    renderVideoPanel(container, [], onUpload);
     document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
       const element = originalCreateElement(tagName, options);
       if (tagName.toLowerCase() === 'video') {
@@ -382,29 +424,19 @@ describe('ScreenshotManager uploads', () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' });
     const onRemove = mock(() => undefined);
     const renderVideo = (videoBlob: Blob) =>
-      render(
-        <ScreenshotManager
-          media={[
-            {
-              id: 'video-1',
-              blob: videoBlob,
-              timestamp: new Date(),
-              annotated: false,
-              mimeType: 'video/mp4',
-            },
-          ]}
-          onCapture={() => undefined}
-          onUpload={() => undefined}
-          onRemove={onRemove}
-          onAnnotate={() => undefined}
-          isCapturing={false}
-          enableAnnotation={true}
-          reduceQuality={false}
-          onReduceQualityChange={() => undefined}
-          oversizedCapture={null}
-          onDismissOversizedCapture={() => undefined}
-        />,
-        container
+      renderVideoPanel(
+        container,
+        [
+          {
+            id: 'video-1',
+            blob: videoBlob,
+            timestamp: new Date(),
+            annotated: false,
+            mimeType: 'video/mp4',
+          },
+        ],
+        () => undefined,
+        onRemove
       );
 
     renderVideo(blob);
@@ -412,8 +444,8 @@ describe('ScreenshotManager uploads', () => {
 
     const video = container.querySelector('video');
     expect(video?.getAttribute('src')).toBe('blob:test-1');
-    expect(video?.controls).toBe(false);
-    expect(video?.muted).toBe(true);
+    expect(video?.controls).toBe(true);
+    expect(video?.muted).toBe(false);
     expect(createdObjectUrls).toEqual([blob]);
 
     video?.dispatchEvent(new window.Event('error'));
