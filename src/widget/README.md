@@ -5,6 +5,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 ## Features
 
 - **Screenshot Capture** - Full page or visible area
+- **Screen Recording** - Record a tab, window, or screen with optional microphone audio
 - **Annotation Tools** - Draw, highlight, blur, and add text
 - **Privacy First** - Self-hosted, your data stays on your servers
 - **Customizable** - Match your brand colors and style

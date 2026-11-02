@@ -7,8 +7,12 @@ const SESSION_STORE = 'sessions';
 const CHUNK_STORE = 'chunks';
 const PENDING_KEY_PREFIX = 'bugpin-recording-pending-';
 const HEARTBEAT_KEY_PREFIX = 'bugpin-recording-heartbeat-';
+const OWNER_TAB_KEY_PREFIX = 'bugpin-recording-owner-tab-';
+const TAB_ID_KEY = 'bugpin-recording-tab-id';
+const STORAGE_USED_KEY = 'bugpin-recording-storage-used';
 const ACTIVE_SESSION_TTL_MS = 15 * 60 * 1000;
-const RECOVERY_SETTLE_MS = 2500;
+const RECOVERY_LIVENESS_MS = 90 * 1000;
+const RECORDING_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface RecordingSessionRecord {
   id: string;
@@ -58,9 +62,29 @@ let db: IDBPDatabase<RecordingStoreDB> | null = null;
 const writeQueues = new Map<string, Promise<void>>();
 const sessionApiKeys = new Map<string, string>();
 const heartbeatTimes = new Map<string, number>();
+const closedSessions = new Set<string>();
+let tabId: string | null = null;
 
 function pendingKey(apiKey: string): string {
   return `${PENDING_KEY_PREFIX}${apiKey}`;
+}
+
+function ownerTabKey(apiKey: string): string {
+  return `${OWNER_TAB_KEY_PREFIX}${apiKey}`;
+}
+
+function getTabId(): string {
+  if (tabId) return tabId;
+  try {
+    tabId = window.sessionStorage.getItem(TAB_ID_KEY);
+    if (!tabId) {
+      tabId = crypto.randomUUID();
+      window.sessionStorage.setItem(TAB_ID_KEY, tabId);
+    }
+  } catch {
+    tabId = crypto.randomUUID();
+  }
+  return tabId;
 }
 
 function normalizeOwnerEmail(ownerEmail?: string): string | undefined {
@@ -81,6 +105,7 @@ function clearPendingSession(apiKey: string, sessionId: string): void {
     if (localStorage.getItem(pendingKey(apiKey)) === sessionId) {
       localStorage.removeItem(pendingKey(apiKey));
       localStorage.removeItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`);
+      localStorage.removeItem(ownerTabKey(apiKey));
     }
   } catch {
     // IndexedDB remains the source for cleanup if local storage is unavailable.
@@ -114,8 +139,12 @@ function getHeartbeat(apiKey: string): number | null {
 }
 
 function isStaleSessionId(sessionId: string): boolean {
-  const startedAt = Number(sessionId.split('-', 1)[0]);
+  const startedAt = sessionStartedAt(sessionId);
   return !Number.isFinite(startedAt) || Date.now() - startedAt > ACTIVE_SESSION_TTL_MS;
+}
+
+function sessionStartedAt(sessionId: string): number {
+  return Number(sessionId.split('-', 1)[0]);
 }
 
 async function initDB(): Promise<IDBPDatabase<RecordingStoreDB>> {
@@ -155,14 +184,15 @@ function isStartBlocked(apiKey: string): boolean {
 
 async function begin(input: BeginRecordingInput): Promise<string | null> {
   const existingSessionId = getPendingSessionId(input.apiKey);
-  if (existingSessionId && !isStaleSessionId(existingSessionId)) return null;
+  if (existingSessionId) return null;
 
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   try {
     localStorage.setItem(pendingKey(input.apiKey), sessionId);
+    localStorage.setItem(ownerTabKey(input.apiKey), getTabId());
+    localStorage.setItem(STORAGE_USED_KEY, 'true');
     updateHeartbeat(input.apiKey);
     const database = await initDB();
-    if (existingSessionId) await deleteSessionRecords(database, existingSessionId);
     await database.put(SESSION_STORE, {
       id: sessionId,
       apiKey: input.apiKey,
@@ -187,8 +217,10 @@ async function addChunk(
   blob: Blob,
   durationMs: number
 ): Promise<void> {
+  if (closedSessions.has(sessionId)) return;
   const previous = writeQueues.get(sessionId)?.catch(() => undefined) ?? Promise.resolve();
   const next = previous.then(async () => {
+    if (closedSessions.has(sessionId)) return;
     const database = await initDB();
     await database.put(CHUNK_STORE, {
       id: `${sessionId}:${index}`,
@@ -208,15 +240,15 @@ async function addChunk(
 }
 
 async function remove(apiKey: string, sessionId: string): Promise<void> {
+  closedSessions.add(sessionId);
   try {
     const database = await initDB();
     await deleteSessionRecords(database, sessionId);
-  } catch (error) {
-    console.error('[BugPin] Failed to clear recording recovery storage:', error);
-  } finally {
     clearPendingSession(apiKey, sessionId);
     sessionApiKeys.delete(sessionId);
     heartbeatTimes.delete(sessionId);
+  } catch (error) {
+    console.error('[BugPin] Failed to clear recording recovery storage:', error);
   }
 }
 
@@ -224,13 +256,18 @@ async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRe
   const sessionId = getPendingSessionId(apiKey);
   if (!sessionId) return null;
 
-  const heartbeat = getHeartbeat(apiKey);
-  if (heartbeat) {
-    const remaining = RECOVERY_SETTLE_MS - Math.max(0, Date.now() - heartbeat);
-    if (remaining > 0) {
+  let ownerTabId: string | null = null;
+  try {
+    ownerTabId = localStorage.getItem(ownerTabKey(apiKey));
+  } catch {
+    // Heartbeat expiry remains the fallback when storage is unavailable.
+  }
+  if (ownerTabId !== getTabId()) {
+    let heartbeat = getHeartbeat(apiKey);
+    while (heartbeat && Date.now() - heartbeat < RECOVERY_LIVENESS_MS) {
+      const remaining = RECOVERY_LIVENESS_MS - Math.max(0, Date.now() - heartbeat);
       await new Promise((resolve) => setTimeout(resolve, remaining + 10));
-      const latestHeartbeat = getHeartbeat(apiKey);
-      if (latestHeartbeat && Date.now() - latestHeartbeat < RECOVERY_SETTLE_MS) return null;
+      heartbeat = getHeartbeat(apiKey);
     }
   }
 
@@ -242,6 +279,7 @@ async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRe
       return null;
     }
     if (session.ownerEmail !== normalizeOwnerEmail(ownerEmail)) {
+      closedSessions.add(sessionId);
       await deleteSessionRecords(database, sessionId);
       clearPendingSession(apiKey, sessionId);
       return null;
@@ -251,6 +289,7 @@ async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRe
       .filter((chunk) => chunk.sessionId === sessionId)
       .sort((left, right) => left.index - right.index);
     if (chunks.length === 0) {
+      closedSessions.add(sessionId);
       await deleteSessionRecords(database, sessionId);
       clearPendingSession(apiKey, sessionId);
       return null;
@@ -273,6 +312,52 @@ async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRe
   }
 }
 
+async function expire(): Promise<boolean> {
+  try {
+    if (localStorage.getItem(STORAGE_USED_KEY) !== 'true') return false;
+    const database = await initDB();
+    const [sessions, chunks] = await Promise.all([
+      database.getAll(SESSION_STORE),
+      database.getAll(CHUNK_STORE),
+    ]);
+    const cutoff = Date.now() - RECORDING_EXPIRY_MS;
+    const expiredSessionIds = new Set(
+      sessions
+        .filter((session) => {
+          const startedAt = Date.parse(session.startedAt);
+          return !Number.isFinite(startedAt) || startedAt <= cutoff;
+        })
+        .map((session) => session.id)
+    );
+    const expiredChunks = chunks.filter((chunk) => {
+      const startedAt = sessionStartedAt(chunk.sessionId);
+      return (
+        expiredSessionIds.has(chunk.sessionId) || !Number.isFinite(startedAt) || startedAt <= cutoff
+      );
+    });
+
+    await Promise.all([
+      ...expiredChunks.map((chunk) => database.delete(CHUNK_STORE, chunk.id)),
+      ...[...expiredSessionIds].map((sessionId) => database.delete(SESSION_STORE, sessionId)),
+    ]);
+    sessions
+      .filter((session) => expiredSessionIds.has(session.id))
+      .forEach((session) => clearPendingSession(session.apiKey, session.id));
+
+    const [remainingSessions, remainingChunks] = await Promise.all([
+      database.count(SESSION_STORE),
+      database.count(CHUNK_STORE),
+    ]);
+    if (remainingSessions === 0 && remainingChunks === 0) {
+      localStorage.removeItem(STORAGE_USED_KEY);
+    }
+    return expiredSessionIds.size > 0 || expiredChunks.length > 0;
+  } catch (error) {
+    console.error('[BugPin] Failed to expire recording recovery storage:', error);
+    return false;
+  }
+}
+
 export const recordingStore = {
   isStartBlocked,
   begin,
@@ -280,4 +365,5 @@ export const recordingStore = {
   touch,
   remove,
   recover,
+  expire,
 };

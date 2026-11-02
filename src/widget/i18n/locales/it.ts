@@ -96,7 +96,7 @@ const it: WidgetCatalog = {
   'recording.resume': 'Riprendi',
   'recording.warning.wholeScreen': "Stai condividendo l'intero schermo.",
   'recording.notice.noMicrophone': 'Registrazione senza microfono.',
-  'recording.stopped.duration': 'Registrazione interrotta al limite di {minutes} minuti.',
+  'recording.stopped.duration': 'Registrazione interrotta dopo {duration}.',
   'recording.stopped.size': 'Registrazione interrotta al limite di {size}MB.',
   'recording.recovered': 'Registrazione salvata. Apri BugPin per continuare.',
   'recording.error.unavailable': 'La registrazione dello schermo non è disponibile.',
@@ -104,6 +104,14 @@ const it: WidgetCatalog = {
   'recording.error.empty': 'La registrazione era vuota. Riprova.',
   'recording.oversized': 'La registrazione è di {size}MB (max. {limit}MB).',
   'recording.oversizedHint': 'Scaricala o registra una clip più breve.',
+  'recording.previewUnavailable': 'Anteprima non disponibile.',
+
+  'submit.uploading': 'Caricamento: {percent}%',
+  'submit.cancelUpload': 'Annulla caricamento',
+  'submit.error.tooLarge':
+    'Il caricamento è troppo grande per il server. Rimuovi alcuni file multimediali e riprova.',
+  'submit.error.videoQuota':
+    'I caricamenti video sono sospesi per questo progetto. Rimuovi il video per inviare la segnalazione.',
 
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',

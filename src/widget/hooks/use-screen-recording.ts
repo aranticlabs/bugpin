@@ -8,7 +8,7 @@ import {
   type RecordingSession,
 } from '../capture/recorder.js';
 import type { ToastType } from '../components/ui';
-import { t } from '../i18n/index.js';
+import { getLocale, t } from '../i18n/index.js';
 import { recordingStore } from '../storage/recording-store.js';
 
 const COUNTDOWN_SECONDS = 3;
@@ -33,7 +33,11 @@ interface UseScreenRecordingOptions {
   dependencies?: Partial<RecordingDependencies>;
   prepare: () => Promise<boolean>;
   onEnter: () => void;
-  onExit: (result: RecordingResult | null, failed: boolean) => void | Promise<void>;
+  onExit: (
+    result: RecordingResult | null,
+    failed: boolean,
+    sessionId?: string
+  ) => void | Promise<void>;
   onNotice: (message: string, type: ToastType) => void;
 }
 
@@ -53,8 +57,21 @@ function isPermissionDenial(error: unknown): boolean {
   return error instanceof Object && 'name' in error && error.name === 'NotAllowedError';
 }
 
-function formatMinutes(durationMs: number): number {
-  return Math.round((durationMs / 60_000) * 10) / 10;
+function formatDurationLimit(durationMs: number): string {
+  const seconds = Math.round(durationMs / 1000);
+  const useMinutes = seconds >= 60 && seconds % 30 === 0;
+  const value = useMinutes ? seconds / 60 : seconds;
+  const unit = useMinutes ? 'minute' : 'second';
+  try {
+    return new Intl.NumberFormat(getLocale(), {
+      style: 'unit',
+      unit,
+      unitDisplay: 'long',
+      maximumFractionDigits: 1,
+    }).format(value);
+  } catch {
+    return `${value} ${unit}${value === 1 ? '' : 's'}`;
+  }
 }
 
 export function useScreenRecording(options: UseScreenRecordingOptions) {
@@ -100,7 +117,10 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   const handleAutoStop = useCallback((reason: AutoStopReason) => {
     const { maxDurationMs, maxVideoSize, onNotice } = optionsRef.current;
     if (reason === 'duration') {
-      onNotice(t('recording.stopped.duration', { minutes: formatMinutes(maxDurationMs) }), 'info');
+      onNotice(
+        t('recording.stopped.duration', { duration: formatDurationLimit(maxDurationMs) }),
+        'info'
+      );
     } else if (reason === 'size') {
       onNotice(
         t('recording.stopped.size', { size: Math.round(maxVideoSize / BYTES_PER_MB) }),
@@ -137,8 +157,9 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
         },
         onAutoStop: handleAutoStop,
         onChunk: async (chunk, index) => {
+          const durationMs = elapsedRef.current;
           const sessionId = await storedSession;
-          if (sessionId) await store.addChunk(sessionId, index, chunk, elapsedRef.current);
+          if (sessionId) await store.addChunk(sessionId, index, chunk, durationMs);
         },
       });
       storedSession = store.begin({
@@ -167,7 +188,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
       }
       updateStatus('idle');
       try {
-        await optionsRef.current.onExit(result, failedRef.current);
+        await optionsRef.current.onExit(result, failedRef.current, sessionId ?? undefined);
         if (sessionId) await store.remove(apiKey, sessionId);
       } catch (error) {
         console.error('[BugPin] Failed to save completed recording:', error);
@@ -187,16 +208,14 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
 
   useEffect(() => {
     mountedRef.current = true;
-    const handleBeforeUnload = () => {
-      unloadingRef.current = true;
-      setTimeout(() => {
-        if (mountedRef.current) unloadingRef.current = false;
-      }, 0);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    const handlePageHide = () => (unloadingRef.current = true);
+    const handlePageShow = () => (unloadingRef.current = false);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
     return () => {
       mountedRef.current = false;
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
       const pending = takePending();
       if (pending) stopCaptureTracks(pending.stream, pending.microphone);
       sessionRef.current?.discard();

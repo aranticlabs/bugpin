@@ -97,7 +97,7 @@ const es: WidgetCatalog = {
   'recording.resume': 'Reanudar',
   'recording.warning.wholeScreen': 'Estás compartiendo toda la pantalla.',
   'recording.notice.noMicrophone': 'Grabando sin micrófono.',
-  'recording.stopped.duration': 'Grabación detenida en el límite de {minutes} minutos.',
+  'recording.stopped.duration': 'Grabación detenida después de {duration}.',
   'recording.stopped.size': 'Grabación detenida en el límite de {size} MB.',
   'recording.recovered': 'Grabación guardada. Abre BugPin para continuar.',
   'recording.error.unavailable': 'La grabación de pantalla no está disponible.',
@@ -105,6 +105,14 @@ const es: WidgetCatalog = {
   'recording.error.empty': 'La grabación estaba vacía. Inténtalo de nuevo.',
   'recording.oversized': 'La grabación ocupa {size} MB (máx. {limit} MB).',
   'recording.oversizedHint': 'Descárgala o graba un clip más corto.',
+  'recording.previewUnavailable': 'Vista previa no disponible.',
+
+  'submit.uploading': 'Subiendo: {percent} %',
+  'submit.cancelUpload': 'Cancelar subida',
+  'submit.error.tooLarge':
+    'La subida es demasiado grande para el servidor. Elimina algunos archivos y vuelve a intentarlo.',
+  'submit.error.videoQuota':
+    'Las subidas de vídeo están pausadas para este proyecto. Elimina el vídeo para enviar el informe.',
 
   'toast.success.submit': '¡Informe enviado correctamente!',
   'toast.error.submit': 'No se ha podido enviar el informe',

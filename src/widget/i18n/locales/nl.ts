@@ -98,7 +98,7 @@ const nl: WidgetCatalog = {
   'recording.resume': 'Hervatten',
   'recording.warning.wholeScreen': 'U deelt uw volledige scherm.',
   'recording.notice.noMicrophone': 'Opname zonder microfoon.',
-  'recording.stopped.duration': 'Opname gestopt bij de limiet van {minutes} minuten.',
+  'recording.stopped.duration': 'Opname gestopt na {duration}.',
   'recording.stopped.size': 'Opname gestopt bij de limiet van {size}MB.',
   'recording.recovered': 'Opname opgeslagen. Open BugPin om door te gaan.',
   'recording.error.unavailable': 'Schermopname is niet beschikbaar.',
@@ -106,6 +106,14 @@ const nl: WidgetCatalog = {
   'recording.error.empty': 'De opname was leeg. Probeer het opnieuw.',
   'recording.oversized': 'De opname is {size}MB (max. {limit}MB).',
   'recording.oversizedHint': 'Download de opname of maak een kortere clip.',
+  'recording.previewUnavailable': 'Videovoorbeeld niet beschikbaar.',
+
+  'submit.uploading': 'Uploaden: {percent}%',
+  'submit.cancelUpload': 'Upload annuleren',
+  'submit.error.tooLarge':
+    'De upload is te groot voor de server. Verwijder media en probeer het opnieuw.',
+  'submit.error.videoQuota':
+    'Video-uploads zijn gepauzeerd voor dit project. Verwijder de video om het rapport te verzenden.',
 
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',

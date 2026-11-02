@@ -95,7 +95,7 @@ const en = {
   'recording.resume': 'Resume',
   'recording.warning.wholeScreen': 'You are sharing your whole screen.',
   'recording.notice.noMicrophone': 'Recording without microphone.',
-  'recording.stopped.duration': 'Recording stopped at the {minutes} minute limit.',
+  'recording.stopped.duration': 'Recording stopped after {duration}.',
   'recording.stopped.size': 'Recording stopped at the {size}MB limit.',
   'recording.recovered': 'Recording saved. Open BugPin to continue.',
   'recording.error.unavailable': 'Screen recording is not available.',
@@ -103,6 +103,14 @@ const en = {
   'recording.error.empty': 'The recording was empty. Please try again.',
   'recording.oversized': 'Recording is {size}MB (max. {limit}MB).',
   'recording.oversizedHint': 'Download it, or record a shorter clip.',
+  'recording.previewUnavailable': 'Preview unavailable.',
+
+  'submit.uploading': 'Uploading {percent}%',
+  'submit.cancelUpload': 'Cancel upload',
+  'submit.error.tooLarge':
+    'The upload is too large for the server. Remove some media and try again.',
+  'submit.error.videoQuota':
+    'Video uploads are paused for this project. Remove the video to submit.',
 
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',

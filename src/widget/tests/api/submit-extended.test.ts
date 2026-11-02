@@ -148,6 +148,31 @@ describe('submit API (offline + errors)', () => {
     ).rejects.toThrow('too large');
   });
 
+  it('localizes the video quota error code', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest((request) =>
+      request.respond(
+        429,
+        JSON.stringify({
+          success: false,
+          error: 'VIDEO_QUOTA_EXCEEDED',
+          message: 'Server quota message',
+        })
+      )
+    );
+
+    const { submitReport } = await import('../../api/submit');
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      })
+    ).rejects.toThrow('Video uploads are paused for this project');
+  });
+
   it('aborts without buffering the report', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
     installMockXMLHttpRequest(() => undefined);

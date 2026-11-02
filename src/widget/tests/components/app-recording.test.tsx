@@ -205,6 +205,7 @@ beforeEach(async () => {
     touch: mock(() => undefined),
     remove: mock(async () => undefined),
     recover: mock(async () => null),
+    expire: mock(async () => false),
   };
   submitReport = mock(async () => ({ success: true, reportId: 'report-1' }));
   globalThis.window.matchMedia = () =>
@@ -285,6 +286,68 @@ describe('App screen recording', () => {
         }),
       ])
     );
+  });
+
+  it('keeps a recovered clip visible when saving it to the draft fails', async () => {
+    recoveryStore.recover = mock(async () => ({
+      sessionId: 'failed-recovery-save',
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'video/webm' }),
+      mimeType: 'video/webm',
+      durationMs: 2000,
+      startedAt: new Date().toISOString(),
+      hasAudio: false,
+    }));
+    spyOn(draftStorage, 'save').mockRejectedValue(new Error('Quota exceeded'));
+
+    await renderClosedApp();
+
+    expect(container.querySelector('[data-testid="bugpin-pending-recording"]')).not.toBeNull();
+    document.dispatchEvent(new window.CustomEvent('bugpin:open'));
+    await flush();
+    expect(clips()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'recording-failed-recovery-save', recovered: true }),
+      ])
+    );
+    expect(toast()).toContain('Failed to save the draft');
+    expect(recoveryStore.remove).toHaveBeenCalledTimes(0);
+  });
+
+  it('does not duplicate a completed clip recovered before cleanup finishes', async () => {
+    const clip: CapturedMedia = {
+      id: 'recording-same-session',
+      blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+      timestamp: new Date(),
+      annotated: false,
+      mimeType: 'video/webm',
+      source: 'recording',
+    };
+    await draftStorage.save(
+      'proj_key',
+      {
+        title: 'Existing recording',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      'recording',
+      [clip]
+    );
+    recoveryStore.recover = mock(async () => ({
+      sessionId: 'same-session',
+      blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+      mimeType: 'video/webm',
+      durationMs: 2000,
+      startedAt: new Date().toISOString(),
+      hasAudio: false,
+    }));
+
+    await renderClosedApp();
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:open'));
+    await flush();
+    expect(clips().filter((item) => item.id === 'recording-same-session')).toHaveLength(1);
   });
 
   it('does not submit hidden recording drafts when the feature is disabled', async () => {
@@ -403,6 +466,7 @@ describe('App screen recording', () => {
     expect(dialogProps?.activeTab).toBe('recording');
     expect(clips()).toHaveLength(1);
     expect(clips()[0]).toMatchObject({
+      id: 'recording-recording-session',
       source: 'recording',
       mimeType: 'video/webm',
       durationMs: 4000,
@@ -438,6 +502,31 @@ describe('App screen recording', () => {
       1250
     );
     expect(recoveryStore.touch).toHaveBeenCalledWith('recording-session');
+  });
+
+  it('captures chunk duration before waiting for recovery storage', async () => {
+    let finishBegin: ((sessionId: string) => void) | undefined;
+    recoveryStore.begin = mock(
+      () =>
+        new Promise<string>((resolve) => {
+          finishBegin = resolve;
+        })
+    );
+    await renderOpenApp();
+    await reachRecording();
+
+    recorderOptions?.onTick?.(1250, 3);
+    const write = recorderOptions?.onChunk?.(new Blob([new Uint8Array([1])]), 0);
+    recorderOptions?.onTick?.(2500, 4);
+    finishBegin?.('delayed-session');
+    await write;
+
+    expect(recoveryStore.addChunk).toHaveBeenCalledWith(
+      'delayed-session',
+      0,
+      expect.any(Blob),
+      1250
+    );
   });
 
   it('continues recording when recovery storage is unavailable', async () => {
@@ -518,7 +607,7 @@ describe('App screen recording', () => {
   });
 
   it.each([
-    ['duration', () => t('recording.stopped.duration', { minutes: 1.5 })],
+    ['duration', () => t('recording.stopped.duration', { duration: '1.5 minutes' })],
     ['size', () => t('recording.stopped.size', { size: 10 })],
     ['error', () => t('recording.error.failed')],
   ] as const)('shows a toast for the %s auto-stop', async (reason, message) => {
@@ -529,6 +618,24 @@ describe('App screen recording', () => {
     await flush();
 
     expect(toast()).toContain(message());
+  });
+
+  it('keeps non-round duration limits exact', async () => {
+    await renderOpenApp({ maxRecordingDurationSeconds: 61 });
+    await reachRecording();
+
+    recorderOptions?.onAutoStop?.('duration');
+    await flush();
+
+    expect(toast()).toContain(
+      t('recording.stopped.duration', {
+        duration: new Intl.NumberFormat('en', {
+          style: 'unit',
+          unit: 'second',
+          unitDisplay: 'long',
+        }).format(61),
+      })
+    );
   });
 
   it('shows no toast when sharing ends', async () => {
@@ -694,7 +801,7 @@ describe('App screen recording', () => {
     await renderOpenApp();
     await reachRecording();
 
-    window.dispatchEvent(new window.Event('beforeunload'));
+    window.dispatchEvent(new window.Event('pagehide'));
     render(null, container);
     current.resolveFinished(null);
     await Promise.resolve();

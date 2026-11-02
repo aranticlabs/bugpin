@@ -2,6 +2,7 @@ import { PageContext } from '../capture/context.js';
 import { bufferReport, startAutoSync } from '../storage/report-buffer.js';
 import { buildSubmitFormData, MAX_SUBMIT_FORM_BYTES, type MediaItem } from './submit-form.js';
 import type { UserActivityCapturePolicy } from '@shared/types';
+import { t } from '../i18n/index.js';
 
 // Start auto-sync on module load
 startAutoSync();
@@ -80,9 +81,13 @@ function sendSubmitRequest(
       if (xhr.status < 200 || xhr.status >= 300 || !result?.success) {
         const fallback =
           xhr.status === 413
-            ? 'The report is too large to upload. Remove some media and try again.'
+            ? t('submit.error.tooLarge')
             : `Failed to submit report (HTTP ${xhr.status})`;
-        reject(new Error(result?.message || result?.error || fallback));
+        const message =
+          result?.error === 'VIDEO_QUOTA_EXCEEDED'
+            ? t('submit.error.videoQuota')
+            : result?.message || result?.error || fallback;
+        reject(new Error(message));
         return;
       }
 
@@ -133,7 +138,7 @@ export async function submitReport(
 
   const { formData, byteSize } = buildSubmitFormData(bufferedReport);
   if (byteSize > MAX_SUBMIT_FORM_BYTES) {
-    throw new Error('The report is too large to upload. Remove some media and try again.');
+    throw new Error(t('submit.error.tooLarge'));
   }
 
   // If offline, buffer immediately

@@ -10,13 +10,15 @@ import {
   Download,
   Trash2,
   Plus,
+  Video,
 } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { Button } from './ui';
 import { useLocale } from '../hooks/use-locale.js';
 import { useObjectUrl } from '../hooks/use-object-url.js';
-import { t } from '../i18n/index.js';
+import { getLocale, t } from '../i18n/index.js';
 import { getExtensionFromMimeType, type MediaData } from '../api/submit-form.js';
+import { formatDuration } from './RecordingBar.js';
 
 interface CapturedMediaBase {
   id: string;
@@ -54,10 +56,37 @@ const DEFAULT_MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
+export function formatVideoMeta(item: CapturedMedia): string {
+  const details: string[] = [];
+  if (item.durationMs !== undefined) details.push(formatDuration(item.durationMs));
+  if (item.blob) {
+    const sizeMb = Math.max(item.blob.size / (1024 * 1024), 0.1);
+    try {
+      details.push(
+        new Intl.NumberFormat(getLocale(), {
+          style: 'unit',
+          unit: 'megabyte',
+          unitDisplay: 'short',
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        }).format(sizeMb)
+      );
+    } catch {
+      details.push(`${sizeMb.toFixed(1)} MB`);
+    }
+  }
+  return details.join(' · ');
+}
+
 export function downloadMedia(item: CapturedMedia): void {
   const extension = getExtensionFromMimeType(item.mimeType);
   const stamp = item.timestamp.toISOString().replace(/[:.]/g, '-');
-  const kind = item.mimeType.startsWith('video/') ? 'recording' : 'screenshot';
+  const kind =
+    item.source === 'recording'
+      ? 'recording'
+      : item.mimeType.startsWith('video/')
+        ? 'video'
+        : 'screenshot';
   const anchor = document.createElement('a');
   const objectUrl = item.blob ? URL.createObjectURL(item.blob) : null;
   anchor.href = item.blob ? (objectUrl as string) : item.dataUrl;
@@ -71,14 +100,57 @@ export function downloadMedia(item: CapturedMedia): void {
   }
 }
 
-const MediaPreview: FunctionComponent<{ item: CapturedMedia }> = ({ item }) => {
+export const VideoPreview: FunctionComponent<{ item: CapturedMedia; controls?: boolean }> = ({
+  item,
+  controls = false,
+}) => {
+  const objectUrl = useObjectUrl(item.blob);
+  const source = item.blob ? objectUrl : item.dataUrl;
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const failed = source !== null && source !== undefined && failedSource === source;
+
+  if (failed) {
+    return (
+      <div
+        data-testid="video-preview-fallback"
+        role="status"
+        class="w-full h-full flex flex-col items-center justify-center gap-2 p-3 text-center text-gray-200"
+      >
+        <Video class="w-8 h-8" aria-hidden="true" />
+        <span class="text-xs font-medium">{t('recording.previewUnavailable')}</span>
+        {formatVideoMeta(item) && <span class="text-xs">{formatVideoMeta(item)}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <video
+      class="w-full h-full object-contain"
+      src={source ?? undefined}
+      muted={!controls}
+      controls={controls}
+      playsInline
+      preload="metadata"
+      aria-label={t('screenshot.badge.video')}
+      onError={() => source && setFailedSource(source)}
+    />
+  );
+};
+
+const ImagePreview: FunctionComponent<{ item: CapturedMedia }> = ({ item }) => {
   const objectUrl = useObjectUrl(item.blob);
   const source = item.blob ? objectUrl : item.dataUrl;
 
-  return item.mimeType.startsWith('video/') ? (
-    <video class="w-full h-full object-contain" src={source ?? undefined} muted />
-  ) : (
+  return (
     <img class="w-full h-full object-contain" src={source ?? undefined} alt={t('screenshot.alt')} />
+  );
+};
+
+const MediaPreview: FunctionComponent<{ item: CapturedMedia }> = ({ item }) => {
+  return item.mimeType.startsWith('video/') ? (
+    <VideoPreview item={item} />
+  ) : (
+    <ImagePreview item={item} />
   );
 };
 
@@ -382,11 +454,13 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                   </div>
                   <div class="flex justify-between px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(item.timestamp)}</span>
-                    {item.width && item.height && (
+                    {isVideo(item.mimeType) && formatVideoMeta(item) ? (
+                      <span>{formatVideoMeta(item)}</span>
+                    ) : item.width && item.height ? (
                       <span>
                         {item.width} x {item.height}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div class="flex gap-1 px-2 py-1.5 border-t border-solid border-border bg-muted">
                     {enableAnnotation && isImage(item.mimeType) && (

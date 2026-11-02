@@ -97,7 +97,7 @@ const de: WidgetCatalog = {
   'recording.resume': 'Fortsetzen',
   'recording.warning.wholeScreen': 'Du teilst deinen gesamten Bildschirm.',
   'recording.notice.noMicrophone': 'Aufnahme ohne Mikrofon.',
-  'recording.stopped.duration': 'Aufnahme beim Limit von {minutes} Minuten gestoppt.',
+  'recording.stopped.duration': 'Aufnahme nach {duration} gestoppt.',
   'recording.stopped.size': 'Aufnahme beim Limit von {size} MB gestoppt.',
   'recording.recovered': 'Aufnahme gespeichert. Öffne BugPin, um fortzufahren.',
   'recording.error.unavailable': 'Bildschirmaufnahme ist nicht verfügbar.',
@@ -105,6 +105,14 @@ const de: WidgetCatalog = {
   'recording.error.empty': 'Die Aufnahme war leer. Bitte versuche es erneut.',
   'recording.oversized': 'Die Aufnahme ist {size} MB groß (max. {limit} MB).',
   'recording.oversizedHint': 'Lade sie herunter oder nimm einen kürzeren Clip auf.',
+  'recording.previewUnavailable': 'Vorschau nicht verfügbar.',
+
+  'submit.uploading': 'Wird hochgeladen: {percent} %',
+  'submit.cancelUpload': 'Hochladen abbrechen',
+  'submit.error.tooLarge':
+    'Der Upload ist zu groß für den Server. Entferne einige Medien und versuche es erneut.',
+  'submit.error.videoQuota':
+    'Video-Uploads sind für dieses Projekt pausiert. Entferne das Video, um den Bericht zu senden.',
 
   'toast.success.submit': 'Fehlerbericht erfolgreich gesendet!',
   'toast.error.submit': 'Bericht konnte nicht gesendet werden',

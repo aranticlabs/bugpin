@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 import { installDom } from '../helpers/dom';
 
@@ -362,5 +362,14 @@ describe('draft storage', () => {
     expect(localStorage.getItem(`bugpin-draft-media-saved-at-${apiKey}`)).not.toBeNull();
     expect(await draftStorage.expireMedia(apiKey)).toBe(false);
     expect((await draftStorage.load(apiKey))?.media).toHaveLength(1);
+  });
+
+  it('does not open IndexedDB when no media expiry timestamp exists', async () => {
+    const open = spyOn(globalThis.indexedDB, 'open');
+    // @ts-expect-error - Query params isolate the module-level database handle.
+    const { draftStorage } = await import('../../storage/draft-storage?no-media-timestamp');
+
+    expect(await draftStorage.expireMedia(`${TEST_API_KEY}-no-media-timestamp`)).toBe(false);
+    expect(open).toHaveBeenCalledTimes(0);
   });
 });

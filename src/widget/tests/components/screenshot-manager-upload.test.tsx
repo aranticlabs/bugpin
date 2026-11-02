@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { render } from 'preact';
-import { ScreenshotManager } from '../../components/ScreenshotManager';
+import {
+  downloadMedia,
+  formatVideoMeta,
+  ScreenshotManager,
+} from '../../components/ScreenshotManager';
 import { installDom } from '../helpers/dom';
+import { setLocale, t } from '../../i18n/index';
 
 const originalFileReader = globalThis.FileReader;
 const originalImage = globalThis.Image;
@@ -83,6 +88,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setLocale('en');
   restoreDom?.();
   restoreDom = null;
   globalThis.FileReader = originalFileReader;
@@ -92,6 +98,57 @@ afterEach(() => {
 });
 
 describe('ScreenshotManager uploads', () => {
+  it('formats video size for the active locale', () => {
+    setLocale('fr');
+    const meta = formatVideoMeta({
+      id: 'video',
+      blob: new Blob([new Uint8Array(1024 * 1024)]),
+      timestamp: new Date(),
+      annotated: false,
+      mimeType: 'video/mp4',
+    });
+
+    expect(meta).toContain('Mo');
+    expect(meta).not.toContain('MB');
+  });
+
+  it('downloads videos with their direct extension and source-specific name', () => {
+    const downloads: string[] = [];
+    const originalClick = window.HTMLAnchorElement.prototype.click;
+    const originalSetTimeout = globalThis.setTimeout;
+    window.HTMLAnchorElement.prototype.click = function () {
+      downloads.push(this.download);
+    };
+    globalThis.setTimeout = (() => 1) as unknown as typeof setTimeout;
+
+    try {
+      const timestamp = new Date('2026-11-02T10:00:00Z');
+      for (const [mimeType, source] of [
+        ['video/mp4', undefined],
+        ['video/webm', 'recording'],
+        ['video/quicktime', undefined],
+      ] as const) {
+        downloadMedia({
+          id: mimeType,
+          blob: new Blob(['video'], { type: mimeType }),
+          timestamp,
+          annotated: false,
+          mimeType,
+          source,
+        });
+      }
+    } finally {
+      window.HTMLAnchorElement.prototype.click = originalClick;
+      globalThis.setTimeout = originalSetTimeout;
+    }
+
+    expect(downloads.map((name) => name.replace(/-2026.*\./, '.'))).toEqual([
+      'bugpin-video.mp4',
+      'bugpin-recording.webm',
+      'bugpin-video.mov',
+    ]);
+  });
+
   it('advertises only supported image and video types', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -319,42 +376,66 @@ describe('ScreenshotManager uploads', () => {
     container.remove();
   });
 
-  it('previews Blob-backed videos through an object URL', async () => {
+  it('previews Blob-backed videos and falls back without losing actions', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' });
+    const onRemove = mock(() => undefined);
+    const renderVideo = (videoBlob: Blob) =>
+      render(
+        <ScreenshotManager
+          media={[
+            {
+              id: 'video-1',
+              blob: videoBlob,
+              timestamp: new Date(),
+              annotated: false,
+              mimeType: 'video/mp4',
+            },
+          ]}
+          onCapture={() => undefined}
+          onUpload={() => undefined}
+          onRemove={onRemove}
+          onAnnotate={() => undefined}
+          isCapturing={false}
+          enableAnnotation={true}
+          reduceQuality={false}
+          onReduceQualityChange={() => undefined}
+          oversizedCapture={null}
+          onDismissOversizedCapture={() => undefined}
+        />,
+        container
+      );
 
-    render(
-      <ScreenshotManager
-        media={[
-          {
-            id: 'video-1',
-            blob,
-            timestamp: new Date(),
-            annotated: false,
-            mimeType: 'video/mp4',
-          },
-        ]}
-        onCapture={() => undefined}
-        onUpload={() => undefined}
-        onRemove={() => undefined}
-        onAnnotate={() => undefined}
-        isCapturing={false}
-        enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
-        oversizedCapture={null}
-        onDismissOversizedCapture={() => undefined}
-      />,
-      container
-    );
+    renderVideo(blob);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(container.querySelector('video')?.getAttribute('src')).toBe('blob:test-1');
+    const video = container.querySelector('video');
+    expect(video?.getAttribute('src')).toBe('blob:test-1');
+    expect(video?.controls).toBe(false);
+    expect(video?.muted).toBe(true);
     expect(createdObjectUrls).toEqual([blob]);
 
-    render(null, container);
+    video?.dispatchEvent(new window.Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const fallback = container.querySelector('[data-testid="video-preview-fallback"]');
+    expect(fallback?.textContent).toContain(t('recording.previewUnavailable'));
+    expect(fallback?.textContent).toContain('0.1 MB');
+    const remove = container.querySelector(
+      `button[title="${t('screenshot.action.remove')}"]`
+    ) as HTMLButtonElement;
+    remove.click();
+    expect(onRemove).toHaveBeenCalledWith('video-1');
+
+    const replacement = new Blob([new Uint8Array([4, 5, 6])], { type: 'video/mp4' });
+    renderVideo(replacement);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector('[data-testid="video-preview-fallback"]')).toBeNull();
+    expect(container.querySelector('video')?.getAttribute('src')).toBe('blob:test-2');
     expect(revokedObjectUrls).toContain('blob:test-1');
+
+    render(null, container);
+    expect(revokedObjectUrls).toContain('blob:test-2');
     container.remove();
   });
 });

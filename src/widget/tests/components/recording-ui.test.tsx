@@ -18,6 +18,9 @@ const noop = () => undefined;
 
 let restoreDom: (() => void) | null = null;
 let container: HTMLElement;
+const originalCreateObjectURL = globalThis.URL.createObjectURL;
+const originalRevokeObjectURL = globalThis.URL.revokeObjectURL;
+let objectUrlIndex = 0;
 
 async function mount(node: ComponentChild): Promise<void> {
   render(node, container);
@@ -90,6 +93,10 @@ beforeEach(() => {
   localStorage.clear();
   container = document.createElement('div');
   document.body.appendChild(container);
+  objectUrlIndex = 0;
+  globalThis.URL.createObjectURL = (() =>
+    `blob:recording-${++objectUrlIndex}`) as typeof URL.createObjectURL;
+  globalThis.URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
   globalThis.window.matchMedia = () =>
     ({
       matches: false,
@@ -102,6 +109,8 @@ afterEach(() => {
   render(null, container);
   restoreDom?.();
   restoreDom = null;
+  globalThis.URL.createObjectURL = originalCreateObjectURL;
+  globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
 });
 
 describe('RecordingBar', () => {
@@ -283,9 +292,30 @@ describe('ScreenRecordingPanel', () => {
     );
 
     expect(container.textContent).toContain('1:05 · 1.0 MB');
+    const video = container.querySelector('video');
+    expect(video?.controls).toBe(true);
+    expect(video?.muted).toBe(false);
+    expect(video?.getAttribute('src')).toBe('blob:recording-1');
     button(t('screenshot.action.remove'))?.click();
     expect(onRemove.mock.calls[0]).toEqual(['a'] as never);
     expect(button(t('screenshot.action.download'))).not.toBeNull();
+  });
+
+  it('keeps clip details and actions when playback fails', async () => {
+    const onRemove = mock(noop);
+    await mount(
+      <ScreenRecordingPanel {...panelProps} clips={[clip('a', 'recording')]} onRemove={onRemove} />
+    );
+
+    container.querySelector('video')?.dispatchEvent(new window.Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const fallback = container.querySelector('[data-testid="video-preview-fallback"]');
+    expect(fallback?.textContent).toContain(t('recording.previewUnavailable'));
+    expect(fallback?.textContent).toContain('1:05 · 1.0 MB');
+    expect(button(t('screenshot.action.download'))).not.toBeNull();
+    button(t('screenshot.action.remove'))?.click();
+    expect(onRemove.mock.calls[0]).toEqual(['a'] as never);
   });
 
   it('shows and dismisses the oversized banner', async () => {

@@ -74,12 +74,18 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [media, setMedia] = useState<CapturedMedia[]>([]);
+  const mediaRef = useRef(media);
+  mediaRef.current = media;
   const [annotatingMediaId, setAnnotatingMediaId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
   const [formData, setFormData] = useState<FormData>(() => getInitialFormData(config));
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftLoadedRef = useRef(draftLoaded);
+  draftLoadedRef.current = draftLoaded;
   const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showScreenCaptureConsent, setShowScreenCaptureConsent] = useState(false);
@@ -106,7 +112,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     [config.enableScreenRecording, isRecordingSupportedFn]
   );
 
-  const handleRecordingExit = async (result: RecordingResult | null, failed: boolean) => {
+  const handleRecordingExit = async (
+    result: RecordingResult | null,
+    failed: boolean,
+    sessionId?: string
+  ) => {
     setStep('form');
     setActiveTab('recording');
     setIncludeMicrophone(false);
@@ -117,7 +127,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       return;
     }
 
-    const id = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = sessionId
+      ? `recording-${sessionId}`
+      : `recording-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const item: CapturedMedia = {
       id,
       blob: result.blob,
@@ -129,7 +141,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       durationMs: result.durationMs,
       source: 'recording',
     };
-    const nextMedia = [...media, item];
+    const nextMedia = [...mediaRef.current, item];
+    mediaRef.current = nextMedia;
     setMedia(nextMedia);
 
     if (result.blob.size > config.maxVideoUploadSize) {
@@ -143,7 +156,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     try {
       await draftStorage.save(
         config.apiKey,
-        formData,
+        formDataRef.current,
         'recording',
         nextMedia,
         config.reporterEmail
@@ -184,13 +197,17 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     setDraftStorageReady(false);
 
     void (async () => {
-      await draftStorage.expireMedia(config.apiKey);
+      await Promise.all([draftStorage.expireMedia(config.apiKey), recordingStoreFn.expire()]);
+      if (cancelled) return;
+      setDraftStorageReady(true);
       if (!recordingEnabled) return;
 
       const recovered = await recordingStoreFn.recover(config.apiKey, config.reporterEmail);
       if (!recovered || cancelled) return;
 
-      const draft = await draftStorage.load(config.apiKey, config.reporterEmail);
+      const draft = draftLoadedRef.current
+        ? { formData: formDataRef.current, media: mediaRef.current }
+        : await draftStorage.load(config.apiKey, config.reporterEmail);
       if (cancelled) return;
       const recoveredId = `recording-${recovered.sessionId}`;
       const recoveredItem: CapturedMedia = {
@@ -208,6 +225,14 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         ? existingMedia
         : [...existingMedia, recoveredItem];
       const nextFormData = draft?.formData ?? getInitialFormData(config);
+      formDataRef.current = nextFormData;
+      mediaRef.current = nextMedia;
+      draftLoadedRef.current = true;
+      setFormData(nextFormData);
+      setMedia(nextMedia);
+      setActiveTab('recording');
+      setDraftLoaded(true);
+      setHasPendingRecording(stepRef.current === 'closed');
 
       try {
         await draftStorage.save(
@@ -219,19 +244,13 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         );
       } catch (error) {
         console.error('[BugPin] Failed to save recovered recording:', error);
+        if (!cancelled) setToast({ message: DRAFT_SAVE_FAILED_MESSAGE, type: 'error' });
         return;
       }
-      if (cancelled) return;
       await recordingStoreFn.remove(config.apiKey, recovered.sessionId);
       if (cancelled) return;
-      setFormData(nextFormData);
-      setMedia(nextMedia);
-      setActiveTab('recording');
-      setHasPendingRecording(stepRef.current === 'closed');
       setToast({ message: t('recording.recovered'), type: 'info' });
-    })().finally(() => {
-      if (!cancelled) setDraftStorageReady(true);
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -248,11 +267,15 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   useEffect(() => {
     if (step === 'form' && draftStorageReady && !draftLoaded) {
       draftStorage.load(config.apiKey, config.reporterEmail).then((draft) => {
+        if (draftLoadedRef.current) return;
         if (draft) {
+          formDataRef.current = draft.formData;
+          mediaRef.current = draft.media;
           setFormData(draft.formData);
           setActiveTab(draft.activeTab);
           setMedia(draft.media);
         }
+        draftLoadedRef.current = true;
         setDraftLoaded(true);
       });
     }

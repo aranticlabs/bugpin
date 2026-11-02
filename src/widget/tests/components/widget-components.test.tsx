@@ -329,7 +329,8 @@ describe('widget components', () => {
       />
     );
     expect(html).toContain('role="progressbar"');
-    expect(html).toContain('42%');
+    expect(html).toContain('Uploading 42%');
+    expect(html).toContain('Cancel upload');
   });
 
   it('shows capturing label when capturing', () => {

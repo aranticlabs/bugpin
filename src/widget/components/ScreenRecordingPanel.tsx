@@ -1,12 +1,14 @@
 import { FunctionComponent } from 'preact';
 import { Download, Trash2, TriangleAlert, Video, X } from 'lucide-preact';
 import { Button } from './ui';
-import { formatDuration } from './RecordingBar.js';
-import { downloadMedia, type CapturedMedia } from './ScreenshotManager.js';
+import {
+  downloadMedia,
+  formatVideoMeta,
+  VideoPreview,
+  type CapturedMedia,
+} from './ScreenshotManager.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
-
-const BYTES_PER_MB = 1024 * 1024;
 
 interface ScreenRecordingPanelProps {
   clips: CapturedMedia[];
@@ -86,31 +88,32 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
           {clips.map((clip) => (
             <li
               key={clip.id}
-              class="flex items-center gap-3 px-3 py-2 border border-solid border-border rounded"
+              class="overflow-hidden border border-solid border-border rounded bg-background"
             >
-              <Video class="w-4 h-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span class="flex-1 text-sm tabular-nums">
-                {formatDuration(clip.durationMs ?? 0)}
-                {clip.blob && ` · ${Math.max(clip.blob.size / BYTES_PER_MB, 0.1).toFixed(1)} MB`}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => downloadMedia(clip)}
-                title={t('screenshot.action.download')}
-                aria-label={t('screenshot.action.download')}
-              >
-                <Download class="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onRemove(clip.id)}
-                title={t('screenshot.action.remove')}
-                aria-label={t('screenshot.action.remove')}
-              >
-                <Trash2 class="w-4 h-4" />
-              </Button>
+              <div class="aspect-video bg-gray-800">
+                <VideoPreview item={clip} controls />
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 border-t border-solid border-border">
+                <span class="flex-1 text-sm tabular-nums">{formatVideoMeta(clip)}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => downloadMedia(clip)}
+                  title={t('screenshot.action.download')}
+                  aria-label={t('screenshot.action.download')}
+                >
+                  <Download class="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onRemove(clip.id)}
+                  title={t('screenshot.action.remove')}
+                  aria-label={t('screenshot.action.remove')}
+                >
+                  <Trash2 class="w-4 h-4" />
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

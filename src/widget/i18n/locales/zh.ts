@@ -90,7 +90,7 @@ const zh: WidgetCatalog = {
   'recording.resume': '继续',
   'recording.warning.wholeScreen': '您正在共享整个屏幕。',
   'recording.notice.noMicrophone': '正在录制，未使用麦克风。',
-  'recording.stopped.duration': '已达到 {minutes} 分钟上限，录制已停止。',
+  'recording.stopped.duration': '录制在{duration}后停止。',
   'recording.stopped.size': '已达到 {size}MB 上限，录制已停止。',
   'recording.recovered': '录制已保存。打开 BugPin 以继续。',
   'recording.error.unavailable': '屏幕录制不可用。',
@@ -98,6 +98,12 @@ const zh: WidgetCatalog = {
   'recording.error.empty': '录制内容为空，请重试。',
   'recording.oversized': '录制文件为 {size}MB（最大 {limit}MB）。',
   'recording.oversizedHint': '请下载该文件，或录制更短的片段。',
+  'recording.previewUnavailable': '无法预览。',
+
+  'submit.uploading': '正在上传 {percent}%',
+  'submit.cancelUpload': '取消上传',
+  'submit.error.tooLarge': '上传内容过大，服务器无法接收。请移除部分媒体后重试。',
+  'submit.error.videoQuota': '此项目已暂停视频上传。请移除视频后再提交。',
 
   'toast.success.submit': '缺陷报告已成功提交！',
   'toast.error.submit': '报告提交失败',

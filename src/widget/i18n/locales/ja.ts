@@ -95,7 +95,7 @@ const ja: WidgetCatalog = {
   'recording.resume': '再開',
   'recording.warning.wholeScreen': '画面全体を共有しています。',
   'recording.notice.noMicrophone': 'マイクなしで録画しています。',
-  'recording.stopped.duration': '{minutes} 分の上限に達したため録画を停止しました。',
+  'recording.stopped.duration': '{duration}後に録画を停止しました。',
   'recording.stopped.size': '{size}MBの上限に達したため録画を停止しました。',
   'recording.recovered': '録画を保存しました。BugPin を開いて続行してください。',
   'recording.error.unavailable': '画面録画は利用できません。',
@@ -103,6 +103,14 @@ const ja: WidgetCatalog = {
   'recording.error.empty': '録画が空でした。もう一度お試しください。',
   'recording.oversized': '録画サイズは{size}MBです（最大{limit}MB）。',
   'recording.oversizedHint': 'ダウンロードするか、より短いクリップを録画してください。',
+  'recording.previewUnavailable': 'プレビューを表示できません。',
+
+  'submit.uploading': 'アップロード中 {percent}%',
+  'submit.cancelUpload': 'アップロードをキャンセル',
+  'submit.error.tooLarge':
+    'アップロードがサーバーの上限を超えています。メディアを減らして、もう一度お試しください。',
+  'submit.error.videoQuota':
+    'このプロジェクトでは動画のアップロードが一時停止されています。動画を削除して送信してください。',
 
   'toast.success.submit': 'バグレポートを送信しました！',
   'toast.error.submit': 'レポートの送信に失敗しました',

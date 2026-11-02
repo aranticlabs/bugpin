@@ -97,7 +97,7 @@ const fr: WidgetCatalog = {
   'recording.resume': 'Reprendre',
   'recording.warning.wholeScreen': 'Vous partagez tout votre écran.',
   'recording.notice.noMicrophone': 'Enregistrement sans microphone.',
-  'recording.stopped.duration': 'Enregistrement arrêté à la limite de {minutes} minutes.',
+  'recording.stopped.duration': 'Enregistrement arrêté après {duration}.',
   'recording.stopped.size': 'Enregistrement arrêté à la limite de {size} Mo.',
   'recording.recovered': 'Enregistrement sauvegardé. Ouvrez BugPin pour continuer.',
   'recording.error.unavailable': "L'enregistrement d'écran n'est pas disponible.",
@@ -105,6 +105,14 @@ const fr: WidgetCatalog = {
   'recording.error.empty': "L'enregistrement était vide. Veuillez réessayer.",
   'recording.oversized': "L'enregistrement fait {size} Mo (max. {limit} Mo).",
   'recording.oversizedHint': 'Téléchargez-le ou enregistrez un clip plus court.',
+  'recording.previewUnavailable': 'Aperçu indisponible.',
+
+  'submit.uploading': 'Téléversement : {percent} %',
+  'submit.cancelUpload': 'Annuler le téléversement',
+  'submit.error.tooLarge':
+    'Le téléversement est trop volumineux pour le serveur. Supprimez des médias et réessayez.',
+  'submit.error.videoQuota':
+    'Les téléversements vidéo sont suspendus pour ce projet. Supprimez la vidéo pour envoyer le rapport.',
 
   'toast.success.submit': 'Rapport de bug envoyé avec succès !',
   'toast.error.submit': "Échec de l'envoi du rapport",

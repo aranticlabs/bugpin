@@ -340,7 +340,9 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 <div
                   class="h-1.5 overflow-hidden rounded-full bg-foreground/15"
                   role="progressbar"
-                  aria-label="Upload progress"
+                  aria-label={t('submit.uploading', {
+                    percent: Math.round(uploadProgress * 100),
+                  })}
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(uploadProgress * 100)}
@@ -357,11 +359,11 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   class="flex-1"
                   onClick={isSubmitting ? onCancelSubmit : onClose}
                 >
-                  {t('dialog.buttons.cancel')}
+                  {isSubmitting ? t('submit.cancelUpload') : t('dialog.buttons.cancel')}
                 </Button>
                 <Button class="flex-1" onClick={handleSubmit} disabled={isSubmitting}>
                   {isSubmitting && uploadProgress !== null
-                    ? `${Math.round(uploadProgress * 100)}%`
+                    ? t('submit.uploading', { percent: Math.round(uploadProgress * 100) })
                     : t('dialog.buttons.submit')}
                 </Button>
               </div>
