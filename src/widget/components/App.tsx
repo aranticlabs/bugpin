@@ -585,10 +585,15 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const handleRemoveMedia = useCallback(
     (id: string) => {
       forgetStoredRecordings(mediaRef.current.filter((item) => item.id === id));
-      setMedia((prev) => prev.filter((item) => item.id !== id));
+      const nextMedia = mediaRef.current.filter((item) => item.id !== id);
+      mediaRef.current = nextMedia;
+      setMedia(nextMedia);
       setOversizedRecording((current) => (current?.id === id ? null : current));
+      draftStorage.replaceMedia(config.apiKey, nextMedia).catch(() => {
+        setToast({ message: t('toast.error.draftSave'), type: 'error' });
+      });
     },
-    [forgetStoredRecordings]
+    [config.apiKey, forgetStoredRecordings]
   );
 
   const handleAnnotateMedia = useCallback((id: string) => {
