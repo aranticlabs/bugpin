@@ -233,12 +233,12 @@ Use your real name (sorry, no pseudonyms or anonymous contributions). You can si
 
 BugPin uses a multi-license approach:
 
-| Component | License |
-|-----------|---------|
-| Server (`src/server/`) | AGPL-3.0 |
-| Admin (`src/admin/`) | AGPL-3.0 |
-| Widget (`src/widget/`) | MIT |
-| Enterprise (`ee/`) | Proprietary |
+| Component              | License     |
+| ---------------------- | ----------- |
+| Server (`src/server/`) | AGPL-3.0    |
+| Admin (`src/admin/`)   | AGPL-3.0    |
+| Widget (`src/widget/`) | MIT         |
+| Enterprise (`ee/`)     | Proprietary |
 
 By contributing to BugPin, you agree that:
 

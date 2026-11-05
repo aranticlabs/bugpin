@@ -126,7 +126,7 @@ describe('notificationsService.notifyReporterSubmission', () => {
       expect.objectContaining({
         report: baseReport,
         projectName: 'Project',
-      }),
+      })
     );
   });
 
@@ -171,7 +171,7 @@ describe('notificationsService.notifyReporterStatusChange', () => {
         projectName: 'Project',
         oldStatus: 'open',
         newStatus: 'resolved',
-      }),
+      })
     );
   });
 
@@ -214,7 +214,7 @@ describe('notificationsService.notifyReporterMessage', () => {
         projectName: 'Project',
         senderName: 'Admin User',
         message: 'Hello reporter',
-      }),
+      })
     );
   });
 
@@ -250,11 +250,11 @@ describe('notificationsService.notifyReporterMessage', () => {
     await notificationsService.notifyReporterMessage(baseReport, 'Hello', 'usr_1', true);
     expect(sendReporterMessageEmail).toHaveBeenCalledWith(
       'reporter@example.com',
-      expect.objectContaining({ message: 'Hello' }),
+      expect.objectContaining({ message: 'Hello' })
     );
     expect(sendReporterMessageCcEmail).toHaveBeenCalledWith(
       'admin@example.com',
-      expect.objectContaining({ message: 'Hello' }),
+      expect.objectContaining({ message: 'Hello' })
     );
   });
 
@@ -284,7 +284,7 @@ describe('notificationsService.notifyReporterPriorityChange', () => {
         projectName: 'Project',
         oldPriority: 'low',
         newPriority: 'critical',
-      }),
+      })
     );
   });
 
@@ -319,7 +319,7 @@ describe('notificationsService.notifyReporterAssignment', () => {
         report: baseReport,
         projectName: 'Project',
         assigneeName: 'Admin User',
-      }),
+      })
     );
   });
 

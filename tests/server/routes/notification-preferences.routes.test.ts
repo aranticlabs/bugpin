@@ -146,7 +146,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/me/projects/prj_missing',
         {
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(404);
@@ -189,7 +189,7 @@ describe('notification-preferences routes', () => {
           body: JSON.stringify({
             notifyOnNewReport: false,
           }),
-        },
+        }
       );
 
       expect(res.status).toBe(404);
@@ -203,7 +203,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_1/defaults',
         {
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(200);
@@ -220,7 +220,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_1/defaults',
         {
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(403);
@@ -235,7 +235,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_missing/defaults',
         {
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(404);
@@ -256,7 +256,7 @@ describe('notification-preferences routes', () => {
           body: JSON.stringify({
             defaultNotifyOnNewReport: false,
           }),
-        },
+        }
       );
 
       expect(res.status).toBe(200);
@@ -279,7 +279,7 @@ describe('notification-preferences routes', () => {
           body: JSON.stringify({
             defaultNotifyOnNewReport: false,
           }),
-        },
+        }
       );
 
       expect(res.status).toBe(403);
@@ -294,7 +294,7 @@ describe('notification-preferences routes', () => {
         {
           method: 'DELETE',
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(200);
@@ -311,7 +311,7 @@ describe('notification-preferences routes', () => {
         {
           method: 'DELETE',
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(403);
@@ -327,7 +327,7 @@ describe('notification-preferences routes', () => {
         {
           method: 'DELETE',
           headers: { cookie: 'session=sess_1' },
-        },
+        }
       );
 
       expect(res.status).toBe(404);

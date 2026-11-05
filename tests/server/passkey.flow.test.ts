@@ -68,7 +68,12 @@ class SoftAuthenticator {
   private authData(rp: RelyingParty, flags: number, attested?: Uint8Array): Buffer {
     const counter = Buffer.alloc(4);
     counter.writeUInt32BE(this.counter);
-    return Buffer.concat([sha256(rp.id), Buffer.from([flags]), counter, attested ?? Buffer.alloc(0)]);
+    return Buffer.concat([
+      sha256(rp.id),
+      Buffer.from([flags]),
+      counter,
+      attested ?? Buffer.alloc(0),
+    ]);
   }
 
   register(rp: RelyingParty, challenge: string) {
@@ -116,7 +121,11 @@ class SoftAuthenticator {
     const clientDataJSON = Buffer.from(
       JSON.stringify({ type: 'webauthn.get', challenge, origin: rp.origin, crossOrigin: false })
     );
-    const signature = sign('sha256', Buffer.concat([authData, sha256(clientDataJSON)]), this.privateKey);
+    const signature = sign(
+      'sha256',
+      Buffer.concat([authData, sha256(clientDataJSON)]),
+      this.privateKey
+    );
     return {
       id: this.id,
       rawId: this.id,
@@ -131,7 +140,11 @@ class SoftAuthenticator {
   }
 }
 
-const rp: RelyingParty = { name: 'BugPin', origin: 'https://bugs.example.test', id: 'bugs.example.test' };
+const rp: RelyingParty = {
+  name: 'BugPin',
+  origin: 'https://bugs.example.test',
+  id: 'bugs.example.test',
+};
 const originalConfig = { ...config };
 const originalLogger = { ...logger };
 const password = 'initial-password-1';

@@ -38,8 +38,8 @@
     "reset-password": "bun run --cwd src/server reset-password",
     "reset-two-factor": "bun run --cwd src/server reset-two-factor",
     "knip": "knip",
-    "format": "prettier --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format": "prettier --ignore-path .gitignore --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --ignore-path .gitignore --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "check:dependency-age": "bun run src/server/scripts/check-dependency-age.ts bun.lock ee/bun.lock"
   },
   "devDependencies": {

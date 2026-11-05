@@ -17,7 +17,7 @@ mock.module(eeUrl, () => ({
         feature: 's3-storage',
         upgradeUrl: 'https://bugpin.io/pricing',
       },
-      402,
+      402
     );
   },
 }));
