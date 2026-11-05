@@ -19,6 +19,7 @@ interface UserRow {
   role: UserRole;
   is_active: number;
   must_change_password: number;
+  api_access_enabled: number;
   password_changed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -40,6 +41,7 @@ function mapRowToUser(row: UserRow): User {
     role: row.role,
     isActive: row.is_active === 1,
     mustChangePassword: row.must_change_password === 1,
+    apiAccessEnabled: row.api_access_enabled === 1,
     passwordChangedAt: row.password_changed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -232,6 +234,15 @@ export const usersRepo = {
     const db = getDb();
     db.run('UPDATE users SET must_change_password = ?, updated_at = ? WHERE id = ?', [
       mustChangePassword ? 1 : 0,
+      new Date().toISOString(),
+      id,
+    ]);
+  },
+
+  async setApiAccess(id: string, enabled: boolean): Promise<void> {
+    const db = getDb();
+    db.run('UPDATE users SET api_access_enabled = ?, updated_at = ? WHERE id = ?', [
+      enabled ? 1 : 0,
       new Date().toISOString(),
       id,
     ]);

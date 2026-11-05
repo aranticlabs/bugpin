@@ -216,6 +216,28 @@ describe('authMiddleware', () => {
     });
   });
 
+  it('refuses API tokens of a non-admin without API access', async () => {
+    registerTokenUser({ ...baseUser, role: 'editor', apiAccessEnabled: false });
+
+    const blocked = await authMiddleware(
+      bearerContext('/api/reports') as unknown as never,
+      async () => undefined
+    );
+    expect((blocked as Response).status).toBe(403);
+    expect(await (blocked as Response).json()).toMatchObject({ error: 'API_ACCESS_DISABLED' });
+  });
+
+  it('accepts API tokens of a non-admin once an admin allowed API access', async () => {
+    registerTokenUser({ ...baseUser, role: 'editor', apiAccessEnabled: true });
+    twoFactorService.describeUser = async (user) => ({ ...user, twoFactorSetupRequired: false });
+
+    let nextCalled = false;
+    await authMiddleware(bearerContext('/api/reports') as unknown as never, async () => {
+      nextCalled = true;
+    });
+    expect(nextCalled).toBe(true);
+  });
+
   it('accepts API tokens once the user has a second factor', async () => {
     registerTokenUser(baseUser);
     twoFactorService.describeUser = async (user) => ({

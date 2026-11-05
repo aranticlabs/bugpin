@@ -135,6 +135,18 @@ export function getSampleDataForTemplate(
         },
       };
 
+    case 'passwordReset':
+      return {
+        ...baseData,
+        user: {
+          name: 'Jane Smith',
+        },
+        reset: {
+          url: `${appUrl}/admin/reset-password?token=sample-token-123`,
+          expiresInHours: 24,
+        },
+      };
+
     case 'reporterConfirmation':
       return {
         ...baseData,

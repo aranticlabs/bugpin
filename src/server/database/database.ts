@@ -111,6 +111,7 @@ export async function initSchema(): Promise<void> {
       role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin', 'editor', 'viewer')),
       is_active INTEGER DEFAULT 1 NOT NULL CHECK(is_active IN (0, 1)),
       must_change_password INTEGER DEFAULT 0 NOT NULL CHECK(must_change_password IN (0, 1)),
+      api_access_enabled INTEGER DEFAULT 0 NOT NULL CHECK(api_access_enabled IN (0, 1)),
       password_changed_at TEXT,
       created_at TEXT DEFAULT (datetime('now')) NOT NULL,
       updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
@@ -140,6 +141,20 @@ export async function initSchema(): Promise<void> {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT UNIQUE NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')) NOT NULL
+    )
+  `);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`
+  );
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
 
   // Two-factor authentication: authenticator apps, recovery codes and passkeys
@@ -528,6 +543,7 @@ export async function runMigrations(): Promise<void> {
           (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
           (file === '006_add_user_password_fields.sql' &&
             message.includes('duplicate column name')) ||
+          (file === '008_add_user_api_access.sql' && message.includes('duplicate column name')) ||
           (file === '004_add_report_history.sql' && message.includes('already exists'));
         if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);

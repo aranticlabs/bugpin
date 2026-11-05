@@ -3,6 +3,7 @@ import { getCookie } from 'hono/cookie';
 import { authService } from '../services/auth.service.js';
 import { twoFactorService } from '../services/two-factor.service.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
+import { apiAccessDeniedBody, hasApiAccess } from './api-access.js';
 import type { ApiTokenValidationResult } from '../types/ee-plugin.js';
 import type { User, Session } from '@shared/types';
 
@@ -69,6 +70,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
     const token = result.value;
     if (token.user.mustChangePassword) return c.json(passwordChangeRequiredBody, 403);
     const scope = ['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) ? 'read' : 'write';
+    if (!hasApiAccess(token.user)) return c.json(apiAccessDeniedBody, 403);
     if (!service.hasScope(token, scope) || (scope === 'write' && token.user.role === 'viewer')) {
       return c.json(
         { success: false, error: 'FORBIDDEN', message: 'Insufficient API permissions' },

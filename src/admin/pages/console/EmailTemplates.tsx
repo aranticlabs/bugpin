@@ -55,6 +55,11 @@ const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: st
     description: 'Sent when inviting a new user',
   },
   {
+    value: 'passwordReset',
+    label: 'Password Reset',
+    description: 'Sent when an administrator sends a password reset link',
+  },
+  {
     value: 'reportDeleted',
     label: 'Report Deleted',
     description: 'Sent when a report is deleted',
@@ -152,6 +157,7 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'assignee.email',
   ],
   invitation: ['app.name', 'inviter.name', 'invite.url', 'invite.expiresInDays'],
+  passwordReset: ['app.name', 'user.name', 'reset.url', 'reset.expiresInHours'],
   reportDeleted: [
     'app.name',
     'app.url',

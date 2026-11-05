@@ -20,6 +20,9 @@ import { widgetRoutes } from './widget/submit.js';
 import { githubWebhookRoutes } from './api/github-webhook.js';
 import { publicFilesRoutes } from './api/public-files.js';
 import { invitationsRoutes } from './api/invitations.js';
+import { passwordResetRoutes } from './api/password-reset.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { requireApiAccessToCreateTokens } from '../middleware/api-access.js';
 import { twoFactorRoutes } from './api/two-factor.js';
 import { passkeyRoutes } from './api/passkeys.js';
 import { getEERoutes } from '../utils/ee.js';
@@ -43,6 +46,9 @@ export function createApiRouter(): Hono {
   api.route('/notification-preferences', notificationPreferences);
   api.route('/license', licenseRoutes);
   api.route('/webhooks/github', githubWebhookRoutes);
+
+  // Runs before both the EE and CE token routes
+  api.use('/tokens', authMiddleware, requireApiAccessToCreateTokens);
 
   // Mount EE routes first if available (they take priority over CE routes)
   // EE routes handle the actual feature implementation when licensed
@@ -87,6 +93,7 @@ export function createApiRouter(): Hono {
 
   // Mount invitations routes (public, no auth)
   api.route('/invitations', invitationsRoutes);
+  api.route('/password-reset', passwordResetRoutes);
 
   return api;
 }

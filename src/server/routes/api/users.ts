@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { usersService } from '../../services/users.service.js';
 import { twoFactorService } from '../../services/two-factor.service.js';
 import { invitationsService } from '../../services/invitations.service.js';
+import { userAccessService } from '../../services/user-access.service.js';
+import { passwordResetService } from '../../services/password-reset.service.js';
+import { requireEEFeature } from '../../utils/ee.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { saveAvatar, deleteAllAvatars } from '../../storage/files.js';
@@ -184,6 +187,110 @@ users.delete(
     return c.json({ success: true, message: 'Two-factor authentication reset' });
   }
 );
+
+function errorStatus(code: string | undefined): 404 | 400 {
+  return code === 'NOT_FOUND' ? 404 : 400;
+}
+
+// Per-user API access (Admin only)
+
+users.patch(
+  '/:id/api-access',
+  authorize(['admin']),
+  requireEEFeature('api-access'),
+  validate({ params: schemas.id, body: schemas.apiAccess }),
+  async (c) => {
+    const { enabled } = await c.req.json<{ enabled: boolean }>();
+    const result = await userAccessService.setApiAccess(c.req.param('id'), enabled);
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+    return c.json({ success: true, user: result.value });
+  }
+);
+
+users.get(
+  '/:id/api-tokens',
+  authorize(['admin']),
+  requireEEFeature('api-access'),
+  validate({ params: schemas.id }),
+  async (c) => {
+    const result = await userAccessService.listApiTokens(c.req.param('id'));
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+    return c.json({ success: true, tokens: result.value });
+  }
+);
+
+users.delete(
+  '/:id/api-tokens',
+  authorize(['admin']),
+  requireEEFeature('api-access'),
+  validate({ params: schemas.id }),
+  async (c) => {
+    const result = await userAccessService.revokeApiTokens(c.req.param('id'));
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+    return c.json({ success: true, revoked: result.value });
+  }
+);
+
+// Sign-in help (Admin only)
+
+users.post(
+  '/:id/temporary-password',
+  authorize(['admin']),
+  validate({ params: schemas.id, body: schemas.temporaryPassword }),
+  async (c) => {
+    const { password } = await c.req.json<{ password: string }>();
+    const result = await userAccessService.setTemporaryPassword(c.req.param('id'), password);
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+    return c.json({ success: true, message: 'Temporary password set' });
+  }
+);
+
+users.post(
+  '/:id/password-reset-email',
+  authorize(['admin']),
+  validate({ params: schemas.id }),
+  async (c) => {
+    const result = await passwordResetService.sendResetEmail(c.req.param('id'));
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+    return c.json({ success: true, message: 'Password reset email sent' });
+  }
+);
+
+users.delete('/:id/sessions', authorize(['admin']), validate({ params: schemas.id }), async (c) => {
+  const result = await userAccessService.signOutEverywhere(c.req.param('id'));
+  if (!result.success) {
+    return c.json(
+      { success: false, error: result.code, message: result.error },
+      errorStatus(result.code)
+    );
+  }
+  return c.json({ success: true, ended: result.value });
+});
 
 // Delete User (Admin only)
 

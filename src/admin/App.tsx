@@ -82,6 +82,9 @@ const Language = lazyWithRetry(() =>
 const TestWidgetPage = lazyWithRetry(() =>
   import('./pages/TestWidgetPage').then((m) => ({ default: m.TestWidgetPage }))
 );
+const ResetPassword = lazyWithRetry(() =>
+  import('./pages/ResetPassword').then((m) => ({ default: m.ResetPassword }))
+);
 const AcceptInvitation = lazyWithRetry(() =>
   import('./pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation }))
 );
@@ -153,6 +156,7 @@ export function App() {
           {/* Public routes */}
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
           <Route path="/accept-invitation" element={<AcceptInvitation />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/test-widget" element={<TestWidgetPage />} />
 
           {/* Protected routes */}

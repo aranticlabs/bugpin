@@ -325,6 +325,8 @@ export interface User {
   role: UserRole;
   isActive: boolean;
   mustChangePassword?: boolean;
+  /** Non-admins can create and use API tokens only while this is true */
+  apiAccessEnabled?: boolean;
   passwordChangedAt?: string;
   /** True when the user has a confirmed authenticator app or at least one passkey */
   twoFactorEnabled?: boolean;
@@ -696,6 +698,7 @@ export type TeamTemplateType =
   | 'assignment'
   | 'reportDeleted'
   | 'invitation'
+  | 'passwordReset'
   | 'testEmail';
 
 export type EmailTemplateType = ReporterTemplateType | TeamTemplateType;

@@ -719,4 +719,14 @@ export const schemas = {
   token: z.object({
     token: z.string().min(1, 'Token is required'),
   }),
+
+  apiAccess: z.object({ enabled: z.boolean() }),
+
+  // Strength rules come from the password policy service
+  temporaryPassword: z.object({ password: z.string().min(1, 'Password is required').max(200) }),
+
+  completePasswordReset: z.object({
+    token: z.string().min(1, 'Token is required'),
+    password: z.string().min(1, 'Password is required').max(200),
+  }),
 };

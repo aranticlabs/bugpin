@@ -812,6 +812,31 @@ export const emailService = {
     });
   },
 
+  async sendPasswordResetEmail(
+    recipient: EmailRecipient,
+    data: { resetUrl: string; expiresInHours: number }
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
+    const appName = settings.appName || 'BugPin';
+
+    const template = await this.getTemplate('passwordReset', 'en');
+    const templateData = {
+      app: { name: appName },
+      user: { name: recipient.name ?? recipient.email },
+      reset: { url: data.resetUrl, expiresInHours: data.expiresInHours },
+    };
+
+    const subject = templateService.compileTemplate(template.subject, templateData);
+    const compiledHtml = templateService.compileTemplate(template.html, templateData);
+    const withFooter = await this.appendFooter(compiledHtml, 'passwordReset');
+    const html = applyBrandColor(
+      templateService.compileTemplate(withFooter, templateData),
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
+    );
+
+    return this.sendEmail({ to: [recipient], subject, html });
+  },
+
   /**
    * Send a test email to verify SMTP configuration
    */

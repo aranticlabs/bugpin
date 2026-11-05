@@ -71,3 +71,7 @@ export function generateApiTokenId(): string {
 export function generateApiToken(): string {
   return generateId('bpat');
 }
+
+export function generatePasswordResetTokenId(): string {
+  return generateId('pwr');
+}

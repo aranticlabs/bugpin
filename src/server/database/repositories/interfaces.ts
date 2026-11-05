@@ -125,6 +125,7 @@ export interface IUsersRepository {
   update(id: string, updates: Partial<User>): Promise<User | null>;
   updatePassword(id: string, passwordHash: string): Promise<boolean>;
   setMustChangePassword(id: string, mustChangePassword: boolean): Promise<void>;
+  setApiAccess(id: string, enabled: boolean): Promise<void>;
   updateLastLogin(id: string): Promise<boolean>;
   updateAvatarUrl(id: string, avatarUrl: string | null): Promise<User | null>;
   delete(id: string): Promise<boolean>;
@@ -152,6 +153,23 @@ export interface ISessionsRepository {
   deleteByUserIdExcept(userId: string, exceptSessionId: string): Promise<number>;
   deleteExpired(): Promise<number>;
   extend(id: string, newExpiresAt: string): Promise<boolean>;
+}
+
+// Password Reset Token Repository Interface
+
+export interface PasswordResetToken {
+  id: string;
+  userId: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
+}
+
+export interface IPasswordResetTokensRepository {
+  create(userId: string, tokenHash: string, expiresAt: string): Promise<PasswordResetToken>;
+  findValidByHash(tokenHash: string): Promise<PasswordResetToken | null>;
+  markUsed(id: string): Promise<boolean>;
+  deleteByUserId(userId: string): Promise<number>;
 }
 
 // File Repository Interface

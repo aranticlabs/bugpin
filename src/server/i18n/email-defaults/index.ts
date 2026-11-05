@@ -10,6 +10,7 @@ import { priorityChange } from './team/priorityChange.js';
 import { assignment } from './team/assignment.js';
 import { reportDeleted } from './team/reportDeleted.js';
 import { invitation } from './team/invitation.js';
+import { passwordReset } from './team/passwordReset.js';
 import { testEmail } from './team/testEmail.js';
 
 export const defaultEmailTemplates: DefaultEmailTemplates = {
@@ -24,5 +25,6 @@ export const defaultEmailTemplates: DefaultEmailTemplates = {
   assignment,
   reportDeleted,
   invitation,
+  passwordReset,
   testEmail,
 };
