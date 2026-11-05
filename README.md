@@ -4,7 +4,7 @@
         <img src="src/admin/public/branding/light/logo-light.svg" width="400" alt="BugPin" />
     </picture><br /><br />
     <p><big><strong>The self-hosted, open-source visual bug reporting tool.</strong></big><br />
-    Capture screenshots, annotate issues, and track bugs from your web applications.</p>
+    Capture screenshots and screen recordings, annotate issues, and track bugs from your web applications.</p>
     <!-- <a target="_blank" href="https://github.com/aranticlabs/bugpin"><img src="https://img.shields.io/github/stars/aranticlabs/bugpin?style=flat" /></a> -->
     <a target="_blank" href="https://github.com/aranticlabs/bugpin"><img src="https://img.shields.io/github/last-commit/aranticlabs/bugpin" /></a>
     <a target="_blank" href="https://github.com/aranticlabs/bugpin/blob/main/LICENSE"><img src="https://img.shields.io/badge/Admin%20Console%20license-AGPL--3.0-blue.svg" alt="Admin Console license: AGPL-3.0" /></a>
@@ -26,7 +26,7 @@ Manage projects and triage reports. Light and dark mode out of the box.
 
 ### Widget
 
-Capture screenshots and annotate issues from any page on your site.
+Capture screenshots, record the screen, and annotate issues from any page on your site.
 
 <img src="./src/admin/public/images/bugpin-widget-dialog.png" width="800" alt="BugPin Widget" />
 
@@ -34,12 +34,14 @@ Capture screenshots and annotate issues from any page on your site.
 - Shadow DOM isolation: widget styles never leak into your site, and your CSS never bleeds into the widget
 - Offline-safe: reports are cached locally and synced when the connection returns
 - Annotation tools: pen, shapes, arrows, text, privacy blur
+- Screen recording with a pen, laser pointer, click effects, and optional microphone audio; recordings survive a crash or reload
 - Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection
 
 # Features
 
 - **Visual Bug Reporting** - Capture screenshots with one click
 - **Annotation Tools** - Draw, highlight, and annotate screenshots
+- **Screen Recording** - Record the page from the widget or attach a video, with quality, duration, size, and daily upload limits set globally or per project
 - **Automated Metadata Collection** - Failed network requests (4xx, 5xx), console errors, and OS/browser/device info captured automatically
 - **Offline Support** - Reports are buffered and sent when back online
 - **Self-Hosted** - Your data stays on your servers
@@ -47,7 +49,7 @@ Capture screenshots and annotate issues from any page on your site.
 - **Multilingual Widget** - Widget and reporter emails translated into 8 languages, with per-project language settings
 - **Export Diagnostics** - Export a report's full context as Markdown, plain text, an AI prompt, or JSON, with section toggles and redactions
 - **Enhanced Security Features** - Domain whitelists, configurable rate limiting, HSTS, and secure headers
-- **GitHub Integration** - Forward reports to GitHub Issues
+- **GitHub Integration** - Forward reports to GitHub Issues, with optional public links to attached videos
 - **Dark Mode** - Admin Console supports light and dark themes
 
 # Quick Start
