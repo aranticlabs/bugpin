@@ -29,7 +29,7 @@ export function SecurityTab() {
   return (
     <>
       <PasswordCard />
-      <TwoFactorCard />
+      <TwoFactorCard className="flex-1" />
     </>
   );
 }
@@ -93,7 +93,7 @@ function SettingRow({
   );
 }
 
-export function TwoFactorCard() {
+export function TwoFactorCard({ className }: { className?: string }) {
   const { refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const { data: status, isLoading } = useTwoFactorStatus();
@@ -116,7 +116,7 @@ export function TwoFactorCard() {
   const hasSecondFactor = !!status && (status.totpEnabled || status.passkeys.length > 0);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle>Two-Factor Authentication</CardTitle>
         <CardDescription>
@@ -198,7 +198,7 @@ export function TwoFactorCard() {
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="ghost-destructive"
                         size="icon"
                         aria-label={`Remove ${passkey.name}`}
                         onClick={() => setRemoving(passkey)}

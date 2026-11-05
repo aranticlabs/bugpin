@@ -19,7 +19,6 @@ import { Badge } from '../ui/badge';
 import {
   Dialog,
   DialogContent,
-  DialogBody,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -39,36 +38,52 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh]" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-2xl h-[min(760px,90vh)]"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Profile Settings</DialogTitle>
           <DialogDescription>Manage your account and how you sign in</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="account" className="flex min-h-0 flex-1 flex-col">
-          <div className="px-6 pt-2">
+          <div className="pt-2">
             <TabsList>
               <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
           </div>
-          <DialogBody contentClassName="space-y-6 py-4 px-6">
-            <TabsContent value="account" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Account</CardTitle>
-                  <CardDescription>Your profile picture, name and email address</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <ProfileSection user={user} />
-                  <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-            <TabsContent value="security" className="mt-0 space-y-6">
-              <SecurityTab />
-            </TabsContent>
-          </DialogBody>
+          {/* Plain scroll container instead of DialogBody: its inner wrapper cannot stretch to the viewport height. */}
+          <div className="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+            {/* Both panels share one grid cell, so each stretches to the height of the tab area. */}
+            <div className="grid flex-1 grid-cols-1">
+              <TabsContent
+                forceMount
+                value="account"
+                className="col-start-1 row-start-1 mt-0 flex flex-col data-[state=inactive]:invisible"
+              >
+                <Card className="flex flex-1 flex-col">
+                  <CardHeader>
+                    <CardTitle>Account</CardTitle>
+                    <CardDescription>Your profile picture, name and email address</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col space-y-6">
+                    <ProfileSection user={user} />
+                    <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent
+                forceMount
+                value="security"
+                className="col-start-1 row-start-1 mt-0 flex flex-col gap-6 data-[state=inactive]:invisible"
+              >
+                <SecurityTab />
+              </TabsContent>
+            </div>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -469,8 +484,8 @@ function UpdateProfileSection({ user }: { user: User | null }) {
   const hasChanges = watchedName !== originalValues.name || watchedEmail !== originalValues.email;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <div className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col gap-4">
         <div className="space-y-2">
           <Label htmlFor="profile-name">
             Name <span className="text-destructive">*</span>
@@ -493,16 +508,18 @@ function UpdateProfileSection({ user }: { user: User | null }) {
           <p className="text-sm text-muted-foreground">Used for login and notifications</p>
         </div>
 
-        <Button type="submit" disabled={mutation.isPending || !hasChanges}>
-          {mutation.isPending ? (
-            <>
-              <Spinner size="sm" className="mr-2" />
-              Saving...
-            </>
-          ) : (
-            'Save Changes'
-          )}
-        </Button>
+        <div className="flex flex-1 items-end">
+          <Button type="submit" disabled={mutation.isPending || !hasChanges}>
+            {mutation.isPending ? (
+              <>
+                <Spinner size="sm" className="mr-2" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
+        </div>
       </div>
     </form>
   );

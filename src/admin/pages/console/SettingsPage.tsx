@@ -9,8 +9,8 @@ import { SubPageTabs } from './SubPageTabs';
 const SETTINGS_SUB_TABS = [
   { hash: 'general', label: 'General' },
   { hash: 'smtp', label: 'SMTP' },
-  { hash: 'storage', label: 'Storage' },
   { hash: 'privacy', label: 'Privacy' },
+  { hash: 'storage', label: 'Storage' },
   { hash: 'api-tokens', label: 'API' },
   { hash: 'webhooks', label: 'Webhooks' },
 ];
@@ -21,8 +21,8 @@ export function SettingsPage() {
       <SubPageTabs subTabs={SETTINGS_SUB_TABS} defaultHash="general">
         <Settings />
         <SMTP />
-        <Storage />
         <Privacy />
+        <Storage />
         <ApiTokens />
         <Webhooks />
       </SubPageTabs>
