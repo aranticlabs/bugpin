@@ -5,6 +5,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 ## Features
 
 - **Screenshot Capture** - Full page or visible area
+- **Screen Recording** - Record the page with a pen, laser pointer, and click effects, with optional microphone audio, or attach an existing video
 - **Annotation Tools** - Draw, highlight, blur, and add text
 - **Privacy First** - Self-hosted, your data stays on your servers
 - **Customizable** - Match your brand colors and style
@@ -77,6 +78,75 @@ For automatic script-tag initialization:
 ```
 
 The reporter can still edit both fields before submitting.
+
+## Screen recording
+
+Reporters can record their screen from the **Recordings** tab and attach the clip to the report.
+They can also drop in an existing MP4, WebM, or MOV file.
+
+Screen recording is off by default. Turn it on in the Admin Console under **Widget > Recording**,
+or for a single project under **Project Settings > Recording**.
+
+| Setting                    | Default                                   | Allowed values                                       |
+| -------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| Enable Screen Recording    | Off                                       | On or off                                            |
+| Video Quality              | Standard (1080p, 15 fps, about 11 MB/min) | Low (720p, 10 fps), Standard, High (1440p, 30 fps)   |
+| Max. Recording Duration    | 180 seconds                               | 10 to 600 seconds                                    |
+| Max. Video Upload Size     | 50 MB                                     | 1 to 100 MB, also applies to uploaded video files    |
+| Daily Video Upload Limit   | 2048 MB per project in 24 hours           | 0 to 1048576 MB, 0 turns the limit off               |
+| Allow Microphone Recording | Off                                       | On or off, reporters still opt in for each recording |
+
+### Recording a clip
+
+1. The first time, the widget explains that the browser will ask what to share. Reporters can skip
+   this notice for later recordings.
+2. The browser's picker opens. In Chromium browsers it offers the current tab first.
+3. The recording toolbar appears with a 3-second countdown after **Start**.
+4. Reporters can pause, resume, stop, or discard the recording, and annotate the page while
+   recording.
+
+Toolbar tools and their shortcuts:
+
+| Tool           | Shortcut                  |
+| -------------- | ------------------------- |
+| Cursor         | Alt+V (Option+V on macOS) |
+| Pen            | Alt+P (Option+P on macOS) |
+| Laser pointer  | Alt+L (Option+L on macOS) |
+| Click effects  | Alt+C (Option+C on macOS) |
+| Undo stroke    | Alt+Z (Option+Z on macOS) |
+| Back to cursor | Esc                       |
+
+Shortcuts need Alt or Option, so plain keys keep working in the page being recorded. They are
+ignored while typing in a form field.
+
+Recording stops on its own at the duration limit, or shortly before the clip would pass the upload
+size limit. When the reporter stops sharing through the browser's own controls, the clip is kept.
+A clip that is still too large keeps **Submit** disabled until it is removed.
+
+When the browser supports Element Capture and the current tab is shared, the recording is limited
+to the page. The toolbar, the red recording frame, and widget notifications stay visible to the
+reporter but are left out of the video. If a whole screen is shared, the toolbar shows a warning.
+
+### Recovery after a crash or reload
+
+While recording, the widget stores the video in the visitor's browser (IndexedDB database
+`bugpin-recordings`). If the tab crashes or reloads, the clip is restored the next time the widget
+loads, and the launcher shows a badge. Stored recordings are deleted once the report is submitted
+or the clip is removed, and expire after 7 days. A recording is only restored for the same reporter
+email.
+
+### Browser support and requirements
+
+- Screen recording needs `getDisplayMedia` and `MediaRecorder`, which current desktop versions of
+  Chrome, Edge, Firefox, and Safari provide. Mobile browsers generally cannot capture the screen;
+  there the **Recordings** tab only offers video uploads.
+- Clips are recorded as WebM or MP4, depending on the browser. The server adds duration and seek
+  information so recordings play and seek correctly in the Admin Console.
+- If the host page blocks screen capture with a `Permissions-Policy` header, or embeds the widget
+  in a cross-origin iframe without `allow="display-capture"`, recording is not available.
+- Your reverse proxy must accept uploads up to the configured video size and allow enough time for
+  slower uploads. See the [reverse proxy guide](https://docs.bugpin.io/installation/reverse-proxy).
+  The widget shows upload progress, and reporters can cancel a running upload.
 
 ## Privacy and diagnostic capture
 

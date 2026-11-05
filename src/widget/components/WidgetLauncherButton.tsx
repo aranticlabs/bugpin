@@ -27,6 +27,7 @@ interface WidgetLauncherButtonProps {
   enableHoverScaleEffect: boolean;
   tooltipEnabled: boolean;
   tooltipText: LauncherTextBundle;
+  hasPendingRecording?: boolean;
   onClick: () => void;
 }
 
@@ -56,6 +57,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   enableHoverScaleEffect,
   tooltipEnabled,
   tooltipText,
+  hasPendingRecording = false,
   onClick,
 }) => {
   useLocale();
@@ -174,6 +176,13 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
           <Icon name={buttonIcon} size={buttonIconSize} strokeWidth={buttonIconStroke} />
         )}
         {resolvedButtonText && <span>{resolvedButtonText}</span>}
+        {hasPendingRecording && (
+          <span
+            data-testid="bugpin-pending-recording"
+            class="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 border-2 border-solid border-white"
+            aria-hidden="true"
+          />
+        )}
       </button>
 
       {tooltipEnabled && resolvedTooltipText && isHovered && (

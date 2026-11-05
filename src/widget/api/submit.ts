@@ -1,16 +1,14 @@
 import { PageContext } from '../capture/context.js';
-import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
 import { bufferReport, startAutoSync } from '../storage/report-buffer.js';
+import { buildSubmitFormData, MAX_SUBMIT_FORM_BYTES, type MediaItem } from './submit-form.js';
+import type { RecordingQuality } from '@shared/recording-quality.js';
 import type { UserActivityCapturePolicy } from '@shared/types';
+import { t } from '../i18n/index.js';
 
 // Start auto-sync on module load
 startAutoSync();
 
-export interface MediaItem {
-  dataUrl: string;
-  mimeType: string;
-  annotations?: object;
-}
+export type { MediaItem } from './submit-form.js';
 
 export interface SubmitReportInput {
   apiKey: string;
@@ -32,6 +30,18 @@ interface SubmitResponse {
   error?: string;
 }
 
+export interface SendOptions {
+  onProgress?: (fraction: number) => void;
+  signal?: AbortSignal;
+}
+
+class SubmissionNetworkError extends Error {
+  constructor() {
+    super('Network request failed');
+    this.name = 'SubmissionNetworkError';
+  }
+}
+
 /**
  * Check if we're online
  */
@@ -39,45 +49,103 @@ function isOnline(): boolean {
   return navigator.onLine !== false;
 }
 
-/**
- * Get file extension from mime type
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeMap: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/quicktime': 'mov',
-    'video/x-msvideo': 'avi',
-  };
-  return mimeMap[mimeType] || 'bin';
+function sendSubmitRequest(
+  url: string,
+  apiKey: string,
+  formData: FormData,
+  options: SendOptions
+): Promise<SubmitResponse> {
+  return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new DOMException('Upload canceled', 'AbortError'));
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const cleanup = () => options.signal?.removeEventListener('abort', abort);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        options.onProgress?.(Math.min(1, event.loaded / event.total));
+      }
+    };
+    xhr.onload = () => {
+      cleanup();
+      let result: SubmitResponse | null = null;
+      try {
+        result = JSON.parse(xhr.responseText) as SubmitResponse;
+      } catch {
+        result = null;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300 || !result?.success) {
+        const fallback =
+          xhr.status === 413
+            ? t('submit.error.tooLarge')
+            : `Failed to submit report (HTTP ${xhr.status})`;
+        const message =
+          result?.error === 'VIDEO_QUOTA_EXCEEDED'
+            ? t('submit.error.videoQuota')
+            : result?.message || result?.error || fallback;
+        reject(new Error(message));
+        return;
+      }
+
+      resolve(result);
+    };
+    xhr.onerror = () => {
+      cleanup();
+      reject(new SubmissionNetworkError());
+    };
+    xhr.onabort = () => {
+      cleanup();
+      reject(new DOMException('Upload canceled', 'AbortError'));
+    };
+
+    try {
+      xhr.open('POST', url);
+      xhr.setRequestHeader('x-api-key', apiKey);
+      options.signal?.addEventListener('abort', abort, { once: true });
+      xhr.send(formData);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
 }
 
 /**
  * Submit a bug report to the server
  * If the submission fails due to network issues, the report is buffered for later retry
  */
-export async function submitReport(input: SubmitReportInput): Promise<SubmitResponse> {
+export async function submitReport(
+  input: SubmitReportInput,
+  options: SendOptions = {}
+): Promise<SubmitResponse> {
   const { apiKey, serverUrl, media, ...data } = input;
+  const bufferedReport = {
+    apiKey,
+    serverUrl,
+    title: data.title,
+    description: data.description,
+    priority: data.priority,
+    reporterEmail: data.reporterEmail,
+    reporterName: data.reporterName,
+    locale: data.locale,
+    media,
+    metadata: data.metadata,
+  };
+
+  const { formData, byteSize } = buildSubmitFormData(bufferedReport);
+  if (byteSize > MAX_SUBMIT_FORM_BYTES) {
+    throw new Error(t('submit.error.tooLarge'));
+  }
 
   // If offline, buffer immediately
   if (!isOnline()) {
     console.log('[BugPin] Offline, buffering report for later submission');
-    await bufferReport({
-      apiKey,
-      serverUrl,
-      title: data.title,
-      description: data.description,
-      priority: data.priority,
-      reporterEmail: data.reporterEmail,
-      reporterName: data.reporterName,
-      locale: data.locale,
-      media,
-      metadata: data.metadata,
-    });
+    await bufferReport(bufferedReport);
 
     return {
       success: true,
@@ -88,78 +156,12 @@ export async function submitReport(input: SubmitReportInput): Promise<SubmitResp
   // Build the URL
   const url = new URL('/api/widget/submit', serverUrl);
 
-  // Create form data for multipart upload
-  const formData = new FormData();
-
-  // Add JSON data
-  formData.append(
-    'data',
-    JSON.stringify({
-      title: data.title,
-      description: data.description,
-      priority: data.priority,
-      reporterEmail: data.reporterEmail,
-      reporterName: data.reporterName,
-      locale: data.locale,
-      metadata: data.metadata,
-      mediaCount: media?.length || 0,
-      mediaAnnotations: media?.map((item) => item.annotations).filter(Boolean),
-    })
-  );
-
-  // Add media files
-  if (media && media.length > 0) {
-    for (let i = 0; i < media.length; i++) {
-      const item = media[i];
-      const blob = dataUrlToBlob(item.dataUrl);
-      const ext = getExtensionFromDataUrl(item.dataUrl) || getExtensionFromMimeType(item.mimeType);
-      const isVideo = item.mimeType.startsWith('video/');
-      const prefix = isVideo ? 'video' : 'screenshot';
-
-      // Debug: Log sizes
-      console.log(
-        `[BugPin] Media ${i}: dataUrl length=${item.dataUrl.length}, blob size=${blob.size}, type=${blob.type}`
-      );
-
-      formData.append('media', blob, `${prefix}-${i}.${ext}`);
-    }
-  }
-
   try {
-    // Submit the report with API key in header
-    const response = await fetch(url.toString(), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'x-api-key': apiKey,
-      },
-    });
-
-    // Parse response
-    const result = (await response.json()) as SubmitResponse;
-
-    if (!response.ok || !result.success) {
-      throw new Error(result.message || result.error || 'Failed to submit report');
-    }
-
-    return result;
+    return await sendSubmitRequest(url.toString(), apiKey, formData, options);
   } catch (error) {
-    // Check if it's a network error (not a server error)
-    if (error instanceof TypeError && error.message.includes('fetch')) {
+    if (error instanceof SubmissionNetworkError) {
       console.log('[BugPin] Network error, buffering report for later submission');
-
-      await bufferReport({
-        apiKey,
-        serverUrl,
-        title: data.title,
-        description: data.description,
-        priority: data.priority,
-        reporterEmail: data.reporterEmail,
-        reporterName: data.reporterName,
-        locale: data.locale,
-        media,
-        metadata: data.metadata,
-      });
+      await bufferReport(bufferedReport);
 
       return {
         success: true,
@@ -189,7 +191,11 @@ export async function fetchWidgetConfig(
     networkCapture: boolean;
     storageKeysCapture: boolean;
     userActivityCapture: UserActivityCapturePolicy;
+    screenRecording?: boolean;
+    recordingMicrophone?: boolean;
   };
+  maxRecordingDurationSeconds?: number;
+  recordingQuality?: RecordingQuality;
   theme: string;
   position: string;
 }> {

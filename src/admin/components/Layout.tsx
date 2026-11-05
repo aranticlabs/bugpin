@@ -54,6 +54,7 @@ const routeCrumbs: Record<string, RouteCrumbConfig> = {
   '/button': { label: 'Button' },
   '/dialog': { label: 'Dialog' },
   '/screenshot': { label: 'Screenshot' },
+  '/recording': { label: 'Recording' },
   '/language': { label: 'Language' },
 };
 

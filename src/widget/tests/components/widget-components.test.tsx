@@ -71,12 +71,16 @@ const baseConfig: WidgetConfig = {
   enableConsoleCapture: true,
   enableNetworkCapture: true,
   enableStorageKeysCapture: false,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
   userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: 'standard',
 };
 
 const mediaItem: CapturedMedia = {
@@ -187,15 +191,10 @@ describe('widget components', () => {
     expect(html).toContain('Add more');
   });
 
-  it('renders screenshot manager with video and annotation disabled', () => {
-    const videoItem: CapturedMedia = {
-      ...mediaItem,
-      id: 'media_video',
-      mimeType: 'video/mp4',
-    };
+  it('renders screenshot manager without annotation actions when disabled', () => {
     const html = renderToString(
       <ScreenshotManager
-        media={[videoItem]}
+        media={[mediaItem]}
         onCapture={() => undefined}
         onUpload={() => undefined}
         onRemove={() => undefined}
@@ -208,7 +207,7 @@ describe('widget components', () => {
         onDismissOversizedCapture={() => undefined}
       />
     );
-    expect(html).toContain('Video');
+    expect(html).toContain('Screenshot');
     expect(html).not.toContain('title="Annotate"');
   });
 
@@ -223,6 +222,8 @@ describe('widget components', () => {
         onAddMedia={() => undefined}
         onRemoveMedia={() => undefined}
         isSubmitting={false}
+        uploadProgress={null}
+        onCancelSubmit={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
         activeTab="details"
@@ -262,6 +263,8 @@ describe('widget components', () => {
         onAddMedia={() => undefined}
         onRemoveMedia={() => undefined}
         isSubmitting={false}
+        uploadProgress={null}
+        onCancelSubmit={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
         activeTab="media"
@@ -287,7 +290,7 @@ describe('widget components', () => {
     expect(html).toContain('Capture Screenshot');
   });
 
-  it('shows submitting spinner when submitting', () => {
+  it('shows upload progress when submitting', () => {
     const html = renderToString(
       <WidgetDialog
         onClose={() => undefined}
@@ -298,6 +301,8 @@ describe('widget components', () => {
         onAddMedia={() => undefined}
         onRemoveMedia={() => undefined}
         isSubmitting={true}
+        uploadProgress={0.42}
+        onCancelSubmit={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
         activeTab="details"
@@ -319,7 +324,9 @@ describe('widget components', () => {
         onDismissOversizedCapture={() => undefined}
       />
     );
-    expect(html).toContain('animate-[spin_0.8s_linear_infinite]');
+    expect(html).toContain('role="progressbar"');
+    expect(html).toContain('Uploading 42%');
+    expect(html).toContain('Cancel upload');
   });
 
   it('shows capturing label when capturing', () => {

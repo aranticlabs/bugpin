@@ -4,6 +4,8 @@ import type { WidgetConfig } from '../../config';
 import type { FormData as WidgetFormData } from '../../components/WidgetDialog';
 import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { draftStorage } from '../../storage/draft-storage';
+import type { SendOptions, SubmitReportInput } from '../../api/submit';
 
 const captureScreenshot = mock(async () => 'data:image/png;base64,abc');
 const captureContext = mock(() => ({
@@ -13,7 +15,9 @@ const captureContext = mock(() => ({
   viewport: { width: 800, height: 600, devicePixelRatio: 2 },
   timestamp: new Date().toISOString(),
 }));
-const submitReport = mock(async () => undefined);
+const submitReport = mock(
+  async (_input: SubmitReportInput, _options?: SendOptions): Promise<undefined> => undefined
+);
 const clearUserActivity = mock(() => undefined);
 
 let lastDialogProps: Record<string, unknown> | null = null;
@@ -80,12 +84,16 @@ const baseConfig: WidgetConfig = {
   enableConsoleCapture: true,
   enableNetworkCapture: true,
   enableStorageKeysCapture: false,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
   userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: 'standard',
 };
 
 const originalSetTimeout = globalThis.setTimeout;
@@ -208,6 +216,53 @@ describe('App state transitions', () => {
     container.remove();
   });
 
+  it('keeps the widget open when saving a draft fails', async () => {
+    const originalSave = draftStorage.save;
+    draftStorage.save = async () => {
+      throw new Error('storage quota exceeded');
+    };
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?draft-save-failure');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    try {
+      render(<App config={baseConfig} deps={appDeps} />, container);
+      const launcher = container.querySelector(
+        'button[aria-label="Report issue"]'
+      ) as HTMLButtonElement;
+      launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      (lastDialogProps?.onFormDataChange as (data: WidgetFormData) => void)({
+        title: 'Unsaved bug',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      });
+      await flush();
+      (lastDialogProps?.onClose as () => void)();
+      await flush();
+
+      const saveButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Save Draft'
+      );
+      saveButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        'Failed to save the draft'
+      );
+    } finally {
+      draftStorage.save = originalSave;
+      render(null, container);
+      container.remove();
+    }
+  });
+
   it('prefills reporter fields without treating defaults as unsaved content', async () => {
     // @ts-expect-error - Query params in import for test isolation
     const { App } = await import('../../components/App?reporter-prefill');
@@ -308,6 +363,10 @@ describe('App state transitions', () => {
       expect.objectContaining({
         reporterEmail: 'current@example.com',
         reporterName: 'Current User',
+      }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onProgress: expect.any(Function),
       })
     );
 
@@ -457,6 +516,53 @@ describe('App state transitions', () => {
 
     const toast = container.querySelector('[role="alert"]');
     expect(toast?.textContent ?? '').toContain('submit failed');
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('cancels an in-flight upload without showing an error', async () => {
+    submitReport.mockImplementationOnce(
+      async (_input: SubmitReportInput, options?: SendOptions) =>
+        await new Promise<undefined>((_, reject) => {
+          options?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Upload canceled', 'AbortError'));
+          });
+        })
+    );
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?cancel-upload');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(<App config={baseConfig} deps={appDeps} />, container);
+
+    const launcher = container.querySelector(
+      'button[aria-label="Report issue"]'
+    ) as HTMLButtonElement;
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    const submission = (
+      lastDialogProps?.onSubmit as (data: WidgetFormData, media: unknown[]) => Promise<void>
+    )(
+      {
+        title: 'Bug title',
+        description: '',
+        priority: 'medium',
+        reporterEmail: '',
+        reporterName: '',
+      },
+      []
+    );
+    await flush();
+    expect(lastDialogProps?.isSubmitting).toBe(true);
+
+    (lastDialogProps?.onCancelSubmit as () => void)();
+    await submission;
+    await flush();
+
+    expect(lastDialogProps?.isSubmitting).toBe(false);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
 
     render(null, container);
     container.remove();

@@ -1,3 +1,4 @@
+import { DEFAULT_RECORDING_QUALITY, type RecordingQuality } from '@shared/recording-quality.js';
 import type { LauncherTextBundle, LocaleCode, UserActivityCapturePolicy } from '@shared/types';
 
 export type { LauncherTextBundle };
@@ -57,12 +58,16 @@ export interface WidgetConfig {
   enableConsoleCapture: boolean;
   enableNetworkCapture: boolean;
   enableStorageKeysCapture: boolean;
+  enableScreenRecording: boolean;
+  allowRecordingMicrophone: boolean;
   userActivityCapture: UserActivityCapturePolicy;
   captureMethod: 'visible' | 'fullpage' | 'element';
   useScreenCaptureAPI: boolean;
   maxScreenshotSize: number;
   maxImageUploadSize: number;
   maxVideoUploadSize: number;
+  maxRecordingDurationSeconds: number;
+  recordingQuality: RecordingQuality;
 }
 
 export const defaultConfig: WidgetConfig = {
@@ -111,10 +116,14 @@ export const defaultConfig: WidgetConfig = {
   enableConsoleCapture: true,
   enableNetworkCapture: true,
   enableStorageKeysCapture: false,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
   userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 10 * 1024 * 1024, // 10MB
   maxImageUploadSize: 10 * 1024 * 1024, // 10MB
   maxVideoUploadSize: 50 * 1024 * 1024, // 50MB
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: DEFAULT_RECORDING_QUALITY,
 };

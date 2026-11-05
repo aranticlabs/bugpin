@@ -141,6 +141,25 @@ describe('integrationsService.create', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects a non-boolean public video setting', async () => {
+    const result = await integrationsService.create({
+      projectId: 'prj_1',
+      type: 'github',
+      name: 'GitHub',
+      config: {
+        owner: 'org',
+        repo: 'repo',
+        accessToken: 'token',
+        publicVideoLinks: 'false',
+      } as never,
+    });
+    expect(result).toEqual({
+      success: false,
+      error: 'Public video links must be true or false',
+      code: 'INVALID_CONFIG',
+    });
+  });
+
   it('masks access token on success', async () => {
     const result = await integrationsService.create({
       projectId: 'prj_1',

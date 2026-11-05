@@ -5,12 +5,15 @@ import { projectsRepo } from '../../../src/server/database/repositories/projects
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
+import { settingsService } from '../../../src/server/services/settings.service';
+import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import {
   widgetPackageCompatibilityService,
   type WidgetVersionObservationInput,
 } from '../../../src/server/services/widget-package-compatibility.service';
 import { Result } from '../../../src/server/utils/result';
 import { logger } from '../../../src/server/utils/logger';
+import { MAX_REQUEST_BODY_SIZE } from '../../../src/server/utils/request-limits';
 import type { Project, Report, AppSettings } from '../../../src/shared/types';
 
 const baseProject: Project = {
@@ -87,6 +90,13 @@ const baseSettings: Partial<AppSettings> = {
   },
   screenshot: {
     useScreenCaptureAPI: false,
+    maxScreenshotSize: 10,
+    maxImageUploadSizeMb: 10,
+    maxVideoUploadSizeMb: 50,
+    maxVideoUploadMbPerDay: 2048,
+    enableScreenRecording: false,
+    allowRecordingMicrophone: false,
+    maxRecordingDurationSeconds: 180,
   },
   language: {
     mode: 'auto',
@@ -97,6 +107,8 @@ const baseSettings: Partial<AppSettings> = {
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalReportsService = { ...reportsService };
+const originalSettingsService = { ...settingsService };
+const originalFilesRepo = { ...filesRepo };
 const originalWidgetPackageCompatibilityService = { ...widgetPackageCompatibilityService };
 const originalLogger = { ...logger };
 
@@ -115,6 +127,7 @@ beforeEach(() => {
   projectsRepo.findByApiKey = async () => projectResult;
   settingsRepo.getAll = async () => baseSettings as AppSettings;
   reportsService.create = async () => Result.ok(baseReport);
+  filesRepo.getVideoSizeByProjectSince = () => 0;
   widgetPackageCompatibilityService.observe = async (input) => {
     observedWidgetVersions.push(input);
     return Result.ok(undefined);
@@ -132,6 +145,8 @@ afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(reportsService, originalReportsService);
+  Object.assign(settingsService, originalSettingsService);
+  Object.assign(filesRepo, originalFilesRepo);
   Object.assign(widgetPackageCompatibilityService, originalWidgetPackageCompatibilityService);
   Object.assign(logger, originalLogger);
 });
@@ -154,6 +169,84 @@ const validSubmitBody = {
     timestamp: new Date().toISOString(),
   },
 };
+
+function createVideoSubmitForm(
+  size = 8,
+  mimeType = 'video/mp4',
+  filename = 'clip.mp4',
+  signature = [0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70],
+  field: 'media' | 'recording' = 'media'
+): FormData {
+  const bytes = new Uint8Array(size);
+  bytes.set(signature);
+  const form = new FormData();
+  form.set('data', JSON.stringify(validSubmitBody));
+  form.set(field, new File([bytes], filename, { type: mimeType }));
+  return form;
+}
+
+describe('widget submit request body limit', () => {
+  const MB = 1024 * 1024;
+
+  async function submitThroughServer(form: FormData): Promise<Response> {
+    const server = Bun.serve({
+      port: 0,
+      maxRequestBodySize: MAX_REQUEST_BODY_SIZE,
+      fetch: createApp().fetch,
+    });
+    try {
+      return await fetch(`http://localhost:${server.port}/widget/submit`, {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+    } finally {
+      server.stop(true);
+    }
+  }
+
+  beforeEach(() => {
+    projectResult = {
+      ...baseProject,
+      settings: {
+        ...baseProject.settings,
+        screenshot: { maxVideoUploadSizeMb: 100, maxScreenshotSize: 50, maxImageUploadSizeMb: 50 },
+      },
+    };
+  });
+
+  it('covers one maximum-size video and three maximum-size images', () => {
+    expect(MAX_REQUEST_BODY_SIZE).toBeGreaterThanOrEqual((100 + 3 * 50) * MB);
+  });
+
+  it('accepts a maximum-size video with a large screenshot', async () => {
+    let fileSizes: number[] = [];
+    reportsService.create = async (input) => {
+      fileSizes = input.files?.map((file) => file.data.byteLength) ?? [];
+      return Result.ok(baseReport);
+    };
+    const form = createVideoSubmitForm(100 * MB);
+    const image = new Uint8Array(30 * MB);
+    image.set([0x89, 0x50, 0x4e, 0x47]);
+    form.append('media', new File([image], 'screenshot.png', { type: 'image/png' }));
+
+    const res = await submitThroughServer(form);
+
+    expect(res.status).toBe(201);
+    expect(fileSizes).toEqual([100 * MB, 30 * MB]);
+  });
+
+  it('answers an oversized video with a structured error', async () => {
+    const res = await submitThroughServer(createVideoSubmitForm(100 * MB + 1));
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({
+      success: false,
+      error: 'FILE_TOO_LARGE',
+      details: { kind: 'video', limit: 100 * MB },
+    });
+  });
+});
 
 describe('widget routes', () => {
   describe('POST /widget/submit', () => {
@@ -342,6 +435,259 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it('normalizes recorded video MIME parameters before validation and persistence', async () => {
+      let submittedMimeType: string | undefined;
+      reportsService.create = async (input) => {
+        submittedMimeType = input.files?.[0]?.mimeType;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/mp4; codecs=avc1.42000a'),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedMimeType).toBe('video/mp4');
+    });
+
+    it('accepts uploaded MOV videos while screen recording is disabled', async () => {
+      let submittedMimeType: string | undefined;
+      reportsService.create = async (input) => {
+        submittedMimeType = input.files?.[0]?.mimeType;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/quicktime', 'clip.mov'),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedMimeType).toBe('video/quicktime');
+    });
+
+    it('accepts WebM uploads with an EBML signature', async () => {
+      let submittedFile: { mimeType: string; data: Buffer | Uint8Array } | undefined;
+      reportsService.create = async (input) => {
+        submittedFile = input.files?.[0];
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(8, 'video/webm', 'clip.webm', [0x1a, 0x45, 0xdf, 0xa3]),
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedFile?.mimeType).toBe('video/webm');
+      expect(Array.from(submittedFile?.data.slice(0, 4) ?? [])).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    });
+
+    it('marks only files from the recording field for remuxing', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { enableScreenRecording: true },
+        },
+      };
+      let submittedFiles: Array<{ filename: string; isRecording?: boolean }> = [];
+      reportsService.create = async (input) => {
+        submittedFiles =
+          input.files?.map(({ filename, isRecording }) => ({ filename, isRecording })) ?? [];
+        return Result.ok(baseReport);
+      };
+
+      const mp4 = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const form = new FormData();
+      form.set('data', JSON.stringify(validSubmitBody));
+      form.append('media', new File([mp4], 'upload.mp4', { type: 'video/mp4' }));
+      form.append('recording', new File([mp4], 'recording-1.mp4', { type: 'video/mp4' }));
+      form.append('recording', new File([mp4], 'recording-2.mp4', { type: 'video/mp4' }));
+      form.append('screenshot', new File([png], 'legacy.png', { type: 'image/png' }));
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+
+      expect(res.status).toBe(201);
+      expect(submittedFiles).toEqual([
+        { filename: 'upload.mp4', isRecording: false },
+        { filename: 'recording-1.mp4', isRecording: true },
+        { filename: 'recording-2.mp4', isRecording: true },
+        { filename: 'legacy.png', isRecording: false },
+      ]);
+    });
+
+    it('rejects recording fields while screen recording is disabled', async () => {
+      const form = new FormData();
+      form.set('data', JSON.stringify(validSubmitBody));
+      form.set(
+        'recording',
+        new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])], 'recording.mp4', {
+          type: 'video/mp4',
+        })
+      );
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: 'SCREEN_RECORDING_DISABLED' });
+    });
+
+    it('rejects video when the project daily quota would be exceeded', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = () => 1024 * 1024;
+      let createCalled = false;
+      reportsService.create = async () => {
+        createCalled = true;
+        return Result.ok(baseReport);
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(),
+      });
+
+      expect(res.status).toBe(429);
+      expect((await res.json()).error).toBe('VIDEO_QUOTA_EXCEEDED');
+      expect(createCalled).toBe(false);
+    });
+
+    it('does not check video usage when the project quota is disabled', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 0 },
+        },
+      };
+      let quotaChecked = false;
+      filesRepo.getVideoSizeByProjectSince = () => {
+        quotaChecked = true;
+        return Number.MAX_SAFE_INTEGER;
+      };
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(),
+      });
+
+      expect(res.status).toBe(201);
+      expect(quotaChecked).toBe(false);
+    });
+
+    it('counts in-flight video uploads against the project quota', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = () => 0;
+
+      let releaseFirst: (() => void) | undefined;
+      let markFirstStarted: (() => void) | undefined;
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      reportsService.create = async () => {
+        markFirstStarted?.();
+        await firstCanFinish;
+        return Result.ok(baseReport);
+      };
+
+      const app = createApp();
+      const firstResponse = app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      await firstStarted;
+
+      const secondResponse = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      releaseFirst?.();
+
+      expect(secondResponse.status).toBe(429);
+      expect((await firstResponse).status).toBe(201);
+    });
+
+    it('allows uploads that exactly reach the project quota', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = () => 512 * 1024;
+
+      const res = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(512 * 1024),
+      });
+
+      expect(res.status).toBe(201);
+    });
+
+    it('releases reserved quota when report preparation throws', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: { maxVideoUploadMbPerDay: 1 },
+        },
+      };
+      filesRepo.getVideoSizeByProjectSince = () => 0;
+      settingsService.getAll = async () => {
+        throw new Error('database unavailable');
+      };
+
+      const first = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+      expect(first.status).toBe(500);
+
+      settingsService.getAll = async () => Result.ok(baseSettings as AppSettings);
+      const second = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(700 * 1024),
+      });
+
+      expect(second.status).toBe(201);
     });
 
     it('removes user activity when EU Privacy Mode disables capture', async () => {
@@ -686,6 +1032,31 @@ describe('widget routes', () => {
       expect(body.config.features).toBeDefined();
       expect(body.config.theme).toBeDefined();
       expect(body.config.position).toBeDefined();
+      expect(body.config.features.screenRecording).toBe(false);
+      expect(body.config.features.recordingMicrophone).toBe(false);
+      expect(body.config.maxRecordingDurationSeconds).toBe(180);
+    });
+
+    it('resolves project screen recording settings over global settings', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          ...baseProject.settings,
+          screenshot: {
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 90,
+          },
+        },
+      };
+
+      const res = await createApp().request('http://localhost/widget/config/test_api_key_123');
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.config.features.screenRecording).toBe(true);
+      expect(body.config.features.recordingMicrophone).toBe(true);
+      expect(body.config.maxRecordingDurationSeconds).toBe(90);
     });
 
     it('returns project-specific settings when available', async () => {
@@ -739,6 +1110,16 @@ describe('widget routes', () => {
         ...baseProject,
         settings: {},
       };
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          screenshot: {
+            ...baseSettings.screenshot,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 240,
+          },
+        }) as AppSettings;
 
       const app = createApp();
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
@@ -747,6 +1128,9 @@ describe('widget routes', () => {
       const body = await res.json();
       expect(body.config.theme).toBe('system');
       expect(body.config.position).toBe('bottom-right');
+      expect(body.config.features.screenRecording).toBe(true);
+      expect(body.config.features.recordingMicrophone).toBe(true);
+      expect(body.config.maxRecordingDurationSeconds).toBe(240);
     });
 
     it('exposes the global language block when project has no override', async () => {

@@ -1,5 +1,5 @@
 import { FunctionComponent } from 'preact';
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 import { cn } from '../../lib/utils';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -9,7 +9,11 @@ interface ToastProps {
   type: ToastType;
   onClose: () => void;
   duration?: number;
+  // Top-layer toasts stay out of tab recordings that use Element Capture.
+  topLayer?: boolean;
 }
+
+const TOP_LAYER_STYLE = { inset: 'auto', bottom: '5rem', right: '1.25rem' };
 
 const toastVariants: Record<ToastType, string> = {
   success: 'bg-green-50 border-green-200 text-green-600',
@@ -22,16 +26,27 @@ export const Toast: FunctionComponent<ToastProps> = ({
   type,
   onClose,
   duration = 5000,
+  topLayer = false,
 }) => {
+  const toastRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
   }, [onClose, duration]);
 
+  useEffect(() => {
+    if (topLayer) toastRef.current?.showPopover?.();
+  }, [topLayer]);
+
   return (
     <div
+      ref={toastRef}
+      popover={topLayer ? 'manual' : undefined}
+      style={topLayer ? TOP_LAYER_STYLE : undefined}
       class={cn(
         'fixed bottom-20 right-5 z-[2147483647] flex items-center gap-3 px-5 py-4 border border-solid rounded text-sm shadow-lg animate-[slideIn_0.3s_ease-out]',
+        topLayer && 'm-0',
         toastVariants[type]
       )}
       role="alert"

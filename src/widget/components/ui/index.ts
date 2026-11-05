@@ -5,3 +5,8 @@ export { Select, type SelectProps } from './select';
 export { Label, type LabelProps } from './label';
 export { Tabs, type Tab } from './tabs';
 export { Toast, type ToastType } from './toast';
+export { Alert } from './alert';
+export { Card } from './card';
+export { Popover } from './popover';
+export { Separator } from './separator';
+export { Tooltip, type TooltipSide } from './tooltip';

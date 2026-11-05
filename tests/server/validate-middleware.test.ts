@@ -140,4 +140,76 @@ describe('validate middleware', () => {
     const payload = await (response as Response).json();
     expect(payload.details[0]).toMatchObject({ field: 'body' });
   });
+
+  it('validates project video upload limits', () => {
+    expect(
+      schemas.updateProject.safeParse({
+        settings: {
+          screenshot: {
+            maxVideoUploadSizeMb: 100,
+            maxVideoUploadMbPerDay: 0,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 600,
+          },
+        },
+      }).success
+    ).toBe(true);
+    expect(
+      schemas.updateProject.safeParse({
+        settings: { screenshot: { maxVideoUploadSizeMb: 101 } },
+      }).success
+    ).toBe(false);
+    expect(
+      schemas.updateProject.safeParse({
+        settings: { screenshot: { maxRecordingDurationSeconds: 601 } },
+      }).success
+    ).toBe(false);
+  });
+
+  it('validates global video upload limits', () => {
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: {
+          maxVideoUploadSizeMb: 100,
+          maxVideoUploadMbPerDay: 1048576,
+          enableScreenRecording: false,
+          allowRecordingMicrophone: false,
+          maxRecordingDurationSeconds: 10,
+        },
+      }).success
+    ).toBe(true);
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: { maxVideoUploadMbPerDay: 1048577 },
+      }).success
+    ).toBe(false);
+    expect(
+      schemas.updateSettings.safeParse({
+        screenshot: { maxRecordingDurationSeconds: 9 },
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts only boolean public video link settings in integration configs', () => {
+    const config = { owner: 'org', repo: 'repo', accessToken: 'token' };
+    const create = (publicVideoLinks: unknown) =>
+      schemas.createIntegration.safeParse({
+        projectId: 'prj_1',
+        type: 'github',
+        name: 'GitHub',
+        config: { ...config, publicVideoLinks },
+      }).success;
+    const update = (publicVideoLinks: unknown) =>
+      schemas.updateIntegration.safeParse({ config: { ...config, publicVideoLinks } }).success;
+
+    for (const valid of [true, false, undefined]) {
+      expect(create(valid)).toBe(true);
+      expect(update(valid)).toBe(true);
+    }
+    for (const invalid of ['false', 'true', 1, null]) {
+      expect(create(invalid)).toBe(false);
+      expect(update(invalid)).toBe(false);
+    }
+  });
 });

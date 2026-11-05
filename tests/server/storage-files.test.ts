@@ -15,7 +15,12 @@ import {
   deleteAvatar,
   deleteAllAvatars,
   validateFile,
+  validateFileContent,
+  createStoredFileHandle,
 } from '../../src/server/storage/files';
+import { getEEHooks, registerEEHooks } from '../../src/server/utils/ee-hooks';
+import { Result } from '../../src/server/utils/result';
+import type { StorageProvider } from '../../src/server/types/ee-plugin';
 
 const originalFindFiles = filesRepo.findByReportId;
 const originalConfig = { ...config };
@@ -208,6 +213,53 @@ describe('file storage', () => {
     expect(readFile(dirPath)).toBeNull();
     expect(await deleteFile(dirPath)).toBe(false);
   });
+
+  it('reads only the requested bytes when the storage provider supports ranges', async () => {
+    const originalHooks = getEEHooks();
+    const rangeCalls: Array<[string, number, number]> = [];
+    let wholeReads = 0;
+    const provider = {
+      read: async () => {
+        wholeReads++;
+        return Result.ok(new Uint8Array());
+      },
+      readRange: async (filePath: string, start: number, end: number) => {
+        rangeCalls.push([filePath, start, end]);
+        return Result.ok(new TextEncoder().encode('2345'));
+      },
+    } as StorageProvider;
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+
+    try {
+      const data = await createStoredFileHandle('s3://bucket/file').readRange(2, 5);
+      expect(Buffer.from(data as Uint8Array).toString()).toBe('2345');
+      expect(rangeCalls).toEqual([['s3://bucket/file', 2, 5]]);
+      expect(wholeReads).toBe(0);
+    } finally {
+      registerEEHooks(originalHooks);
+    }
+  });
+
+  it('falls back to a whole-object read for older storage providers', async () => {
+    const originalHooks = getEEHooks();
+    let reads = 0;
+    const provider = {
+      read: async () => {
+        reads++;
+        return Result.ok(new TextEncoder().encode('0123456789'));
+      },
+    } as StorageProvider;
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+
+    try {
+      const data = await createStoredFileHandle('s3://bucket/file').readRange(2, 5);
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(data as Uint8Array).toString()).toBe('2345');
+      expect(reads).toBe(1);
+    } finally {
+      registerEEHooks(originalHooks);
+    }
+  });
 });
 
 describe('validateFile', () => {
@@ -256,6 +308,19 @@ describe('validateFile', () => {
     }
   });
 
+  it('accepts MOV and rejects AVI video uploads', () => {
+    const mov = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+
+    expect(validateFile({ data: mov, mimeType: 'video/quicktime', type: 'video' }).success).toBe(
+      true
+    );
+    const avi = validateFile({ data: mov, mimeType: 'video/x-msvideo', type: 'video' });
+    expect(avi.success).toBe(false);
+    if (!avi.success) {
+      expect(avi.code).toBe('INVALID_MIME_TYPE');
+    }
+  });
+
   it('rejects file exceeding size limit', () => {
     const bigBuffer = Buffer.alloc(2 * 1024 * 1024); // 2MB
     // Write PNG header so magic bytes pass
@@ -279,6 +344,18 @@ describe('validateFile', () => {
     if (!result.success) {
       expect(result.code).toBe('INVALID_FILE_CONTENT');
     }
+  });
+
+  it('validates file content without applying a size limit', () => {
+    const largePng = Buffer.alloc(2 * 1024 * 1024);
+    pngBuffer.copy(largePng);
+
+    expect(
+      validateFileContent({ data: largePng, mimeType: 'image/png', type: 'screenshot' }).success
+    ).toBe(true);
+    expect(
+      validateFileContent({ data: jpegBuffer, mimeType: 'image/png', type: 'screenshot' }).success
+    ).toBe(false);
   });
 
   it('rejects PNG magic bytes when declared as JPEG', () => {

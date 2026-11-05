@@ -467,9 +467,7 @@ export function ReportDetail() {
           {files?.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {files.length === 1 ? 'Screenshot' : `Screenshots (${files.length})`}
-                </CardTitle>
+                <CardTitle>{files.length === 1 ? 'Media' : `Media (${files.length})`}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className={`grid gap-4 ${files.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -483,7 +481,9 @@ export function ReportDetail() {
                           <video
                             src={fileUrl}
                             controls
-                            className="w-full rounded-lg border bg-black"
+                            preload="metadata"
+                            className="w-full rounded-lg border bg-black object-contain"
+                            style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
                           />
                         ) : (
                           <button

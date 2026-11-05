@@ -66,7 +66,7 @@ let retryIntegrations: Integration[] = [];
 
 const integrationsUrl = new URL(
   '../../../src/server/services/integrations.service.js',
-  import.meta.url,
+  import.meta.url
 ).href;
 mock.module(integrationsUrl, () => ({
   integrationsService: {
@@ -76,7 +76,7 @@ mock.module(integrationsUrl, () => ({
 
 const reportsRepoUrl = new URL(
   '../../../src/server/database/repositories/reports.repo.js',
-  import.meta.url,
+  import.meta.url
 ).href;
 mock.module(reportsRepoUrl, () => ({
   reportsRepo: {
@@ -86,7 +86,7 @@ mock.module(reportsRepoUrl, () => ({
 
 const integrationsRepoUrl = new URL(
   '../../../src/server/database/repositories/integrations.repo.js',
-  import.meta.url,
+  import.meta.url
 ).href;
 mock.module(integrationsRepoUrl, () => ({
   integrationsRepo: {
@@ -97,11 +97,12 @@ mock.module(integrationsRepoUrl, () => ({
 const enqueueMock = mock(async () => undefined);
 const syncQueueUrl = new URL(
   '../../../src/server/services/integrations/sync-queue.service.js',
-  import.meta.url,
+  import.meta.url
 ).href;
 mock.module(syncQueueUrl, () => ({
   syncQueueService: {
     enqueue: enqueueMock,
+    retrySyncForReport: (reportId: string) => syncQueueService.retrySyncForReport(reportId),
   },
 }));
 
@@ -149,7 +150,7 @@ beforeEach(() => {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
     const githubIntegration = retryIntegrations.find(
-      (i: Integration) => i.type === 'github' && i.isActive,
+      (i: Integration) => i.type === 'github' && i.isActive
     );
     if (!githubIntegration) {
       return Result.fail('No active GitHub integration found', 'INTEGRATION_NOT_FOUND');
@@ -185,6 +186,30 @@ describe('reports routes extras', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('image/png');
     expect(res.headers.get('Content-Length')).toBe('4');
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(await res.text()).toBe('file');
+  });
+
+  it('serves report file byte ranges', async () => {
+    const res = await createApp().request('http://localhost/reports/rpt_1/files/file_1', {
+      headers: { cookie: 'session=sess_1', range: 'bytes=1-2' },
+    });
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('Content-Range')).toBe('bytes 1-2/4');
+    expect(res.headers.get('Content-Length')).toBe('2');
+    expect(await res.text()).toBe('il');
+  });
+
+  it('returns 416 for an out-of-bounds report file range', async () => {
+    const res = await createApp().request('http://localhost/reports/rpt_1/files/file_1', {
+      headers: { cookie: 'session=sess_1', range: 'bytes=4-' },
+    });
+
+    expect(res.status).toBe(416);
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Content-Range')).toBe('bytes */4');
   });
 
   it('returns 404 when file missing on disk', async () => {

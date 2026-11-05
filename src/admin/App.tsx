@@ -71,6 +71,9 @@ const WidgetDialog = lazyWithRetry(() =>
 const Screenshot = lazyWithRetry(() =>
   import('./pages/widget/Screenshot').then((m) => ({ default: m.Screenshot }))
 );
+const Recording = lazyWithRetry(() =>
+  import('./pages/widget/Recording').then((m) => ({ default: m.Recording }))
+);
 const Language = lazyWithRetry(() =>
   import('./pages/widget/Language').then((m) => ({ default: m.Language }))
 );
@@ -226,6 +229,14 @@ export function App() {
               element={
                 <AdminRoute>
                   <Screenshot />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="recording"
+              element={
+                <AdminRoute>
+                  <Recording />
                 </AdminRoute>
               }
             />
