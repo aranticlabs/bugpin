@@ -126,7 +126,7 @@ function NavGroup({ label, items, location, onItemClick }: NavGroupProps) {
 }
 
 export function NavMain() {
-  const { user } = useAuth();
+  const { user, canLoadData } = useAuth();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const showAdminGroups = !!user && user.role === 'admin';
@@ -139,7 +139,7 @@ export function NavMain() {
       );
       return response.data.stats;
     },
-    enabled: !!user,
+    enabled: canLoadData,
     refetchInterval: 10000,
     refetchIntervalInBackground: false,
   });
@@ -152,7 +152,7 @@ export function NavMain() {
       );
       return response.data.projects;
     },
-    enabled: showAdminGroups,
+    enabled: showAdminGroups && canLoadData,
   });
 
   const closeSidebarOnMobile = () => {

@@ -110,6 +110,7 @@ export async function initSchema(): Promise<void> {
       avatar_url TEXT,
       role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin', 'editor', 'viewer')),
       is_active INTEGER DEFAULT 1 NOT NULL CHECK(is_active IN (0, 1)),
+      must_change_password INTEGER DEFAULT 0 NOT NULL CHECK(must_change_password IN (0, 1)),
       created_at TEXT DEFAULT (datetime('now')) NOT NULL,
       updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
       last_login_at TEXT,
@@ -477,6 +478,8 @@ export async function runMigrations(): Promise<void> {
         const message = error instanceof Error ? error.message : String(error);
         const isBootstrapSchemaConflict =
           (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
+          (file === '006_add_user_must_change_password.sql' &&
+            message.includes('duplicate column name')) ||
           (file === '004_add_report_history.sql' && message.includes('already exists'));
         if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);

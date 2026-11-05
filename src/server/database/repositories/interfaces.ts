@@ -93,6 +93,7 @@ export interface CreateUserData {
   name: string;
   role?: UserRole;
   avatarUrl?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface CreateInvitedUserData {
@@ -122,6 +123,7 @@ export interface IUsersRepository {
   findAssignable(): Promise<User[]>;
   update(id: string, updates: Partial<User>): Promise<User | null>;
   updatePassword(id: string, passwordHash: string): Promise<boolean>;
+  setMustChangePassword(id: string, mustChangePassword: boolean): Promise<void>;
   updateLastLogin(id: string): Promise<boolean>;
   updateAvatarUrl(id: string, avatarUrl: string | null): Promise<User | null>;
   delete(id: string): Promise<boolean>;

@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { User } from '@shared/types';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  /** False while the user has no session or must change their password first */
+  canLoadData: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -13,8 +16,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const queryClient = useQueryClient();
+  const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // The server refuses data requests until a required password change is done, so
+  // queries are paused by default before the user state reaches any component.
+  const setUser = useCallback(
+    (nextUser: User | null) => {
+      const defaults = queryClient.getDefaultOptions();
+      queryClient.setDefaultOptions({
+        ...defaults,
+        queries: { ...defaults.queries, enabled: !nextUser?.mustChangePassword },
+      });
+      setUserState(nextUser);
+    },
+    [queryClient]
+  );
 
   // Fetch current user on mount
   useEffect(() => {
@@ -35,17 +53,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUser();
-  }, []);
+  }, [setUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password });
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const response = await api.post('/auth/login', { email, password });
 
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Login failed');
-    }
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Login failed');
+      }
 
-    setUser(response.data.user);
-  }, []);
+      setUser(response.data.user);
+    },
+    [setUser]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -54,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore errors during logout
     }
     setUser(null);
-  }, []);
+  }, [setUser]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -67,10 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null);
     }
-  }, []);
+  }, [setUser]);
+
+  const canLoadData = !!user && !user.mustChangePassword;
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, isLoading, canLoadData, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

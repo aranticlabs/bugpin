@@ -97,17 +97,17 @@ BugPin will be available at `http://localhost:7300`
 
 ## Login
 
-Log in with the default credentials:
+On first start, BugPin creates an admin account from these environment variables:
 
-- **Email**: `admin@example.com`
-- **Password**: `changeme123`
+| Variable         | Default             |
+| ---------------- | ------------------- |
+| `ADMIN_EMAIL`    | `admin@example.com` |
+| `ADMIN_PASSWORD` | `changeme123`       |
 
-> [!IMPORTANT]
-> Change the default password immediately after first login:
->
-> 1. Click your profile icon
-> 2. Select "Profile"
-> 3. Update your password
+The initial password only works once. After the first login, BugPin asks you to choose a new password before you can use the Admin Console or the API. Instances that still use the initial password after an update ask for the change on the next login.
+
+> [!NOTE]
+> The variables are only read when no users exist yet. Changing them later does not change an existing account. Development mode (`make dev`) does not require the password change.
 
 ## Create a Project
 

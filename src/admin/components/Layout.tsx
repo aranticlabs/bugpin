@@ -68,11 +68,11 @@ function findRouteConfig(pathname: string): { path: string; config: RouteCrumbCo
 }
 
 export function Layout() {
-  const { user } = useAuth();
+  const { user, canLoadData } = useAuth();
   const { data: license, isError: licenseError } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
-    enabled: !!user,
+    enabled: canLoadData,
     refetchInterval: 60_000,
   });
   const enterpriseBadgeClass = badgeVariants({

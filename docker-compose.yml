@@ -5,8 +5,8 @@
 #   docker compose up -d
 #
 # Access: http://localhost:7300
-# Default login: admin@example.com / changeme123
-# Change password after first login!
+# First login: ADMIN_EMAIL / ADMIN_PASSWORD below (defaults: admin@example.com / changeme123).
+# The initial password works once; BugPin asks for a new one after the first login.
 #
 # Update:
 #   docker compose pull && docker compose up -d
@@ -25,6 +25,9 @@ services:
     environment:
       # Set to "debug" for verbose logging (default: info)
       - LOG_LEVEL=info
+      # Initial admin account, used only when no users exist yet
+      # - ADMIN_EMAIL=admin@example.com
+      # - ADMIN_PASSWORD=choose-a-strong-initial-password
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
       interval: 30s

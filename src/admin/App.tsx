@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
 import { Spinner } from './components/ui/spinner';
 
 // Wrapper around React.lazy that reloads the page once when a chunk fails to load.
@@ -109,7 +110,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  // The console remounts once the password is changed so its paused queries start fresh.
+  return (
+    <>
+      <React.Fragment key={user.mustChangePassword ? 'password-change-required' : 'ready'}>
+        {children}
+      </React.Fragment>
+      {user.mustChangePassword && <ForcePasswordChangeDialog />}
+    </>
+  );
 }
 
 // Admin-only route wrapper

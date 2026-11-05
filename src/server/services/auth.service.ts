@@ -157,7 +157,14 @@ export const authService = {
       return Result.fail('Password must be at least 8 characters', 'WEAK_PASSWORD');
     }
 
-    // Hash and update password
+    if (newPassword === currentPassword) {
+      return Result.fail(
+        'New password must be different from the current password',
+        'PASSWORD_UNCHANGED'
+      );
+    }
+
+    // Hash and update password (also clears any pending forced change)
     const newHash = await hashPassword(newPassword);
     await usersRepo.updatePassword(userId, newHash);
 
@@ -174,27 +181,55 @@ export const authService = {
 
   /**
    * Bootstrap first admin user
-   * Called during application startup if no users exist
+   * Called during application startup. Creates the admin from ADMIN_EMAIL/ADMIN_PASSWORD
+   * (defaults: admin@example.com / changeme123) when no users exist. Outside development the
+   * initial password only works for one login: the account must set a new password before
+   * using the API. Development keeps the initial password usable for local hot-reload work.
    */
   async bootstrapAdmin(): Promise<Result<User | null>> {
     const userCount = await usersRepo.count();
 
     if (userCount > 0) {
+      await this.requirePasswordChangeIfInitialPassword();
       logger.info('Users already exist, skipping bootstrap');
       return Result.ok(null);
     }
 
-    // Create admin user with configured credentials (defaults: admin@example.com / changeme123)
     const passwordHash = await hashPassword(config.adminPassword);
     const user = await usersRepo.create({
       email: config.adminEmail,
       passwordHash,
       name: 'Admin',
       role: 'admin',
+      mustChangePassword: !config.isDev,
     });
 
     logger.info('First admin user created', { email: config.adminEmail });
     return Result.ok(user);
+  },
+
+  /**
+   * Flag the bootstrap admin when it still uses the initial password, which covers
+   * installs created before a password change was enforced. In development the flag is
+   * cleared instead, so a data directory shared with a production-mode run stays usable.
+   */
+  async requirePasswordChangeIfInitialPassword(): Promise<void> {
+    const admin = await usersRepo.findByEmailWithPassword(config.adminEmail);
+    if (!admin) return;
+
+    if (config.isDev) {
+      if (admin.mustChangePassword) await usersRepo.setMustChangePassword(admin.id, false);
+      return;
+    }
+
+    if (admin.mustChangePassword) return;
+
+    if (await verifyPassword(config.adminPassword, admin.passwordHash)) {
+      await usersRepo.setMustChangePassword(admin.id, true);
+      logger.warn('Admin account still uses the initial password; a change is now required', {
+        email: admin.email,
+      });
+    }
   },
 
   /**

@@ -186,6 +186,7 @@ describe('database lifecycle', () => {
       const db = getDb();
       db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE users (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,
@@ -209,6 +210,76 @@ describe('database lifecycle', () => {
         )
         .get() as { name?: string } | undefined;
       expect(table?.name).toBe('widget_version_observations');
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('adds must_change_password to existing users without requiring a change', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-migration-'));
+
+    Object.assign(config, {
+      dataDir: baseDir,
+      dbPath: path.join(baseDir, 'bugpin.db'),
+    });
+
+    try {
+      await initDatabase();
+      const db = getDb();
+      db.exec(`
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE users (id TEXT PRIMARY KEY);
+        INSERT INTO users (id) VALUES ('usr_existing');
+        CREATE TABLE migrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          applied_at TEXT DEFAULT (datetime('now')) NOT NULL
+        );
+      `);
+      for (const name of [
+        '001_add_reporter_messages.sql',
+        '002_add_report_source.sql',
+        '003_add_reporter_locale.sql',
+        '004_add_report_history.sql',
+        '005_add_widget_version_observations.sql',
+      ]) {
+        db.run('INSERT INTO migrations (name) VALUES (?)', [name]);
+      }
+
+      await runMigrations();
+
+      const row = db
+        .query('SELECT must_change_password FROM users WHERE id = ?')
+        .get('usr_existing') as { must_change_password: number };
+      expect(row.must_change_password).toBe(0);
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('records the must_change_password migration when the schema already has the column', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-bootstrap-'));
+
+    Object.assign(config, {
+      dataDir: baseDir,
+      dbPath: path.join(baseDir, 'bugpin.db'),
+    });
+
+    try {
+      await initDatabase();
+      await initSchema();
+      await runMigrations();
+
+      const applied = getDb()
+        .query('SELECT name FROM migrations WHERE name = ?')
+        .get('006_add_user_must_change_password.sql') as { name?: string } | undefined;
+      expect(applied?.name).toBe('006_add_user_must_change_password.sql');
     } finally {
       closeDatabase();
       fs.rmSync(baseDir, { recursive: true, force: true });

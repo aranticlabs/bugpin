@@ -323,6 +323,7 @@ export interface User {
   avatarUrl?: string;
   role: UserRole;
   isActive: boolean;
+  mustChangePassword?: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;

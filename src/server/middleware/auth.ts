@@ -18,6 +18,18 @@ declare module 'hono' {
 
 // Middleware
 
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/change-password', '/api/auth/logout']);
+
+function passwordChangeRequired(user: User, path: string): boolean {
+  return user.mustChangePassword === true && !PASSWORD_CHANGE_ALLOWED_PATHS.has(path);
+}
+
+const passwordChangeRequiredBody = {
+  success: false,
+  error: 'PASSWORD_CHANGE_REQUIRED',
+  message: 'You must change your password before continuing',
+} as const;
+
 /**
  * Authentication middleware
  * Validates API credentials or a session cookie and sets the user in context
@@ -37,6 +49,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
     if (!result.success)
       return c.json({ success: false, error: result.code, message: result.error }, 401);
     const token = result.value;
+    if (token.user.mustChangePassword) return c.json(passwordChangeRequiredBody, 403);
     const scope = ['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) ? 'read' : 'write';
     if (!service.hasScope(token, scope) || (scope === 'write' && token.user.role === 'viewer')) {
       return c.json(
@@ -66,6 +79,9 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       { success: false, error: result.code ?? 'UNAUTHORIZED', message: result.error },
       401
     );
+  if (passwordChangeRequired(result.value.user, c.req.path)) {
+    return c.json(passwordChangeRequiredBody, 403);
+  }
   c.set('user', result.value.user);
   c.set('session', result.value.session);
 

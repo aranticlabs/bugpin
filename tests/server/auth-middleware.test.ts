@@ -14,6 +14,7 @@ type TestContext = {
     header: (name: string) => string | undefined;
     raw: { headers: Headers };
     url: string;
+    path: string;
   };
   set: (key: string, value: unknown) => void;
   get: (key: string) => unknown;
@@ -44,9 +45,11 @@ const originalValidateSession = authService.validateSession;
 function createContext({
   cookie,
   user,
+  path = '/api',
 }: {
   cookie?: string;
   user?: User;
+  path?: string;
 } = {}): TestContext {
   const headers = new Headers();
   if (cookie) {
@@ -61,7 +64,8 @@ function createContext({
     req: {
       header: (name: string) => headers.get(name),
       raw: { headers },
-      url: 'https://example.com/api',
+      url: `https://example.com${path}`,
+      path,
     },
     set: (key: string, value: unknown) => {
       vars.set(key, value);
@@ -119,6 +123,44 @@ describe('authMiddleware', () => {
     expect(ctx._vars.get('user')).toEqual(baseUser);
     expect(ctx._vars.get('session')).toEqual(baseSession);
   });
+
+  it('blocks a user who must change their password from other routes', async () => {
+    const flaggedUser: User = { ...baseUser, mustChangePassword: true };
+    authService.validateSession = async () =>
+      Result.ok({ user: flaggedUser, session: baseSession });
+
+    const ctx = createContext({ cookie: 'session=sess_123', path: '/api/reports' });
+    let nextCalled = false;
+
+    const response = await authMiddleware(ctx as unknown as never, async () => {
+      nextCalled = true;
+    });
+
+    expect(nextCalled).toBe(false);
+    expect((response as Response).status).toBe(403);
+    expect(await (response as Response).json()).toMatchObject({
+      error: 'PASSWORD_CHANGE_REQUIRED',
+    });
+  });
+
+  it.each(['/api/auth/change-password', '/api/auth/logout'])(
+    'lets a user who must change their password reach %s',
+    async (path) => {
+      const flaggedUser: User = { ...baseUser, mustChangePassword: true };
+      authService.validateSession = async () =>
+        Result.ok({ user: flaggedUser, session: baseSession });
+
+      const ctx = createContext({ cookie: 'session=sess_123', path });
+      let nextCalled = false;
+
+      const response = await authMiddleware(ctx as unknown as never, async () => {
+        nextCalled = true;
+      });
+
+      expect(response).toBeUndefined();
+      expect(nextCalled).toBe(true);
+    }
+  );
 });
 
 describe('authorize', () => {
