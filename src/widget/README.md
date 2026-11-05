@@ -9,7 +9,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 - **Annotation Tools** - Draw, highlight, blur, and add text
 - **Privacy First** - Self-hosted, your data stays on your servers
 - **Customizable** - Match your brand colors and style
-- **Lightweight** - Less than 175KB gzipped
+- **Lightweight** - Less than 190 KiB gzipped
 - **Dark Mode** - Automatic theme detection
 - **Responsive** - Works on all devices
 - **Multilingual** - Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection from `<html lang>` or the visitor's browser

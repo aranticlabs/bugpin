@@ -91,7 +91,7 @@ Client Request
 
 ## Widget Constraints
 
-- Bundle size: ≤175KB gzipped (IIFE bundle, the one customers embed)
+- Bundle size: ≤190 KiB gzipped (IIFE bundle, the one customers embed)
 - No external runtime dependencies
 - Shadow DOM for CSS isolation
 - Offline-first with IndexedDB queue
