@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type { DefaultProjectReference, User, UserRole } from '@shared/types';
 import { passwordPolicyService } from './password-policy.service.js';
+import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 
 // Types
 
@@ -156,7 +157,11 @@ export const usersService = {
    */
   async list(): Promise<Result<User[]>> {
     const users = await usersRepo.findAll();
-    return Result.ok(await attachDefaultProjectsToMany(users));
+    const withTwoFactor = await twoFactorRepo.listUserIdsWithTwoFactor();
+    const withProjects = await attachDefaultProjectsToMany(users);
+    return Result.ok(
+      withProjects.map((user) => ({ ...user, twoFactorEnabled: withTwoFactor.has(user.id) }))
+    );
   },
 
   /**

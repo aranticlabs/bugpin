@@ -30,6 +30,23 @@ const passwordChangeRequiredBody = {
   message: 'You must change your password before continuing',
 } as const;
 
+// While the two-factor policy requires setup, only sign-out, password and second-factor
+// management stay available.
+const TWO_FACTOR_SETUP_ALLOWED_PREFIXES = ['/api/auth/two-factor'];
+
+function twoFactorSetupRequired(user: User, path: string): boolean {
+  if (user.twoFactorSetupRequired !== true || PASSWORD_CHANGE_ALLOWED_PATHS.has(path)) return false;
+  return !TWO_FACTOR_SETUP_ALLOWED_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  );
+}
+
+const twoFactorSetupRequiredBody = {
+  success: false,
+  error: 'TWO_FACTOR_SETUP_REQUIRED',
+  message: 'You must set up two-factor authentication before continuing',
+} as const;
+
 /**
  * Authentication middleware
  * Validates API credentials or a session cookie and sets the user in context
@@ -81,6 +98,9 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
     );
   if (passwordChangeRequired(result.value.user, c.req.path)) {
     return c.json(passwordChangeRequiredBody, 403);
+  }
+  if (twoFactorSetupRequired(result.value.user, c.req.path)) {
+    return c.json(twoFactorSetupRequiredBody, 403);
   }
   c.set('user', result.value.user);
   c.set('session', result.value.session);

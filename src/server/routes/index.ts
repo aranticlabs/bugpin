@@ -20,6 +20,7 @@ import { widgetRoutes } from './widget/submit.js';
 import { githubWebhookRoutes } from './api/github-webhook.js';
 import { publicFilesRoutes } from './api/public-files.js';
 import { invitationsRoutes } from './api/invitations.js';
+import { twoFactorRoutes } from './api/two-factor.js';
 import { getEERoutes } from '../utils/ee.js';
 import { logger } from '../utils/logger.js';
 
@@ -27,6 +28,7 @@ export function createApiRouter(): Hono {
   const api = new Hono();
 
   // Mount core CE API routes
+  api.route('/auth/two-factor', twoFactorRoutes);
   api.route('/auth', authRoutes);
   api.route('/reports', reportsRoutes);
   api.route('/reports', reporterMessagesRoutes);

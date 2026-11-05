@@ -1,6 +1,6 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
-import { authService } from '../../services/auth.service.js';
+import { authService, type LoginResult } from '../../services/auth.service.js';
 import { authMiddleware, optionalAuth } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { rateLimiter } from '../../middleware/rate-limit.js';
@@ -12,6 +12,23 @@ import { passwordPolicyService } from '../../services/password-policy.service.js
 const auth = new Hono();
 
 // Login
+
+async function startSession(c: Context, result: LoginResult) {
+  // Get session max age from settings
+  const settings = await settingsRepo.getAll();
+  const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
+
+  // Set session cookie
+  setCookie(c, 'session', result.session.id, {
+    httpOnly: true,
+    secure: config.isProd,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: sessionMaxAgeSeconds,
+  });
+
+  return c.json({ success: true, user: result.user });
+}
 
 auth.post(
   '/login',
@@ -30,23 +47,29 @@ auth.post(
       return c.json({ success: false, error: result.code, message: result.error }, 401);
     }
 
-    // Get session max age from settings
-    const settings = await settingsRepo.getAll();
-    const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
+    if ('twoFactorRequired' in result.value) {
+      const { challengeToken, methods } = result.value;
+      return c.json({ success: true, twoFactorRequired: true, challengeToken, methods });
+    }
 
-    // Set session cookie
-    setCookie(c, 'session', result.value.session.id, {
-      httpOnly: true,
-      secure: config.isProd,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: sessionMaxAgeSeconds,
-    });
+    return startSession(c, result.value);
+  }
+);
 
-    return c.json({
-      success: true,
-      user: result.value.user,
-    });
+// Second login step (authenticator code or recovery code)
+
+auth.post(
+  '/login/two-factor',
+  rateLimiter({ max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorLogin }),
+  async (c) => {
+    const body = await c.req.json();
+    const input = body.recoveryCode ? { recoveryCode: body.recoveryCode } : { code: body.code };
+    const result = await authService.completeTwoFactorLogin(body.challengeToken, input);
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return startSession(c, result.value);
   }
 );
 

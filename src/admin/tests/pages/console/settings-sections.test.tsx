@@ -191,7 +191,7 @@ describe('Settings sections', () => {
     await waitFor(() => expect(minLength).toHaveValue(12));
     fireEvent.change(minLength, { target: { value: '16' } });
     await user.click(screen.getByLabelText(/special character/i));
-    await user.click(screen.getAllByRole('button', { name: /save changes/i })[1]);
+    await user.click(screen.getAllByRole('button', { name: /save changes/i })[2]);
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', {
@@ -203,6 +203,21 @@ describe('Settings sections', () => {
           requireSymbol: true,
         },
       });
+    });
+  });
+
+  it('saves the two-factor policy on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<Security />);
+
+    await screen.findByLabelText(/requests per minute/i);
+    await screen.findAllByText('Admins only');
+    await user.click(screen.getAllByRole('button', { name: /save changes/i })[1]);
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'admins' });
     });
   });
 

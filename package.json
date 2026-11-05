@@ -36,6 +36,7 @@
     "migrate": "bun run --cwd src/server migrate",
     "repair-github-links": "bun run src/server/scripts/repair-github-links.ts",
     "reset-password": "bun run --cwd src/server reset-password",
+    "reset-two-factor": "bun run --cwd src/server reset-two-factor",
     "knip": "knip",
     "format": "prettier --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",

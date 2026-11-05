@@ -143,6 +143,32 @@ describe('authMiddleware', () => {
     });
   });
 
+  it('blocks a user who must set up two-factor authentication', async () => {
+    const flaggedUser: User = { ...baseUser, twoFactorSetupRequired: true };
+    authService.validateSession = async () =>
+      Result.ok({ user: flaggedUser, session: baseSession });
+
+    const blocked = await authMiddleware(
+      createContext({ cookie: 'session=sess_123', path: '/api/reports' }) as unknown as never,
+      async () => undefined
+    );
+    expect((blocked as Response).status).toBe(403);
+    expect(await (blocked as Response).json()).toMatchObject({
+      error: 'TWO_FACTOR_SETUP_REQUIRED',
+    });
+
+    for (const path of ['/api/auth/two-factor/totp/setup']) {
+      let nextCalled = false;
+      await authMiddleware(
+        createContext({ cookie: 'session=sess_123', path }) as unknown as never,
+        async () => {
+          nextCalled = true;
+        }
+      );
+      expect(nextCalled).toBe(true);
+    }
+  });
+
   it.each(['/api/auth/change-password', '/api/auth/logout'])(
     'lets a user who must change their password reach %s',
     async (path) => {

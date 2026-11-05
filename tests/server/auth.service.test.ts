@@ -7,12 +7,14 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { logger } from '../../src/server/utils/logger';
 import { config } from '../../src/server/config';
 import type { Session, User } from '../../src/shared/types';
+import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
 import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 
 const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
+const originalTwoFactorRepo = { ...twoFactorRepo };
 
 const baseUser: User = {
   id: 'usr_1',
@@ -109,8 +111,12 @@ beforeEach(() => {
   settingsRepo.getAll = async () =>
     ({
       sessionMaxAgeDays: 7,
+      twoFactorPolicy: 'off',
       passwordPolicy: DEFAULT_PASSWORD_POLICY,
     }) as never;
+
+  twoFactorRepo.getTotp = async () => null;
+  twoFactorRepo.countPasskeys = async () => 0;
 
   logger.info = () => undefined;
   logger.warn = () => undefined;
@@ -122,6 +128,7 @@ afterEach(() => {
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);
+  Object.assign(twoFactorRepo, originalTwoFactorRepo);
 });
 
 describe('authService.login', () => {

@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit",
     "migrate": "bun run storage/migrations/index.ts",
     "migrate-to-s3": "bun run scripts/migrate-to-s3.ts",
-    "reset-password": "bun run scripts/reset-password.ts"
+    "reset-password": "bun run scripts/reset-password.ts",
+    "reset-two-factor": "bun run scripts/reset-two-factor.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
+    "@simplewebauthn/server": "^14.0.3",
     "hono": "^4.13.16",
     "mediabunny": "1.64.0",
     "nodemailer": "^10.3.1",

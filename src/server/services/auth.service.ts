@@ -1,7 +1,10 @@
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { sessionsRepo } from '../database/repositories/sessions.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
+import { twoFactorService } from './two-factor.service.js';
 import { passwordPolicyService } from './password-policy.service.js';
+import { loginChallengeService } from './login-challenge.service.js';
+import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 import { config } from '../config.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
@@ -12,6 +15,34 @@ import type { User, Session } from '@shared/types';
 export interface LoginResult {
   user: User;
   session: Session;
+}
+
+export interface TwoFactorChallenge {
+  twoFactorRequired: true;
+  challengeToken: string;
+  methods: { totp: boolean; passkey: boolean; recoveryCode: boolean };
+}
+
+export type LoginOutcome = LoginResult | TwoFactorChallenge;
+
+export type SecondFactorInput = { code: string } | { recoveryCode: string };
+
+async function createSessionForUser(
+  user: User,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<LoginResult> {
+  const settings = await settingsCacheService.getAll();
+  const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
+  const expiresAt = new Date(Date.now() + sessionMaxAgeSeconds * 1000).toISOString();
+  const session = await sessionsRepo.create({
+    userId: user.id,
+    expiresAt,
+    ipAddress,
+    userAgent,
+  });
+  await usersRepo.updateLastLogin(user.id);
+  return { user: await twoFactorService.describeUser(user), session };
 }
 
 // Password Hashing (using Bun's built-in password API)
@@ -40,7 +71,7 @@ export const authService = {
     password: string,
     ipAddress?: string,
     userAgent?: string
-  ): Promise<Result<LoginResult>> {
+  ): Promise<Result<LoginOutcome>> {
     // Find user by email
     const userWithPassword = await usersRepo.findByEmailWithPassword(email);
 
@@ -63,26 +94,68 @@ export const authService = {
       return Result.fail('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Create session
-    const settings = await settingsCacheService.getAll();
-    const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
-    const expiresAt = new Date(Date.now() + sessionMaxAgeSeconds * 1000).toISOString();
-    const session = await sessionsRepo.create({
-      userId: userWithPassword.id,
-      expiresAt,
-      ipAddress,
-      userAgent,
-    });
-
-    // Update last login
-    await usersRepo.updateLastLogin(userWithPassword.id);
-
     // Remove password hash from user object
     const { passwordHash: _, ...user } = userWithPassword;
 
-    logger.info('User logged in', { userId: user.id, email: user.email });
+    // With a second factor, the password only opens a short-lived challenge
+    if (await twoFactorService.hasSecondFactor(user.id)) {
+      const challengeToken = loginChallengeService.create(user.id, { ipAddress, userAgent });
+      logger.info('Password accepted, second factor required', { userId: user.id });
+      return Result.ok({
+        twoFactorRequired: true,
+        challengeToken,
+        methods: {
+          totp: await twoFactorService.hasTotp(user.id),
+          passkey: (await twoFactorRepo.countPasskeys(user.id)) > 0,
+          recoveryCode: true,
+        },
+      });
+    }
 
-    return Result.ok({ user, session });
+    const result = await createSessionForUser(user, ipAddress, userAgent);
+    logger.info('User logged in', { userId: user.id, email: user.email });
+    return Result.ok(result);
+  },
+
+  /**
+   * Second login step: an authenticator code or a recovery code for a pending challenge
+   */
+  async completeTwoFactorLogin(
+    challengeToken: string,
+    input: SecondFactorInput
+  ): Promise<Result<LoginResult>> {
+    const pending = loginChallengeService.get(challengeToken);
+    if (!pending) {
+      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
+    }
+    const valid =
+      'code' in input
+        ? await twoFactorService.verifyLoginCode(pending.userId, input.code)
+        : await twoFactorService.verifyRecoveryCode(pending.userId, input.recoveryCode);
+    if (!valid) {
+      loginChallengeService.recordFailure(challengeToken);
+      logger.warn('Second factor rejected', { userId: pending.userId });
+      return Result.fail('The code is not valid', 'INVALID_CODE');
+    }
+    return this.finishPendingLogin(challengeToken);
+  },
+
+  /**
+   * Turn a verified pending challenge into a session
+   */
+  async finishPendingLogin(challengeToken: string): Promise<Result<LoginResult>> {
+    const pending = loginChallengeService.get(challengeToken);
+    if (!pending) {
+      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
+    }
+    loginChallengeService.consume(challengeToken);
+    const user = await usersRepo.findById(pending.userId);
+    if (!user || !user.isActive) {
+      return Result.fail('Account is disabled', 'ACCOUNT_DISABLED');
+    }
+    const result = await createSessionForUser(user, pending.ipAddress, pending.userAgent);
+    logger.info('User logged in with a second factor', { userId: user.id });
+    return Result.ok(result);
   },
 
   /**
@@ -124,7 +197,7 @@ export const authService = {
     // Update session activity
     await sessionsRepo.updateActivity(sessionId);
 
-    return Result.ok({ user, session });
+    return Result.ok({ user: await twoFactorService.describeUser(user), session });
   },
 
   /**

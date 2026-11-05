@@ -536,6 +536,7 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       settings: {
+        twoFactorPolicy: 'admins',
         passwordPolicy: {
           minLength: 12,
           requireUppercase: true,

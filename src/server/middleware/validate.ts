@@ -456,12 +456,28 @@ export const schemas = {
     isActive: z.boolean().optional(),
   }),
 
+  // Second login step: exactly one of an authenticator code or a recovery code
+  twoFactorLogin: z
+    .object({
+      challengeToken: z.string().min(1).max(200),
+      code: z.string().min(6).max(10).optional(),
+      recoveryCode: z.string().min(10).max(20).optional(),
+    })
+    .refine((data) => (data.code === undefined) !== (data.recoveryCode === undefined), {
+      message: 'Provide either code or recoveryCode',
+    }),
+
+  // Two-factor management
+  twoFactorCode: z.object({ code: z.string().min(6).max(10) }),
+  passwordConfirmation: z.object({ password: z.string().min(1).max(200) }),
+
   // Update settings request
   updateSettings: z
     .object({
       invitationExpirationDays: z.number().int().min(1).max(365).optional(),
       widgetDialog: themeColorsSchema.strict().optional(),
       enforceHttps: z.boolean().optional(),
+      twoFactorPolicy: z.enum(['off', 'admins', 'everyone']).optional(),
       passwordPolicy: z
         .object({
           minLength: z.number().int().min(8).max(128),

@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
+import { ForceTwoFactorSetupDialog } from './components/ForceTwoFactorSetupDialog';
 import { Spinner } from './components/ui/spinner';
 
 // Wrapper around React.lazy that reloads the page once when a chunk fails to load.
@@ -110,13 +111,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // The console remounts once the password is changed so its paused queries start fresh.
+  // The console remounts once a required setup step is done so its paused queries start
+  // fresh. The password change comes first, then the two-factor setup.
+  const pendingStep = user.mustChangePassword
+    ? 'password'
+    : user.twoFactorSetupRequired
+      ? 'two-factor'
+      : 'ready';
   return (
     <>
-      <React.Fragment key={user.mustChangePassword ? 'password-change-required' : 'ready'}>
-        {children}
-      </React.Fragment>
-      {user.mustChangePassword && <ForcePasswordChangeDialog />}
+      <React.Fragment key={pendingStep}>{children}</React.Fragment>
+      {pendingStep === 'password' && <ForcePasswordChangeDialog />}
+      {pendingStep === 'two-factor' && <ForceTwoFactorSetupDialog />}
     </>
   );
 }

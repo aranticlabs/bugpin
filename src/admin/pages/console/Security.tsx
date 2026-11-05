@@ -17,7 +17,14 @@ import { Switch } from '../../components/ui/switch';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { Checkbox } from '../../components/ui/checkbox';
-import type { AppSettings } from '@shared/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import type { AppSettings, TwoFactorPolicy } from '@shared/types';
 import {
   DEFAULT_PASSWORD_POLICY,
   PASSWORD_MIN_LENGTH_CEILING,
@@ -29,6 +36,7 @@ export function Security() {
   return (
     <div className="max-w-4xl space-y-6">
       <SecuritySettingsCard />
+      <TwoFactorPolicyCard />
       <PasswordPolicyCard />
     </div>
   );
@@ -222,6 +230,62 @@ function SecuritySettingsCard() {
             </p>
           </div>
 
+          <SaveButton isPending={mutation.isPending} />
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+const TWO_FACTOR_POLICY_LABELS: Record<TwoFactorPolicy, string> = {
+  off: 'Off',
+  admins: 'Admins only',
+  everyone: 'All users',
+};
+
+function TwoFactorPolicyCard() {
+  const { data: settings } = useSettings();
+  const [policy, setPolicy] = useState<TwoFactorPolicy>('off');
+  const mutation = useSaveSettings('Two-factor policy saved');
+
+  useEffect(() => {
+    if (settings) setPolicy(settings.twoFactorPolicy ?? 'off');
+  }, [settings]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Two-Factor Authentication</CardTitle>
+        <CardDescription>
+          Require an authenticator app or a passkey in addition to the password
+        </CardDescription>
+      </CardHeader>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate({ twoFactorPolicy: policy });
+        }}
+      >
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="two-factor-policy">Require for</Label>
+            <Select value={policy} onValueChange={(value) => setPolicy(value as TwoFactorPolicy)}>
+              <SelectTrigger id="two-factor-policy" className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TWO_FACTOR_POLICY_LABELS) as TwoFactorPolicy[]).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {TWO_FACTOR_POLICY_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Users the policy covers who have no second factor yet must set one up at their next
+              sign-in. Users can always add one themselves in their profile.
+            </p>
+          </div>
           <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>

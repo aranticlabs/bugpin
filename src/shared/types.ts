@@ -326,12 +326,34 @@ export interface User {
   isActive: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: string;
+  /** True when the user has a confirmed authenticator app or at least one passkey */
+  twoFactorEnabled?: boolean;
+  /** True when the two-factor policy covers the user and no second factor is set up yet */
+  twoFactorSetupRequired?: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
   invitationSentAt?: string;
   invitationAcceptedAt?: string;
   defaultProjects?: DefaultProjectReference[];
+}
+
+export type TwoFactorPolicy = 'off' | 'admins' | 'everyone';
+
+export interface Passkey {
+  id: string;
+  name: string;
+  backedUp: boolean;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export interface TwoFactorStatus {
+  totpEnabled: boolean;
+  passkeys: Passkey[];
+  recoveryCodesRemaining: number;
+  policy: TwoFactorPolicy;
+  setupRequired: boolean;
 }
 
 export interface Session {
@@ -522,6 +544,7 @@ export interface AppSettings {
   updateCheckEnabled: boolean;
   // Security settings
   enforceHttps: boolean;
+  twoFactorPolicy: TwoFactorPolicy;
   passwordPolicy: PasswordPolicy;
   // Privacy settings
   privacy: PrivacySettings;
