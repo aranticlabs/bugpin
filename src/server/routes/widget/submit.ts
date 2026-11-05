@@ -571,6 +571,9 @@ widget.get('/config/:apiKey', async (c) => {
     projButton?.buttonIcon !== undefined ? projButton.buttonIcon : globalButton.buttonIcon;
   const buttonIconSize = projButton?.buttonIconSize ?? globalButton.buttonIconSize;
   const buttonIconStroke = projButton?.buttonIconStroke ?? globalButton.buttonIconStroke;
+  const buttonOffsetX = projButton?.buttonOffsetX ?? globalButton.buttonOffsetX;
+  const buttonOffsetY = projButton?.buttonOffsetY ?? globalButton.buttonOffsetY;
+  const buttonSizeUnit = projButton?.buttonSizeUnit ?? globalButton.buttonSizeUnit;
   const enableHoverScaleEffect =
     projButton?.enableHoverScaleEffect ?? globalButton.enableHoverScaleEffect;
   const tooltipEnabled = projButton?.tooltipEnabled ?? globalButton.tooltipEnabled;
@@ -656,6 +659,9 @@ widget.get('/config/:apiKey', async (c) => {
       buttonIcon,
       buttonIconSize,
       buttonIconStroke,
+      buttonOffsetX,
+      buttonOffsetY,
+      buttonSizeUnit,
       // Light mode colors
       lightButtonColor,
       lightTextColor,

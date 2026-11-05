@@ -7,6 +7,7 @@ import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 import { resolveLauncherText } from '../i18n/resolve-launcher-text.js';
 import type { LauncherTextBundle } from '../config.js';
+import { computeTooltipShift } from '@shared/tooltip-position.js';
 
 interface WidgetLauncherButtonProps {
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -15,6 +16,9 @@ interface WidgetLauncherButtonProps {
   buttonIcon: string | null;
   buttonIconSize: number;
   buttonIconStroke: number;
+  buttonOffsetX: number;
+  buttonOffsetY: number;
+  buttonSizeUnit: 'px' | 'rem';
   theme: 'auto' | 'light' | 'dark';
   lightButtonColor: string;
   lightTextColor: string;
@@ -31,12 +35,20 @@ interface WidgetLauncherButtonProps {
   onClick: () => void;
 }
 
-const positionClasses: Record<string, string> = {
-  'bottom-right': 'bottom-5 right-5',
-  'bottom-left': 'bottom-5 left-5',
-  'top-right': 'top-5 right-5',
-  'top-left': 'top-5 left-5',
-};
+// rem resolves against the host page's root font size, even inside the Shadow DOM.
+// The safe-area inset is 0 unless the host page opts in with viewport-fit=cover.
+function getPositionStyle(
+  position: WidgetLauncherButtonProps['position'],
+  offsetX: number,
+  offsetY: number,
+  unit: WidgetLauncherButtonProps['buttonSizeUnit']
+): Record<string, string> {
+  const [vertical, horizontal] = position.split('-');
+  return {
+    [vertical]: `calc(${offsetY}${unit} + env(safe-area-inset-${vertical}, 0px))`,
+    [horizontal]: `calc(${offsetX}${unit} + env(safe-area-inset-${horizontal}, 0px))`,
+  };
+}
 
 export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> = ({
   position,
@@ -45,6 +57,9 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   buttonIcon,
   buttonIconSize,
   buttonIconStroke,
+  buttonOffsetX,
+  buttonOffsetY,
+  buttonSizeUnit,
   theme,
   lightButtonColor,
   lightTextColor,
@@ -62,11 +77,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
 }) => {
   useLocale();
   const [isHovered, setIsHovered] = useState(false);
-  const [tooltipOffset, setTooltipOffset] = useState({
-    left: '50%',
-    transform: 'translateX(-50%)',
-    arrowLeft: '50%',
-  });
+  const [tooltipShift, setTooltipShift] = useState(0);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const effectiveTheme = useEffectiveTheme(theme);
@@ -87,41 +98,23 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
       tooltipBuiltinForActive
     ) ?? t('tooltip.launcher');
 
-  // Calculate tooltip position to ensure 4px margin from window edges
+  // Shift the tooltip sideways so it stays inside the window.
   useEffect(() => {
     if (isHovered && tooltipRef.current && buttonRef.current) {
       const tooltip = tooltipRef.current;
       const button = buttonRef.current;
 
-      // Small delay to ensure tooltip is rendered
+      // Wait a frame so the tooltip has been laid out before measuring it
       requestAnimationFrame(() => {
-        const tooltipRect = tooltip.getBoundingClientRect();
         const buttonRect = button.getBoundingClientRect();
-        const windowWidth = window.innerWidth;
-        const margin = 4;
-
-        // Calculate button center in viewport coordinates
-        const buttonCenter = buttonRect.left + buttonRect.width / 2;
-        const tooltipHalfWidth = tooltipRect.width / 2;
-
-        // Calculate how much to shift from centered position
-        let shift = 0;
-        const centeredLeft = buttonCenter - tooltipHalfWidth;
-
-        // Check if tooltip would go off-screen on the left
-        if (centeredLeft < margin) {
-          shift = margin - centeredLeft;
-        }
-        // Check if tooltip would go off-screen on the right
-        else if (centeredLeft + tooltipRect.width > windowWidth - margin) {
-          shift = windowWidth - margin - (centeredLeft + tooltipRect.width);
-        }
-
-        setTooltipOffset({
-          left: '50%',
-          transform: `translateX(-50%) translateX(${shift}px)`,
-          arrowLeft: '50%',
-        });
+        setTooltipShift(
+          computeTooltipShift(
+            buttonRect.left + buttonRect.width / 2,
+            tooltip.getBoundingClientRect().width,
+            0,
+            window.innerWidth
+          )
+        );
       });
     }
   }, [isHovered, resolvedTooltipText]);
@@ -149,12 +142,16 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
 
   const borderRadius = buttonShape === 'round' ? '50%' : '8px';
   const ariaLabel = resolvedButtonText || t('aria.launcher');
+  const tooltipBelow = position.startsWith('top');
 
   // For round shape, padding scales with icon size (half the icon size)
-  const padding = buttonShape === 'round' ? `${buttonIconSize / 2}px` : '12px 20px';
+  const padding = buttonShape === 'round' ? `${buttonIconSize / 2}${buttonSizeUnit}` : '12px 20px';
 
   return (
-    <div class={cn('fixed z-[2147483647]', positionClasses[position])}>
+    <div
+      class="fixed z-[2147483647]"
+      style={getPositionStyle(position, buttonOffsetX, buttonOffsetY, buttonSizeUnit)}
+    >
       <button
         ref={buttonRef}
         class={cn(
@@ -173,7 +170,11 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         aria-label={ariaLabel}
       >
         {buttonIcon && (
-          <Icon name={buttonIcon} size={buttonIconSize} strokeWidth={buttonIconStroke} />
+          <Icon
+            name={buttonIcon}
+            size={`${buttonIconSize}${buttonSizeUnit}`}
+            strokeWidth={buttonIconStroke}
+          />
         )}
         {resolvedButtonText && <span>{resolvedButtonText}</span>}
         {hasPendingRecording && (
@@ -188,25 +189,19 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
       {tooltipEnabled && resolvedTooltipText && isHovered && (
         <div
           ref={tooltipRef}
-          class="absolute bottom-full mb-2 px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md"
+          class={cn(
+            'absolute px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md',
+            tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
+          )}
           style={{
             backgroundColor: tooltipBgColor,
             color: tooltipTextColor,
             opacity: 0,
-            left: tooltipOffset.left,
-            transform: tooltipOffset.transform,
+            left: '50%',
+            transform: `translateX(-50%) translateX(${tooltipShift}px)`,
           }}
         >
           {resolvedTooltipText}
-          <div
-            class="absolute top-full border-4 border-solid border-transparent"
-            style={{
-              left: tooltipOffset.arrowLeft,
-              transform: 'translateX(-50%)',
-              marginTop: '-4px',
-              borderTopColor: tooltipBgColor,
-            }}
-          />
         </div>
       )}
     </div>

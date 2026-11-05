@@ -3,7 +3,7 @@ import { Bug, MessageSquare, AlertCircle, type LucideIcon } from 'lucide-preact'
 interface IconProps {
   name: string;
   class?: string;
-  size?: number;
+  size?: number | string;
   strokeWidth?: number;
 }
 

@@ -727,6 +727,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           buttonIcon={config.buttonIcon}
           buttonIconSize={config.buttonIconSize}
           buttonIconStroke={config.buttonIconStroke}
+          buttonOffsetX={config.buttonOffsetX}
+          buttonOffsetY={config.buttonOffsetY}
+          buttonSizeUnit={config.buttonSizeUnit}
           theme={config.theme}
           lightButtonColor={config.lightButtonColor}
           lightTextColor={config.lightTextColor}

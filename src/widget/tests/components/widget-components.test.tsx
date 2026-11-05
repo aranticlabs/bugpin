@@ -38,6 +38,9 @@ const baseConfig: WidgetConfig = {
   buttonIcon: 'bug',
   buttonIconSize: 18,
   buttonIconStroke: 2,
+  buttonOffsetX: 20,
+  buttonOffsetY: 20,
+  buttonSizeUnit: 'px',
   theme: 'auto',
   lightButtonColor: '#000000',
   lightTextColor: '#ffffff',
@@ -108,6 +111,9 @@ describe('widget components', () => {
         buttonIcon="bug"
         buttonIconSize={18}
         buttonIconStroke={2}
+        buttonOffsetX={20}
+        buttonOffsetY={20}
+        buttonSizeUnit="px"
         theme="auto"
         lightButtonColor="#000000"
         lightTextColor="#ffffff"
@@ -135,6 +141,9 @@ describe('widget components', () => {
         buttonIcon={null}
         buttonIconSize={18}
         buttonIconStroke={2}
+        buttonOffsetX={20}
+        buttonOffsetY={20}
+        buttonSizeUnit="px"
         theme="auto"
         lightButtonColor="#000000"
         lightTextColor="#ffffff"

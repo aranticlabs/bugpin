@@ -21,6 +21,9 @@ export interface WidgetConfig {
   buttonIcon: string | null;
   buttonIconSize: number;
   buttonIconStroke: number;
+  buttonOffsetX: number;
+  buttonOffsetY: number;
+  buttonSizeUnit: 'px' | 'rem';
   theme: 'auto' | 'light' | 'dark';
   // Light mode colors
   lightButtonColor: string;
@@ -79,6 +82,9 @@ export const defaultConfig: WidgetConfig = {
   buttonIcon: 'bug',
   buttonIconSize: 18,
   buttonIconStroke: 2,
+  buttonOffsetX: 20,
+  buttonOffsetY: 20,
+  buttonSizeUnit: 'px',
   theme: 'auto',
   // Light mode colors
   lightButtonColor: '#02658D',

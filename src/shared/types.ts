@@ -208,6 +208,9 @@ export interface WidgetLauncherButtonSettings {
   buttonIcon?: string | null;
   buttonIconSize?: number;
   buttonIconStroke?: number;
+  buttonOffsetX?: number;
+  buttonOffsetY?: number;
+  buttonSizeUnit?: 'px' | 'rem';
   theme?: 'auto' | 'light' | 'dark';
   enableHoverScaleEffect?: boolean;
   tooltipEnabled?: boolean;
@@ -548,6 +551,9 @@ export interface GlobalWidgetLauncherButtonSettings {
   buttonIcon: string | null;
   buttonIconSize: number;
   buttonIconStroke: number;
+  buttonOffsetX: number;
+  buttonOffsetY: number;
+  buttonSizeUnit: 'px' | 'rem';
   theme: 'auto' | 'light' | 'dark';
   enableHoverScaleEffect: boolean;
   tooltipEnabled: boolean;

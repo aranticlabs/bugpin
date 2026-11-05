@@ -46,6 +46,9 @@ async function fetchConfig(
           buttonIcon: cfg.buttonIcon,
           buttonIconSize: cfg.buttonIconSize,
           buttonIconStroke: cfg.buttonIconStroke,
+          buttonOffsetX: cfg.buttonOffsetX,
+          buttonOffsetY: cfg.buttonOffsetY,
+          buttonSizeUnit: cfg.buttonSizeUnit,
           position: cfg.position,
           theme: cfg.theme,
           // Light mode colors
