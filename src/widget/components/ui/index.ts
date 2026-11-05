@@ -6,7 +6,6 @@ export { Label, type LabelProps } from './label';
 export { Tabs, type Tab } from './tabs';
 export { Toast, type ToastType } from './toast';
 export { Alert } from './alert';
-export { Badge } from './badge';
 export { Card } from './card';
 export { Popover } from './popover';
 export { Separator } from './separator';

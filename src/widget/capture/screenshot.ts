@@ -511,17 +511,6 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       const captureWidth = scrollX + viewportWidth;
       const captureHeight = scrollY + viewportHeight;
 
-      // Debug logging
-      console.log('[BugPin] Capture debug:', {
-        scrollX,
-        scrollY,
-        viewportWidth,
-        viewportHeight,
-        captureWidth,
-        captureHeight,
-        dpr,
-      });
-
       // Capture from origin to the end of the visible viewport
       const toCanvasOptions: Parameters<typeof toCanvas>[1] = {
         ...getCaptureDefaults(),
@@ -534,14 +523,6 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       };
 
       const fullCanvas = await renderToCanvas(element, toCanvasOptions);
-
-      // Debug: log actual canvas dimensions
-      console.log('[BugPin] Canvas captured:', {
-        canvasWidth: fullCanvas.width,
-        canvasHeight: fullCanvas.height,
-        expectedWidth: captureWidth * dpr,
-        expectedHeight: captureHeight * dpr,
-      });
 
       // Crop to the visible viewport
       const croppedCanvas = document.createElement('canvas');
