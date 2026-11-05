@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import {
   ALL_FORMATS,
   BufferSource,
+  Conversion,
   Input,
 } from '../../src/server/node_modules/mediabunny/dist/modules/src/index.js';
-import { remuxRecording } from '../../src/server/services/video-remux.service';
+import { inspectRecording, remuxRecording } from '../../src/server/services/video-remux.service';
 
 const fixturesDir = join(import.meta.dir, '../fixtures/video-remux');
 
@@ -56,6 +57,66 @@ async function buildWebmWithBlocks(block: Uint8Array, count: number): Promise<Bu
   return data;
 }
 
+const CLUSTER_ID = Buffer.from([0x1f, 0x43, 0xb6, 0x75]);
+const SEEK_HEAD_ID = Buffer.from([0x11, 0x4d, 0x9b, 0x74]);
+const CUES_ID = Buffer.from([0x1c, 0x53, 0xbb, 0x6b]);
+const LEVEL_ONE_SCAN_IDS = [CLUSTER_ID, SEEK_HEAD_ID, CUES_ID];
+const SYNTHETIC_CLUSTERS = 4;
+const SYNTHETIC_BLOCKS = 32;
+const SYNTHETIC_FILLER_BYTES = 64 * 1024;
+
+function encodeElement(id: Buffer, content: Buffer): Buffer {
+  const size = Buffer.alloc(8);
+  size[0] = 0x01;
+  size.writeUIntBE(content.byteLength, 2, 6);
+  return Buffer.concat([id, size, content]);
+}
+
+function createIdLadenFiller(seed: number): Buffer {
+  const filler = Buffer.alloc(SYNTHETIC_FILLER_BYTES);
+  let state = seed;
+  for (let index = 0; index < filler.byteLength; index += 1) {
+    state = (state * 1_103_515_245 + 12_345) >>> 0;
+    filler[index] = state >>> 24;
+  }
+  for (let offset = 61; offset + 4 <= filler.byteLength; offset += 1_021) {
+    LEVEL_ONE_SCAN_IDS[(offset >> 4) % LEVEL_ONE_SCAN_IDS.length]!.copy(filler, offset);
+  }
+  return filler;
+}
+
+async function buildWebmWithIdLadenPayloads(): Promise<Buffer> {
+  const fixture = Buffer.from(await Bun.file(join(fixturesDir, 'chrome-vp9.webm')).arrayBuffer());
+  const clusterOffset = fixture.indexOf(CLUSTER_ID);
+  const firstBlockOffset = fixture.indexOf(0xa3, clusterOffset);
+  const blockSizeLength = 8 - Math.floor(Math.log2(fixture[firstBlockOffset + 1]!));
+  const sizeBytes = Buffer.from(
+    fixture.subarray(firstBlockOffset + 1, firstBlockOffset + 1 + blockSizeLength)
+  );
+  sizeBytes[0]! &= 0xff >> blockSizeLength;
+  const blockSize = sizeBytes.readUIntBE(0, blockSizeLength);
+  const blockContentStart = firstBlockOffset + 1 + blockSizeLength;
+  const keyFrame = fixture.subarray(blockContentStart + 4, blockContentStart + blockSize);
+
+  const clusters: Buffer[] = [];
+  for (let cluster = 0; cluster < SYNTHETIC_CLUSTERS; cluster += 1) {
+    const timecode = Buffer.alloc(2);
+    timecode.writeUInt16BE(cluster * SYNTHETIC_BLOCKS * 40);
+    const children: Buffer[] = [encodeElement(Buffer.from([0xe7]), timecode)];
+    for (let block = 0; block < SYNTHETIC_BLOCKS; block += 1) {
+      const header = Buffer.alloc(4);
+      header[0] = 0x81;
+      header.writeInt16BE(block * 40, 1);
+      header[3] = 0x80;
+      const filler = createIdLadenFiller(cluster * SYNTHETIC_BLOCKS + block + 1);
+      children.push(encodeElement(Buffer.from([0xa3]), Buffer.concat([header, keyFrame, filler])));
+    }
+    clusters.push(encodeElement(CLUSTER_ID, Buffer.concat(children)));
+  }
+
+  return Buffer.concat([fixture.subarray(0, clusterOffset), ...clusters]);
+}
+
 const browserRecordings = [
   {
     filename: 'chrome-with-audio.mp4',
@@ -85,6 +146,20 @@ const browserRecordings = [
       { type: 'video', packetCount: 21 },
       { type: 'audio', packetCount: 46 },
     ],
+    negativeAudioStart: true,
+  },
+  {
+    filename: 'chrome-vp9.webm',
+    mimeType: 'video/webm',
+    tracks: [{ type: 'video', packetCount: 18 }],
+  },
+  {
+    filename: 'chrome-vp9-opus.webm',
+    mimeType: 'video/webm',
+    tracks: [
+      { type: 'video', packetCount: 18 },
+      { type: 'audio', packetCount: 19 },
+    ],
   },
   {
     filename: 'webkit-with-audio.mp4',
@@ -95,6 +170,15 @@ const browserRecordings = [
     ],
   },
 ] as const;
+
+async function getMetadataDuration(data: Uint8Array): Promise<number | null> {
+  const input = new Input({ source: new BufferSource(data), formats: ALL_FORMATS });
+  try {
+    return await input.getDurationFromMetadata();
+  } finally {
+    input.dispose();
+  }
+}
 
 describe('remuxRecording', () => {
   for (const fixture of browserRecordings) {
@@ -121,10 +205,14 @@ describe('remuxRecording', () => {
         expect(getMovieHeaderDuration(result.value)).toBeGreaterThan(0n);
         expect(output.indexOf('moov')).toBeLessThan(output.indexOf('mdat'));
       } else {
-        const sourceAudio = sourceTracks.find((track) => track.type === 'audio');
+        if ('negativeAudioStart' in fixture) {
+          const sourceAudio = sourceTracks.find((track) => track.type === 'audio');
+          expect(sourceAudio?.firstTimestamp).toBe(-0.001);
+        }
         const outputAudio = outputTracks.find((track) => track.type === 'audio');
-        expect(sourceAudio?.firstTimestamp).toBe(-0.001);
-        expect(outputAudio?.firstTimestamp).toBeGreaterThanOrEqual(0);
+        if (outputAudio) expect(outputAudio.firstTimestamp).toBeGreaterThanOrEqual(0);
+        expect(await getMetadataDuration(data)).toBeNull();
+        expect(await getMetadataDuration(result.value)).toBeGreaterThan(0);
         expect(Array.from(result.value.subarray(0, 4))).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
       }
     });
@@ -439,15 +527,45 @@ describe('remuxRecording', () => {
     });
   });
 
+  it('accepts a large WebM whose block payloads contain level-1 element IDs', async () => {
+    const data = await buildWebmWithIdLadenPayloads();
+    expect(data.byteLength).toBeGreaterThan(8 * 1024 * 1024);
+    for (const id of LEVEL_ONE_SCAN_IDS) {
+      expect(data.indexOf(id)).toBeGreaterThan(0);
+    }
+
+    const result = await remuxRecording({ data, mimeType: 'video/webm' });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const outputTracks = await inspectTracks(result.value);
+    expect(outputTracks).toEqual([
+      expect.objectContaining({
+        type: 'video',
+        packetCount: SYNTHETIC_CLUSTERS * SYNTHETIC_BLOCKS,
+      }),
+    ]);
+  });
+
+  it('rejects a WebM cluster hidden after unparseable data that follows ID-laden blocks', async () => {
+    const data = await buildWebmWithIdLadenPayloads();
+    const hidden = Buffer.concat([data, Buffer.from([0]), CLUSTER_ID, Buffer.from([0x80])]);
+
+    const result = await remuxRecording({ data: hidden, mimeType: 'video/webm' });
+    expect(result).toEqual({
+      success: false,
+      error: 'Recording contains an unvalidated WebM cluster',
+      code: 'REMUX_SOURCE_EXPANDS',
+    });
+  });
+
   for (const [id, error] of [
-    [new Uint8Array([0x1f, 0x43, 0xb6, 0x75]), 'Recording contains an unvalidated WebM cluster'],
-    [new Uint8Array([0x11, 0x4d, 0x9b, 0x74]), 'Recording contains an unvalidated WebM seek head'],
+    [CLUSTER_ID, 'Recording contains an unvalidated WebM cluster'],
+    [SEEK_HEAD_ID, 'Recording contains an unvalidated WebM seek head'],
+    [CUES_ID, 'Recording WebM cues are unsupported'],
   ] as const) {
-    it(`rejects ${error.toLowerCase()} in a block payload`, async () => {
-      const data = await buildWebmWithBlocks(
-        new Uint8Array([0xa3, 0x88, 0x81, 0, 0, 0, ...id]),
-        1
-      );
+    it(`rejects ${error.toLowerCase()} outside block payloads`, async () => {
+      const voidElement = Buffer.concat([Buffer.from([0xec, 0x84]), id]);
+      const data = await buildWebmWithBlocks(voidElement, 1);
 
       const result = await remuxRecording({ data, mimeType: 'video/webm' });
       expect(result).toEqual({
@@ -537,5 +655,83 @@ describe('remuxRecording', () => {
       error: 'Recording format cannot be remuxed',
       code: 'UNSUPPORTED_RECORDING_FORMAT',
     });
+  });
+
+  it('runs concurrent remuxes one at a time', async () => {
+    const execute = Conversion.prototype.execute;
+    let active = 0;
+    let maxActive = 0;
+    const executeSpy = spyOn(Conversion.prototype, 'execute').mockImplementation(async function (
+      this: Conversion
+    ) {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return await execute.call(this);
+      } finally {
+        active -= 1;
+      }
+    });
+
+    try {
+      const data = await Bun.file(join(fixturesDir, 'chrome-vp9-opus.webm')).bytes();
+      const results = await Promise.all(
+        Array.from({ length: 3 }, () => remuxRecording({ data, mimeType: 'video/webm' }))
+      );
+      expect(results.every((result) => result.success)).toBe(true);
+      expect(executeSpy).toHaveBeenCalledTimes(3);
+      expect(maxActive).toBe(1);
+    } finally {
+      executeSpy.mockRestore();
+    }
+  });
+
+  it('keeps serving remuxes after a failed one', async () => {
+    const failing = remuxRecording({
+      data: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
+      mimeType: 'video/mp4',
+    });
+    const data = await Bun.file(join(fixturesDir, 'chrome-vp9.webm')).bytes();
+    const succeeding = remuxRecording({ data, mimeType: 'video/webm' });
+
+    expect((await failing).success).toBe(false);
+    expect((await succeeding).success).toBe(true);
+  });
+});
+
+describe('inspectRecording', () => {
+  for (const [filename, mimeType, hasAudio] of [
+    ['chrome-vp9.webm', 'video/webm', false],
+    ['chrome-vp9-opus.webm', 'video/webm', true],
+    ['firefox-with-audio.webm', 'video/webm', true],
+    ['chrome-without-audio.mp4', 'video/mp4', false],
+    ['chrome-with-audio.mp4', 'video/mp4', true],
+  ] as const) {
+    it(`reports audio and duration for ${filename}`, async () => {
+      const data = await Bun.file(join(fixturesDir, filename)).bytes();
+      const result = await inspectRecording({ data, mimeType });
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.value.hasAudio).toBe(hasAudio);
+      expect(result.value.durationSeconds).toBeGreaterThan(0.5);
+      expect(result.value.durationSeconds).toBeLessThan(1.5);
+    });
+  }
+
+  it('rejects unreadable and unsupported recordings', async () => {
+    const unreadable = await inspectRecording({
+      data: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
+      mimeType: 'video/mp4',
+    });
+    expect(unreadable.success).toBe(false);
+
+    expect(await inspectRecording({ data: new Uint8Array(), mimeType: 'video/quicktime' })).toEqual(
+      {
+        success: false,
+        error: 'Recording format cannot be inspected',
+        code: 'UNSUPPORTED_RECORDING_FORMAT',
+      }
+    );
   });
 });

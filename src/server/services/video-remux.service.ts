@@ -11,10 +11,16 @@ import {
   WebMOutputFormat,
 } from 'mediabunny';
 import { Result } from '../utils/result.js';
+import { createSerialQueue } from '../utils/serial-queue.js';
 
 export interface RemuxInput {
   data: Buffer | Uint8Array;
   mimeType: string;
+}
+
+export interface RecordingInfo {
+  hasAudio: boolean;
+  durationSeconds: number;
 }
 
 interface TrackStats {
@@ -26,6 +32,10 @@ const MAX_RECORDING_PACKETS = 300_000;
 const MAX_RECORDING_TRACKS = 2;
 
 class RemuxLimitError extends Error {}
+
+// Each remux holds the source, the muxer state and the output in memory at once, so running
+// them one at a time bounds peak memory regardless of how many uploads arrive together.
+const runExclusive = createSerialQueue();
 
 interface Mp4Box {
   type: string;
@@ -161,6 +171,7 @@ interface EbmlElement {
   id: number;
   contentStart: number;
   end: number;
+  unknownSize: boolean;
 }
 
 function readEbmlVintLength(data: Buffer | Uint8Array, offset: number): number {
@@ -202,7 +213,7 @@ function readEbmlElement(
   const contentStart = sizeOffset + sizeLength;
   const end = unknownSize ? parentEnd : contentStart + size;
   if (end > parentEnd) return null;
-  return { start: offset, id, contentStart, end };
+  return { start: offset, id, contentStart, end, unknownSize };
 }
 
 function validateWebmPacketCount(data: Buffer | Uint8Array): void {
@@ -227,6 +238,7 @@ function validateWebmPacketCount(data: Buffer | Uint8Array): void {
     CLUSTER_ID,
   ]);
   const clusterRanges: Array<{ start: number; end: number }> = [];
+  const blockRanges: Array<{ start: number; end: number }> = [];
   const seekHeadStarts: number[] = [];
   let packetCount = 0;
   let clusterCount = 0;
@@ -248,6 +260,11 @@ function validateWebmPacketCount(data: Buffer | Uint8Array): void {
     packetCount += frameCount;
     if (packetCount > MAX_RECORDING_PACKETS) {
       throw new RemuxLimitError('Recording exceeds the packet limit');
+    }
+    // An unknown-size block would hide the rest of its cluster, so only blocks whose extent
+    // both parsers derive from the same explicit size are exempt from the ID scan below.
+    if (!element.unknownSize) {
+      blockRanges.push({ start: element.start, end: element.end });
     }
   };
 
@@ -330,6 +347,10 @@ function validateWebmPacketCount(data: Buffer | Uint8Array): void {
     offset = element.end;
   }
 
+  // Demuxers resync by scanning raw bytes for level-1 IDs, so any ID occurrence the walk above
+  // did not validate could expose elements the limits never counted. Compressed frame payloads
+  // contain these byte patterns by chance and are skipped: a demuxer that agrees on the block
+  // sizes never starts a resync inside them.
   const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   const rejectUnvalidatedId = (
     id: Uint8Array,
@@ -338,8 +359,18 @@ function validateWebmPacketCount(data: Buffer | Uint8Array): void {
   ): void => {
     let position = bytes.indexOf(id);
     let validIndex = 0;
+    let blockIndex = 0;
     while (position >= 0) {
-      while (validIndex < validStarts.length && validStarts[validIndex]! < position) validIndex += 1;
+      while (blockIndex < blockRanges.length && blockRanges[blockIndex]!.end <= position) {
+        blockIndex += 1;
+      }
+      const block = blockRanges[blockIndex];
+      if (block && block.start <= position) {
+        position = bytes.indexOf(id, block.end);
+        continue;
+      }
+      while (validIndex < validStarts.length && validStarts[validIndex]! < position)
+        validIndex += 1;
       if (validStarts[validIndex] !== position) throw new RemuxLimitError(message);
       position = bytes.indexOf(id, position + 1);
     }
@@ -362,7 +393,14 @@ function validateWebmPacketCount(data: Buffer | Uint8Array): void {
   );
 }
 
-async function getTrackStats(input: Input, maxPacketBytes: number): Promise<TrackStats[]> {
+// Source packets are read with their data because the remux copies only packets whose bytes are
+// present; a truncated upload can declare packets past its end. Remux output is complete, so its
+// packets can be counted from metadata alone.
+async function getTrackStats(
+  input: Input,
+  maxPacketBytes: number,
+  metadataOnly: boolean
+): Promise<TrackStats[]> {
   const tracks = await input.getTracks();
   if (tracks.length > MAX_RECORDING_TRACKS) {
     throw new RemuxLimitError('Recording exceeds the track limit');
@@ -374,7 +412,7 @@ async function getTrackStats(input: Input, maxPacketBytes: number): Promise<Trac
   for (const track of tracks) {
     let packetCount = 0;
     const sink = new EncodedPacketSink(track);
-    for await (const packet of sink.packets()) {
+    for await (const packet of sink.packets(undefined, undefined, { metadataOnly })) {
       packetCount += 1;
       totalPacketCount += 1;
       totalPacketBytes += packet.byteLength;
@@ -391,36 +429,89 @@ async function getTrackStats(input: Input, maxPacketBytes: number): Promise<Trac
   return stats;
 }
 
-export async function remuxRecording(input: RemuxInput): Promise<Result<Uint8Array>> {
-  if (input.mimeType !== 'video/mp4' && input.mimeType !== 'video/webm') {
-    return Result.fail('Recording format cannot be remuxed', 'UNSUPPORTED_RECORDING_FORMAT');
-  }
+function isSupportedRecordingType(mimeType: string): boolean {
+  return mimeType === 'video/mp4' || mimeType === 'video/webm';
+}
 
+function openValidatedSource(input: RemuxInput): Input {
+  if (input.mimeType === 'video/mp4') {
+    validateMp4PacketCount(input.data);
+  } else {
+    validateWebmPacketCount(input.data);
+  }
+  const sourceFormat =
+    input.data.byteLength >= 8 &&
+    input.data[4] === 0x66 &&
+    input.data[5] === 0x74 &&
+    input.data[6] === 0x79 &&
+    input.data[7] === 0x70
+      ? MP4
+      : WEBM;
+  return new Input({ source: new BufferSource(input.data), formats: [sourceFormat] });
+}
+
+function toFailure<T>(error: unknown, fallbackMessage: string, fallbackCode: string): Result<T> {
+  if (error instanceof RemuxLimitError) {
+    return Result.fail(error.message, 'REMUX_SOURCE_EXPANDS');
+  }
+  return Result.fail(error instanceof Error ? error.message : fallbackMessage, fallbackCode);
+}
+
+export function inspectRecording(input: RemuxInput): Promise<Result<RecordingInfo>> {
+  if (!isSupportedRecordingType(input.mimeType)) {
+    return Promise.resolve(
+      Result.fail('Recording format cannot be inspected', 'UNSUPPORTED_RECORDING_FORMAT')
+    );
+  }
+  return runExclusive(() => inspectValidatedRecording(input));
+}
+
+async function inspectValidatedRecording(input: RemuxInput): Promise<Result<RecordingInfo>> {
+  let source: Input | undefined;
+  try {
+    source = openValidatedSource(input);
+    const tracks = await source.getTracks();
+    if (tracks.length > MAX_RECORDING_TRACKS) {
+      throw new RemuxLimitError('Recording exceeds the track limit');
+    }
+    if (tracks.length === 0) {
+      return Result.fail('Recording contains no tracks', 'RECORDING_UNREADABLE');
+    }
+    const end = await source.computeDuration(tracks, { metadataOnly: true });
+    const start = await source.getFirstTimestamp(tracks);
+    return Result.ok({
+      hasAudio: tracks.some((track) => track.type === 'audio'),
+      durationSeconds: Math.max(0, end - start),
+    });
+  } catch (error) {
+    return toFailure(error, 'Recording could not be inspected', 'RECORDING_UNREADABLE');
+  } finally {
+    source?.dispose();
+  }
+}
+
+export function remuxRecording(input: RemuxInput): Promise<Result<Uint8Array>> {
+  if (!isSupportedRecordingType(input.mimeType)) {
+    return Promise.resolve(
+      Result.fail('Recording format cannot be remuxed', 'UNSUPPORTED_RECORDING_FORMAT')
+    );
+  }
+  return runExclusive(() => remuxValidatedRecording(input));
+}
+
+async function remuxValidatedRecording(input: RemuxInput): Promise<Result<Uint8Array>> {
   let source: Input | undefined;
   let output: Output | undefined;
 
   try {
-    if (input.mimeType === 'video/mp4') {
-      validateMp4PacketCount(input.data);
-    } else {
-      validateWebmPacketCount(input.data);
-    }
+    source = openValidatedSource(input);
     const format =
       input.mimeType === 'video/mp4'
         ? new Mp4OutputFormat({ fastStart: 'in-memory' })
         : new WebMOutputFormat();
-    const sourceFormat =
-      input.data.byteLength >= 8 &&
-      input.data[4] === 0x66 &&
-      input.data[5] === 0x74 &&
-      input.data[6] === 0x79 &&
-      input.data[7] === 0x70
-        ? MP4
-        : WEBM;
-    source = new Input({ source: new BufferSource(input.data), formats: [sourceFormat] });
     const target = new BufferTarget();
     output = new Output({ format, target });
-    const sourceTracks = await getTrackStats(source, input.data.byteLength);
+    const sourceTracks = await getTrackStats(source, input.data.byteLength, false);
 
     const conversion = await Conversion.init({
       input: source,
@@ -448,7 +539,7 @@ export async function remuxRecording(input: RemuxInput): Promise<Result<Uint8Arr
     const outputFormat = input.mimeType === 'video/mp4' ? MP4 : WEBM;
     const remuxedInput = new Input({ source: new BufferSource(remuxed), formats: [outputFormat] });
     try {
-      const remuxedTracks = await getTrackStats(remuxedInput, remuxed.byteLength);
+      const remuxedTracks = await getTrackStats(remuxedInput, remuxed.byteLength, true);
       const tracksMatch =
         sourceTracks.length === remuxedTracks.length &&
         sourceTracks.every(
@@ -465,13 +556,7 @@ export async function remuxRecording(input: RemuxInput): Promise<Result<Uint8Arr
 
     return Result.ok(remuxed);
   } catch (error) {
-    if (error instanceof RemuxLimitError) {
-      return Result.fail(error.message, 'REMUX_SOURCE_EXPANDS');
-    }
-    return Result.fail(
-      error instanceof Error ? error.message : 'Recording remux failed',
-      'REMUX_FAILED'
-    );
+    return toFailure(error, 'Recording remux failed', 'REMUX_FAILED');
   } finally {
     if (output && output.state !== 'finalized') {
       await output.cancel().catch(() => undefined);
