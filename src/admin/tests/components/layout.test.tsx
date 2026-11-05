@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
 import { mockUsers } from '../mocks/handlers';
 import { Routes, Route } from 'react-router-dom';
-import { renderWithProviders, screen, userEvent, waitFor } from '../utils';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../utils';
 import { Layout } from '../../components/Layout';
 import { BrandingProvider } from '../../contexts/BrandingContext';
 
@@ -26,7 +26,7 @@ describe('Layout', () => {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<div>Home Content</div>} />
-          <Route path="license" element={<div>License Content</div>} />
+          <Route path="settings/license" element={<div>License Content</div>} />
         </Route>
       </Routes>
     );
@@ -43,7 +43,7 @@ describe('Layout', () => {
     const badge = await screen.findByRole('link', {
       name: 'Enterprise license active',
     });
-    expect(badge).toHaveAttribute('href', '/license');
+    expect(badge).toHaveAttribute('href', '/settings/license');
     await user.hover(badge);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Enterprise license active');
@@ -116,62 +116,45 @@ describe('Layout', () => {
     expect(await screen.findByText('About BugPin')).toBeInTheDocument();
   });
 
-  it('renders the Security breadcrumb on /security', async () => {
-    window.location.hash = '';
-
+  it.each([
+    ['/settings/authentication', 'Access', 'Authentication'],
+    ['/settings/data-privacy', 'System', 'Privacy & Data'],
+    ['/settings/account/profile', 'Account', 'Profile'],
+    ['/settings/project-defaults/dialog-colors', 'Project Defaults', 'Dialog Colors'],
+  ])('renders the settings breadcrumb on %s', async (path, group, page) => {
     renderWithProviders(
       <BrandingProvider>
         <Routes>
-          <Route path="/security" element={<Layout />}>
-            <Route index element={<div>Security Content</div>} />
+          <Route path="/" element={<Layout />}>
+            <Route path="*" element={<div>Settings Content</div>} />
           </Route>
         </Routes>
       </BrandingProvider>,
-      { initialEntries: ['/security'] }
+      { initialEntries: [path] }
     );
 
-    expect(await screen.findByRole('button', { name: 'Security' })).toBeInTheDocument();
-    expect(screen.getByText('General', { exact: true })).toBeInTheDocument();
-    expect(screen.getByText('Security Content')).toBeInTheDocument();
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(breadcrumb).toHaveTextContent(`Settings${group}${page}`);
+    expect(within(breadcrumb).getByRole('heading', { name: page })).toBeInTheDocument();
+    expect(screen.getByText('Settings Content')).toBeInTheDocument();
   });
-
-  it('renders the Privacy breadcrumb for /settings#privacy', async () => {
-    window.location.hash = '#privacy';
-
+  it('links back to the list from a settings detail page', async () => {
     renderWithProviders(
       <BrandingProvider>
         <Routes>
-          <Route path="/settings" element={<Layout />}>
-            <Route index element={<div>Privacy Content</div>} />
+          <Route path="/" element={<Layout />}>
+            <Route path="*" element={<div>Detail Content</div>} />
           </Route>
         </Routes>
       </BrandingProvider>,
-      { initialEntries: ['/settings#privacy'] }
+      { initialEntries: ['/settings/users/user-3'] }
     );
 
-    expect(await screen.findByRole('button', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByText('Privacy')).toBeInTheDocument();
-  });
-
-  it('renders two-level breadcrumb on /settings#storage and clears hash on root click', async () => {
-    const user = userEvent.setup();
-    window.location.hash = '#storage';
-
-    renderWithProviders(
-      <BrandingProvider>
-        <Routes>
-          <Route path="/settings" element={<Layout />}>
-            <Route index element={<div>Settings Content</div>} />
-          </Route>
-        </Routes>
-      </BrandingProvider>,
-      { initialEntries: ['/settings'] }
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(breadcrumb).toHaveTextContent('SettingsAccessUsersDetails');
+    expect(within(breadcrumb).getByRole('link', { name: 'Users' })).toHaveAttribute(
+      'href',
+      '/settings/users'
     );
-
-    expect(await screen.findByRole('button', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByText('Storage')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(window.location.hash).toBe('');
   });
 });

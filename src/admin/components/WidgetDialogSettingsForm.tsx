@@ -1,10 +1,9 @@
-import { Label } from './ui/label';
-import { Switch } from './ui/switch';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { ChevronDown, FileText, Image as ImageIcon, Video, X } from 'lucide-react';
 import { ThemeColorPicker } from './ThemeColorPicker';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import type { ThemeColors } from '@shared/types';
 
-const DEFAULT_WIDGET_COLORS: ThemeColors = {
+const DEFAULT_WIDGET_COLORS: Required<ThemeColors> = {
   lightButtonColor: '#02658D',
   lightTextColor: '#ffffff',
   lightButtonHoverColor: '#024F6F',
@@ -28,10 +27,147 @@ interface WidgetDialogSettingsFormProps {
   onChange: (value: Partial<ThemeColors>) => void;
   globalWidgetColors?: ThemeColors;
   disabled?: boolean;
-  showCustomToggle?: boolean;
-  useCustomSettings?: boolean;
-  onCustomToggle?: (enabled: boolean) => void;
-  showCard?: boolean;
+}
+
+export function resolveDialogColors(
+  value: Partial<ThemeColors>,
+  globalWidgetColors?: ThemeColors
+): ThemeColors {
+  const resolved: Required<ThemeColors> = { ...DEFAULT_WIDGET_COLORS };
+  for (const key of Object.keys(DEFAULT_WIDGET_COLORS) as Array<keyof ThemeColors>) {
+    resolved[key] = value[key] ?? globalWidgetColors?.[key] ?? DEFAULT_WIDGET_COLORS[key];
+  }
+  return resolved;
+}
+
+// Fixed widget theme tokens that the dialog colors do not override.
+const WIDGET_THEME_TOKENS = {
+  light: { border: '#e5e5e5', mutedForeground: '#737373' },
+  dark: { border: '#262626', mutedForeground: '#a3a3a3' },
+} as const;
+
+function PreviewField({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-[var(--wp-foreground)]">
+        {label}
+        {required && <span className="ml-0.5 text-[#ef4444]">*</span>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+const PREVIEW_INPUT_CLASS =
+  'flex h-10 w-full items-center rounded-md border border-[var(--wp-border)] bg-[var(--wp-input)] px-3 text-sm';
+
+export function WidgetDialogPreview({
+  colors,
+  mode,
+}: {
+  colors: ThemeColors;
+  mode: 'light' | 'dark';
+}) {
+  const [submitHovered, setSubmitHovered] = useState(false);
+  const dark = mode === 'dark';
+  const tokens = WIDGET_THEME_TOKENS[mode];
+  const style = {
+    '--wp-background': dark ? colors.darkBackgroundColor : colors.lightBackgroundColor,
+    '--wp-muted': dark ? colors.darkSecondaryColor : colors.lightSecondaryColor,
+    '--wp-input': dark ? colors.darkInputColor : colors.lightInputColor,
+    '--wp-foreground': dark ? colors.darkForegroundColor : colors.lightForegroundColor,
+    '--wp-border': tokens.border,
+    '--wp-muted-foreground': tokens.mutedForeground,
+    '--wp-primary': dark ? colors.darkButtonColor : colors.lightButtonColor,
+    '--wp-primary-foreground': dark ? colors.darkTextColor : colors.lightTextColor,
+    '--wp-primary-hover': dark ? colors.darkButtonHoverColor : colors.lightButtonHoverColor,
+    '--wp-primary-hover-foreground': dark ? colors.darkTextHoverColor : colors.lightTextHoverColor,
+  } as CSSProperties;
+
+  return (
+    <div
+      aria-label="Dialog preview"
+      style={style}
+      className="overflow-hidden rounded border border-[var(--wp-border)] bg-[var(--wp-background)] text-[var(--wp-foreground)] shadow-lg"
+    >
+      <div className="flex items-center justify-between border-b border-[var(--wp-border)] p-6">
+        <span className="text-xl font-semibold">Report a Bug</span>
+        <X className="h-5 w-5" aria-hidden="true" />
+      </div>
+
+      <div className="px-4 pt-4">
+        <div className="inline-flex max-w-full flex-wrap gap-1 rounded bg-[var(--wp-muted)] p-1">
+          {[
+            { label: 'Details', icon: FileText, active: true },
+            { label: 'Screenshots', icon: ImageIcon, active: false },
+            { label: 'Recordings', icon: Video, active: false },
+          ].map(({ label, icon: Icon, active }) => (
+            <span
+              key={label}
+              className={`flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                active
+                  ? 'bg-[var(--wp-background)] text-[var(--wp-foreground)] shadow-sm'
+                  : 'text-[var(--wp-muted-foreground)]'
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 p-6">
+        <PreviewField label="Title" required>
+          <div className={`${PREVIEW_INPUT_CLASS} text-[var(--wp-muted-foreground)]`}>
+            Brief description of the issue
+          </div>
+        </PreviewField>
+        <PreviewField label="Description">
+          <div
+            className={`${PREVIEW_INPUT_CLASS} h-20 items-start py-2 text-[var(--wp-muted-foreground)]`}
+          >
+            Steps to reproduce, expected behavior, etc.
+          </div>
+        </PreviewField>
+        <PreviewField label="Priority">
+          <div className={`${PREVIEW_INPUT_CLASS} justify-between`}>
+            Medium
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </div>
+        </PreviewField>
+      </div>
+
+      <div className="flex gap-3 border-t border-[var(--wp-border)] bg-[var(--wp-muted)] p-6">
+        <span className="flex h-10 flex-1 items-center justify-center rounded-md border border-[var(--wp-border)] bg-[var(--wp-background)] text-sm font-medium">
+          Cancel
+        </span>
+        <span
+          onMouseEnter={() => setSubmitHovered(true)}
+          onMouseLeave={() => setSubmitHovered(false)}
+          className={`flex h-10 flex-1 cursor-default items-center justify-center rounded-md text-sm font-medium transition-colors ${
+            submitHovered
+              ? 'bg-[var(--wp-primary-hover)] text-[var(--wp-primary-hover-foreground)]'
+              : 'bg-[var(--wp-primary)] text-[var(--wp-primary-foreground)]'
+          }`}
+        >
+          Submit Report
+        </span>
+      </div>
+
+      <div className="border-t border-[var(--wp-border)] bg-[var(--wp-background)] px-6 py-3 text-center text-xs text-[var(--wp-muted-foreground)]">
+        Powered by <span className="font-medium text-[var(--wp-primary)]">BugPin</span>
+      </div>
+    </div>
+  );
 }
 
 export function WidgetDialogSettingsForm({
@@ -39,140 +175,13 @@ export function WidgetDialogSettingsForm({
   onChange,
   globalWidgetColors,
   disabled = false,
-  showCustomToggle = false,
-  useCustomSettings = true,
-  onCustomToggle,
-  showCard = true,
 }: WidgetDialogSettingsFormProps) {
-  // Merge value with global colors and defaults
-  const currentColors: ThemeColors = {
-    lightButtonColor:
-      value.lightButtonColor ??
-      globalWidgetColors?.lightButtonColor ??
-      DEFAULT_WIDGET_COLORS.lightButtonColor,
-    lightTextColor:
-      value.lightTextColor ??
-      globalWidgetColors?.lightTextColor ??
-      DEFAULT_WIDGET_COLORS.lightTextColor,
-    lightButtonHoverColor:
-      value.lightButtonHoverColor ??
-      globalWidgetColors?.lightButtonHoverColor ??
-      DEFAULT_WIDGET_COLORS.lightButtonHoverColor,
-    lightTextHoverColor:
-      value.lightTextHoverColor ??
-      globalWidgetColors?.lightTextHoverColor ??
-      DEFAULT_WIDGET_COLORS.lightTextHoverColor,
-    lightBackgroundColor:
-      value.lightBackgroundColor ??
-      globalWidgetColors?.lightBackgroundColor ??
-      DEFAULT_WIDGET_COLORS.lightBackgroundColor,
-    lightSecondaryColor:
-      value.lightSecondaryColor ??
-      globalWidgetColors?.lightSecondaryColor ??
-      DEFAULT_WIDGET_COLORS.lightSecondaryColor,
-    lightInputColor:
-      value.lightInputColor ??
-      globalWidgetColors?.lightInputColor ??
-      DEFAULT_WIDGET_COLORS.lightInputColor,
-    lightForegroundColor:
-      value.lightForegroundColor ??
-      globalWidgetColors?.lightForegroundColor ??
-      DEFAULT_WIDGET_COLORS.lightForegroundColor,
-    darkButtonColor:
-      value.darkButtonColor ??
-      globalWidgetColors?.darkButtonColor ??
-      DEFAULT_WIDGET_COLORS.darkButtonColor,
-    darkTextColor:
-      value.darkTextColor ??
-      globalWidgetColors?.darkTextColor ??
-      DEFAULT_WIDGET_COLORS.darkTextColor,
-    darkButtonHoverColor:
-      value.darkButtonHoverColor ??
-      globalWidgetColors?.darkButtonHoverColor ??
-      DEFAULT_WIDGET_COLORS.darkButtonHoverColor,
-    darkTextHoverColor:
-      value.darkTextHoverColor ??
-      globalWidgetColors?.darkTextHoverColor ??
-      DEFAULT_WIDGET_COLORS.darkTextHoverColor,
-    darkBackgroundColor:
-      value.darkBackgroundColor ??
-      globalWidgetColors?.darkBackgroundColor ??
-      DEFAULT_WIDGET_COLORS.darkBackgroundColor,
-    darkSecondaryColor:
-      value.darkSecondaryColor ??
-      globalWidgetColors?.darkSecondaryColor ??
-      DEFAULT_WIDGET_COLORS.darkSecondaryColor,
-    darkInputColor:
-      value.darkInputColor ??
-      globalWidgetColors?.darkInputColor ??
-      DEFAULT_WIDGET_COLORS.darkInputColor,
-    darkForegroundColor:
-      value.darkForegroundColor ??
-      globalWidgetColors?.darkForegroundColor ??
-      DEFAULT_WIDGET_COLORS.darkForegroundColor,
-  };
-
-  const handleColorChange = (colors: Partial<ThemeColors>) => {
-    onChange({ ...value, ...colors });
-  };
-
-  const isDisabled = disabled || (showCustomToggle && !useCustomSettings);
-
-  const colorPicker = (
+  return (
     <ThemeColorPicker
-      value={currentColors}
-      onChange={handleColorChange}
-      disabled={isDisabled}
+      value={resolveDialogColors(value, globalWidgetColors)}
+      onChange={(colors) => onChange({ ...value, ...colors })}
+      disabled={disabled}
       showSurfaceColors
     />
-  );
-
-  return (
-    <div className="space-y-4">
-      {/* Use Custom Settings Toggle */}
-      {showCustomToggle && (
-        <div className="flex items-center justify-between pb-3 border-b">
-          <div className="space-y-0.5">
-            <Label htmlFor="use-custom-widget-dialog" className="text-sm font-medium">
-              Use Custom Settings
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Enable custom widget dialog colors for this project
-            </p>
-          </div>
-          <Switch
-            id="use-custom-widget-dialog"
-            checked={useCustomSettings}
-            onCheckedChange={(checked) => {
-              onCustomToggle?.(checked);
-              if (!checked) {
-                // Reset all values to undefined when switching to global defaults
-                onChange({});
-              }
-            }}
-          />
-        </div>
-      )}
-
-      {/* Widget Dialog Colors - collapsed when custom toggle is off */}
-      {(!showCustomToggle || useCustomSettings) && (
-        <>
-          {showCard ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Widget Dialog Colors</CardTitle>
-                <CardDescription>
-                  Configure the colors for buttons inside the feedback widget dialog (submit, action
-                  buttons).
-                </CardDescription>
-              </CardHeader>
-              <CardContent>{colorPicker}</CardContent>
-            </Card>
-          ) : (
-            <div>{colorPicker}</div>
-          )}
-        </>
-      )}
-    </div>
   );
 }

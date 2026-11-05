@@ -11,6 +11,7 @@ import {
   AlertDialogCancel,
 } from './ui/alert-dialog';
 import { Button } from './ui/button';
+import { ScrollArea } from './ui/scroll-area';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -171,9 +172,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   </div>
 
                   {error?.stack && (
-                    <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap break-all">
-                      <code className="text-muted-foreground">{error.stack}</code>
-                    </pre>
+                    <ScrollArea className="max-h-48 rounded-lg bg-muted" aria-label="Error stack">
+                      <pre className="p-3 text-xs whitespace-pre-wrap break-all">
+                        <code className="text-muted-foreground">{error.stack}</code>
+                      </pre>
+                    </ScrollArea>
                   )}
 
                   {errorInfo?.componentStack && (
@@ -181,9 +184,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                       <p className="mb-1 text-xs font-medium text-muted-foreground">
                         Component Stack:
                       </p>
-                      <pre className="max-h-32 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap break-all">
-                        <code className="text-muted-foreground">{errorInfo.componentStack}</code>
-                      </pre>
+                      <ScrollArea
+                        className="max-h-32 rounded-lg bg-muted"
+                        aria-label="Component stack"
+                      >
+                        <pre className="p-3 text-xs whitespace-pre-wrap break-all">
+                          <code className="text-muted-foreground">{errorInfo.componentStack}</code>
+                        </pre>
+                      </ScrollArea>
                     </div>
                   )}
                 </div>

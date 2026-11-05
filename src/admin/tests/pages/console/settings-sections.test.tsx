@@ -7,10 +7,16 @@ import {
   waitFor,
   fireEvent,
 } from '../../utils';
-import { Settings } from '../../../pages/console/Settings';
+import { DataRetention, Settings } from '../../../pages/console/Settings';
 import { Recording } from '../../../pages/widget/Recording';
 import { Screenshot } from '../../../pages/widget/Screenshot';
-import { PasswordPolicySettings, Security, TwoFactor } from '../../../pages/console/Security';
+import {
+  InvitationSettingsCard,
+  NetworkSettingsCard,
+  PasswordPolicyCard,
+  SessionSettingsCard,
+  TwoFactorPolicyCard,
+} from '../../../pages/console/Security';
 import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
@@ -37,22 +43,33 @@ describe('Settings sections', () => {
 
     await screen.findByDisplayValue('BugPin');
     const appNameInput = screen.getByLabelText(/application name/i);
-    const retentionInput = screen.getByLabelText(/data retention/i);
 
     await user.clear(appNameInput);
     await user.type(appNameInput, 'New App Name');
-    fireEvent.change(retentionInput, { target: { value: '120' } });
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith(
         '/settings',
-        expect.objectContaining({
-          appName: 'New App Name',
-          retentionDays: 120,
-        })
+        expect.objectContaining({ appName: 'New App Name' })
       );
+    });
+    expect(putSpy.mock.calls[0][1]).not.toHaveProperty('retentionDays');
+  });
+
+  it('saves data retention on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<DataRetention />);
+
+    const retentionInput = await screen.findByLabelText(/data retention/i);
+    fireEvent.change(retentionInput, { target: { value: '120' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { retentionDays: 120 });
     });
   });
 
@@ -155,28 +172,51 @@ describe('Settings sections', () => {
     expect(toast.success).toHaveBeenCalledWith('Recording settings saved successfully');
   });
 
-  it('submits security settings updates', async () => {
+  it('saves network settings on their own', async () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Security />);
+    renderWithQuery(<NetworkSettingsCard />);
 
     const rateLimitInput = await screen.findByLabelText(/requests per minute/i);
-    const sessionInput = screen.getByLabelText(/session duration/i);
-
     fireEvent.change(rateLimitInput, { target: { value: '120' } });
-    fireEvent.change(sessionInput, { target: { value: '14' } });
-
-    await user.click(screen.getAllByRole('button', { name: /save changes/i })[0]);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith(
-        '/settings',
-        expect.objectContaining({
-          rateLimitPerMinute: 120,
-          sessionMaxAgeDays: 14,
-        })
-      );
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        enforceHttps: false,
+        rateLimitPerMinute: 120,
+      });
+    });
+  });
+
+  it('saves the session duration on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<SessionSettingsCard />);
+
+    const sessionInput = await screen.findByLabelText(/session duration/i);
+    fireEvent.change(sessionInput, { target: { value: '14' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { sessionMaxAgeDays: 14 });
+    });
+  });
+
+  it('saves the invitation expiration on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<InvitationSettingsCard />);
+
+    const invitationInput = await screen.findByLabelText(/invitation expiration/i);
+    fireEvent.change(invitationInput, { target: { value: '14' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { invitationExpirationDays: 14 });
     });
   });
 
@@ -184,7 +224,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<PasswordPolicySettings />);
+    renderWithQuery(<PasswordPolicyCard />);
 
     const minLength = await screen.findByLabelText(/minimum length/i);
     await waitFor(() => expect(minLength).toHaveValue(12));
@@ -209,7 +249,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<TwoFactor />);
+    renderWithQuery(<TwoFactorPolicyCard />);
 
     await screen.findAllByText('Admins only');
     await user.click(screen.getByRole('button', { name: /save changes/i }));

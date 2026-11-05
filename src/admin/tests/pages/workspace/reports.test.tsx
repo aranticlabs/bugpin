@@ -3,7 +3,9 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
-import { renderWithProviders } from '../../utils';
+import { Route, Routes } from 'react-router-dom';
+import { createTestQueryClient, renderWithProviders } from '../../utils';
+import { ReportDetail } from '../../../pages/workspace/ReportDetail';
 import { Reports } from '../../../pages/workspace/Reports';
 import { api } from '../../../api/client';
 
@@ -459,5 +461,43 @@ describe('Reports Page - Bulk Actions', () => {
       expect(screen.getByText(/Delete 1 reports\?/)).toBeInTheDocument();
       expect(screen.getByText(/This action cannot be undone/)).toBeInTheDocument();
     });
+  });
+});
+
+describe('Reports back link', () => {
+  function renderFlow(entry: string, queryClient = createTestQueryClient()) {
+    return renderWithProviders(
+      <Routes>
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/projects/:id" element={<Reports projectId="project-1" />} />
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: [entry], queryClient }
+    );
+  }
+
+  async function openFirstReport() {
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByText('Button not working'))[0]);
+    return user;
+  }
+
+  it('links back to the project the report was opened from', async () => {
+    const queryClient = createTestQueryClient();
+    renderFlow('/projects/project-1', queryClient);
+    await waitFor(() => expect(queryClient.getQueryData(['project-summaries'])).toBeDefined());
+    const user = await openFirstReport();
+
+    const back = await screen.findByRole('button', { name: 'Back to Test Project' });
+    await user.click(back);
+    expect(await screen.findAllByText('Button not working')).not.toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /^Back to/ })).not.toBeInTheDocument();
+  });
+
+  it('links back to the filtered reports list', async () => {
+    renderFlow('/reports?priority=high');
+    await openFirstReport();
+
+    expect(await screen.findByRole('button', { name: 'Back to Reports' })).toBeInTheDocument();
   });
 });

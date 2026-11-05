@@ -37,6 +37,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -284,7 +285,7 @@ export function ApiTokens() {
 
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh]"
           onEscapeKeyDown={(event) => {
             if (createdToken) event.preventDefault();
           }}
@@ -302,7 +303,7 @@ export function ApiTokens() {
           </DialogHeader>
           {createdToken ? (
             <>
-              <div className="space-y-2">
+              <DialogBody contentClassName="space-y-2">
                 <Label htmlFor={`${formId}-token`}>New API token</Label>
                 <Input
                   id={`${formId}-token`}
@@ -316,7 +317,7 @@ export function ApiTokens() {
                     {copyError}
                   </p>
                 )}
-              </div>
+              </DialogBody>
               <DialogFooter className="gap-2 sm:space-x-0">
                 <Button variant="outline" onClick={() => void copyToken()}>
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -327,68 +328,70 @@ export function ApiTokens() {
             </>
           ) : (
             <form
-              className="space-y-4"
+              className="flex min-h-0 flex-col gap-4"
               onSubmit={(event: FormEvent<HTMLFormElement>) => {
                 event.preventDefault();
                 if (!create.isPending) create.mutate(fields);
               }}
             >
-              <div className="space-y-2">
-                <Label htmlFor={`${formId}-name`}>Token name</Label>
-                <Input
-                  id={`${formId}-name`}
-                  name="name"
-                  required
-                  minLength={2}
-                  maxLength={100}
-                  placeholder="e.g. CI integration"
-                  value={fields.name}
-                  disabled={create.isPending}
-                  onChange={(event) => setFields({ ...fields, name: event.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`${formId}-scope`}>Scope</Label>
-                <Select
-                  name="scope"
-                  value={fields.scope}
-                  disabled={create.isPending}
-                  onValueChange={(value) => {
-                    if (value === 'read' || value === 'write' || value === 'admin')
-                      setFields({ ...fields, scope: value });
-                  }}
-                >
-                  <SelectTrigger id={`${formId}-scope`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="read">Read</SelectItem>
-                    {user?.role !== 'viewer' && (
-                      <SelectItem value="write">Read and write</SelectItem>
-                    )}
-                    {user?.role === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`${formId}-days`}>Expires in days</Label>
-                <Input
-                  id={`${formId}-days`}
-                  name="days"
-                  type="number"
-                  min={1}
-                  max={365}
-                  required
-                  value={fields.days}
-                  disabled={create.isPending}
-                  onChange={(event) => setFields({ ...fields, days: event.target.value })}
-                />
-              </div>
-              {create.error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {errorMessage(create.error)}
-                </p>
-              )}
+              <DialogBody contentClassName="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-name`}>Token name</Label>
+                  <Input
+                    id={`${formId}-name`}
+                    name="name"
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    placeholder="e.g. CI integration"
+                    value={fields.name}
+                    disabled={create.isPending}
+                    onChange={(event) => setFields({ ...fields, name: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-scope`}>Scope</Label>
+                  <Select
+                    name="scope"
+                    value={fields.scope}
+                    disabled={create.isPending}
+                    onValueChange={(value) => {
+                      if (value === 'read' || value === 'write' || value === 'admin')
+                        setFields({ ...fields, scope: value });
+                    }}
+                  >
+                    <SelectTrigger id={`${formId}-scope`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="read">Read</SelectItem>
+                      {user?.role !== 'viewer' && (
+                        <SelectItem value="write">Read and write</SelectItem>
+                      )}
+                      {user?.role === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-days`}>Expires in days</Label>
+                  <Input
+                    id={`${formId}-days`}
+                    name="days"
+                    type="number"
+                    min={1}
+                    max={365}
+                    required
+                    value={fields.days}
+                    disabled={create.isPending}
+                    onChange={(event) => setFields({ ...fields, days: event.target.value })}
+                  />
+                </div>
+                {create.error && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {errorMessage(create.error)}
+                  </p>
+                )}
+              </DialogBody>
               <DialogFooter className="gap-2 sm:space-x-0">
                 <Button
                   type="button"

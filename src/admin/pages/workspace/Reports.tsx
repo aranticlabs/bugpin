@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { reportOriginState } from '../../lib/reportOrigin';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -63,7 +64,7 @@ import {
 } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { downloadReportsShare, type ReportShareFormat } from '../../lib/reportsShareExport';
-import { UNASSIGNED_FILTER } from '@shared/types';
+import { ACTIVE_REPORT_STATUSES, ASSIGNED_TO_ME_FILTER, UNASSIGNED_FILTER } from '@shared/types';
 import {
   Tooltip,
   TooltipContent,
@@ -71,14 +72,7 @@ import {
   TooltipTrigger,
 } from '../../components/ui/tooltip';
 import { formatDate as formatAbsoluteDate } from '../../lib/utils';
-import type { ManualReportChannel, Report, User } from '@shared/types';
-
-interface Project {
-  licenseLocked?: boolean;
-  isActive?: boolean;
-  id: string;
-  name: string;
-}
+import type { ManualReportChannel, ProjectSummary, Report, User } from '@shared/types';
 
 const PROJECT_DEFAULT_ASSIGNEE = '__project_default__';
 const UNASSIGNED_ASSIGNEE = '__unassigned__';
@@ -130,7 +124,10 @@ function normalizeManualReportUrl(value: string): string {
   return `https://${trimmed}`;
 }
 
-export function Reports() {
+export function Reports({
+  projectId: fixedProjectId,
+  headerStart,
+}: { projectId?: string; headerStart?: ReactNode } = {}) {
   const { user } = useAuth();
   const canManageReports = user?.role === 'admin' || user?.role === 'editor';
   const [searchParams, setSearchParams] = useSearchParams();
@@ -139,26 +136,38 @@ export function Reports() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createForm, setCreateForm] = useState<CreateReportFormState>(() =>
-    buildCreateReportForm(searchParams.get('projectId') || undefined)
+    buildCreateReportForm(fixedProjectId ?? (searchParams.get('projectId') || undefined))
   );
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   const page = parseInt(searchParams.get('page') || '1');
   const status = searchParams.get('status') || '';
   const priority = searchParams.get('priority') || '';
-  const projectId = searchParams.get('projectId') || '';
+  const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
   const assignedTo = searchParams.get('assignedTo') || '';
   const source = searchParams.get('source') || '';
 
   // Fetch projects for filter
   const { data: projectsData } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['project-summaries'],
     queryFn: async () => {
-      const response = await api.get('/projects');
-      return response.data.projects as Project[];
+      const response = await api.get('/projects/summaries');
+      return response.data.projects as ProjectSummary[];
     },
   });
+
+  const fixedProjectName = fixedProjectId
+    ? projectsData?.find((project) => project.id === fixedProjectId)?.name
+    : undefined;
+  const openReport = (reportId: string) =>
+    navigate(`/reports/${reportId}`, {
+      state: reportOriginState({
+        path: location.pathname + location.search,
+        label: fixedProjectId ? (fixedProjectName ?? 'Project') : 'Reports',
+      }),
+    });
 
   const { data: assignableUsers = [] } = useQuery({
     queryKey: ['assignable-users'],
@@ -418,17 +427,23 @@ export function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-muted-foreground">Manage bug reports</p>
+      {(!fixedProjectId || headerStart || canManageReports) && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {fixedProjectId ? (
+            (headerStart ?? <span />)
+          ) : (
+            <div>
+              <h1 className="text-2xl font-bold">Reports</h1>
+              <p className="text-muted-foreground">Manage bug reports</p>
+            </div>
+          )}
+          {canManageReports && (
+            <Button onClick={openCreateDialog} className="sm:shrink-0">
+              Create Report
+            </Button>
+          )}
         </div>
-        {canManageReports && (
-          <Button onClick={openCreateDialog} className="sm:shrink-0">
-            Create Report
-          </Button>
-        )}
-      </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -453,11 +468,12 @@ export function Reports() {
               value={status || 'all'}
               onValueChange={(value) => handleFilterChange('status', value)}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[170px]">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
                 <SelectItem value="open">Open</SelectItem>
                 <SelectItem value="in_progress">In Progress</SelectItem>
                 <SelectItem value="resolved">Resolved</SelectItem>
@@ -484,22 +500,24 @@ export function Reports() {
             </Select>
 
             {/* Project filter */}
-            <Select
-              value={projectId || 'all'}
-              onValueChange={(value) => handleFilterChange('projectId', value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Projects" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                {projectsData?.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!fixedProjectId && (
+              <Select
+                value={projectId || 'all'}
+                onValueChange={(value) => handleFilterChange('projectId', value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {projectsData?.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {canManageReports && (
               <Select
@@ -512,6 +530,7 @@ export function Reports() {
                 <SelectContent>
                   <SelectItem value="all">All Assignees</SelectItem>
                   <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
+                  <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
                   {assignableUsers.map((assignee) => (
                     <SelectItem key={assignee.id} value={assignee.id}>
                       <AssigneeDisplay user={assignee} compact />
@@ -926,7 +945,7 @@ export function Reports() {
             <Card
               key={report.id}
               className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
-              onClick={() => navigate(`/reports/${report.id}`)}
+              onClick={() => openReport(report.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
@@ -1040,7 +1059,7 @@ export function Reports() {
                 <TableRow
                   key={report.id}
                   className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
-                  onClick={() => navigate(`/reports/${report.id}`)}
+                  onClick={() => openReport(report.id)}
                 >
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox

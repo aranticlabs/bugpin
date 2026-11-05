@@ -294,6 +294,21 @@ export const handlers = [
     });
   }),
 
+  http.get('/api/reports/recent', () => {
+    return HttpResponse.json({ success: true, reports: [] });
+  }),
+
+  http.get('/api/reports/views/counts', () => {
+    return HttpResponse.json({
+      success: true,
+      counts: { assignedToMe: 2, unassigned: 3, active: 7 },
+    });
+  }),
+
+  http.post('/api/reports/:id/views', () => {
+    return HttpResponse.json({ success: true });
+  }),
+
   http.get('/api/reports/:id', ({ params }) => {
     const report = mockReports.find((r) => r.id === params.id);
 
@@ -389,6 +404,13 @@ export const handlers = [
     });
   }),
 
+  http.get('/api/projects/summaries', () => {
+    return HttpResponse.json({
+      success: true,
+      projects: mockProjects.map(({ id, name, isActive }) => ({ id, name, isActive })),
+    });
+  }),
+
   http.post('/api/projects', async ({ request }) => {
     const body = (await request.json()) as { name: string };
 
@@ -403,6 +425,22 @@ export const handlers = [
         position: mockProjects.length,
       },
     });
+  }),
+
+  http.get('/api/projects/pinned', () => {
+    return HttpResponse.json({ success: true, projects: [] });
+  }),
+
+  http.put('/api/projects/pinned/order', () => {
+    return HttpResponse.json({ success: true });
+  }),
+
+  http.put('/api/projects/:id/pin', () => {
+    return HttpResponse.json({ success: true });
+  }),
+
+  http.delete('/api/projects/:id/pin', () => {
+    return HttpResponse.json({ success: true });
   }),
 
   http.get('/api/projects/:id', ({ params }) => {

@@ -32,30 +32,6 @@ import {
   type PasswordPolicy,
 } from '@shared/password-policy';
 
-export function Security() {
-  return (
-    <div className="max-w-4xl space-y-6">
-      <SecuritySettingsCard />
-    </div>
-  );
-}
-
-export function TwoFactor() {
-  return (
-    <div className="max-w-4xl space-y-6">
-      <TwoFactorPolicyCard />
-    </div>
-  );
-}
-
-export function PasswordPolicySettings() {
-  return (
-    <div className="max-w-4xl space-y-6">
-      <PasswordPolicyCard />
-    </div>
-  );
-}
-
 function useSettings() {
   return useQuery({
     queryKey: ['settings'],
@@ -99,55 +75,133 @@ function SaveButton({ isPending }: { isPending: boolean }) {
   );
 }
 
-function SecuritySettingsCard() {
-  const [formData, setFormData] = useState({
-    enforceHttps: false,
-    rateLimitPerMinute: 60,
-    sessionMaxAgeDays: 7,
-    invitationExpirationDays: 7,
-  });
+function LoadingCard() {
+  return (
+    <Card>
+      <CardContent className="py-12">
+        <Spinner className="mx-auto text-primary" />
+      </CardContent>
+    </Card>
+  );
+}
 
+export function SessionSettingsCard() {
   const { data: settings, isLoading } = useSettings();
+  const [sessionMaxAgeDays, setSessionMaxAgeDays] = useState(7);
+  const mutation = useSaveSettings('Session settings saved');
+
+  useEffect(() => {
+    if (settings) setSessionMaxAgeDays(settings.sessionMaxAgeDays || 7);
+  }, [settings]);
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sessions</CardTitle>
+        <CardDescription>How long users stay signed in</CardDescription>
+      </CardHeader>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate({ sessionMaxAgeDays });
+        }}
+      >
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="session-max-age">Session Duration (Days)</Label>
+            <Input
+              id="session-max-age"
+              type="number"
+              min={1}
+              max={365}
+              value={sessionMaxAgeDays}
+              onChange={(e) => setSessionMaxAgeDays(parseInt(e.target.value) || 7)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Number of days before a user session expires and requires re-login (1-365)
+            </p>
+          </div>
+          <SaveButton isPending={mutation.isPending} />
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+export function InvitationSettingsCard() {
+  const { data: settings, isLoading } = useSettings();
+  const [invitationExpirationDays, setInvitationExpirationDays] = useState(7);
+  const mutation = useSaveSettings('Invitation settings saved');
+
+  useEffect(() => {
+    if (settings) setInvitationExpirationDays(settings.invitationExpirationDays || 7);
+  }, [settings]);
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Invitations</CardTitle>
+        <CardDescription>How long invitation links stay valid</CardDescription>
+      </CardHeader>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate({ invitationExpirationDays });
+        }}
+      >
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="invitation-expiration">Invitation Expiration (Days)</Label>
+            <Input
+              id="invitation-expiration"
+              type="number"
+              min={1}
+              max={30}
+              value={invitationExpirationDays}
+              onChange={(e) => setInvitationExpirationDays(parseInt(e.target.value) || 7)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Number of days before an invitation link expires (1-30)
+            </p>
+          </div>
+          <SaveButton isPending={mutation.isPending} />
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+export function NetworkSettingsCard() {
+  const { data: settings, isLoading } = useSettings();
+  const [formData, setFormData] = useState({ enforceHttps: false, rateLimitPerMinute: 60 });
+  const mutation = useSaveSettings('Network settings saved');
 
   useEffect(() => {
     if (settings) {
       setFormData({
         enforceHttps: settings.enforceHttps || false,
         rateLimitPerMinute: settings.rateLimitPerMinute || 60,
-        sessionMaxAgeDays: settings.sessionMaxAgeDays || 7,
-        invitationExpirationDays: settings.invitationExpirationDays || 7,
       });
     }
   }, [settings]);
 
-  const mutation = useSaveSettings('Security settings saved successfully');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutation.mutate(formData);
-  };
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
+  if (isLoading) return <LoadingCard />;
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Security Settings</CardTitle>
-        </div>
-        <CardDescription>Configure rate limiting and session settings</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-6">
-          {/* HTTPS Enforcement */}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate(formData);
+        }}
+      >
+        <CardContent className="space-y-6 pt-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -177,7 +231,6 @@ function SecuritySettingsCard() {
 
           <hr className="border-border" />
 
-          {/* Rate Limiting */}
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
@@ -205,45 +258,6 @@ function SecuritySettingsCard() {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="session-max-age">Session Duration (Days)</Label>
-            <Input
-              id="session-max-age"
-              type="number"
-              min={1}
-              max={365}
-              value={formData.sessionMaxAgeDays}
-              onChange={(e) =>
-                setFormData({ ...formData, sessionMaxAgeDays: parseInt(e.target.value) || 7 })
-              }
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Number of days before a user session expires and requires re-login (1-365)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="invitation-expiration">Invitation Expiration (Days)</Label>
-            <Input
-              id="invitation-expiration"
-              type="number"
-              min={1}
-              max={30}
-              value={formData.invitationExpirationDays}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  invitationExpirationDays: parseInt(e.target.value) || 7,
-                })
-              }
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Number of days before an invitation link expires (1-30)
-            </p>
-          </div>
-
           <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
@@ -257,7 +271,7 @@ const TWO_FACTOR_POLICY_LABELS: Record<TwoFactorPolicy, string> = {
   everyone: 'All users',
 };
 
-function TwoFactorPolicyCard() {
+export function TwoFactorPolicyCard() {
   const { data: settings } = useSettings();
   const [policy, setPolicy] = useState<TwoFactorPolicy>('off');
   const mutation = useSaveSettings('Two-factor policy saved');
@@ -317,7 +331,7 @@ const PASSWORD_RULE_OPTIONS: {
   { key: 'requireSymbol', label: 'Special character' },
 ];
 
-function PasswordPolicyCard() {
+export function PasswordPolicyCard() {
   const { data: settings } = useSettings();
   const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_PASSWORD_POLICY);
   const mutation = useSaveSettings('Password policy saved');

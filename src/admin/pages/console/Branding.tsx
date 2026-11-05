@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
 import { brandingApi } from '../../api/branding';
-import { WhiteLabelSettings } from './WhiteLabelSettings';
 import { licenseApi } from '../../api/license';
 import {
   Card,
@@ -76,7 +75,6 @@ export function Branding() {
           description="Customize your BugPin instance with your own logo, icon, favicon, and brand colors. Make it truly yours."
         />
       )}
-      {featureStatus?.features['white-label'] && <WhiteLabelSettings />}
     </div>
   );
 }

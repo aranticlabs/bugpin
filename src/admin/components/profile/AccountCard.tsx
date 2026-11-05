@@ -1,5 +1,3 @@
-import { SecurityTab } from '../profile/SecurityTab';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -28,65 +26,20 @@ import { Upload, Trash2, Camera } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { getCroppedImg } from '../../lib/imageUtils';
 
-interface ProfileDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
+export function AccountCard() {
   const { user } = useAuth();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-2xl h-[min(760px,90vh)]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>Profile Settings</DialogTitle>
-          <DialogDescription>Manage your account and how you sign in</DialogDescription>
-        </DialogHeader>
-
-        <Tabs defaultValue="account" className="flex min-h-0 flex-1 flex-col">
-          <div className="pt-2">
-            <TabsList>
-              <TabsTrigger value="account">Account</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
-            </TabsList>
-          </div>
-          {/* Plain scroll container instead of DialogBody: its inner wrapper cannot stretch to the viewport height. */}
-          <div className="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
-            {/* Both panels share one grid cell, so each stretches to the height of the tab area. */}
-            <div className="grid flex-1 grid-cols-1">
-              <TabsContent
-                forceMount
-                value="account"
-                className="col-start-1 row-start-1 mt-0 flex flex-col data-[state=inactive]:invisible"
-              >
-                <Card className="flex flex-1 flex-col">
-                  <CardHeader>
-                    <CardTitle>Account</CardTitle>
-                    <CardDescription>Your profile picture, name and email address</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-1 flex-col space-y-6">
-                    <ProfileSection user={user} />
-                    <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent
-                forceMount
-                value="security"
-                className="col-start-1 row-start-1 mt-0 flex flex-col gap-6 data-[state=inactive]:invisible"
-              >
-                <SecurityTab />
-              </TabsContent>
-            </div>
-          </div>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+    <Card>
+      <CardHeader>
+        <CardTitle>Account</CardTitle>
+        <CardDescription>Your profile picture, name and email address</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <ProfileSection user={user} />
+        <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
+      </CardContent>
+    </Card>
   );
 }
 

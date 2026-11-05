@@ -42,7 +42,7 @@ export const CE_INTEGRATION_TYPES: IntegrationTypeDefinition[] = [
   {
     type: 'github',
     name: 'GitHub',
-    description: 'Create issues from bug reports in your GitHub repository',
+    description: 'Create issues from bug reports in your GitHub repository.',
     icon: Github,
     maxPerProject: 1,
     getConfigSummary: (integration) => <GitHubConfigSummary integration={integration} />,

@@ -33,9 +33,9 @@ export function ColorPicker({ value, onChange, disabled, className }: ColorPicke
           <button
             type="button"
             className={cn(
-              'w-20 h-10 rounded-md border border-input shadow-sm transition-colors',
+              'w-20 h-9 shrink-0 rounded-md border border-input shadow-sm transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              disabled && 'opacity-50 cursor-not-allowed'
+              disabled && 'cursor-not-allowed'
             )}
             style={{ backgroundColor: value }}
             disabled={disabled}

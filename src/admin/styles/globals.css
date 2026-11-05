@@ -3,6 +3,32 @@
 /* Dark mode custom variant for Tailwind v4 */
 @custom-variant dark (&:is(.dark *));
 
+.launcher-preview-margin {
+  background: rgb(14 165 233 / 22%);
+  opacity: 0;
+  animation: launcher-margin-highlight 1s ease-out;
+}
+
+[data-preview-theme='light'] .launcher-preview-margin {
+  background: rgb(14 165 233 / 26%);
+}
+
+@keyframes launcher-margin-highlight {
+  0%,
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-preview-margin {
+    animation-timing-function: step-end;
+  }
+}
+
 /* BugPin Primary Color Palette */
 :root {
   --bugpin-primary-50: #e6f3f9;
@@ -258,6 +284,11 @@
 }
 .status-inactive {
   @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
+}
+
+/* Fields that are inherited and cannot be edited */
+.section-disabled {
+  @apply select-none opacity-60 grayscale;
 }
 
 /* Connection status */

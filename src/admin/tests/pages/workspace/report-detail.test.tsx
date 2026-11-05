@@ -17,6 +17,25 @@ vi.mock('sonner', () => ({
 import { toast } from 'sonner';
 
 describe('ReportDetail', () => {
+  it('records the report as recently viewed once it loads', async () => {
+    const viewed: string[] = [];
+    server.use(
+      http.post('/api/reports/:id/views', ({ params }) => {
+        viewed.push(String(params.id));
+        return HttpResponse.json({ success: true });
+      })
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+
+    expect(await screen.findByText('Button not working')).toBeInTheDocument();
+    await waitFor(() => expect(viewed).toEqual(['report-1']));
+  });
+
   it('auto-saves status and priority changes inline', async () => {
     const user = userEvent.setup();
     renderWithProviders(
@@ -117,6 +136,45 @@ describe('ReportDetail', () => {
 
     expect(await screen.findByText('Report not found')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to Reports' })).toBeInTheDocument();
+  });
+
+  it('goes back to the page the report was opened from', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+        <Route path="/" element={<p>Dashboard page</p>} />
+      </Routes>,
+      {
+        initialEntries: [
+          {
+            pathname: '/reports/report-1',
+            state: { reportOrigin: { path: '/', label: 'Dashboard' } },
+          },
+        ],
+      }
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Back to Dashboard' }));
+    expect(await screen.findByText('Dashboard page')).toBeInTheDocument();
+  });
+
+  it('ignores an origin that points off the console', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      {
+        initialEntries: [
+          {
+            pathname: '/reports/report-1',
+            state: { reportOrigin: { path: '//evil.example', label: 'Elsewhere' } },
+          },
+        ],
+      }
+    );
+
+    expect(await screen.findByRole('button', { name: 'Back to Reports' })).toBeInTheDocument();
   });
 
   it('retries GitHub sync when status is error', async () => {

@@ -1,6 +1,5 @@
 import { Integration } from '@shared/types';
 import { IntegrationTypeDefinition } from '../../lib/integration-types';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Edit, Trash2, PlayCircle, Power, Clock } from 'lucide-react';
@@ -43,77 +42,77 @@ export function IntegrationTypeCard({
 
   if (!integration) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-muted-foreground mb-3">
-            <Icon className="h-6 w-6" />
+      <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Icon className="h-5 w-5" />
           </div>
-          <h3 className="font-semibold">{definition.name}</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-4">{definition.description}</p>
-          <Button variant="outline" size="sm" onClick={() => onSetup(definition)}>
-            Configure
-          </Button>
-        </CardContent>
-      </Card>
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-medium">{definition.name}</p>
+            <p className="text-xs text-muted-foreground">{definition.description}</p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 self-start sm:self-auto"
+          onClick={() => onSetup(definition)}
+        >
+          Connect
+        </Button>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Icon className="h-5 w-5" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">{integration.name}</CardTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge
-                  variant="outline"
-                  className={`text-xs ${integration.isActive ? 'status-active' : 'status-inactive'}`}
-                >
-                  {integration.isActive ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {definition.getConfigSummary(integration)}
-
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          <span>Last used: {formatLastUsed(integration.lastUsedAt)}</span>
-          <span className="ml-2">
-            ({integration.usageCount} time{integration.usageCount !== 1 ? 's' : ''})
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t">
-          <Button variant="outline" size="sm" onClick={() => onEdit(integration, definition)}>
-            <Edit className="h-4 w-4 mr-1" />
-            Edit
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => onTest(integration.id)}>
-            <PlayCircle className="h-4 w-4 mr-1" />
-            Test
-          </Button>
-          <Button
+        <div className="min-w-0 space-y-1">
+          <p className="truncate text-sm font-medium">{integration.name}</p>
+          <Badge
             variant="outline"
-            size="sm"
-            onClick={() => onToggleActive(integration.id, !integration.isActive)}
+            className={`text-xs ${integration.isActive ? 'status-active' : 'status-inactive'}`}
           >
-            <Power className="h-4 w-4 mr-1" />
-            {integration.isActive ? 'Disable' : 'Enable'}
-          </Button>
-          <Button variant="outline-destructive" size="sm" onClick={() => onDelete(integration.id)}>
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete
-          </Button>
+            {integration.isActive ? 'Active' : 'Inactive'}
+          </Badge>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {definition.getConfigSummary(integration)}
+
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Clock className="h-4 w-4" />
+        <span>Last used: {formatLastUsed(integration.lastUsedAt)}</span>
+        <span className="ml-2">
+          ({integration.usageCount} time{integration.usageCount !== 1 ? 's' : ''})
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => onEdit(integration, definition)}>
+          <Edit className="h-4 w-4 mr-1" />
+          Edit
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onTest(integration.id)}>
+          <PlayCircle className="h-4 w-4 mr-1" />
+          Test
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onToggleActive(integration.id, !integration.isActive)}
+        >
+          <Power className="h-4 w-4 mr-1" />
+          {integration.isActive ? 'Disable' : 'Enable'}
+        </Button>
+        <Button variant="outline-destructive" size="sm" onClick={() => onDelete(integration.id)}>
+          <Trash2 className="h-4 w-4 mr-1" />
+          Delete
+        </Button>
+      </div>
+    </div>
   );
 }

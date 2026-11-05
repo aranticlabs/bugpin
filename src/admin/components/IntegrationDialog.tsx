@@ -850,7 +850,7 @@ export function IntegrationDialog({
             <AlertDialogAction
               onClick={() => {
                 setShowConfigDialog(false);
-                window.location.href = '/admin/settings';
+                window.location.href = '/admin/settings/general';
               }}
             >
               Go to Settings

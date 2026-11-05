@@ -2,6 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
+import { brandingApi } from '../../api/branding';
+import { licenseApi } from '../../api/license';
+import { UpgradePrompt } from '../../components/UpgradePrompt';
 import {
   Card,
   CardHeader,
@@ -21,7 +24,7 @@ function showError(error: Error) {
   );
 }
 
-export function WhiteLabelSettings() {
+function WhiteLabelSettings() {
   const client = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ['white-label'],
@@ -48,18 +51,12 @@ export function WhiteLabelSettings() {
   });
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>White-label</CardTitle>
-        <CardDescription>
-          Control footer branding in the Admin Console and email notifications.
-        </CardDescription>
-      </CardHeader>
       {isLoading ? (
         <CardContent className="py-12">
           <Spinner className="mx-auto text-primary" />
         </CardContent>
       ) : error || !data ? (
-        <CardContent>
+        <CardContent className="pt-6">
           <p role="alert" className="text-sm text-destructive">
             Unable to load white-label settings.
           </p>
@@ -72,7 +69,7 @@ export function WhiteLabelSettings() {
             save.mutate(new FormData(event.currentTarget));
           }}
         >
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="hide-footer-branding">Hide admin footer branding</Label>
               <Switch
@@ -114,5 +111,88 @@ export function WhiteLabelSettings() {
         </form>
       )}
     </Card>
+  );
+}
+
+function WidgetBrandingSettings() {
+  const client = useQueryClient();
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['branding-config'],
+    queryFn: brandingApi.getConfig,
+  });
+  const save = useMutation({
+    mutationFn: (showBranding: boolean) =>
+      api.put('/white-label/config', { hidePoweredBy: !showBranding }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ['branding-config'] });
+      await client.invalidateQueries({ queryKey: ['white-label'] });
+      toast.success('Widget branding updated');
+    },
+    onError: () => toast.error('Failed to update widget branding'),
+  });
+
+  if (!isLoading && !config?.whiteLabel) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Widget Branding</CardTitle>
+        <CardDescription>The branding line in the widget dialog footer.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading || !config ? (
+          <Spinner className="mx-auto text-primary" />
+        ) : (
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="show-widget-branding">Show BugPin branding</Label>
+              <p className="text-sm text-muted-foreground">
+                Display “Powered by BugPin” in the widget footer. Changes save automatically.
+              </p>
+            </div>
+            <Switch
+              id="show-widget-branding"
+              checked={!config.whiteLabel?.hidePoweredBy}
+              onCheckedChange={(checked) => save.mutate(checked)}
+              disabled={save.isPending}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function WhiteLabel() {
+  const { data: featureStatus, isLoading } = useQuery({
+    queryKey: ['license-features'],
+    queryFn: licenseApi.getFeatures,
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <Spinner className="mx-auto text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!featureStatus?.features['white-label']) {
+    return (
+      <UpgradePrompt
+        feature="white-label"
+        title="White-label"
+        description="Remove BugPin branding from the Admin Console, email notifications, and the widget."
+      />
+    );
+  }
+
+  return (
+    <>
+      <WhiteLabelSettings />
+      <WidgetBrandingSettings />
+    </>
   );
 }

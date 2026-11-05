@@ -4,16 +4,21 @@ import { toast } from 'sonner';
 import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { api } from '../../api/client';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Spinner } from '../../components/ui/spinner';
+  SectionCard,
+  SectionLoading,
+  SettingsFormActions,
+} from '../../components/settings/SectionCard';
 import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
+
+const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
+  maxVideoUploadSizeMb: stored.maxVideoUploadSizeMb || 50,
+  maxVideoUploadMbPerDay: stored.maxVideoUploadMbPerDay ?? 2048,
+  enableScreenRecording: stored.enableScreenRecording ?? false,
+  allowRecordingMicrophone: stored.allowRecordingMicrophone ?? false,
+  maxRecordingDurationSeconds: stored.maxRecordingDurationSeconds ?? 180,
+  recordingQuality: stored.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
+});
 
 export function Recording() {
   const queryClient = useQueryClient();
@@ -35,17 +40,11 @@ export function Recording() {
   });
 
   useEffect(() => {
-    if (settings) {
-      setFormData({
-        maxVideoUploadSizeMb: settings.screenshot.maxVideoUploadSizeMb || 50,
-        maxVideoUploadMbPerDay: settings.screenshot.maxVideoUploadMbPerDay ?? 2048,
-        enableScreenRecording: settings.screenshot.enableScreenRecording ?? false,
-        allowRecordingMicrophone: settings.screenshot.allowRecordingMicrophone ?? false,
-        maxRecordingDurationSeconds: settings.screenshot.maxRecordingDurationSeconds ?? 180,
-        recordingQuality: settings.screenshot.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
-      });
-    }
+    if (settings) setFormData(fromSettings(settings.screenshot));
   }, [settings]);
+
+  const isDirty =
+    !!settings && JSON.stringify(formData) !== JSON.stringify(fromSettings(settings.screenshot));
 
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
@@ -60,6 +59,23 @@ export function Recording() {
       toast.error(err.response?.data?.message || 'Failed to save settings');
     },
   });
+
+  const handleChange = (next: ScreenshotSettings) => {
+    const enabledChanged = !!next.enableScreenRecording !== !!formData.enableScreenRecording;
+    setFormData(next);
+    // The on/off switch saves by itself: while recording is off the form is locked, so it could
+    // not be saved afterwards.
+    if (enabledChanged && settings) {
+      const enabled = !!next.enableScreenRecording;
+      mutation.mutate({
+        screenshot: {
+          ...settings.screenshot,
+          enableScreenRecording: enabled,
+          ...(enabled ? {} : { allowRecordingMicrophone: false }),
+        },
+      });
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,40 +96,26 @@ export function Recording() {
 
   if (isLoading) {
     return (
-      <Card className="max-w-4xl">
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
+      <SectionCard section="recording">
+        <SectionLoading />
+      </SectionCard>
     );
   }
 
   return (
-    <Card className="max-w-4xl">
-      <CardHeader>
-        <CardTitle>Recording Settings</CardTitle>
-        <CardDescription>Configure screen recording and video uploads</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <RecordingSettingsForm
-            value={formData}
-            onChange={setFormData}
-            disabled={mutation.isPending}
-          />
-
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </Button>
-        </CardContent>
+    <SectionCard section="recording">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <RecordingSettingsForm
+          value={formData}
+          onChange={handleChange}
+          disabled={mutation.isPending}
+        />
+        <SettingsFormActions
+          isPending={mutation.isPending}
+          isDirty={isDirty}
+          locked={!formData.enableScreenRecording}
+        />
       </form>
-    </Card>
+    </SectionCard>
   );
 }

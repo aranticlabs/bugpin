@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, userEvent } from '../../utils';
-import { ProjectIntegrationsDialog } from '../../../components/project/ProjectIntegrationsDialog';
+import { ProjectIntegrations } from '../../../components/project/ProjectIntegrations';
 import type { Integration } from '@shared/types';
 
 const mockDeleteIntegration = vi.fn();
@@ -59,7 +59,7 @@ const baseIntegration: Integration = {
   updatedAt: new Date().toISOString(),
 };
 
-describe('ProjectIntegrationsDialog', () => {
+describe('ProjectIntegrations', () => {
   beforeEach(() => {
     integrationsData = [];
     integrationsLoading = false;
@@ -68,30 +68,17 @@ describe('ProjectIntegrationsDialog', () => {
   });
 
   it('shows not-configured card when no integrations exist', () => {
-    render(
-      <ProjectIntegrationsDialog
-        project={{ id: 'project-1', name: 'Project' }}
-        open={true}
-        onOpenChange={() => undefined}
-      />
-    );
+    render(<ProjectIntegrations projectId="project-1" />);
 
     expect(screen.getByText('GitHub')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /configure/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /connect/i })).toBeInTheDocument();
   });
 
   it('handles setup, edit, test, toggle, and delete actions', async () => {
     const user = userEvent.setup();
-    const onOpenChange = vi.fn();
     integrationsData = [baseIntegration];
 
-    render(
-      <ProjectIntegrationsDialog
-        project={{ id: 'project-1', name: 'Project' }}
-        open={true}
-        onOpenChange={onOpenChange}
-      />
-    );
+    render(<ProjectIntegrations projectId="project-1" />);
 
     expect(screen.getByText('GitHub Main')).toBeInTheDocument();
 
@@ -115,15 +102,9 @@ describe('ProjectIntegrationsDialog', () => {
   it('opens config dialog on setup click', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ProjectIntegrationsDialog
-        project={{ id: 'project-1', name: 'Project' }}
-        open={true}
-        onOpenChange={() => undefined}
-      />
-    );
+    render(<ProjectIntegrations projectId="project-1" />);
 
-    await user.click(screen.getByRole('button', { name: /configure/i }));
+    await user.click(screen.getByRole('button', { name: /connect/i }));
     expect(screen.getByText(/create integration dialog/i)).toBeInTheDocument();
   });
 
@@ -131,13 +112,7 @@ describe('ProjectIntegrationsDialog', () => {
     const user = userEvent.setup();
     integrationsData = [baseIntegration];
 
-    render(
-      <ProjectIntegrationsDialog
-        project={{ id: 'project-1', name: 'Project' }}
-        open={true}
-        onOpenChange={() => undefined}
-      />
-    );
+    render(<ProjectIntegrations projectId="project-1" />);
 
     await user.click(screen.getByRole('button', { name: /edit/i }));
     expect(screen.getByText(/edit integration dialog/i)).toBeInTheDocument();
@@ -146,13 +121,7 @@ describe('ProjectIntegrationsDialog', () => {
   it('shows loading state when integrations are loading', () => {
     integrationsLoading = true;
 
-    render(
-      <ProjectIntegrationsDialog
-        project={{ id: 'project-1', name: 'Project' }}
-        open={true}
-        onOpenChange={() => undefined}
-      />
-    );
+    render(<ProjectIntegrations projectId="project-1" />);
 
     expect(document.querySelector('.animate-spin')).toBeTruthy();
   });

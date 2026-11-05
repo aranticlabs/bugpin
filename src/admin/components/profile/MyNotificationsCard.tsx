@@ -3,14 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { Button } from '../ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '../ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -20,15 +13,10 @@ import type {
   AppSettings,
   NotificationDefaultSettings,
   NotificationPreferences,
-  Project,
+  ProjectSummary,
 } from '@shared/types';
 
-interface NotificationsDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogProps) {
+export function MyNotificationsCard() {
   const queryClient = useQueryClient();
   const [perProject, setPerProject] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -48,7 +36,6 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
       const response = await api.get('/settings');
       return response.data.settings as AppSettings;
     },
-    enabled: open,
   });
 
   // Fetch all user preferences
@@ -58,17 +45,15 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
       const response = await api.get('/notification-preferences/me');
       return response.data.preferences as NotificationPreferences[];
     },
-    enabled: open,
   });
 
   // Fetch projects for per-project mode
   const { data: projectsData } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['project-summaries'],
     queryFn: async () => {
-      const response = await api.get('/projects');
-      return response.data.projects as Project[];
+      const response = await api.get('/projects/summaries');
+      return response.data.projects as ProjectSummary[];
     },
-    enabled: open,
   });
 
   // Fetch per-project preferences when a project is selected
@@ -78,13 +63,11 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
       const response = await api.get(`/notification-preferences/me/projects/${selectedProjectId}`);
       return response.data.preferences as NotificationPreferences;
     },
-    enabled: open && perProject && !!selectedProjectId,
+    enabled: perProject && !!selectedProjectId,
   });
 
   // Initialize form data from preferences or global defaults
   useEffect(() => {
-    if (!open) return;
-
     if (perProject && projectPreferences) {
       setFormData({
         emailEnabled: projectPreferences.emailEnabled,
@@ -117,7 +100,7 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
         });
       }
     }
-  }, [open, perProject, projectPreferences, allPreferences, settings]);
+  }, [perProject, projectPreferences, allPreferences, settings]);
 
   // Bulk update mutation (all projects)
   const bulkMutation = useMutation({
@@ -155,35 +138,38 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
     },
   });
 
+  const saveFormData = (data: typeof formData) => {
+    if (perProject && selectedProjectId) {
+      projectMutation.mutate({ projectId: selectedProjectId, data });
+    } else if (!perProject) {
+      bulkMutation.mutate(data);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (perProject && selectedProjectId) {
-      projectMutation.mutate({ projectId: selectedProjectId, data: formData });
-    } else {
-      bulkMutation.mutate(formData);
-    }
+    saveFormData(formData);
   };
 
   const isSaving = bulkMutation.isPending || projectMutation.isPending;
   const isLoading = isLoadingPrefs || (perProject && isLoadingProjectPrefs);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Notification Preferences</DialogTitle>
-          <DialogDescription>
-            Configure your personal notification preferences.
-            {!perProject && ' These settings apply to all projects.'}
-          </DialogDescription>
-        </DialogHeader>
-
+    <Card>
+      <CardHeader>
+        <CardTitle>Notification Preferences</CardTitle>
+        <CardDescription>
+          Configure your personal notification preferences.
+          {!perProject && ' These settings apply to all projects.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
         {isLoading ? (
           <div className="py-12 flex items-center justify-center">
             <Spinner className="text-primary" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6 py-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Per-project toggle */}
             <div className="flex items-center justify-between pb-3 border-b">
               <div className="space-y-0.5">
@@ -229,11 +215,25 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
 
             {/* Show form when not in per-project mode, or when a project is selected */}
             {(!perProject || selectedProjectId) && (
-              <NotificationSettingsForm value={formData} onChange={setFormData} />
+              <NotificationSettingsForm
+                value={formData}
+                onChange={(next) => {
+                  setFormData(next);
+                  // The email switch saves by itself: the form is locked while emails are off.
+                  if (next.emailEnabled !== formData.emailEnabled) saveFormData(next);
+                }}
+              />
             )}
 
-            <DialogFooter>
-              <Button type="submit" disabled={isSaving || (perProject && !selectedProjectId)}>
+            <div>
+              <Button
+                type="submit"
+                disabled={
+                  isSaving ||
+                  (perProject && !selectedProjectId) ||
+                  (formData.emailEnabled ?? true) === false
+                }
+              >
                 {isSaving ? (
                   <>
                     <Spinner size="sm" className="mr-2" />
@@ -243,10 +243,10 @@ export function NotificationsDialog({ open, onOpenChange }: NotificationsDialogP
                   'Save Changes'
                 )}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }

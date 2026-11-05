@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Crown } from 'lucide-react';
 import { licenseApi } from '../api/license';
@@ -11,66 +10,11 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { AppSidebar } from './sidebar/AppSidebar';
 import { Footer } from './Footer';
+import { findSettingsNavItem } from '../lib/settingsNavigation';
 import { UpdateBanner } from './UpdateBanner';
 import { usePreference } from '../hooks/useUserPreferences';
 import { ThemePreferenceSync } from './ThemePreferenceSync';
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
-
-interface RouteCrumbConfig {
-  label: string;
-  subTabs?: { hash: string; label: string }[];
-  defaultHash?: string;
-  showDefaultSubTab?: boolean;
-}
-
-const routeCrumbs: Record<string, RouteCrumbConfig> = {
-  '/settings': {
-    label: 'Settings',
-    defaultHash: 'general',
-    subTabs: [
-      { hash: 'general', label: 'General' },
-      { hash: 'storage', label: 'Storage' },
-      { hash: 'smtp', label: 'SMTP' },
-      { hash: 'privacy', label: 'Privacy' },
-    ],
-  },
-  '/notifications': {
-    label: 'Notifications',
-    defaultHash: 'general',
-    subTabs: [
-      { hash: 'general', label: 'General' },
-      { hash: 'reporter', label: 'Reporter' },
-      { hash: 'email-templates', label: 'Email Templates' },
-    ],
-  },
-  '/users': { label: 'Users' },
-  '/security': {
-    label: 'Security',
-    defaultHash: 'general',
-    showDefaultSubTab: true,
-    subTabs: [
-      { hash: 'general', label: 'General' },
-      { hash: 'two-factor', label: 'Two-Factor' },
-      { hash: 'password-policy', label: 'Password Policy' },
-    ],
-  },
-  '/branding': { label: 'Branding' },
-  '/license': { label: 'License' },
-  '/button': { label: 'Button' },
-  '/dialog': { label: 'Dialog' },
-  '/screenshot': { label: 'Screenshot' },
-  '/recording': { label: 'Recording' },
-  '/language': { label: 'Language' },
-};
-
-function findRouteConfig(pathname: string): { path: string; config: RouteCrumbConfig } | null {
-  for (const [path, config] of Object.entries(routeCrumbs)) {
-    if (pathname === path || pathname.startsWith(path + '/')) {
-      return { path, config };
-    }
-  }
-  return null;
-}
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
@@ -95,16 +39,7 @@ export function Layout() {
     </>
   );
   const location = useLocation();
-  const navigate = useNavigate();
-  const routeMatch = findRouteConfig(location.pathname);
-  const [activeHash, setActiveHash] = useState<string>(window.location.hash.slice(1));
-
-  useEffect(() => {
-    const handler = () => setActiveHash(window.location.hash.slice(1));
-    handler();
-    window.addEventListener('hashchange', handler);
-    return () => window.removeEventListener('hashchange', handler);
-  }, []);
+  const settingsMatch = findSettingsNavItem(location.pathname);
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -112,38 +47,6 @@ export function Layout() {
     if (path.startsWith('/reports')) return 'Reports';
     if (path.startsWith('/projects')) return 'Projects';
     return 'BugPin';
-  };
-
-  const renderBreadcrumb = () => {
-    if (!routeMatch) return null;
-    const { path, config } = routeMatch;
-    const resolvedHash = activeHash || (config.showDefaultSubTab ? config.defaultHash : undefined);
-    const activeSubTab = config.subTabs?.find((t) => t.hash === resolvedHash);
-    const showSub =
-      !!activeSubTab && (config.showDefaultSubTab || activeSubTab.hash !== config.defaultHash);
-
-    return (
-      <nav className="flex items-center gap-1 text-sm">
-        {showSub ? (
-          <>
-            <button
-              onClick={() => {
-                navigate(path);
-                history.replaceState(null, '', path);
-                window.dispatchEvent(new HashChangeEvent('hashchange'));
-              }}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {config.label}
-            </button>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{activeSubTab.label}</span>
-          </>
-        ) : (
-          <span className="font-medium">{config.label}</span>
-        )}
-      </nav>
-    );
   };
 
   return (
@@ -163,8 +66,27 @@ export function Layout() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
 
-          {routeMatch ? (
-            renderBreadcrumb()
+          {settingsMatch ? (
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
+              <span className="text-muted-foreground">Settings</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <span className="text-muted-foreground">{settingsMatch.group.label}</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              {location.pathname === settingsMatch.item.path ? (
+                <h1 className="font-medium">{settingsMatch.item.title}</h1>
+              ) : (
+                <>
+                  <Link
+                    to={settingsMatch.item.path}
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {settingsMatch.item.title}
+                  </Link>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <h1 className="font-medium">Details</h1>
+                </>
+              )}
+            </nav>
           ) : (
             <h1 className="text-sm font-medium">{getPageTitle()}</h1>
           )}
@@ -174,7 +96,7 @@ export function Layout() {
                 <TooltipTrigger asChild>
                   {user.role === 'admin' ? (
                     <Link
-                      to="/license"
+                      to="/settings/license"
                       className={enterpriseBadgeClass}
                       aria-label="Enterprise license active"
                     >

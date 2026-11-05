@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '../../components/ui/alert-dialog';
+import { ScrollArea } from '../../components/ui/scroll-area';
 
 export function License() {
   const queryClient = useQueryClient();
@@ -512,76 +513,78 @@ export function License() {
           if (!open) setAgreementAccepted(false);
         }}
       >
-        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
-            <AlertDialogDescription asChild>
+        <AlertDialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col">
+          <ScrollArea className="-mx-6" contentClassName="space-y-4 px-6">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p>
+                    Review the Enterprise License Agreement before activating this license. If you
+                    act for another person or an organization, you must be authorized to accept on
+                    their behalf.
+                  </p>
+                  <p>
+                    <strong className="font-medium text-foreground">
+                      Activating binds this license to this installation.
+                    </strong>{' '}
+                    This key cannot be used on another installation. To move your license, you must
+                    replace (rotate) the key first.
+                  </p>
+                  <p>
+                    Sign in to the{' '}
+                    <a
+                      href="https://bugpin.io/portal/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      customer portal
+                    </a>
+                    , find your license, and choose{' '}
+                    <strong>Replace license for another server</strong>. Type{' '}
+                    <strong>replace</strong> to confirm, then copy or download the new key and
+                    activate it on the new installation. The old key is revoked. Replacement is
+                    available once every 24 hours.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {activationSelection && (
               <div className="space-y-3">
-                <p>
-                  Review the Enterprise License Agreement before activating this license. If you act
-                  for another person or an organization, you must be authorized to accept on their
-                  behalf.
+                <p className="font-medium">
+                  Choose up to {activationSelection.projectLimit} projects to keep available
                 </p>
-                <p>
-                  <strong className="font-medium text-foreground">
-                    Activating binds this license to this installation.
-                  </strong>{' '}
-                  This key cannot be used on another installation. To move your license, you must
-                  replace (rotate) the key first.
-                </p>
-                <p>
-                  Sign in to the{' '}
-                  <a
-                    href="https://bugpin.io/portal/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    customer portal
-                  </a>
-                  , find your license, and choose{' '}
-                  <strong>Replace license for another server</strong>. Type <strong>replace</strong>{' '}
-                  to confirm, then copy or download the new key and activate it on the new
-                  installation. The old key is revoked. Replacement is available once every 24
-                  hours.
-                </p>
+                <ProjectSelection
+                  projects={activationSelection.projects}
+                  limit={activationSelection.projectLimit}
+                  selectedIds={selectedIds ?? []}
+                  onChange={setSelectedIds}
+                  disabled={activateMutation.isPending}
+                />
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {activationSelection && (
-            <div className="space-y-3">
-              <p className="font-medium">
-                Choose up to {activationSelection.projectLimit} projects to keep available
-              </p>
-              <ProjectSelection
-                projects={activationSelection.projects}
-                limit={activationSelection.projectLimit}
-                selectedIds={selectedIds ?? []}
-                onChange={setSelectedIds}
+            )}
+            <div className="flex items-center gap-3 py-2">
+              <Checkbox
+                id="enterprise-license-agreement"
+                checked={agreementAccepted}
+                onCheckedChange={(checked) => setAgreementAccepted(checked === true)}
                 disabled={activateMutation.isPending}
               />
+              <Label htmlFor="enterprise-license-agreement" className="text-sm leading-relaxed">
+                I accept the{' '}
+                <a
+                  href={ENTERPRISE_AGREEMENT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  BugPin Enterprise License Agreement
+                </a>
+                .
+              </Label>
             </div>
-          )}
-          <div className="flex items-center gap-3 py-2">
-            <Checkbox
-              id="enterprise-license-agreement"
-              checked={agreementAccepted}
-              onCheckedChange={(checked) => setAgreementAccepted(checked === true)}
-              disabled={activateMutation.isPending}
-            />
-            <Label htmlFor="enterprise-license-agreement" className="text-sm leading-relaxed">
-              I accept the{' '}
-              <a
-                href={ENTERPRISE_AGREEMENT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                BugPin Enterprise License Agreement
-              </a>
-              .
-            </Label>
-          </div>
+          </ScrollArea>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={activateMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction

@@ -9,14 +9,7 @@ import { Integration } from '@shared/types';
 import { IntegrationTypeCard } from '../integrations/IntegrationTypeCard';
 import { CE_INTEGRATION_TYPES, IntegrationTypeDefinition } from '../../lib/integration-types';
 
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { SettingsCard } from '../ui/settings-card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,19 +22,15 @@ import {
 } from '../ui/alert-dialog';
 import { Spinner } from '../ui/spinner';
 
-interface ProjectIntegrationsDialogProps {
-  project: { id: string; name: string };
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface ProjectIntegrationsProps {
+  projectId: string;
   integrationTypes?: IntegrationTypeDefinition[];
 }
 
-export function ProjectIntegrationsDialog({
-  project,
-  open,
-  onOpenChange,
+export function ProjectIntegrations({
+  projectId,
   integrationTypes = CE_INTEGRATION_TYPES,
-}: ProjectIntegrationsDialogProps) {
+}: ProjectIntegrationsProps) {
   const [activeType, setActiveType] = useState<IntegrationTypeDefinition | null>(null);
   const [editingIntegration, setEditingIntegration] = useState<Integration | undefined>();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -51,7 +40,7 @@ export function ProjectIntegrationsDialog({
   const updateMutation = useUpdateIntegration();
   const testMutation = useTestIntegration();
 
-  const { data: integrations, isLoading } = useIntegrations(project.id);
+  const { data: integrations, isLoading } = useIntegrations(projectId);
 
   const handleSetup = (definition: IntegrationTypeDefinition) => {
     setEditingIntegration(undefined);
@@ -96,49 +85,41 @@ export function ProjectIntegrationsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className={`max-h-[85vh] ${integrationTypes.length > 1 ? 'max-w-3xl' : 'max-w-lg'}`}
-        >
-          <DialogHeader>
-            <DialogTitle>Integrations</DialogTitle>
-            <DialogDescription>Manage integrations for "{project.name}"</DialogDescription>
-          </DialogHeader>
-
-          <DialogBody className="flex-1">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <Spinner size="lg" className="text-primary" />
-              </div>
-            ) : (
-              <div className={`grid gap-4 ${integrationTypes.length > 1 ? 'md:grid-cols-2' : ''}`}>
-                {integrationTypes.map((definition) => {
-                  const integration = integrations?.find((i) => i.type === definition.type);
-                  return (
-                    <IntegrationTypeCard
-                      key={definition.type}
-                      definition={definition}
-                      integration={integration}
-                      onSetup={handleSetup}
-                      onEdit={handleEdit}
-                      onDelete={handleDeleteIntegration}
-                      onTest={handleTestIntegration}
-                      onToggleActive={handleToggleActive}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+      <SettingsCard
+        title="Issue Trackers"
+        description="Forward reports from this project to your issue tracker."
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="text-primary" />
+          </div>
+        ) : (
+          <div className="divide-y">
+            {integrationTypes.map((definition) => {
+              const integration = integrations?.find((i) => i.type === definition.type);
+              return (
+                <IntegrationTypeCard
+                  key={definition.type}
+                  definition={definition}
+                  integration={integration}
+                  onSetup={handleSetup}
+                  onEdit={handleEdit}
+                  onDelete={handleDeleteIntegration}
+                  onTest={handleTestIntegration}
+                  onToggleActive={handleToggleActive}
+                />
+              );
+            })}
+          </div>
+        )}
+      </SettingsCard>
 
       {ActiveConfigDialog && (
         <ActiveConfigDialog
           open={!!activeType}
           onClose={handleConfigDialogClose}
           integration={editingIntegration}
-          projectId={project.id}
+          projectId={projectId}
         />
       )}
 

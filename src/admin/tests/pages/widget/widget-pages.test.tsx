@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQuery, screen, userEvent, waitFor, within } from '../../utils';
 import { Dialog } from '../../../pages/widget/Dialog';
 import { Button } from '../../../pages/widget/Button';
 import { api } from '../../../api/client';
@@ -14,7 +14,8 @@ vi.mock('../../../api/branding', () => ({
   brandingApi: brandingApiMocks,
 }));
 
-vi.mock('../../../components/WidgetDialogSettingsForm', () => ({
+vi.mock('../../../components/WidgetDialogSettingsForm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../components/WidgetDialogSettingsForm')>()),
   WidgetDialogSettingsForm: ({
     onChange,
   }: {
@@ -26,7 +27,10 @@ vi.mock('../../../components/WidgetDialogSettingsForm', () => ({
   ),
 }));
 
-vi.mock('../../../components/WidgetLauncherButtonSettingsForm', () => ({
+vi.mock('../../../components/WidgetLauncherButtonSettingsForm', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../components/WidgetLauncherButtonSettingsForm')
+  >()),
   WidgetLauncherButtonSettingsForm: ({
     onChange,
   }: {
@@ -82,11 +86,13 @@ describe('Widget settings pages', () => {
 
     renderWithQuery(<Dialog />);
 
-    expect(await screen.findByText('Widget Dialog Settings')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /change widget colors/i })
+    ).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Show BugPin branding' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /change widget colors/i }));
-    await user.click(screen.getByRole('button', { name: /save colors/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(brandingApiMocks.updateWidgetPrimaryColors).toHaveBeenCalled();
@@ -109,9 +115,7 @@ describe('Widget settings pages', () => {
 
     renderWithQuery(<Button />);
 
-    expect(await screen.findByText('Widget Button Settings')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /change widget button/i }));
+    await user.click(await screen.findByRole('button', { name: /change widget button/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
@@ -135,46 +139,68 @@ describe('Widget settings pages', () => {
     // Verify it did NOT trigger a save
     expect(putSpy).not.toHaveBeenCalled();
   });
-});
 
-it('shows branding by default for a white-label license and persists both toggle choices', async () => {
-  const config = await brandingApiMocks.getConfig();
-  let hidePoweredBy = false;
-  brandingApiMocks.getConfig.mockImplementation(async () => ({
-    ...config,
-    whiteLabel: { enabled: true, hidePoweredBy },
-  }));
-  const put = vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {
-    hidePoweredBy = (body as { hidePoweredBy: boolean }).hidePoweredBy;
-    return { data: { success: true } };
-  });
-  const user = userEvent.setup();
-  const first = renderWithQuery(<Dialog />);
-  const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
-  expect(toggle).toBeChecked();
-  await user.click(toggle);
-  await waitFor(() => expect(toggle).not.toBeChecked());
-  expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: true });
-  first.unmount();
-  renderWithQuery(<Dialog />);
-  const restored = await screen.findByRole('switch', { name: 'Show BugPin branding' });
-  expect(restored).not.toBeChecked();
-  await user.click(restored);
-  await waitFor(() => expect(restored).toBeChecked());
-  expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: false });
-});
+  it('previews unsaved dialog colors next to the dialog settings', async () => {
+    const user = userEvent.setup();
 
-it('keeps the saved branding choice when updating it fails', async () => {
-  const config = await brandingApiMocks.getConfig();
-  brandingApiMocks.getConfig.mockResolvedValue({
-    ...config,
-    whiteLabel: { enabled: true, hidePoweredBy: false },
+    renderWithQuery(<Dialog />);
+
+    await screen.findByRole('button', { name: /change widget colors/i });
+    expect(screen.getByText('Live Preview')).toBeInTheDocument();
+    const preview = () => screen.getByLabelText('Dialog preview');
+    expect(within(preview()).getByText('Submit Report')).toBeInTheDocument();
+    expect(within(preview()).getByText('Details')).toBeInTheDocument();
+    expect(preview().style.getPropertyValue('--wp-primary')).toBe('#0f172a');
+
+    await user.click(screen.getByRole('button', { name: /change widget colors/i }));
+    expect(preview().style.getPropertyValue('--wp-primary')).toBe('#123456');
+    expect(brandingApiMocks.updateWidgetPrimaryColors).not.toHaveBeenCalled();
   });
-  vi.spyOn(api, 'put').mockRejectedValue(new Error('License unavailable'));
-  const user = userEvent.setup();
-  renderWithQuery(<Dialog />);
-  const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
-  await user.click(toggle);
-  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update widget branding'));
-  expect(toggle).toBeChecked();
+
+  it('previews the launcher button next to its settings', async () => {
+    renderWithQuery(<Button />);
+
+    await screen.findByRole('button', { name: /change widget button/i });
+    expect(screen.getByText('Live Preview')).toBeInTheDocument();
+    expect(screen.getByText('Hover over the button to see its effects.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
+  });
+
+  it('opens the preview in the console theme and still allows switching', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('bugpin-theme', 'dark');
+
+    renderWithQuery(<Dialog />);
+
+    await screen.findByRole('button', { name: /change widget colors/i });
+    expect(screen.getByRole('tab', { name: 'Dark' })).toHaveAttribute('data-state', 'active');
+    expect(screen.getByLabelText('Dialog preview').style.getPropertyValue('--wp-background')).toBe(
+      '#0a0a0a'
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Light' }));
+    expect(screen.getByRole('tab', { name: 'Light' })).toHaveAttribute('data-state', 'active');
+    localStorage.removeItem('bugpin-theme');
+  });
+
+  it('shows the dialog colors first and lets the preview below collapse', async () => {
+    const user = userEvent.setup();
+    const { unmount, queryClient } = renderWithQuery(<Dialog />);
+
+    const colors = await screen.findByRole('button', { name: /change widget colors/i });
+    const previewToggle = screen.getByRole('button', { name: /live preview/i });
+    expect(
+      colors.compareDocumentPosition(previewToggle) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Dialog preview')).toBeInTheDocument();
+
+    await user.click(previewToggle);
+    expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Dark' })).not.toBeInTheDocument();
+
+    unmount();
+    renderWithQuery(<Dialog />, { queryClient });
+    await screen.findByRole('button', { name: /change widget colors/i });
+    expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
+  });
 });

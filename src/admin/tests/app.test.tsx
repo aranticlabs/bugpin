@@ -32,49 +32,19 @@ vi.mock('../pages/workspace/ReportDetail', () => ({
   ReportDetail: () => <div>Report Detail Page</div>,
 }));
 
-vi.mock('../pages/workspace/Projects', () => ({
-  Projects: () => <div>Projects Page</div>,
+vi.mock('../pages/workspace/ProjectsPage', () => ({
+  ProjectsPage: () => <div>Projects Page</div>,
 }));
 
-vi.mock('../pages/console/SettingsPage', () => ({
-  SettingsPage: () => <div>Settings Page</div>,
-}));
-
-vi.mock('../pages/console/NotificationsPage', () => ({
-  NotificationsPage: () => <div>Notifications Page</div>,
-}));
-
-vi.mock('../pages/console/Users', () => ({
-  Users: () => <div>Users Page</div>,
-}));
-
-vi.mock('../pages/console/SecurityPrivacy', () => ({
-  SecurityPrivacy: () => <div>Security Page</div>,
-}));
-
-vi.mock('../pages/console/Branding', () => ({
-  Branding: () => <div>Branding Page</div>,
-}));
-
-vi.mock('../pages/console/License', () => ({
-  License: () => <div>License Page</div>,
-}));
-
-vi.mock('../pages/widget/Button', () => ({
-  Button: () => <div>Button Page</div>,
-}));
-
-vi.mock('../pages/widget/Dialog', () => ({
-  Dialog: () => <div>Dialog Page</div>,
-}));
-
-vi.mock('../pages/widget/Screenshot', () => ({
-  Screenshot: () => <div>Screenshot Page</div>,
-}));
-
-vi.mock('../pages/widget/Language', () => ({
-  Language: () => <div>Language Page</div>,
-}));
+vi.mock('../pages/settings/SettingsRouter', async () => {
+  const { useLocation } = await import('react-router-dom');
+  return {
+    SettingsRouter: () => {
+      const location = useLocation();
+      return <div>Settings at {location.pathname}</div>;
+    },
+  };
+});
 
 const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 
@@ -91,27 +61,33 @@ describe('App routes', () => {
     expect(await screen.findByText('Login Page')).toBeInTheDocument();
   });
 
-  it('renders admin-only routes for admin users', async () => {
-    mockUseAuth.mockReturnValue({ user: { role: 'admin' }, isLoading: false });
+  it.each(['admin', 'editor', 'viewer'])('opens Projects for %s users', async (role) => {
+    mockUseAuth.mockReturnValue({ user: { role }, isLoading: false });
 
     renderWithRouter(<App />, { initialEntries: ['/projects'] });
 
     expect(await screen.findByText('Projects Page')).toBeInTheDocument();
   });
 
-  it('renders the Security route for administrators', async () => {
-    mockUseAuth.mockReturnValue({ user: { role: 'admin' }, isLoading: false });
+  it('renders the settings area under /settings', async () => {
+    mockUseAuth.mockReturnValue({ user: { role: 'viewer' }, isLoading: false });
 
-    renderWithRouter(<App />, { initialEntries: ['/security'] });
+    renderWithRouter(<App />, { initialEntries: ['/settings/account/profile'] });
 
-    expect(await screen.findByText('Security Page')).toBeInTheDocument();
+    expect(await screen.findByText('Settings at /settings/account/profile')).toBeInTheDocument();
   });
 
-  it('redirects non-admin users away from admin routes', async () => {
-    mockUseAuth.mockReturnValue({ user: { role: 'user' }, isLoading: false });
+  it.each([
+    ['/security', '/settings/authentication'],
+    ['/users', '/settings/users'],
+    ['/license', '/settings/license'],
+    ['/button', '/settings/project-defaults/launcher-button'],
+    ['/notifications#email-templates', '/settings/email'],
+  ])('redirects the former page %s to %s', async (entry, target) => {
+    mockUseAuth.mockReturnValue({ user: { role: 'admin' }, isLoading: false });
 
-    renderWithRouter(<App />, { initialEntries: ['/projects'] });
+    renderWithRouter(<App />, { initialEntries: [entry] });
 
-    expect(await screen.findByText('Dashboard Page')).toBeInTheDocument();
+    expect(await screen.findByText(`Settings at ${target}`)).toBeInTheDocument();
   });
 });

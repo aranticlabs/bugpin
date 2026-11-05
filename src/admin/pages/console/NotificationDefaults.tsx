@@ -2,21 +2,32 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
+import { NotificationTabs } from '../../components/NotificationTabs';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Spinner } from '../../components/ui/spinner';
-import { NotificationSettingsForm } from '../../components/NotificationSettingsForm';
-import type { AppSettings, NotificationDefaultSettings } from '@shared/types';
+  SectionCard,
+  SectionLoading,
+  SettingsFormActions,
+} from '../../components/settings/SectionCard';
+import type {
+  AppSettings,
+  NotificationDefaultSettings,
+  ReporterNotificationSettings,
+} from '@shared/types';
+
+interface NotificationForm {
+  notifications: Partial<NotificationDefaultSettings>;
+  reporterNotifications: Partial<ReporterNotificationSettings>;
+}
+
+const toForm = (settings: AppSettings): NotificationForm => ({
+  notifications: settings.notifications ?? {},
+  reporterNotifications: settings.reporterNotifications ?? {},
+});
 
 export function NotificationDefaults() {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<Partial<NotificationDefaultSettings>>({});
+  const [formData, setFormData] = useState<NotificationForm | null>(null);
+  const [tab, setTab] = useState<'team' | 'reporter'>('team');
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
@@ -27,13 +38,11 @@ export function NotificationDefaults() {
   });
 
   useEffect(() => {
-    if (settings) {
-      setFormData(settings.notifications);
-    }
+    if (settings) setFormData(toForm(settings));
   }, [settings]);
 
   const mutation = useMutation({
-    mutationFn: async (data: { notifications: Partial<NotificationDefaultSettings> }) => {
+    mutationFn: async (data: NotificationForm) => {
       const response = await api.put('/settings', data);
       return response.data;
     },
@@ -46,48 +55,57 @@ export function NotificationDefaults() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutation.mutate({ notifications: formData });
-  };
-
-  if (isLoading) {
+  if (isLoading || !settings || !formData) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
+      <SectionCard section="notifications" showHeader={false}>
+        <SectionLoading />
+      </SectionCard>
     );
   }
 
+  const emailOn = (form: NotificationForm, which: 'team' | 'reporter') =>
+    which === 'team'
+      ? (form.notifications.emailEnabled ?? true)
+      : (form.reporterNotifications.emailEnabled ?? true);
+  // The email switches save by themselves: the tab is locked while its emails are off.
+  const applyChange = (next: NotificationForm, which: 'team' | 'reporter') => {
+    const before = emailOn(formData, which);
+    setFormData(next);
+    if (before !== emailOn(next, which)) {
+      mutation.mutate(
+        which === 'team'
+          ? { ...toForm(settings), notifications: next.notifications }
+          : { ...toForm(settings), reporterNotifications: next.reporterNotifications }
+      );
+    }
+  };
+
+  const isDirty = JSON.stringify(formData) !== JSON.stringify(toForm(settings));
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Notification Defaults</CardTitle>
-        <CardDescription>
-          Default notification preferences for all team members across all projects. Individual
-          users can override these in their notification settings. Projects can also override these
-          in their project settings.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <NotificationSettingsForm value={formData} onChange={setFormData} />
-          <div className="pt-4">
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-          </div>
-        </CardContent>
+    <SectionCard section="notifications" showHeader={false}>
+      <form
+        className="space-y-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate(formData);
+        }}
+      >
+        <NotificationTabs
+          team={formData.notifications}
+          onTeamChange={(notifications) => applyChange({ ...formData, notifications }, 'team')}
+          onTabChange={setTab}
+          reporter={formData.reporterNotifications}
+          onReporterChange={(reporterNotifications) =>
+            applyChange({ ...formData, reporterNotifications }, 'reporter')
+          }
+        />
+        <SettingsFormActions
+          isPending={mutation.isPending}
+          isDirty={isDirty}
+          locked={!emailOn(formData, tab)}
+        />
       </form>
-    </Card>
+    </SectionCard>
   );
 }

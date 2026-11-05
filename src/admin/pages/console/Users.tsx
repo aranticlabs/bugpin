@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -242,9 +243,13 @@ export function Users() {
                         )}
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="font-medium truncate" title={user.name || undefined}>
+                        <Link
+                          to={`/settings/users/${user.id}`}
+                          className="block font-medium truncate hover:underline"
+                          title={user.name || undefined}
+                        >
                           {user.name}
-                        </p>
+                        </Link>
                         <p className="text-sm text-muted-foreground truncate" title={user.email}>
                           {user.email}
                         </p>

@@ -1,36 +1,13 @@
-import React, { Suspense, lazy, type ComponentType } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
 import { ForceTwoFactorSetupDialog } from './components/ForceTwoFactorSetupDialog';
 import { Spinner } from './components/ui/spinner';
-
-// Wrapper around React.lazy that reloads the page once when a chunk fails to load.
-// This handles stale tabs after deployments where old chunk filenames no longer exist.
-function lazyWithRetry(
-  factory: () => Promise<{ default: ComponentType }>
-): React.LazyExoticComponent<ComponentType> {
-  return lazy(() =>
-    factory().catch((error: unknown) => {
-      const isChunkError =
-        error instanceof Error &&
-        (error.message.includes('dynamically imported module') ||
-          error.message.includes('Failed to fetch') ||
-          error.message.includes('Loading chunk'));
-
-      if (isChunkError && !sessionStorage.getItem('chunk_reload')) {
-        sessionStorage.setItem('chunk_reload', '1');
-        window.location.reload();
-        return new Promise(() => {}); // Never resolves — page is reloading
-      }
-
-      sessionStorage.removeItem('chunk_reload');
-      throw error;
-    })
-  );
-}
+import { lazyWithRetry } from './lib/lazyWithRetry';
+import { LEGACY_PATHS, legacySettingsPath } from './lib/legacyRoutes';
 
 // Lazy load pages for code splitting
 const Login = lazyWithRetry(() => import('./pages/Login').then((m) => ({ default: m.Login })));
@@ -43,41 +20,14 @@ const Reports = lazyWithRetry(() =>
 const ReportDetail = lazyWithRetry(() =>
   import('./pages/workspace/ReportDetail').then((m) => ({ default: m.ReportDetail }))
 );
-const Projects = lazyWithRetry(() =>
-  import('./pages/workspace/Projects').then((m) => ({ default: m.Projects }))
+const ProjectDetail = lazyWithRetry(() =>
+  import('./pages/workspace/ProjectDetail').then((m) => ({ default: m.ProjectDetail }))
 );
-const SettingsPage = lazyWithRetry(() =>
-  import('./pages/console/SettingsPage').then((m) => ({ default: m.SettingsPage }))
+const ProjectsPage = lazyWithRetry(() =>
+  import('./pages/workspace/ProjectsPage').then((m) => ({ default: m.ProjectsPage }))
 );
-const NotificationsPage = lazyWithRetry(() =>
-  import('./pages/console/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
-);
-const Users = lazyWithRetry(() =>
-  import('./pages/console/Users').then((m) => ({ default: m.Users }))
-);
-const SecurityPrivacy = lazyWithRetry(() =>
-  import('./pages/console/SecurityPrivacy').then((m) => ({ default: m.SecurityPrivacy }))
-);
-const Branding = lazyWithRetry(() =>
-  import('./pages/console/Branding').then((m) => ({ default: m.Branding }))
-);
-const License = lazyWithRetry(() =>
-  import('./pages/console/License').then((m) => ({ default: m.License }))
-);
-const WidgetButton = lazyWithRetry(() =>
-  import('./pages/widget/Button').then((m) => ({ default: m.Button }))
-);
-const WidgetDialog = lazyWithRetry(() =>
-  import('./pages/widget/Dialog').then((m) => ({ default: m.Dialog }))
-);
-const Screenshot = lazyWithRetry(() =>
-  import('./pages/widget/Screenshot').then((m) => ({ default: m.Screenshot }))
-);
-const Recording = lazyWithRetry(() =>
-  import('./pages/widget/Recording').then((m) => ({ default: m.Recording }))
-);
-const Language = lazyWithRetry(() =>
-  import('./pages/widget/Language').then((m) => ({ default: m.Language }))
+const SettingsRouter = lazyWithRetry(() =>
+  import('./pages/settings/SettingsRouter').then((m) => ({ default: m.SettingsRouter }))
 );
 const TestWidgetPage = lazyWithRetry(() =>
   import('./pages/TestWidgetPage').then((m) => ({ default: m.TestWidgetPage }))
@@ -130,15 +80,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Admin-only route wrapper
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-
-  if (user?.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
-
-  return <>{children}</>;
+function LegacyRedirect() {
+  const { pathname, hash } = useLocation();
+  return <Navigate to={legacySettingsPath(pathname, hash) ?? '/'} replace />;
 }
 
 export function App() {
@@ -171,102 +115,12 @@ export function App() {
             <Route index element={<Dashboard />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/:id" element={<ReportDetail />} />
-            <Route
-              path="projects"
-              element={
-                <AdminRoute>
-                  <Projects />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="settings"
-              element={
-                <AdminRoute>
-                  <SettingsPage />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="notifications"
-              element={
-                <AdminRoute>
-                  <NotificationsPage />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="users"
-              element={
-                <AdminRoute>
-                  <Users />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="security"
-              element={
-                <AdminRoute>
-                  <SecurityPrivacy />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="branding"
-              element={
-                <AdminRoute>
-                  <Branding />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="license"
-              element={
-                <AdminRoute>
-                  <License />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="button"
-              element={
-                <AdminRoute>
-                  <WidgetButton />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="dialog"
-              element={
-                <AdminRoute>
-                  <WidgetDialog />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="screenshot"
-              element={
-                <AdminRoute>
-                  <Screenshot />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="recording"
-              element={
-                <AdminRoute>
-                  <Recording />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="language"
-              element={
-                <AdminRoute>
-                  <Language />
-                </AdminRoute>
-              }
-            />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:id" element={<ProjectDetail />} />
+            <Route path="settings/*" element={<SettingsRouter />} />
+            {LEGACY_PATHS.map((path) => (
+              <Route key={path} path={path.slice(1)} element={<LegacyRedirect />} />
+            ))}
           </Route>
 
           {/* Catch all */}

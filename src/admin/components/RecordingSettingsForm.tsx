@@ -8,8 +8,8 @@ import {
 } from '@shared/recording-quality';
 import { cn } from '../lib/utils';
 import { Alert, AlertDescription } from './ui/alert';
-import { Label } from './ui/label';
 import { Switch } from './ui/switch';
+import { SettingRow, SettingRowPair, SettingRows } from './ui/setting-row';
 import { SettingsNumberInput } from './SettingsNumberInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
@@ -33,9 +33,24 @@ interface RecordingSettingsFormProps {
     screenshot: GlobalScreenshotSettings;
   };
   disabled?: boolean;
-  showCustomToggle?: boolean;
-  useCustomSettings?: boolean;
-  onCustomToggle?: (enabled: boolean) => void;
+}
+
+export function resolveRecordingSettings(
+  value: ScreenshotSettings,
+  globalSettings?: { screenshot: GlobalScreenshotSettings }
+) {
+  const global = globalSettings?.screenshot;
+  return {
+    maxVideoUploadSizeMb: value.maxVideoUploadSizeMb ?? global?.maxVideoUploadSizeMb ?? 50,
+    maxVideoUploadMbPerDay: value.maxVideoUploadMbPerDay ?? global?.maxVideoUploadMbPerDay ?? 2048,
+    enableScreenRecording: value.enableScreenRecording ?? global?.enableScreenRecording ?? false,
+    allowRecordingMicrophone:
+      value.allowRecordingMicrophone ?? global?.allowRecordingMicrophone ?? false,
+    maxRecordingDurationSeconds:
+      value.maxRecordingDurationSeconds ?? global?.maxRecordingDurationSeconds ?? 180,
+    recordingQuality:
+      value.recordingQuality ?? global?.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
+  };
 }
 
 export function RecordingSettingsForm({
@@ -43,233 +58,162 @@ export function RecordingSettingsForm({
   onChange,
   globalSettings,
   disabled = false,
-  showCustomToggle = false,
-  useCustomSettings = true,
-  onCustomToggle,
 }: RecordingSettingsFormProps) {
-  const effectiveMaxVideoUploadSizeMb =
-    value.maxVideoUploadSizeMb ?? globalSettings?.screenshot.maxVideoUploadSizeMb ?? 50;
-  const effectiveMaxVideoUploadMbPerDay =
-    value.maxVideoUploadMbPerDay ?? globalSettings?.screenshot.maxVideoUploadMbPerDay ?? 2048;
-  const effectiveEnableScreenRecording =
-    value.enableScreenRecording ?? globalSettings?.screenshot.enableScreenRecording ?? false;
-  const effectiveAllowRecordingMicrophone =
-    value.allowRecordingMicrophone ?? globalSettings?.screenshot.allowRecordingMicrophone ?? false;
-  const effectiveMaxRecordingDurationSeconds =
-    value.maxRecordingDurationSeconds ??
-    globalSettings?.screenshot.maxRecordingDurationSeconds ??
-    180;
-  const effectiveRecordingQuality =
-    value.recordingQuality ??
-    globalSettings?.screenshot.recordingQuality ??
-    DEFAULT_RECORDING_QUALITY;
-
-  const fieldsDisabled = disabled || !effectiveEnableScreenRecording;
+  const effective = resolveRecordingSettings(value, globalSettings);
+  const recordingOff = !effective.enableScreenRecording;
+  const fieldsDisabled = disabled || recordingOff;
+  const dimmed = recordingOff && 'section-disabled';
 
   const estimatedSizeMb = Math.round(
-    estimateRecordingSizeMb(effectiveRecordingQuality, effectiveMaxRecordingDurationSeconds)
+    estimateRecordingSizeMb(effective.recordingQuality, effective.maxRecordingDurationSeconds)
   );
 
   return (
     <div className="space-y-4">
-      {showCustomToggle && (
-        <div className="flex items-center justify-between pb-3 border-b">
-          <div className="space-y-0.5">
-            <Label htmlFor="use-custom-recording" className="text-sm font-medium">
-              Use Custom Settings
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Enable individual recording settings for this project
-            </p>
-          </div>
+      <SettingRows>
+        <SettingRow
+          label="Enable Screen Recording"
+          htmlFor="enable-screen-recording"
+          description="Let reporters record and attach their screen from the widget."
+        >
           <Switch
-            id="use-custom-recording"
-            checked={useCustomSettings}
-            onCheckedChange={(checked) => {
-              onCustomToggle?.(checked);
-              // Turning custom settings on copies the inherited values, so the project keeps
-              // them even when nothing else is changed before saving.
-              onChange(
-                checked
-                  ? {
-                      maxVideoUploadSizeMb: effectiveMaxVideoUploadSizeMb,
-                      maxVideoUploadMbPerDay: effectiveMaxVideoUploadMbPerDay,
-                      enableScreenRecording: effectiveEnableScreenRecording,
-                      allowRecordingMicrophone: effectiveAllowRecordingMicrophone,
-                      maxRecordingDurationSeconds: effectiveMaxRecordingDurationSeconds,
-                      recordingQuality: effectiveRecordingQuality,
-                    }
-                  : {
-                      maxVideoUploadSizeMb: undefined,
-                      maxVideoUploadMbPerDay: undefined,
-                      enableScreenRecording: undefined,
-                      allowRecordingMicrophone: undefined,
-                      maxRecordingDurationSeconds: undefined,
-                      recordingQuality: undefined,
-                    }
-              );
-            }}
+            id="enable-screen-recording"
+            checked={effective.enableScreenRecording}
+            onCheckedChange={(checked) =>
+              onChange({
+                ...value,
+                enableScreenRecording: checked,
+                ...(checked ? {} : { allowRecordingMicrophone: false }),
+              })
+            }
+            disabled={disabled}
           />
-        </div>
+        </SettingRow>
+
+        <SettingRow
+          label="Video Quality"
+          htmlFor="recording-quality"
+          description="Higher quality is sharper and smoother, but creates larger files."
+          className={cn(dimmed)}
+          controlClassName="@sm:w-96"
+        >
+          <Select
+            value={effective.recordingQuality}
+            onValueChange={(quality) =>
+              onChange({ ...value, recordingQuality: quality as RecordingQuality })
+            }
+            disabled={fieldsDisabled}
+          >
+            <SelectTrigger id="recording-quality" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RECORDING_QUALITIES.map((quality) => (
+                <SelectItem key={quality} value={quality}>
+                  {qualityLabel(quality)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+
+        <SettingRowPair>
+          <SettingRow
+            label="Max. Recording Duration (seconds)"
+            htmlFor="max-recording-duration"
+            description="Recording stops after 10 to 600 seconds."
+            className={cn(dimmed)}
+            controlClassName="@sm:w-28"
+          >
+            <SettingsNumberInput
+              id="max-recording-duration"
+              min={10}
+              max={600}
+              value={effective.maxRecordingDurationSeconds}
+              onChange={(seconds) => onChange({ ...value, maxRecordingDurationSeconds: seconds })}
+              disabled={fieldsDisabled}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Allow Microphone Recording"
+            htmlFor="allow-recording-microphone"
+            description="Reporters still choose for each recording."
+            className={cn(dimmed)}
+          >
+            <Switch
+              id="allow-recording-microphone"
+              checked={effective.allowRecordingMicrophone}
+              onCheckedChange={(checked) =>
+                onChange({ ...value, allowRecordingMicrophone: checked })
+              }
+              disabled={fieldsDisabled}
+            />
+          </SettingRow>
+        </SettingRowPair>
+
+        <SettingRowPair>
+          <SettingRow
+            label="Max. Video Upload Size (MB)"
+            htmlFor="max-video-upload-size"
+            description="1 to 100 MB per video."
+            className={cn(dimmed)}
+            controlClassName="@sm:w-28"
+          >
+            <SettingsNumberInput
+              id="max-video-upload-size"
+              min={1}
+              max={100}
+              value={effective.maxVideoUploadSizeMb}
+              onChange={(sizeMb) => onChange({ ...value, maxVideoUploadSizeMb: sizeMb })}
+              disabled={fieldsDisabled}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Daily Video Upload Limit (MB)"
+            htmlFor="max-video-upload-per-day"
+            description="Per project in 24 hours. 0 disables the limit."
+            className={cn(dimmed)}
+            controlClassName="@sm:w-28"
+          >
+            <SettingsNumberInput
+              id="max-video-upload-per-day"
+              min={0}
+              max={1048576}
+              value={effective.maxVideoUploadMbPerDay}
+              onChange={(limitMb) => onChange({ ...value, maxVideoUploadMbPerDay: limitMb })}
+              disabled={fieldsDisabled}
+            />
+          </SettingRow>
+        </SettingRowPair>
+      </SettingRows>
+
+      {effective.enableScreenRecording && estimatedSizeMb > effective.maxVideoUploadSizeMb && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          A full-length recording at this quality is about {estimatedSizeMb} MB, above the{' '}
+          {effective.maxVideoUploadSizeMb} MB upload limit. Recordings stop early when they reach
+          the limit.
+        </p>
       )}
 
-      {(!showCustomToggle || useCustomSettings) && (
-        <>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <Label htmlFor="enable-screen-recording">Enable Screen Recording</Label>
-                <p className="text-xs text-muted-foreground">
-                  Let reporters record and attach their screen from the widget
-                </p>
-              </div>
-              <Switch
-                id="enable-screen-recording"
-                checked={effectiveEnableScreenRecording}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...value,
-                    enableScreenRecording: checked,
-                    ...(checked ? {} : { allowRecordingMicrophone: false }),
-                  })
-                }
-                disabled={disabled}
-              />
-            </div>
-
-            <div
-              className={cn(
-                'space-y-4',
-                !effectiveEnableScreenRecording && '[&_label]:opacity-50 [&_p]:opacity-50'
-              )}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="recording-quality">Video Quality</Label>
-                <Select
-                  value={effectiveRecordingQuality}
-                  onValueChange={(quality) =>
-                    onChange({ ...value, recordingQuality: quality as RecordingQuality })
-                  }
-                  disabled={fieldsDisabled}
-                >
-                  <SelectTrigger id="recording-quality">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RECORDING_QUALITIES.map((quality) => (
-                      <SelectItem key={quality} value={quality}>
-                        {qualityLabel(quality)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Higher quality is sharper and smoother, but creates larger files.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="max-recording-duration">Max. Recording Duration (seconds)</Label>
-                <SettingsNumberInput
-                  id="max-recording-duration"
-                  min={10}
-                  max={600}
-                  value={effectiveMaxRecordingDurationSeconds}
-                  onChange={(seconds) =>
-                    onChange({ ...value, maxRecordingDurationSeconds: seconds })
-                  }
-                  disabled={fieldsDisabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Recording stops automatically after 10 to 600 seconds.
-                </p>
-              </div>
-
-              {effectiveEnableScreenRecording &&
-                estimatedSizeMb > effectiveMaxVideoUploadSizeMb && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    A full-length recording at this quality is about {estimatedSizeMb} MB, above the{' '}
-                    {effectiveMaxVideoUploadSizeMb} MB upload limit. Recordings stop early when they
-                    reach the limit.
-                  </p>
-                )}
-            </div>
-
-            {/* Video limits also apply to uploaded video files, so they stay editable when recording is off. */}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="max-video-upload-size">Max. Video Upload Size (MB)</Label>
-                <SettingsNumberInput
-                  id="max-video-upload-size"
-                  min={1}
-                  max={100}
-                  value={effectiveMaxVideoUploadSizeMb}
-                  onChange={(sizeMb) => onChange({ ...value, maxVideoUploadSizeMb: sizeMb })}
-                  disabled={disabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Maximum allowed size for uploaded videos (1-100 MB)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="max-video-upload-per-day">Daily Video Upload Limit (MB)</Label>
-                <SettingsNumberInput
-                  id="max-video-upload-per-day"
-                  min={0}
-                  max={1048576}
-                  value={effectiveMaxVideoUploadMbPerDay}
-                  onChange={(limitMb) => onChange({ ...value, maxVideoUploadMbPerDay: limitMb })}
-                  disabled={disabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Maximum video data accepted per project in 24 hours. Use 0 to disable the limit.
-                </p>
-              </div>
-            </div>
-
-            <div
-              className={cn(
-                'space-y-4',
-                !effectiveEnableScreenRecording && '[&_label]:opacity-50 [&_p]:opacity-50'
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5 pr-4">
-                  <Label htmlFor="allow-recording-microphone">Allow Microphone Recording</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Reporters still choose whether to include their microphone for each recording.
-                  </p>
-                </div>
-                <Switch
-                  id="allow-recording-microphone"
-                  checked={effectiveAllowRecordingMicrophone}
-                  onCheckedChange={(checked) =>
-                    onChange({ ...value, allowRecordingMicrophone: checked })
-                  }
-                  disabled={fieldsDisabled}
-                />
-              </div>
-            </div>
-
-            <Alert className="border-primary/20 bg-primary/10">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Your reverse proxy must accept uploads up to the configured video size and allow
-                enough time for slower uploads.{' '}
-                <a
-                  href="https://docs.bugpin.io/installation/reverse-proxy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 underline"
-                >
-                  Reverse proxy guide <ExternalLink className="h-3 w-3" />
-                </a>
-              </AlertDescription>
-            </Alert>
-          </div>
-        </>
-      )}
+      <Alert
+        aria-disabled={recordingOff || undefined}
+        inert={recordingOff}
+        className={cn('border-primary/20 bg-primary/10', recordingOff && 'section-disabled')}
+      >
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          Your reverse proxy must accept uploads up to the configured video size and allow enough
+          time for slower uploads.{' '}
+          <a
+            href="https://docs.bugpin.io/installation/reverse-proxy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 underline"
+          >
+            Reverse proxy guide <ExternalLink className="h-3 w-3" />
+          </a>
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

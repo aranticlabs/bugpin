@@ -19,6 +19,7 @@ import { Progress } from '../../components/ui/progress';
 import { Upload, HardDrive, Cloud, CloudOff } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { Badge } from '../../components/ui/badge';
+import { cn } from '../../lib/utils';
 import type { AppSettings } from '@shared/types';
 
 interface StorageStats {
@@ -119,6 +120,18 @@ function StorageSettingsSection() {
     }
   }, [settings]);
 
+  const savedS3 = {
+    s3Enabled: settings?.s3Enabled || false,
+    s3Config: {
+      bucket: settings?.s3Config?.bucket || '',
+      region: settings?.s3Config?.region || '',
+      accessKeyId: settings?.s3Config?.accessKeyId || '',
+      secretAccessKey: settings?.s3Config?.secretAccessKey || '',
+      endpoint: settings?.s3Config?.endpoint || '',
+    },
+  };
+  const isDirty = !!settings && JSON.stringify(formData) !== JSON.stringify(savedS3);
+
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
       const response = await api.put('/settings', data);
@@ -218,139 +231,114 @@ function StorageSettingsSection() {
             <Switch
               id="s3-enabled"
               checked={formData.s3Enabled}
-              onCheckedChange={(checked) => setFormData({ ...formData, s3Enabled: checked })}
+              onCheckedChange={(checked) => {
+                setFormData({ ...formData, s3Enabled: checked });
+                // Switching off saves by itself: the form is locked while S3 is off.
+                if (!checked && settings?.s3Enabled) mutation.mutate({ s3Enabled: false });
+              }}
             />
           </div>
 
-          {formData.s3Enabled && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="s3-bucket">Bucket Name</Label>
-                <Input
-                  id="s3-bucket"
-                  value={formData.s3Config.bucket}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      s3Config: { ...formData.s3Config, bucket: e.target.value },
-                    })
-                  }
-                  placeholder="my-bugpin-bucket"
-                  required={formData.s3Enabled}
-                />
-                <p className="text-sm text-muted-foreground">The name of your S3 bucket</p>
-              </div>
+          <div
+            aria-disabled={!formData.s3Enabled || undefined}
+            inert={!formData.s3Enabled}
+            className={cn('space-y-4', !formData.s3Enabled && 'section-disabled')}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="s3-bucket">Bucket Name</Label>
+              <Input
+                id="s3-bucket"
+                value={formData.s3Config.bucket}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    s3Config: { ...formData.s3Config, bucket: e.target.value },
+                  })
+                }
+                placeholder="my-bugpin-bucket"
+                required={formData.s3Enabled}
+              />
+              <p className="text-sm text-muted-foreground">The name of your S3 bucket</p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="s3-region">Region</Label>
-                <Input
-                  id="s3-region"
-                  value={formData.s3Config.region}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      s3Config: { ...formData.s3Config, region: e.target.value },
-                    })
-                  }
-                  placeholder="us-east-1"
-                  required={formData.s3Enabled}
-                />
-                <p className="text-sm text-muted-foreground">
-                  AWS region or S3-compatible service region
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="s3-region">Region</Label>
+              <Input
+                id="s3-region"
+                value={formData.s3Config.region}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    s3Config: { ...formData.s3Config, region: e.target.value },
+                  })
+                }
+                placeholder="us-east-1"
+                required={formData.s3Enabled}
+              />
+              <p className="text-sm text-muted-foreground">
+                AWS region or S3-compatible service region
+              </p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="s3-access-key">Access Key ID</Label>
-                <Input
-                  id="s3-access-key"
-                  value={formData.s3Config.accessKeyId}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      s3Config: { ...formData.s3Config, accessKeyId: e.target.value },
-                    })
-                  }
-                  placeholder="AKIAIOSFODNN7EXAMPLE"
-                  required={formData.s3Enabled}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Your AWS access key ID or equivalent
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="s3-access-key">Access Key ID</Label>
+              <Input
+                id="s3-access-key"
+                value={formData.s3Config.accessKeyId}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    s3Config: { ...formData.s3Config, accessKeyId: e.target.value },
+                  })
+                }
+                placeholder="AKIAIOSFODNN7EXAMPLE"
+                required={formData.s3Enabled}
+              />
+              <p className="text-sm text-muted-foreground">Your AWS access key ID or equivalent</p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="s3-secret-key">Secret Access Key</Label>
-                <Input
-                  id="s3-secret-key"
-                  type="password"
-                  value={formData.s3Config.secretAccessKey}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      s3Config: { ...formData.s3Config, secretAccessKey: e.target.value },
-                    })
-                  }
-                  placeholder="Enter secret access key"
-                  required={formData.s3Enabled}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Your AWS secret access key or equivalent
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="s3-secret-key">Secret Access Key</Label>
+              <Input
+                id="s3-secret-key"
+                type="password"
+                value={formData.s3Config.secretAccessKey}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    s3Config: { ...formData.s3Config, secretAccessKey: e.target.value },
+                  })
+                }
+                placeholder="Enter secret access key"
+                required={formData.s3Enabled}
+              />
+              <p className="text-sm text-muted-foreground">
+                Your AWS secret access key or equivalent
+              </p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="s3-endpoint">Custom Endpoint (Optional)</Label>
-                <Input
-                  id="s3-endpoint"
-                  value={formData.s3Config.endpoint}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      s3Config: { ...formData.s3Config, endpoint: e.target.value },
-                    })
-                  }
-                  placeholder="https://s3.example.com"
-                />
-                <p className="text-sm text-muted-foreground">
-                  For S3-compatible services (MinIO, DigitalOcean Spaces, etc.). Leave blank for AWS
-                  S3.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="s3-endpoint">Custom Endpoint (Optional)</Label>
+              <Input
+                id="s3-endpoint"
+                value={formData.s3Config.endpoint}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    s3Config: { ...formData.s3Config, endpoint: e.target.value },
+                  })
+                }
+                placeholder="https://s3.example.com"
+              />
+              <p className="text-sm text-muted-foreground">
+                For S3-compatible services (MinIO, DigitalOcean Spaces, etc.). Leave blank for AWS
+                S3.
+              </p>
+            </div>
+          </div>
 
-              <div className="flex gap-2">
-                <Button type="submit" disabled={mutation.isPending}>
-                  {mutation.isPending ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save Changes'
-                  )}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => testConnection()}
-                  disabled={testing}
-                >
-                  {testing ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Testing...
-                    </>
-                  ) : (
-                    'Test Connection'
-                  )}
-                </Button>
-              </div>
-            </>
-          )}
-
-          {!formData.s3Enabled && (
-            <Button type="submit" disabled={mutation.isPending}>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={mutation.isPending || !isDirty || !formData.s3Enabled}>
               {mutation.isPending ? (
                 <>
                   <Spinner size="sm" className="mr-2" />
@@ -360,7 +348,23 @@ function StorageSettingsSection() {
                 'Save Changes'
               )}
             </Button>
-          )}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => testConnection()}
+              disabled={testing || !formData.s3Enabled}
+            >
+              {testing ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Testing...
+                </>
+              ) : (
+                'Test Connection'
+              )}
+            </Button>
+          </div>
         </CardContent>
       </form>
     </Card>

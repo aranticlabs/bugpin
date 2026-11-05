@@ -34,7 +34,7 @@ describe('Widget Language page', () => {
     expect(trigger).not.toHaveAttribute('data-placeholder');
   });
 
-  it('saves the stored default language unchanged when nothing was edited', async () => {
+  it('keeps the stored default language when only the mode changes', async () => {
     const user = userEvent.setup();
     mockSettings({ mode: 'manual', defaultLanguage: 'de' });
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
@@ -43,11 +43,13 @@ describe('Widget Language page', () => {
 
     const trigger = await screen.findByRole('combobox', { name: /default language/i });
     await waitFor(() => expect(trigger).toHaveTextContent('Deutsch'));
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    await user.click(screen.getByRole('radio', { name: 'Auto-detect' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', {
-        language: { mode: 'manual', defaultLanguage: 'de' },
+        language: { mode: 'auto', defaultLanguage: 'de' },
       });
     });
   });
@@ -82,11 +84,13 @@ describe('Widget Language page', () => {
 
     const trigger = await screen.findByRole('combobox', { name: /default language/i });
     await waitFor(() => expect(trigger).toHaveTextContent('Deutsch'));
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    await user.click(screen.getByRole('radio', { name: 'Auto-detect' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', {
-        language: { mode: 'manual', defaultLanguage: 'de' },
+        language: { mode: 'auto', defaultLanguage: 'de' },
       });
     });
   });

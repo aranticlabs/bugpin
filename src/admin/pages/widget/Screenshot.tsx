@@ -3,16 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Spinner } from '../../components/ui/spinner';
+  SectionCard,
+  SectionLoading,
+  SettingsFormActions,
+} from '../../components/settings/SectionCard';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
+
+const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
+  maxScreenshotSize: stored.maxScreenshotSize || 10,
+  maxImageUploadSizeMb: stored.maxImageUploadSizeMb || 10,
+  useScreenCaptureAPI: stored.useScreenCaptureAPI || false,
+});
 
 export function Screenshot() {
   const queryClient = useQueryClient();
@@ -31,14 +33,11 @@ export function Screenshot() {
   });
 
   useEffect(() => {
-    if (settings) {
-      setFormData({
-        maxScreenshotSize: settings.screenshot.maxScreenshotSize || 10,
-        maxImageUploadSizeMb: settings.screenshot.maxImageUploadSizeMb || 10,
-        useScreenCaptureAPI: settings.screenshot.useScreenCaptureAPI || false,
-      });
-    }
+    if (settings) setFormData(fromSettings(settings.screenshot));
   }, [settings]);
+
+  const isDirty =
+    !!settings && JSON.stringify(formData) !== JSON.stringify(fromSettings(settings.screenshot));
 
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
@@ -70,40 +69,22 @@ export function Screenshot() {
 
   if (isLoading) {
     return (
-      <Card className="max-w-4xl">
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
+      <SectionCard section="screenshot">
+        <SectionLoading />
+      </SectionCard>
     );
   }
 
   return (
-    <Card className="max-w-4xl">
-      <CardHeader>
-        <CardTitle>Screenshot Settings</CardTitle>
-        <CardDescription>Configure screenshot capture settings</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <ScreenshotSettingsForm
-            value={formData}
-            onChange={setFormData}
-            disabled={mutation.isPending}
-          />
-
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </Button>
-        </CardContent>
+    <SectionCard section="screenshot">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <ScreenshotSettingsForm
+          value={formData}
+          onChange={setFormData}
+          disabled={mutation.isPending}
+        />
+        <SettingsFormActions isPending={mutation.isPending} isDirty={isDirty} />
       </form>
-    </Card>
+    </SectionCard>
   );
 }

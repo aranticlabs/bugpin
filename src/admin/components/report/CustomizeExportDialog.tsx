@@ -211,9 +211,12 @@ export function CustomizeExportDialog({
                 {formatByteSize(previewBytes)} · {preview.length.toLocaleString()} chars
               </span>
             </div>
-            <pre className="mt-2 min-h-0 flex-1 overflow-auto rounded-md border bg-muted/40 p-3 text-xs font-mono whitespace-pre-wrap break-words">
-              {preview}
-            </pre>
+            <ScrollArea
+              className="mt-2 flex-1 rounded-md border bg-muted/40"
+              aria-label="Export preview"
+            >
+              <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">{preview}</pre>
+            </ScrollArea>
           </div>
         </div>
 

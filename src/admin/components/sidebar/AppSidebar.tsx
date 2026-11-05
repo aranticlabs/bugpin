@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -10,6 +10,7 @@ import {
   SidebarRail,
 } from '../ui/sidebar';
 import { NavMain } from './NavMain';
+import { NavSettings } from './NavSettings';
 import { NavUser } from './NavUser';
 import { useBranding } from '../../contexts/BrandingContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -17,6 +18,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 export function AppSidebar() {
   const { config } = useBranding();
   const { resolvedTheme } = useTheme();
+  const location = useLocation();
+  const inSettings =
+    location.pathname === '/settings' || location.pathname.startsWith('/settings/');
 
   // Get the appropriate URLs based on current theme
   const logoUrl = resolvedTheme === 'dark' ? config?.logoDarkUrl : config?.logoLightUrl;
@@ -62,9 +66,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        <NavMain />
-      </SidebarContent>
+      <SidebarContent>{inSettings ? <NavSettings /> : <NavMain />}</SidebarContent>
 
       <SidebarFooter>
         <NavUser />

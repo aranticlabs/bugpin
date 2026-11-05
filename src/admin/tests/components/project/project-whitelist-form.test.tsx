@@ -76,25 +76,12 @@ describe('ProjectWhitelistForm', () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('clears custom settings when toggled off', async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    const onCustomToggle = vi.fn();
+  it('shows the domains but blocks edits while disabled', () => {
+    render(<ProjectWhitelistForm value={['example.com']} onChange={vi.fn()} disabled />);
 
-    render(
-      <ProjectWhitelistForm
-        value={['example.com']}
-        onChange={onChange}
-        showCustomToggle
-        useCustomSettings
-        onCustomToggle={onCustomToggle}
-      />
-    );
-
-    const toggle = screen.getByRole('switch', { name: /use custom domain whitelist/i });
-    await user.click(toggle);
-
-    expect(onCustomToggle).toHaveBeenCalledWith(false);
-    expect(onChange).toHaveBeenCalledWith([]);
+    expect(screen.getByText('example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('example.com')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /add/i })).toBeDisabled();
   });
 });

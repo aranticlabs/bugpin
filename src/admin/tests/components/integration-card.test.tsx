@@ -68,7 +68,7 @@ describe('IntegrationTypeCard', () => {
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     expect(screen.getByText(/create issues from bug reports/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /configure/i }));
+    await user.click(screen.getByRole('button', { name: /connect/i }));
     expect(onSetup).toHaveBeenCalledWith(definition);
   });
 

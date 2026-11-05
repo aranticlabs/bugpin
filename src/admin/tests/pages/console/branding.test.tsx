@@ -264,51 +264,14 @@ describe('Branding', () => {
     });
   });
 
-  it('saves white-label settings from Branding', async () => {
-    const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
-    const user = userEvent.setup();
-    renderWithQuery(<Branding />);
-
-    const footer = await screen.findByRole('switch', { name: 'Hide admin footer branding' });
-    const favicon = screen.getByText('Favicon');
-    const whiteLabel = screen.getByText('White-label');
-    expect(
-      favicon.compareDocumentPosition(whiteLabel) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    await user.click(footer);
-    await user.type(screen.getByLabelText('Copyright text'), 'Example Ltd');
-    await user.click(screen.getByRole('button', { name: 'Save white-label settings' }));
-
-    await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('/white-label/config', {
-        hideFooterBranding: true,
-        hideEmailBranding: false,
-        customCopyright: 'Example Ltd',
-      })
-    );
-  });
-
-  it('shows licensed white-label settings independently of custom branding', async () => {
-    licenseApiMocks.getFeatures.mockResolvedValue({
-      features: { 'white-label': true, 'custom-branding': false },
-    });
-    renderWithQuery(<Branding />);
-
-    expect(
-      await screen.findByRole('switch', { name: 'Hide admin footer branding' })
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Brand Colors')).not.toBeInTheDocument();
-  });
-
-  it('does not load white-label settings without the feature', async () => {
-    licenseApiMocks.getFeatures.mockResolvedValue({
-      features: { 'white-label': false, 'custom-branding': true },
-    });
+  it('leaves white-label settings to their own page', async () => {
     const get = vi.spyOn(api, 'get');
     renderWithQuery(<Branding />);
 
     expect(await screen.findByText('Brand Colors')).toBeInTheDocument();
-    expect(screen.queryByText('White-label')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('switch', { name: 'Hide admin footer branding' })
+    ).not.toBeInTheDocument();
     expect(get).not.toHaveBeenCalledWith('/white-label/config');
   });
 });

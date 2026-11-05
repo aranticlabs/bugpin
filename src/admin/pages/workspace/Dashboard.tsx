@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Spinner } from '../../components/ui/spinner';
+import { reportOriginState } from '../../lib/reportOrigin';
 import { ClipboardList, Clock, CheckCircle, Zap } from 'lucide-react';
 
 interface DashboardStats {
@@ -104,6 +105,7 @@ export function Dashboard() {
                 <Link
                   key={report.id}
                   to={`/reports/${report.id}`}
+                  state={reportOriginState({ path: '/', label: 'Dashboard' })}
                   className="block px-6 py-4 hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

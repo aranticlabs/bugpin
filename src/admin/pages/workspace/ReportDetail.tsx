@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
+import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ScrollArea } from '../../components/ui/scroll-area';
@@ -77,6 +78,7 @@ const UNASSIGNED_VALUE = '__unassigned__';
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const origin = readReportOrigin(useLocation().state);
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -125,6 +127,15 @@ export function ReportDetail() {
   });
 
   const canEdit = mayEdit && !data?.report?.licenseLocked;
+
+  const loadedReportId: string | undefined = data?.report?.id;
+  useEffect(() => {
+    if (!loadedReportId) return;
+    api
+      .post(`/reports/${loadedReportId}/views`)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['viewed-reports'] }))
+      .catch(() => undefined);
+  }, [loadedReportId, queryClient]);
 
   // Load integrations for this report's project
   const { data: integrations } = useIntegrations(data?.report?.projectId);
@@ -216,7 +227,7 @@ export function ReportDetail() {
       queryClient.invalidateQueries({ queryKey: ['recent-reports'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Report deleted successfully');
-      navigate('/reports');
+      navigate(origin.path);
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'Failed to delete report');
@@ -252,8 +263,8 @@ export function ReportDetail() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Report not found</p>
-        <Button variant="outline" onClick={() => navigate('/reports')} className="mt-4">
-          Back to Reports
+        <Button variant="outline" onClick={() => navigate(origin.path)} className="mt-4">
+          Back to {origin.label}
         </Button>
       </div>
     );
@@ -412,11 +423,11 @@ export function ReportDetail() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/reports')}
+            onClick={() => navigate(origin.path)}
             className="mb-2 -ml-2 text-muted-foreground"
           >
             <ChevronLeft className="h-4 w-4 mr-1" />
-            Back to Reports
+            Back to {origin.label}
           </Button>
           <h1 className="text-2xl font-bold">{report.title}</h1>
         </div>

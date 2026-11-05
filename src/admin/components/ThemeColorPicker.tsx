@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { ColorPicker } from './ui/color-picker';
@@ -98,6 +99,8 @@ export function ThemeColorPicker({
   showGenerateButton = true,
   showSurfaceColors = false,
 }: ThemeColorPickerProps) {
+  const [activeMode, setActiveMode] = useState<'light' | 'dark'>('light');
+
   const handleGenerateDarkColors = () => {
     const generated = generateDarkModeColors({
       buttonColor: value.lightButtonColor,
@@ -112,172 +115,99 @@ export function ThemeColorPicker({
     onChange(generated);
   };
 
-  return (
-    <Tabs defaultValue="light">
-      <TabsList>
-        <TabsTrigger value="light">{lightModeTitle}</TabsTrigger>
-        <TabsTrigger value="dark">{darkModeTitle}</TabsTrigger>
-      </TabsList>
+  type ColorKey = keyof ThemeColors;
+  const field = (key: ColorKey, label: string, fallback?: string) => ({ key, label, fallback });
 
-      {/* Light Mode Colors */}
-      <TabsContent value="light" className="space-y-3 pt-2">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>{buttonColorLabel}</Label>
-            <ColorPicker
-              value={value.lightButtonColor}
-              onChange={(color) => onChange({ lightButtonColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{textColorLabel}</Label>
-            <ColorPicker
-              value={value.lightTextColor}
-              onChange={(color) => onChange({ lightTextColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{buttonColorLabel} (Hover)</Label>
-            <ColorPicker
-              value={value.lightButtonHoverColor}
-              onChange={(color) => onChange({ lightButtonHoverColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{textColorLabel} (Hover)</Label>
-            <ColorPicker
-              value={value.lightTextHoverColor}
-              onChange={(color) => onChange({ lightTextHoverColor: color })}
-              disabled={disabled}
-            />
-          </div>
+  // Ordered row by row so each hover color sits under its base color.
+  const fieldsFor = (mode: 'light' | 'dark') => {
+    const light = mode === 'light';
+    const button = field(light ? 'lightButtonColor' : 'darkButtonColor', buttonColorLabel);
+    const text = field(light ? 'lightTextColor' : 'darkTextColor', textColorLabel);
+    const buttonHover = field(
+      light ? 'lightButtonHoverColor' : 'darkButtonHoverColor',
+      `${buttonColorLabel} (Hover)`
+    );
+    const textHover = field(
+      light ? 'lightTextHoverColor' : 'darkTextHoverColor',
+      `${textColorLabel} (Hover)`
+    );
+    if (!showSurfaceColors) return [button, text, buttonHover, textHover];
+    return [
+      button,
+      text,
+      field(
+        light ? 'lightBackgroundColor' : 'darkBackgroundColor',
+        'Background Color',
+        light ? '#ffffff' : '#0a0a0a'
+      ),
+      buttonHover,
+      textHover,
+      field(
+        light ? 'lightSecondaryColor' : 'darkSecondaryColor',
+        'Secondary Color',
+        light ? '#f5f5f5' : '#262626'
+      ),
+      field(
+        light ? 'lightInputColor' : 'darkInputColor',
+        'Input Field Color',
+        light ? '#ffffff' : '#1a1a1a'
+      ),
+      field(
+        light ? 'lightForegroundColor' : 'darkForegroundColor',
+        'Text Color',
+        light ? '#0a0a0a' : '#fafafa'
+      ),
+    ];
+  };
+
+  const colorGrid = (mode: 'light' | 'dark') => (
+    <div
+      className={`grid grid-cols-2 gap-x-4 gap-y-3 ${showSurfaceColors ? 'md:grid-cols-3' : ''}`}
+    >
+      {fieldsFor(mode).map(({ key, label, fallback }) => (
+        <div key={key} className="space-y-2">
+          <Label>{label}</Label>
+          <ColorPicker
+            value={value[key] ?? fallback ?? ''}
+            onChange={(color) => onChange({ [key]: color })}
+            disabled={disabled}
+          />
         </div>
-        {showSurfaceColors && (
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="space-y-2">
-              <Label>Background Color</Label>
-              <ColorPicker
-                value={value.lightBackgroundColor ?? '#ffffff'}
-                onChange={(color) => onChange({ lightBackgroundColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Secondary Color</Label>
-              <ColorPicker
-                value={value.lightSecondaryColor ?? '#f5f5f5'}
-                onChange={(color) => onChange({ lightSecondaryColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Input Field Color</Label>
-              <ColorPicker
-                value={value.lightInputColor ?? '#ffffff'}
-                onChange={(color) => onChange({ lightInputColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Text Color</Label>
-              <ColorPicker
-                value={value.lightForegroundColor ?? '#0a0a0a'}
-                onChange={(color) => onChange({ lightForegroundColor: color })}
-                disabled={disabled}
-              />
-            </div>
-          </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <Tabs value={activeMode} onValueChange={(mode) => setActiveMode(mode as 'light' | 'dark')}>
+      {/* The button shares the tab row so switching modes does not move the color fields. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <TabsList>
+          <TabsTrigger value="light" disabled={disabled}>
+            {lightModeTitle}
+          </TabsTrigger>
+          <TabsTrigger value="dark" disabled={disabled}>
+            {darkModeTitle}
+          </TabsTrigger>
+        </TabsList>
+        {showGenerateButton && activeMode === 'dark' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateDarkColors}
+            disabled={disabled}
+            type="button"
+          >
+            Generate from Light Mode
+          </Button>
         )}
+      </div>
+
+      <TabsContent value="light" className="space-y-3 pt-2">
+        {colorGrid('light')}
       </TabsContent>
 
-      {/* Dark Mode Colors */}
       <TabsContent value="dark" className="space-y-3 pt-2">
-        {showGenerateButton && (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateDarkColors}
-              disabled={disabled}
-              type="button"
-            >
-              Generate from Light Mode
-            </Button>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>{buttonColorLabel}</Label>
-            <ColorPicker
-              value={value.darkButtonColor}
-              onChange={(color) => onChange({ darkButtonColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{textColorLabel}</Label>
-            <ColorPicker
-              value={value.darkTextColor}
-              onChange={(color) => onChange({ darkTextColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{buttonColorLabel} (Hover)</Label>
-            <ColorPicker
-              value={value.darkButtonHoverColor}
-              onChange={(color) => onChange({ darkButtonHoverColor: color })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{textColorLabel} (Hover)</Label>
-            <ColorPicker
-              value={value.darkTextHoverColor}
-              onChange={(color) => onChange({ darkTextHoverColor: color })}
-              disabled={disabled}
-            />
-          </div>
-        </div>
-        {showSurfaceColors && (
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="space-y-2">
-              <Label>Background Color</Label>
-              <ColorPicker
-                value={value.darkBackgroundColor ?? '#0a0a0a'}
-                onChange={(color) => onChange({ darkBackgroundColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Secondary Color</Label>
-              <ColorPicker
-                value={value.darkSecondaryColor ?? '#262626'}
-                onChange={(color) => onChange({ darkSecondaryColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Input Field Color</Label>
-              <ColorPicker
-                value={value.darkInputColor ?? '#1a1a1a'}
-                onChange={(color) => onChange({ darkInputColor: color })}
-                disabled={disabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Text Color</Label>
-              <ColorPicker
-                value={value.darkForegroundColor ?? '#fafafa'}
-                onChange={(color) => onChange({ darkForegroundColor: color })}
-                disabled={disabled}
-              />
-            </div>
-          </div>
-        )}
+        {colorGrid('dark')}
       </TabsContent>
     </Tabs>
   );

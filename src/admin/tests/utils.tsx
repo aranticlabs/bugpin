@@ -1,13 +1,13 @@
 import React from 'react';
 import { render, RenderOptions } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../contexts/AuthContext';
 import { BrandingProvider } from '../contexts/BrandingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 
 // Create a new QueryClient for each test
-function createTestQueryClient() {
+export function createTestQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -27,7 +27,7 @@ interface WrapperProps {
 }
 
 interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
-  initialEntries?: string[];
+  initialEntries?: MemoryRouterProps['initialEntries'];
   queryClient?: QueryClient;
 }
 
@@ -60,14 +60,18 @@ export function renderWithProviders(
 }
 
 /**
- * Render with just QueryClient (no router/auth)
+ * Render with QueryClient and the theme (no router/auth)
  */
 export function renderWithQuery(
   ui: React.ReactElement,
   { queryClient = createTestQueryClient(), ...options }: CustomRenderOptions = {}
 ) {
   function Wrapper({ children }: WrapperProps) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>{children}</ThemeProvider>
+      </QueryClientProvider>
+    );
   }
 
   return {

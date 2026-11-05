@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -5,18 +6,18 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
-import { Button as UIButton } from '../../components/ui/button';
-import { RotateCcw } from 'lucide-react';
-import { Spinner } from '../../components/ui/spinner';
+  SectionCard,
+  SectionLoading,
+  SettingsFormActions,
+} from '../../components/settings/SectionCard';
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
+import {
+  LauncherPreviewCard,
+  SettingsWithPreview,
+} from '../../components/widget/WidgetSettingsLayout';
 import type {
   AppSettings,
+  LocaleCode,
   GlobalWidgetLauncherButtonSettings,
   WidgetLauncherButtonSettings,
 } from '@shared/types';
@@ -50,6 +51,9 @@ const buttonSettingsSchema = z.object({
   buttonIcon: z.string().nullable(),
   buttonIconSize: z.number(),
   buttonIconStroke: z.number(),
+  buttonOffsetX: z.number().min(0).max(200),
+  buttonOffsetY: z.number().min(0).max(200),
+  buttonSizeUnit: z.enum(['px', 'rem']),
   theme: z.enum(['auto', 'light', 'dark']),
   enableHoverScaleEffect: z.boolean(),
   tooltipEnabled: z.boolean(),
@@ -79,6 +83,9 @@ const DEFAULT_BUTTON_SETTINGS: ButtonSettingsFormValues = {
   buttonIcon: 'bug',
   buttonIconSize: 24,
   buttonIconStroke: 2,
+  buttonOffsetX: 20,
+  buttonOffsetY: 20,
+  buttonSizeUnit: 'px',
   theme: 'auto',
   lightButtonColor: '#02658D',
   lightTextColor: '#ffffff',
@@ -108,11 +115,9 @@ function WidgetLauncherButtonSettingsSection() {
 
   if (isLoading || !settings?.widgetLauncherButton) {
     return (
-      <Card className="max-w-4xl">
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
+      <SectionCard section="launcher" showHeader={false}>
+        <SectionLoading />
+      </SectionCard>
     );
   }
 
@@ -126,7 +131,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
     watch,
     setValue,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ButtonSettingsFormValues>({
     resolver: zodResolver(buttonSettingsSchema),
     defaultValues: initialValues,
@@ -134,6 +139,8 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
   });
 
   const watched = watch();
+
+  const [previewLocale, setPreviewLocale] = useState<LocaleCode>('en');
 
   const mutation = useMutation({
     mutationFn: async (data: ButtonSettingsFormValues) => {
@@ -166,7 +173,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
   };
 
   const handleReset = () => {
-    reset(DEFAULT_BUTTON_SETTINGS);
+    handleFormChange(DEFAULT_BUTTON_SETTINGS);
   };
 
   const buttonTextError =
@@ -174,44 +181,24 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
     (errors.buttonText as { en?: { message?: string } } | undefined)?.en?.message;
 
   return (
-    <Card className="max-w-4xl">
-      <CardHeader>
-        <CardTitle>Widget Button Settings</CardTitle>
-        <CardDescription>
-          Configure the appearance and behavior of the floating widget launcher button.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit(onValid)} noValidate>
-        <CardContent className="space-y-4">
+    <SettingsWithPreview
+      preview={<LauncherPreviewCard launcher={watched} locale={previewLocale} />}
+    >
+      <SectionCard section="launcher" showHeader={false}>
+        <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-6">
           <WidgetLauncherButtonSettingsForm
             value={watched}
             onChange={handleFormChange}
             buttonTextError={buttonTextError}
+            onPreviewLocaleChange={setPreviewLocale}
           />
-
-          <div className="flex gap-2 pt-4 border-t">
-            <UIButton type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </UIButton>
-            <UIButton
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              disabled={mutation.isPending}
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset to Default
-            </UIButton>
-          </div>
-        </CardContent>
-      </form>
-    </Card>
+          <SettingsFormActions
+            isPending={mutation.isPending}
+            isDirty={isDirty}
+            onReset={handleReset}
+          />
+        </form>
+      </SectionCard>
+    </SettingsWithPreview>
   );
 }
