@@ -14,8 +14,8 @@ function createIncompressibleBytes(length: number): Uint8Array<ArrayBuffer> {
 }
 
 describe('checkWidgetBundleSize', () => {
-  it('allows up to 190 KiB gzipped by default', () => {
-    expect(MAX_GZIPPED_BYTES).toBe(194_560);
+  it('allows up to 190KB gzipped by default', () => {
+    expect(MAX_GZIPPED_BYTES).toBe(190_000);
   });
 
   it('returns the level 9 gzip size below the limit', () => {
