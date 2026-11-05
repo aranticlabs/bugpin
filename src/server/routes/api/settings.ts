@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { settingsService } from '../../services/settings.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
+import { cleanupService } from '../../services/cleanup.service.js';
 import { emailService } from '../../services/email.service.js';
 import { templateService } from '../../services/template.service.js';
 import {
@@ -355,6 +356,32 @@ settings.get(
       success: true,
       template: defaultEmailTemplates[type].en,
     });
+  }
+);
+
+// Delete all reports and their files immediately (Admin only)
+
+settings.delete(
+  '/data',
+  authorize(['admin']),
+  validate({ body: z.object({ confirmation: z.literal('delete') }) }),
+  async (c) => {
+    const { deleted, errors } = await cleanupService.deleteAllReports();
+
+    if (errors > 0) {
+      return c.json(
+        {
+          success: false,
+          error: 'DELETE_DATA_INCOMPLETE',
+          message: `Deleted ${deleted} reports, but ${errors} could not be deleted`,
+          deleted,
+          errors,
+        },
+        500
+      );
+    }
+
+    return c.json({ success: true, deleted });
   }
 );
 

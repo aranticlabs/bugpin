@@ -445,6 +445,15 @@ export const reportsRepo = {
   },
 
   /**
+   * Find the IDs of every report
+   */
+  async findAllIds(): Promise<string[]> {
+    const db = getDb();
+    const rows = db.query('SELECT id FROM reports').all() as { id: string }[];
+    return rows.map((row) => row.id);
+  },
+
+  /**
    * Find report IDs older than a specified number of days
    */
   async findIdsOlderThan(days: number): Promise<string[]> {

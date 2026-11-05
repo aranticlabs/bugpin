@@ -30,36 +30,52 @@ async function cleanupOldReports(): Promise<{ deleted: number; errors: number }>
 
   logger.info(`Found ${oldReportIds.length} reports older than ${retentionDays} days`);
 
+  const result = await deleteReportsByIds(oldReportIds);
+
+  logger.info('Data retention cleanup completed', { ...result, total: oldReportIds.length });
+
+  return result;
+}
+
+async function deleteReportsByIds(
+  reportIds: string[]
+): Promise<{ deleted: number; errors: number }> {
   let deleted = 0;
   let errors = 0;
 
-  for (const reportId of oldReportIds) {
+  for (const reportId of reportIds) {
     try {
-      // Delete associated files from storage
       await deleteReportFiles(reportId);
-
-      // Delete file records from database
       await filesRepo.deleteByReportId(reportId);
 
-      // Delete the report
-      const success = await reportsRepo.delete(reportId);
-
-      if (success) {
+      if (await reportsRepo.delete(reportId)) {
         deleted++;
-        logger.debug('Deleted old report', { reportId });
+        logger.debug('Deleted report', { reportId });
       } else {
         errors++;
         logger.warn('Failed to delete report', { reportId });
       }
     } catch (error) {
       errors++;
-      logger.error('Error deleting old report', error, { reportId });
+      logger.error('Error deleting report', error, { reportId });
     }
   }
 
-  logger.info('Data retention cleanup completed', { deleted, errors, total: oldReportIds.length });
-
   return { deleted, errors };
+}
+
+/**
+ * Immediately delete every report together with its stored files
+ */
+async function deleteAllReports(): Promise<{ deleted: number; errors: number }> {
+  const reportIds = await reportsRepo.findAllIds();
+  logger.warn('Deleting all reports', { total: reportIds.length });
+
+  const result = await deleteReportsByIds(reportIds);
+
+  logger.warn('Delete all reports completed', { ...result, total: reportIds.length });
+
+  return result;
 }
 
 /**
@@ -103,6 +119,7 @@ function stopCleanupScheduler(): void {
 
 export const cleanupService = {
   cleanupOldReports,
+  deleteAllReports,
   startCleanupScheduler,
   stopCleanupScheduler,
 };
