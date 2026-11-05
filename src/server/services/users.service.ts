@@ -6,6 +6,8 @@ import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type { DefaultProjectReference, User, UserRole } from '@shared/types';
+import { passwordPolicyService } from './password-policy.service.js';
+import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 
 // Types
 
@@ -100,9 +102,8 @@ export const usersService = {
     }
 
     // Validate password
-    if (!input.password || input.password.length < 8) {
-      return Result.fail('Password must be at least 8 characters', 'WEAK_PASSWORD');
-    }
+    const policyCheck = await passwordPolicyService.validate(input.password ?? '');
+    if (!policyCheck.success) return policyCheck;
 
     // Validate name
     if (!input.name || input.name.trim().length < 2) {
@@ -156,7 +157,11 @@ export const usersService = {
    */
   async list(): Promise<Result<User[]>> {
     const users = await usersRepo.findAll();
-    return Result.ok(await attachDefaultProjectsToMany(users));
+    const withTwoFactor = await twoFactorRepo.listUserIdsWithTwoFactor();
+    const withProjects = await attachDefaultProjectsToMany(users);
+    return Result.ok(
+      withProjects.map((user) => ({ ...user, twoFactorEnabled: withTwoFactor.has(user.id) }))
+    );
   },
 
   /**
@@ -356,9 +361,8 @@ export const usersService = {
     }
 
     // Validate new password
-    if (newPassword.length < 8) {
-      return Result.fail('Password must be at least 8 characters', 'WEAK_PASSWORD');
-    }
+    const policyCheck = await passwordPolicyService.validate(newPassword);
+    if (!policyCheck.success) return policyCheck;
 
     // Hash and update password
     const passwordHash = await hashPassword(newPassword);

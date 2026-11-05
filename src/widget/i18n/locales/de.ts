@@ -128,6 +128,10 @@ const de: WidgetCatalog = {
     'Der Upload ist zu groß für den Server. Entferne einige Medien und versuche es erneut.',
   'submit.error.videoQuota':
     'Video-Uploads sind für dieses Projekt pausiert. Entferne das Video, um den Bericht zu senden.',
+  'submit.error.rejected':
+    'Der Upload wurde abgelehnt. Möglicherweise sind deine Anhänge zu groß. Entferne oder verkleinere sie und versuche es erneut.',
+  'submit.queued':
+    'Bericht gespeichert. Er wird automatisch gesendet, sobald die Verbindung wieder steht.',
 
   'toast.success.submit': 'Fehlerbericht erfolgreich gesendet!',
   'toast.error.submit': 'Bericht konnte nicht gesendet werden',

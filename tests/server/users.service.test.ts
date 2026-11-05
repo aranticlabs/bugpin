@@ -7,6 +7,12 @@ import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import type { Project, User } from '../../src/shared/types';
+import { passwordPolicyService } from '../../src/server/services/password-policy.service';
+import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
+import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
+
+const originalPasswordPolicyService = { ...passwordPolicyService };
+const originalTwoFactorRepo = { ...twoFactorRepo };
 
 const baseUser: User = {
   id: 'usr_1',
@@ -35,6 +41,8 @@ let usersByRole: User[] = [baseUser];
 let projects: Project[] = [];
 
 beforeEach(() => {
+  passwordPolicyService.getPolicy = async () => DEFAULT_PASSWORD_POLICY;
+  twoFactorRepo.listUserIdsWithTwoFactor = async () => new Set(['usr_1']);
   projectLicenseService.checkAccess = () => Result.ok(undefined);
   lastCreateInput = undefined;
   lastUpdateInput = undefined;
@@ -80,6 +88,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(passwordPolicyService, originalPasswordPolicyService);
+  Object.assign(twoFactorRepo, originalTwoFactorRepo);
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
@@ -393,6 +403,7 @@ describe('usersService lookups', () => {
     if (result.success) {
       expect(result.value.length).toBe(1);
       expect(result.value[0].defaultProjects).toEqual([{ id: 'prj_1', name: 'Alpha' }]);
+      expect(result.value[0].twoFactorEnabled).toBe(true);
     }
   });
 

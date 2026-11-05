@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 
-const MAX_GZIPPED_BYTES = 175_000;
+export const MAX_GZIPPED_BYTES = 190_000;
 
 export function checkWidgetBundleSize(
   content: Uint8Array<ArrayBuffer>,

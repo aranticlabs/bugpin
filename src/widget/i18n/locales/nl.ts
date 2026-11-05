@@ -129,6 +129,10 @@ const nl: WidgetCatalog = {
     'De upload is te groot voor de server. Verwijder media en probeer het opnieuw.',
   'submit.error.videoQuota':
     'Video-uploads zijn gepauzeerd voor dit project. Verwijder de video om het rapport te verzenden.',
+  'submit.error.rejected':
+    'De upload is geweigerd. Je bijlagen zijn mogelijk te groot. Verwijder of verklein ze en probeer het opnieuw.',
+  'submit.queued':
+    'Rapport opgeslagen. Het wordt automatisch verzonden zodra de verbinding hersteld is.',
 
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',

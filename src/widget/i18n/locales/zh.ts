@@ -119,6 +119,8 @@ const zh: WidgetCatalog = {
   'submit.cancelUpload': '取消上传',
   'submit.error.tooLarge': '上传内容过大，服务器无法接收。请移除部分媒体后重试。',
   'submit.error.videoQuota': '此项目已暂停视频上传。请移除视频后再提交。',
+  'submit.error.rejected': '上传被拒绝。附件可能过大。请移除或压缩附件后重试。',
+  'submit.queued': '报告已保存。网络连接恢复后将自动发送。',
 
   'toast.success.submit': '缺陷报告已成功提交！',
   'toast.error.submit': '报告提交失败',

@@ -52,7 +52,13 @@ export function installDom(url = 'https://example.com'): () => void {
     cancelAnimationFrame: globalThis.cancelAnimationFrame,
   };
 
-  const dom = new JSDOM('<!doctype html><html><body></body></html>', { url });
+  // jsdom has no popover API, so :popover-open never matches and its default stylesheet hides
+  // every [popover] element, which also makes everything inside it unfocusable. Its cascade
+  // ranks author and default rules by specificity alone, so the override repeats the selector.
+  const dom = new JSDOM(
+    '<!doctype html><html><head><style>[popover]:not(:popover-open):not(dialog[open]) { display: block; }</style></head><body></body></html>',
+    { url }
+  );
   const { window } = dom;
 
   globalThis.window = window as unknown as typeof globalThis.window;

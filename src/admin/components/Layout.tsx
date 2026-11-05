@@ -28,6 +28,7 @@ const routeCrumbs: Record<string, RouteCrumbConfig> = {
       { hash: 'general', label: 'General' },
       { hash: 'storage', label: 'Storage' },
       { hash: 'smtp', label: 'SMTP' },
+      { hash: 'privacy', label: 'Privacy' },
     ],
   },
   '/notifications': {
@@ -40,13 +41,14 @@ const routeCrumbs: Record<string, RouteCrumbConfig> = {
     ],
   },
   '/users': { label: 'Users' },
-  '/security-privacy': {
-    label: 'Security & Privacy',
-    defaultHash: 'security',
+  '/security': {
+    label: 'Security',
+    defaultHash: 'general',
     showDefaultSubTab: true,
     subTabs: [
-      { hash: 'security', label: 'Security' },
-      { hash: 'privacy', label: 'Privacy' },
+      { hash: 'general', label: 'General' },
+      { hash: 'two-factor', label: 'Two-Factor' },
+      { hash: 'password-policy', label: 'Password Policy' },
     ],
   },
   '/branding': { label: 'Branding' },
@@ -68,11 +70,11 @@ function findRouteConfig(pathname: string): { path: string; config: RouteCrumbCo
 }
 
 export function Layout() {
-  const { user } = useAuth();
+  const { user, canLoadData } = useAuth();
   const { data: license, isError: licenseError } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
-    enabled: !!user,
+    enabled: canLoadData,
     refetchInterval: 60_000,
   });
   const enterpriseBadgeClass = badgeVariants({

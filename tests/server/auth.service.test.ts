@@ -7,11 +7,14 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { logger } from '../../src/server/utils/logger';
 import { config } from '../../src/server/config';
 import type { Session, User } from '../../src/shared/types';
+import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
+import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 
 const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
+const originalTwoFactorRepo = { ...twoFactorRepo };
 
 const baseUser: User = {
   id: 'usr_1',
@@ -45,7 +48,8 @@ let deletedUserSessionsExceptId: { userId: string; exceptSessionId: string } | n
 let updatedActivitySessionId: string | null = null;
 let createdSessionPayload: { userId: string; expiresAt: string } | null = null;
 let deletedExpiredCount = 0;
-let createdUserPayload: { email: string } | null = null;
+let createdUserPayload: { email: string; mustChangePassword?: boolean } | null = null;
+let mustChangePasswordUpdate: { id: string; value: boolean } | null = null;
 
 beforeAll(async () => {
   validHash = await Bun.password.hash(validPassword, { algorithm: 'bcrypt', cost: 4 });
@@ -64,6 +68,7 @@ beforeEach(() => {
   createdSessionPayload = null;
   deletedExpiredCount = 0;
   createdUserPayload = null;
+  mustChangePasswordUpdate = null;
 
   // Invalidate settings cache so mocked settingsRepo.getAll takes effect
   settingsCacheService.invalidate();
@@ -77,8 +82,11 @@ beforeEach(() => {
     updatedPasswordId = id;
   };
   usersRepo.count = async () => 1;
+  usersRepo.setMustChangePassword = async (id, value) => {
+    mustChangePasswordUpdate = { id, value };
+  };
   usersRepo.create = async (payload) => {
-    createdUserPayload = { email: payload.email };
+    createdUserPayload = { email: payload.email, mustChangePassword: payload.mustChangePassword };
     return { ...baseUser, id: 'usr_admin', email: payload.email };
   };
 
@@ -103,7 +111,12 @@ beforeEach(() => {
   settingsRepo.getAll = async () =>
     ({
       sessionMaxAgeDays: 7,
+      twoFactorPolicy: 'off',
+      passwordPolicy: DEFAULT_PASSWORD_POLICY,
     }) as never;
+
+  twoFactorRepo.getTotp = async () => null;
+  twoFactorRepo.countPasskeys = async () => 0;
 
   logger.info = () => undefined;
   logger.warn = () => undefined;
@@ -115,6 +128,7 @@ afterEach(() => {
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);
+  Object.assign(twoFactorRepo, originalTwoFactorRepo);
 });
 
 describe('authService.login', () => {
@@ -215,6 +229,13 @@ describe('authService.changePassword', () => {
     expect(result.code).toBe('WEAK_PASSWORD');
   });
 
+  it('rejects a new password equal to the current one', async () => {
+    const result = await authService.changePassword(baseUser.id, validPassword, validPassword);
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('PASSWORD_UNCHANGED');
+    expect(updatedPasswordId).toBeNull();
+  });
+
   it('updates password and clears sessions', async () => {
     const result = await authService.changePassword(baseUser.id, validPassword, 'newpass123');
     expect(result.success).toBe(true);
@@ -249,11 +270,70 @@ describe('authService.bootstrapAdmin', () => {
     }
   });
 
-  it('creates the first admin user', async () => {
+  it('creates the first admin user with a required password change', async () => {
     usersRepo.count = async () => 0;
     const result = await authService.bootstrapAdmin();
     expect(result.success).toBe(true);
     expect(createdUserPayload?.email).toBe(config.adminEmail);
+    expect(createdUserPayload?.mustChangePassword).toBe(true);
+  });
+
+  it('requires a change when the existing admin still uses the initial password', async () => {
+    usersRepo.count = async () => 1;
+    const initialHash = await Bun.password.hash(config.adminPassword, {
+      algorithm: 'bcrypt',
+      cost: 4,
+    });
+    userWithPassword = { ...baseUser, email: config.adminEmail, passwordHash: initialHash };
+
+    await authService.bootstrapAdmin();
+
+    expect(mustChangePasswordUpdate).toEqual({ id: baseUser.id, value: true });
+  });
+
+  it('does not require a change for a new admin in development', async () => {
+    const wasDev = config.isDev;
+    Object.assign(config, { isDev: true });
+    try {
+      usersRepo.count = async () => 0;
+      await authService.bootstrapAdmin();
+      expect(createdUserPayload?.mustChangePassword).toBe(false);
+    } finally {
+      Object.assign(config, { isDev: wasDev });
+    }
+  });
+
+  it('clears a pending change for the admin in development', async () => {
+    const wasDev = config.isDev;
+    Object.assign(config, { isDev: true });
+    try {
+      usersRepo.count = async () => 1;
+      const initialHash = await Bun.password.hash(config.adminPassword, {
+        algorithm: 'bcrypt',
+        cost: 4,
+      });
+      userWithPassword = {
+        ...baseUser,
+        email: config.adminEmail,
+        mustChangePassword: true,
+        passwordHash: initialHash,
+      };
+
+      await authService.bootstrapAdmin();
+
+      expect(mustChangePasswordUpdate).toEqual({ id: baseUser.id, value: false });
+    } finally {
+      Object.assign(config, { isDev: wasDev });
+    }
+  });
+
+  it('leaves the existing admin alone after the initial password was changed', async () => {
+    usersRepo.count = async () => 1;
+    userWithPassword = { ...baseUser, email: config.adminEmail, passwordHash: validHash };
+
+    await authService.bootstrapAdmin();
+
+    expect(mustChangePasswordUpdate).toBeNull();
   });
 });
 

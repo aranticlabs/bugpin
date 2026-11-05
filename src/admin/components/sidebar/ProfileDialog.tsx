@@ -1,4 +1,5 @@
-import { ApiTokens } from '../../pages/console/ApiTokens';
+import { SecurityTab } from '../profile/SecurityTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -18,7 +19,6 @@ import { Badge } from '../ui/badge';
 import {
   Dialog,
   DialogContent,
-  DialogBody,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -38,18 +38,53 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh]" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-2xl h-[min(760px,90vh)]"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Profile Settings</DialogTitle>
-          <DialogDescription>Manage your account, appearance, and password</DialogDescription>
+          <DialogDescription>Manage your account and how you sign in</DialogDescription>
         </DialogHeader>
 
-        <DialogBody contentClassName="space-y-6 py-4 px-6">
-          <ProfileSection user={user} />
-          <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
-          <ChangePasswordSection />
-          <ApiTokens />
-        </DialogBody>
+        <Tabs defaultValue="account" className="flex min-h-0 flex-1 flex-col">
+          <div className="pt-2">
+            <TabsList>
+              <TabsTrigger value="account">Account</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
+            </TabsList>
+          </div>
+          {/* Plain scroll container instead of DialogBody: its inner wrapper cannot stretch to the viewport height. */}
+          <div className="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+            {/* Both panels share one grid cell, so each stretches to the height of the tab area. */}
+            <div className="grid flex-1 grid-cols-1">
+              <TabsContent
+                forceMount
+                value="account"
+                className="col-start-1 row-start-1 mt-0 flex flex-col data-[state=inactive]:invisible"
+              >
+                <Card className="flex flex-1 flex-col">
+                  <CardHeader>
+                    <CardTitle>Account</CardTitle>
+                    <CardDescription>Your profile picture, name and email address</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col space-y-6">
+                    <ProfileSection user={user} />
+                    <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent
+                forceMount
+                value="security"
+                className="col-start-1 row-start-1 mt-0 flex flex-col gap-6 data-[state=inactive]:invisible"
+              >
+                <SecurityTab />
+              </TabsContent>
+            </div>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
@@ -198,38 +233,30 @@ function ProfileSection({ user }: { user: User | null }) {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>Your account information</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="relative group cursor-pointer" onClick={() => setIsDialogOpen(true)}>
-              <Avatar className="h-16 w-16" key={user?.avatarUrl || 'no-avatar'}>
-                {user?.avatarUrl && user.avatarUrl.trim() !== '' ? (
-                  <AvatarImage src={user.avatarUrl} alt={user?.name || 'User'} />
-                ) : (
-                  <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-2xl">
-                    {user?.name?.charAt(0).toUpperCase() || 'U'}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              {/* Hover overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                <Camera className="h-6 w-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <p className="text-lg font-medium">{user?.name}</p>
-              <p className="text-muted-foreground">{user?.email}</p>
-              <Badge variant="secondary" className="mt-1 capitalize">
-                {user?.role}
-              </Badge>
-            </div>
+      <div className="flex items-center gap-4">
+        <div className="relative group cursor-pointer" onClick={() => setIsDialogOpen(true)}>
+          <Avatar className="h-16 w-16" key={user?.avatarUrl || 'no-avatar'}>
+            {user?.avatarUrl && user.avatarUrl.trim() !== '' ? (
+              <AvatarImage src={user.avatarUrl} alt={user?.name || 'User'} />
+            ) : (
+              <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-2xl">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </AvatarFallback>
+            )}
+          </Avatar>
+          {/* Hover overlay */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+            <Camera className="h-6 w-6 text-white" />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div>
+          <p className="text-lg font-medium">{user?.name}</p>
+          <p className="text-muted-foreground">{user?.email}</p>
+          <Badge variant="secondary" className="mt-1 capitalize">
+            {user?.role}
+          </Badge>
+        </div>
+      </div>
 
       {/* Avatar Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -457,40 +484,31 @@ function UpdateProfileSection({ user }: { user: User | null }) {
   const hasChanges = watchedName !== originalValues.name || watchedEmail !== originalValues.email;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Update Profile</CardTitle>
-        <CardDescription>Change your name and email address</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="profile-name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="profile-name"
-              type="text"
-              {...register('name')}
-              aria-invalid={!!errors.name}
-            />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="profile-name">
+            Name <span className="text-destructive">*</span>
+          </Label>
+          <Input id="profile-name" type="text" {...register('name')} aria-invalid={!!errors.name} />
+          {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="profile-email">
-              Email Address <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="profile-email"
-              type="email"
-              {...register('email')}
-              aria-invalid={!!errors.email}
-            />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            <p className="text-sm text-muted-foreground">Used for login and notifications</p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="profile-email">
+            Email Address <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="profile-email"
+            type="email"
+            {...register('email')}
+            aria-invalid={!!errors.email}
+          />
+          {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+          <p className="text-sm text-muted-foreground">Used for login and notifications</p>
+        </div>
 
+        <div className="flex flex-1 items-end">
           <Button type="submit" disabled={mutation.isPending || !hasChanges}>
             {mutation.isPending ? (
               <>
@@ -501,127 +519,8 @@ function UpdateProfileSection({ user }: { user: User | null }) {
               'Save Changes'
             )}
           </Button>
-        </CardContent>
-      </form>
-    </Card>
-  );
-}
-
-const changePasswordSchema = z
-  .object({
-    currentPassword: z.string().min(1, 'Current password is required'),
-    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your new password'),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
-
-type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
-
-function ChangePasswordSection() {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<ChangePasswordFormData>({
-    resolver: zodResolver(changePasswordSchema),
-    defaultValues: {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      const response = await api.post('/auth/change-password', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      reset();
-      toast.success('Password changed successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      const errorMessage = err.response?.data?.message || 'Failed to change password';
-      toast.error(errorMessage);
-    },
-  });
-
-  const onSubmit = (data: ChangePasswordFormData) => {
-    mutation.mutate({
-      currentPassword: data.currentPassword,
-      newPassword: data.newPassword,
-    });
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Change Password</CardTitle>
-        <CardDescription>Update your password to keep your account secure</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">
-              Current Password <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="current-password"
-              type="password"
-              {...register('currentPassword')}
-              aria-invalid={!!errors.currentPassword}
-            />
-            {errors.currentPassword && (
-              <p className="text-xs text-destructive">{errors.currentPassword.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="new-password">
-              New Password <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="new-password"
-              type="password"
-              {...register('newPassword')}
-              aria-invalid={!!errors.newPassword}
-            />
-            {errors.newPassword && (
-              <p className="text-xs text-destructive">{errors.newPassword.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">
-              Confirm New Password <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              {...register('confirmPassword')}
-              aria-invalid={!!errors.confirmPassword}
-            />
-            {errors.confirmPassword && (
-              <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
-            )}
-          </div>
-
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Changing...
-              </>
-            ) : (
-              'Change Password'
-            )}
-          </Button>
-        </CardContent>
-      </form>
-    </Card>
+        </div>
+      </div>
+    </form>
   );
 }

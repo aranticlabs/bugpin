@@ -61,7 +61,7 @@ function clearDismissal(key: string): void {
 }
 
 export function useUpdateCheck() {
-  const { user } = useAuth();
+  const { user, canLoadData } = useAuth();
   const isAdmin = user?.role === 'admin';
 
   const query = useQuery({
@@ -70,7 +70,7 @@ export function useUpdateCheck() {
       const response = await api.get('/version');
       return response.data as VersionResponse;
     },
-    enabled: isAdmin,
+    enabled: isAdmin && canLoadData,
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });

@@ -4,6 +4,7 @@ import { invitationsService } from '../../services/invitations.service.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
+import { getClientIp } from '../../utils/client-ip.js';
 
 const invitations = new Hono();
 
@@ -35,7 +36,7 @@ invitations.get('/validate/:token', validate({ params: schemas.token }), async (
 invitations.post('/accept', validate({ body: schemas.acceptInvitation }), async (c) => {
   const body = await c.req.json();
 
-  const ipAddress = c.req.header('x-forwarded-for') || c.req.header('x-real-ip');
+  const ipAddress = getClientIp(c);
   const userAgent = c.req.header('user-agent');
 
   const result = await invitationsService.acceptInvitation(body, ipAddress, userAgent);
