@@ -109,6 +109,26 @@ describe('rateLimiter', () => {
       error: 'RATE_LIMIT_EXCEEDED',
     });
   });
+
+  it('keeps named limiters in separate buckets for the same key', async () => {
+    const login = rateLimiter({ name: 'login', max: 1, window: 60, keyGenerator: () => 'ip:x' });
+    const twoFactor = rateLimiter({
+      name: 'login-two-factor',
+      max: 1,
+      window: 60,
+      keyGenerator: () => 'ip:x',
+    });
+    const next = async () => undefined;
+
+    await twoFactor(createContext() as unknown as never, next);
+    const loginContext = createContext();
+    const response = await login(loginContext as unknown as never, next);
+    expect(response).toBeUndefined();
+    expect(loginContext._headers.get('X-RateLimit-Remaining')).toBe('0');
+
+    const blocked = await login(createContext() as unknown as never, next);
+    expect((blocked as Response).status).toBe(429);
+  });
 });
 
 describe('key generators', () => {

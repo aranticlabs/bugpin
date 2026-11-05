@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'bun:test';
-import { getClientIp, isPrivateAddress } from '../../../src/server/utils/client-ip';
+import {
+  getClientIp,
+  isPrivateAddress,
+  rateLimitAddress,
+} from '../../../src/server/utils/client-ip';
 
 function createContext({
   peer,
@@ -67,6 +71,14 @@ describe('getClientIp', () => {
     expect(getClientIp(c, 'auto')).toBe('203.0.113.7');
   });
 
+  it('uses the proxy-appended entry when every forwarded address is private', () => {
+    const c = createContext({
+      peer: '127.0.0.1',
+      headers: { 'x-forwarded-for': '10.9.9.9, 192.168.1.50' },
+    });
+    expect(getClientIp(c, 'auto')).toBe('192.168.1.50');
+  });
+
   it('falls back to X-Real-IP from a trusted proxy', () => {
     const c = createContext({ peer: '::1', headers: { 'x-real-ip': '203.0.113.7' } });
     expect(getClientIp(c, 'auto')).toBe('203.0.113.7');
@@ -98,5 +110,18 @@ describe('getClientIp', () => {
   it('returns undefined when the socket address is unavailable', () => {
     const c = createContext({ headers: { 'x-forwarded-for': '203.0.113.7' } });
     expect(getClientIp(c, 'auto')).toBeUndefined();
+  });
+});
+
+describe('rateLimitAddress', () => {
+  it.each([
+    ['2001:db8:1:2:3:4:5:6', '2001:db8:1:2::/64'],
+    ['2001:db8:1:2:ffff::1', '2001:db8:1:2::/64'],
+    ['2001:0db8:0000:0002::', '2001:db8:0:2::/64'],
+    ['2001:db8::1', '2001:db8:0:0::/64'],
+    ['::1', '0:0:0:0::/64'],
+    ['203.0.113.7', '203.0.113.7'],
+  ])('maps %s to %s', (address, expected) => {
+    expect(rateLimitAddress(address)).toBe(expected);
   });
 });

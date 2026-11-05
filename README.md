@@ -105,7 +105,7 @@ BugPin rate-limits logins and widget submissions per client address. It reads `X
 | `true`           | Trust forwarded headers from any connecting proxy (for example a CDN with a public address)     |
 | `false`          | Ignore forwarded headers and use the connection address                                         |
 
-Set `TRUST_PROXY=false` when BugPin is reachable directly without a reverse proxy, so clients cannot choose their own address with a forged header.
+The quick-start `docker-compose.yml` publishes port 7300 directly and sets `TRUST_PROXY=false`, so clients cannot choose their own address with a forged header. Behind a reverse proxy, set `TRUST_PROXY=auto` (or `true` for a proxy with a public address) and make sure the proxy sets or appends `X-Forwarded-For`. IPv6 clients are rate-limited per /64 network.
 
 ## Login
 

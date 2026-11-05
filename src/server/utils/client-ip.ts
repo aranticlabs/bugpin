@@ -88,10 +88,26 @@ export function getClientIp(
   for (let index = forwarded.length - 1; index >= 0; index--) {
     if (!isPrivateAddress(forwarded[index])) return forwarded[index];
   }
-  if (forwarded.length > 0) return forwarded[0];
+  // Every entry is private: only the rightmost one was written by the trusted proxy
+  if (forwarded.length > 0) return forwarded[forwarded.length - 1];
 
   const realIp = normalizeAddress(c.req.header('x-real-ip') ?? '');
   if (isIP(realIp) !== 0) return realIp;
 
   return peer;
+}
+
+/**
+ * The rate-limit bucket for an address. IPv6 hosts usually get a whole /64, so keying on
+ * the full address would hand one client billions of separate buckets.
+ */
+export function rateLimitAddress(address: string): string {
+  if (isIP(address) !== 6) return address;
+  const [head, tail = ''] = address.toLowerCase().split('::');
+  const headGroups = head ? head.split(':') : [];
+  const tailGroups = address.includes('::') && tail ? tail.split(':') : [];
+  const missing = 8 - headGroups.length - tailGroups.length;
+  const groups = [...headGroups, ...Array<string>(Math.max(0, missing)).fill('0'), ...tailGroups];
+  const prefix = groups.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, ''));
+  return `${prefix.join(':')}::/64`;
 }

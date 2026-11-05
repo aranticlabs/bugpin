@@ -28,9 +28,11 @@ services:
       # Initial admin account, used only when no users exist yet
       # - ADMIN_EMAIL=admin@example.com
       # - ADMIN_PASSWORD=choose-a-strong-initial-password
-      # Which proxies may set X-Forwarded-For: auto (loopback and private networks, default),
-      # true (any proxy) or false (none). Use false when port 7300 is exposed without a proxy.
-      # - TRUST_PROXY=auto
+      # Which proxies may set X-Forwarded-For: auto (loopback and private networks, default
+      # when unset), true (any proxy) or false (none). This quick start publishes port 7300
+      # without a proxy, so forwarded headers are ignored. Switch to auto behind a reverse
+      # proxy such as the Traefik example below.
+      - TRUST_PROXY=false
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
       interval: 30s
@@ -38,7 +40,7 @@ services:
       retries: 3
       start_period: 10s
 
-    # Traefik reverse proxy example (uncomment to use)
+    # Traefik reverse proxy example (uncomment to use, and set TRUST_PROXY=auto above)
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.bugpin.rule=Host(`bugpin.yourdomain.com`)"

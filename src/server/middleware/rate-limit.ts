@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { settingsCacheService } from '../services/settings-cache.service.js';
-import { getClientIp } from '../utils/client-ip.js';
+import { getClientIp, rateLimitAddress } from '../utils/client-ip.js';
 
 // Types
 
@@ -10,6 +10,8 @@ interface RateLimitEntry {
 }
 
 interface RateLimitOptions {
+  /** Gives the limiter its own buckets, so its count is not shared with other limiters */
+  name?: string;
   max?: number;
   window?: number; // in seconds
   keyGenerator?: (c: Context) => string;
@@ -48,7 +50,8 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
   const keyGenerator = options.keyGenerator ?? defaultKeyGenerator;
 
   return async (c, next) => {
-    const key = keyGenerator(c);
+    const baseKey = keyGenerator(c);
+    const key = options.name ? `${options.name}|${baseKey}` : baseKey;
     const now = Date.now();
 
     // Get or create rate limit entry
@@ -97,7 +100,8 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
  * Default key generator - uses the client address (see getClientIp for proxy handling)
  */
 function defaultKeyGenerator(c: Context): string {
-  return `ip:${getClientIp(c) ?? 'unknown'}`;
+  const address = getClientIp(c);
+  return `ip:${address ? rateLimitAddress(address) : 'unknown'}`;
 }
 
 /**
