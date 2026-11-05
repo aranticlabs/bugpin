@@ -32,7 +32,7 @@ const passwordChangeRequiredBody = {
 
 // While the two-factor policy requires setup, only sign-out, password and second-factor
 // management stay available.
-const TWO_FACTOR_SETUP_ALLOWED_PREFIXES = ['/api/auth/two-factor'];
+const TWO_FACTOR_SETUP_ALLOWED_PREFIXES = ['/api/auth/two-factor', '/api/auth/passkeys'];
 
 function twoFactorSetupRequired(user: User, path: string): boolean {
   if (user.twoFactorSetupRequired !== true || PASSWORD_CHANGE_ALLOWED_PATHS.has(path)) return false;

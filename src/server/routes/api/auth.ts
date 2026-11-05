@@ -8,6 +8,10 @@ import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
 import { getClientIp } from '../../utils/client-ip.js';
 import { passwordPolicyService } from '../../services/password-policy.service.js';
+import { passkeyService } from '../../services/passkey.service.js';
+import { settingsCacheService } from '../../services/settings-cache.service.js';
+import { resolveRelyingParty, type RelyingParty } from '../../utils/relying-party.js';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
 const auth = new Hono();
 
@@ -66,6 +70,94 @@ auth.post(
     const body = await c.req.json();
     const input = body.recoveryCode ? { recoveryCode: body.recoveryCode } : { code: body.code };
     const result = await authService.completeTwoFactorLogin(body.challengeToken, input);
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return startSession(c, result.value);
+  }
+);
+
+// Passkeys
+
+async function relyingParty(c: Context): Promise<RelyingParty | null> {
+  return resolveRelyingParty(c, await settingsCacheService.getAll());
+}
+
+function originRejected(c: Context) {
+  return c.json(
+    {
+      success: false,
+      error: 'PASSKEY_ORIGIN_MISMATCH',
+      message: 'Passkeys only work on the address BugPin is configured for',
+    },
+    400
+  );
+}
+
+auth.post(
+  '/login/two-factor/passkey/options',
+  rateLimiter({ max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorPasskeyOptions }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const { challengeToken } = await c.req.json();
+    const result = await authService.passkeySecondFactorOptions(rp, challengeToken);
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return c.json({ success: true, options: result.value });
+  }
+);
+
+auth.post(
+  '/login/two-factor/passkey',
+  rateLimiter({ max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorPasskeyLogin }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const body = (await c.req.json()) as {
+      challengeToken: string;
+      response: AuthenticationResponseJSON;
+    };
+    const result = await authService.completePasskeySecondFactor(
+      rp,
+      body.challengeToken,
+      body.response
+    );
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return startSession(c, result.value);
+  }
+);
+
+auth.post('/login/passkey/options', rateLimiter({ max: 10, window: 60 }), async (c) => {
+  const rp = await relyingParty(c);
+  if (!rp) return originRejected(c);
+  const { challengeId, options } = await passkeyService.loginOptions(rp);
+  return c.json({ success: true, challengeId, options });
+});
+
+auth.post(
+  '/login/passkey',
+  rateLimiter({ max: 10, window: 60 }),
+  validate({ body: schemas.passkeyLogin }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const body = (await c.req.json()) as {
+      challengeId: string;
+      response: AuthenticationResponseJSON;
+    };
+    const result = await authService.loginWithPasskey(
+      rp,
+      body.challengeId,
+      body.response,
+      getClientIp(c),
+      c.req.header('user-agent')
+    );
     if (!result.success) {
       return c.json({ success: false, error: result.code, message: result.error }, 401);
     }

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { signInWithPasskey, verifyPasskeySecondFactor } from '../lib/passkeys';
 import type { User } from '@shared/types';
 
 export interface TwoFactorMethods {
@@ -22,6 +23,8 @@ interface AuthContextType {
   canLoadData: boolean;
   login: (email: string, password: string) => Promise<LoginStep>;
   completeTwoFactor: (challengeToken: string, input: SecondFactorInput) => Promise<void>;
+  loginWithPasskey: () => Promise<void>;
+  completeTwoFactorWithPasskey: (challengeToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -103,6 +106,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [setUser]
   );
 
+  const loginWithPasskey = useCallback(async () => {
+    setUser(await signInWithPasskey());
+  }, [setUser]);
+
+  const completeTwoFactorWithPasskey = useCallback(
+    async (challengeToken: string) => {
+      setUser(await verifyPasskeySecondFactor(challengeToken));
+    },
+    [setUser]
+  );
+
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -135,6 +149,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canLoadData,
         login,
         completeTwoFactor,
+        loginWithPasskey,
+        completeTwoFactorWithPasskey,
         logout,
         refreshUser,
       }}

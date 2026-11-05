@@ -99,6 +99,10 @@ export const twoFactorService = {
     };
   },
 
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    return verifyPassword(userId, password);
+  },
+
   // Authenticator app
 
   async startTotpSetup(user: User, issuer: string): Promise<Result<TotpSetup>> {

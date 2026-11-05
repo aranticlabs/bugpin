@@ -157,7 +157,7 @@ describe('authMiddleware', () => {
       error: 'TWO_FACTOR_SETUP_REQUIRED',
     });
 
-    for (const path of ['/api/auth/two-factor/totp/setup']) {
+    for (const path of ['/api/auth/two-factor/totp/setup', '/api/auth/passkeys/register/options']) {
       let nextCalled = false;
       await authMiddleware(
         createContext({ cookie: 'session=sess_123', path }) as unknown as never,

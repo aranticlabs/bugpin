@@ -4,11 +4,17 @@ import { settingsCacheService } from './settings-cache.service.js';
 import { twoFactorService } from './two-factor.service.js';
 import { passwordPolicyService } from './password-policy.service.js';
 import { loginChallengeService } from './login-challenge.service.js';
+import { passkeyService } from './passkey.service.js';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 import { config } from '../config.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
+import type { RelyingParty } from '../utils/relying-party.js';
 import type { User, Session } from '@shared/types';
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/server';
 
 // Types
 
@@ -155,6 +161,57 @@ export const authService = {
     }
     const result = await createSessionForUser(user, pending.ipAddress, pending.userAgent);
     logger.info('User logged in with a second factor', { userId: user.id });
+    return Result.ok(result);
+  },
+
+  /**
+   * Passkey options for the second login step, limited to the pending user's passkeys
+   */
+  async passkeySecondFactorOptions(
+    rp: RelyingParty,
+    challengeToken: string
+  ): Promise<Result<PublicKeyCredentialRequestOptionsJSON>> {
+    const pending = loginChallengeService.get(challengeToken);
+    if (!pending) {
+      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
+    }
+    if ((await twoFactorRepo.countPasskeys(pending.userId)) === 0) {
+      return Result.fail('No passkey is registered for this account', 'NO_PASSKEY');
+    }
+    return Result.ok(await passkeyService.secondFactorOptions(rp, challengeToken, pending.userId));
+  },
+
+  async completePasskeySecondFactor(
+    rp: RelyingParty,
+    challengeToken: string,
+    response: AuthenticationResponseJSON
+  ): Promise<Result<LoginResult>> {
+    const pending = loginChallengeService.get(challengeToken);
+    if (!pending) {
+      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
+    }
+    if (!(await passkeyService.verifySecondFactor(rp, challengeToken, response))) {
+      loginChallengeService.recordFailure(challengeToken);
+      logger.warn('Passkey second factor rejected', { userId: pending.userId });
+      return Result.fail('The passkey could not be verified', 'PASSKEY_INVALID');
+    }
+    return this.finishPendingLogin(challengeToken);
+  },
+
+  /**
+   * Passwordless sign-in: a verified passkey replaces both password and second factor
+   */
+  async loginWithPasskey(
+    rp: RelyingParty,
+    challengeId: string,
+    response: AuthenticationResponseJSON,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<Result<LoginResult>> {
+    const verified = await passkeyService.login(rp, challengeId, response);
+    if (!verified.success) return verified;
+    const result = await createSessionForUser(verified.value, ipAddress, userAgent);
+    logger.info('User logged in with a passkey', { userId: verified.value.id });
     return Result.ok(result);
   },
 

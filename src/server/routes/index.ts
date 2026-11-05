@@ -21,6 +21,7 @@ import { githubWebhookRoutes } from './api/github-webhook.js';
 import { publicFilesRoutes } from './api/public-files.js';
 import { invitationsRoutes } from './api/invitations.js';
 import { twoFactorRoutes } from './api/two-factor.js';
+import { passkeyRoutes } from './api/passkeys.js';
 import { getEERoutes } from '../utils/ee.js';
 import { logger } from '../utils/logger.js';
 
@@ -29,6 +30,7 @@ export function createApiRouter(): Hono {
 
   // Mount core CE API routes
   api.route('/auth/two-factor', twoFactorRoutes);
+  api.route('/auth/passkeys', passkeyRoutes);
   api.route('/auth', authRoutes);
   api.route('/reports', reportsRoutes);
   api.route('/reports', reporterMessagesRoutes);

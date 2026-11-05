@@ -3,13 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { KeyRound } from 'lucide-react';
 import { useAuth, type TwoFactorMethods } from '../contexts/AuthContext';
+import { passkeyErrorMessage, passkeysSupported } from '../lib/passkeys';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Spinner } from '../components/ui/spinner';
+import { Separator } from '../components/ui/separator';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
@@ -30,10 +33,11 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, loginWithPasskey } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [twoFactorStep, setTwoFactorStep] = useState<TwoFactorStep | null>(null);
 
   const {
@@ -67,6 +71,19 @@ export function Login() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const onPasskeySignIn = async () => {
+    setError('');
+    setIsPasskeyLoading(true);
+    try {
+      await loginWithPasskey();
+      navigate('/');
+    } catch (err) {
+      setError(passkeyErrorMessage(err, 'Sign-in with a passkey failed. Please try again.'));
+    } finally {
+      setIsPasskeyLoading(false);
     }
   };
 
@@ -134,7 +151,7 @@ export function Login() {
                 )}
               </div>
 
-              <Button type="submit" disabled={isLoading} className="w-full">
+              <Button type="submit" disabled={isLoading || isPasskeyLoading} className="w-full">
                 {isLoading ? (
                   <>
                     <Spinner size="sm" className="mr-2" />
@@ -144,6 +161,30 @@ export function Login() {
                   'Sign in'
                 )}
               </Button>
+
+              {passkeysSupported() && (
+                <>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <Separator className="flex-1" />
+                    or
+                    <Separator className="flex-1" />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={isLoading || isPasskeyLoading}
+                    onClick={onPasskeySignIn}
+                  >
+                    {isPasskeyLoading ? (
+                      <Spinner size="sm" className="mr-2" />
+                    ) : (
+                      <KeyRound className="mr-2 h-4 w-4" />
+                    )}
+                    Sign in with a passkey
+                  </Button>
+                </>
+              )}
             </form>
           )}
         </CardContent>
@@ -152,10 +193,11 @@ export function Login() {
   );
 }
 
-type SecondFactorMethod = 'totp' | 'recovery';
+type SecondFactorMethod = 'totp' | 'passkey' | 'recovery';
 
 const METHOD_LINKS: Record<SecondFactorMethod, string> = {
   totp: 'Use your authenticator app',
+  passkey: 'Use a passkey',
   recovery: 'Use a recovery code',
 };
 
@@ -168,9 +210,10 @@ function TwoFactorForm({
   onBack: () => void;
   onSignedIn: () => void;
 }) {
-  const { completeTwoFactor } = useAuth();
+  const { completeTwoFactor, completeTwoFactorWithPasskey } = useAuth();
   const available: SecondFactorMethod[] = [
     ...(step.methods.totp ? (['totp'] as const) : []),
+    ...(step.methods.passkey && passkeysSupported() ? (['passkey'] as const) : []),
     ...(step.methods.recoveryCode ? (['recovery'] as const) : []),
   ];
   const [method, setMethod] = useState<SecondFactorMethod>(available[0] ?? 'recovery');
@@ -181,6 +224,18 @@ function TwoFactorForm({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    if (method === 'passkey') {
+      setIsSubmitting(true);
+      try {
+        await completeTwoFactorWithPasskey(step.challengeToken);
+        onSignedIn();
+      } catch (err) {
+        setError(passkeyErrorMessage(err, 'Verification failed. Please try again.'));
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
     if (!value.trim()) {
       setError(method === 'recovery' ? 'Enter a recovery code' : 'Enter the 6-digit code');
       return;
@@ -207,6 +262,7 @@ function TwoFactorForm({
 
   const instructions: Record<SecondFactorMethod, string> = {
     totp: 'Enter the 6-digit code from your authenticator app.',
+    passkey: 'Confirm it is you with one of your passkeys.',
     recovery: 'Enter one of your recovery codes. Each code works only once.',
   };
 
@@ -220,25 +276,34 @@ function TwoFactorForm({
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="two-factor-code">{method === 'recovery' ? 'Recovery code' : 'Code'}</Label>
-        <Input
-          id="two-factor-code"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          autoComplete="one-time-code"
-          inputMode={method === 'recovery' ? 'text' : 'numeric'}
-          placeholder={method === 'recovery' ? 'xxxxx-xxxxx' : '123456'}
-          maxLength={method === 'recovery' ? 20 : 6}
-          autoFocus
-        />
-      </div>
+      {method !== 'passkey' && (
+        <div className="space-y-2">
+          <Label htmlFor="two-factor-code">
+            {method === 'recovery' ? 'Recovery code' : 'Code'}
+          </Label>
+          <Input
+            id="two-factor-code"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            autoComplete="one-time-code"
+            inputMode={method === 'recovery' ? 'text' : 'numeric'}
+            placeholder={method === 'recovery' ? 'xxxxx-xxxxx' : '123456'}
+            maxLength={method === 'recovery' ? 20 : 6}
+            autoFocus
+          />
+        </div>
+      )}
 
       <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? (
           <>
             <Spinner size="sm" className="mr-2" />
             Verifying...
+          </>
+        ) : method === 'passkey' ? (
+          <>
+            <KeyRound className="mr-2 h-4 w-4" />
+            Use passkey
           </>
         ) : (
           'Verify'
