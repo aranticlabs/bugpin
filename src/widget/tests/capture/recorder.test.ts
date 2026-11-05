@@ -355,6 +355,37 @@ describe('screen recorder', () => {
     expect(microphone.stopCount).toBeGreaterThan(0);
   });
 
+  it('records microphone audio into plain MP4 when that is the only audio format', async () => {
+    FakeMediaRecorder.supported = new Set(['video/mp4']);
+    const { stream } = makeVideoStream();
+    const microphone = new FakeTrack('audio');
+    const session = startRecording(stream, microphone as unknown as MediaStreamTrack, {
+      maxDurationMs: 10_000,
+      maxBytes: 10_000,
+    });
+
+    expect(FakeMediaRecorder.instances[0]?.options.mimeType).toBe('video/mp4');
+    expect(session.hasAudio).toBe(true);
+    session.stop();
+    expect((await session.finished)?.hasAudio).toBe(true);
+  });
+
+  it('falls back to video only when no format can carry the microphone', async () => {
+    FakeMediaRecorder.supported = new Set(['video/webm;codecs=vp9']);
+    const { stream } = makeVideoStream();
+    const microphone = new FakeTrack('audio');
+    const session = startRecording(stream, microphone as unknown as MediaStreamTrack, {
+      maxDurationMs: 10_000,
+      maxBytes: 10_000,
+    });
+
+    expect(FakeMediaRecorder.instances[0]?.options.mimeType).toBe('video/webm;codecs=vp9');
+    expect(session.hasAudio).toBe(false);
+    expect(microphone.stopCount).toBeGreaterThan(0);
+    session.stop();
+    expect((await session.finished)?.hasAudio).toBe(false);
+  });
+
   it('uses the MIME type reported by the recorder for recovery metadata', async () => {
     FakeMediaRecorder.reportedMimeType = 'video/mp4;codecs=avc1.64003e';
     const { stream } = makeVideoStream();

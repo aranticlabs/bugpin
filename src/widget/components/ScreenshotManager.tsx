@@ -1,21 +1,9 @@
 import { FunctionComponent } from 'preact';
 import { useState, useCallback, useRef } from 'preact/hooks';
-import {
-  Camera,
-  TriangleAlert,
-  X,
-  CircleAlert,
-  Upload,
-  Pencil,
-  Download,
-  Trash2,
-  Plus,
-  Video,
-  Play,
-  Pause,
-} from 'lucide-preact';
+import { Camera, Pencil, Download, Trash2, Play, Pause } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { Button } from './ui';
+import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
 import { useLocale } from '../hooks/use-locale.js';
 import { useObjectUrl } from '../hooks/use-object-url.js';
 import { getLocale, t } from '../i18n/index.js';
@@ -122,11 +110,9 @@ export const VideoPreview: FunctionComponent<{ item: CapturedMedia; controls?: b
       <div
         data-testid="video-preview-fallback"
         role="status"
-        class="w-full h-full flex flex-col items-center justify-center gap-2 p-3 text-center text-gray-200"
+        class="w-full h-full flex items-center justify-center px-2 pt-8 pb-2 text-center text-gray-200"
       >
-        <Video class="w-8 h-8" aria-hidden="true" />
         <span class="text-xs font-medium">{t('recording.previewUnavailable')}</span>
-        {formatVideoMeta(item) && <span class="text-xs">{formatVideoMeta(item)}</span>}
       </div>
     );
   }
@@ -308,25 +294,12 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
       {/* Fixed top section: capture button and related controls stay visible
           while the media grid below scrolls independently. */}
       <div class="shrink-0 flex flex-col gap-4 px-6 pt-6 pb-4">
-        <div
-          class="flex items-center justify-end gap-2 text-xs text-muted-foreground select-none"
+        <MediaOptionToggle
+          label={t('screenshot.quality.label')}
           title={t('screenshot.quality.tooltip')}
-        >
-          <label class="flex items-center gap-2 cursor-pointer">
-            <span>{t('screenshot.quality.label')}</span>
-            <input
-              type="checkbox"
-              class="peer sr-only"
-              checked={reduceQuality}
-              onChange={(e) => onReduceQualityChange((e.target as HTMLInputElement).checked)}
-              aria-label={t('screenshot.quality.label')}
-            />
-            <span
-              aria-hidden="true"
-              class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4"
-            />
-          </label>
-        </div>
+          checked={reduceQuality}
+          onChange={onReduceQualityChange}
+        />
 
         {/* Action button */}
         <div class="flex gap-2">
@@ -347,41 +320,21 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
         {/* Privacy notice */}
         <p class="text-xs text-muted-foreground">{t('screenshot.privacyTip')}</p>
 
-        {/* Oversize warning banner with inline quality toggle.
-          Only shown after a too-large capture is rejected. */}
-        {oversizedCapture && (
-          <div
-            role="alert"
-            class="flex items-start gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-solid border-amber-200 dark:border-amber-800/60 rounded text-amber-800 dark:text-amber-200 text-xs"
-          >
-            <TriangleAlert class="w-4 h-4 flex-shrink-0 mt-px" />
-            <div class="flex-1 leading-relaxed">
-              <p class="font-medium">
-                {t('screenshot.error.captureTooLarge', {
-                  size: oversizedCapture.sizeMb,
-                  limit: oversizedCapture.limitMb,
-                })}
-              </p>
-              <p class="mt-1 opacity-90">{t('screenshot.error.captureTooLargeHint')}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onDismissOversizedCapture}
-              class="flex-shrink-0 -mt-0.5 -mr-1 p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-              aria-label={t('aria.close')}
-            >
-              <X class="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Error message */}
-        {uploadError && (
-          <div class="flex items-center gap-2 px-3 py-2.5 bg-red-50 dark:bg-red-950/50 border border-solid border-red-200 dark:border-red-800 rounded text-red-600 dark:text-red-400 text-sm">
-            <CircleAlert class="w-4.5 h-4.5 flex-shrink-0" />
-            {uploadError}
-          </div>
-        )}
+        <MediaCaptureFeedback
+          error={uploadError}
+          warning={
+            oversizedCapture
+              ? {
+                  message: t('screenshot.error.captureTooLarge', {
+                    size: oversizedCapture.sizeMb,
+                    limit: oversizedCapture.limitMb,
+                  }),
+                  hint: t('screenshot.error.captureTooLargeHint'),
+                }
+              : null
+          }
+          onDismiss={onDismissOversizedCapture}
+        />
       </div>
 
       {/* Scrollable area: only the media grid and helper text scroll, so the
@@ -401,14 +354,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
           onDrop={handleDrop}
         >
           {media.length === 0 ? (
-            <div
-              class="flex flex-col items-center justify-center py-8 px-4 text-muted-foreground text-center cursor-pointer transition-colors hover:text-primary [&_svg]:hover:text-primary"
-              onClick={handleUploadClick}
-            >
-              <Upload class="w-12 h-12 mb-3 text-muted-foreground transition-colors" />
-              <p class="text-sm font-medium mb-1">{t('screenshot.dropzone.title')}</p>
-              <span class="text-xs text-muted-foreground">{t('screenshot.dropzone.subtitle')}</span>
-            </div>
+            <MediaUploadButton hasMedia={false} onClick={handleUploadClick} />
           ) : (
             <div class="grid grid-cols-2 gap-3">
               {media.map((item) => (
@@ -427,7 +373,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                       )}
                     </div>
                   </div>
-                  <div class="flex justify-between px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
+                  <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(item.timestamp)}</span>
                     {item.width && item.height ? (
                       <span>
@@ -443,6 +389,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                         class="w-7 h-7 bg-background hover:bg-foreground/10 text-foreground"
                         onClick={() => onAnnotate(item.id)}
                         title={t('screenshot.action.annotate')}
+                        aria-label={t('screenshot.action.annotate')}
                       >
                         <Pencil class="w-4 h-4" />
                       </Button>
@@ -453,6 +400,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                       class="w-7 h-7 bg-background hover:bg-foreground/10 text-foreground"
                       onClick={() => downloadMedia(item)}
                       title={t('screenshot.action.download')}
+                      aria-label={t('screenshot.action.download')}
                     >
                       <Download class="w-4 h-4" />
                     </Button>
@@ -462,22 +410,14 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                       class="w-7 h-7 bg-background hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 text-foreground"
                       onClick={() => onRemove(item.id)}
                       title={t('screenshot.action.remove')}
+                      aria-label={t('screenshot.action.remove')}
                     >
                       <Trash2 class="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               ))}
-              {/* Drop more area as a grid item */}
-              <div
-                class="flex flex-col items-center justify-center gap-2 min-h-28 border-2 border-dashed border-border rounded bg-muted cursor-pointer transition-colors hover:border-primary hover:bg-primary/5 [&_svg]:hover:text-primary [&_span]:hover:text-primary"
-                onClick={handleUploadClick}
-              >
-                <Plus class="w-8 h-8 text-muted-foreground transition-colors" />
-                <span class="text-xs text-muted-foreground transition-colors">
-                  {t('screenshot.addMore')}
-                </span>
-              </div>
+              <MediaUploadButton hasMedia onClick={handleUploadClick} />
             </div>
           )}
         </div>

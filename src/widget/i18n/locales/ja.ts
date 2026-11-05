@@ -51,7 +51,7 @@ const ja: WidgetCatalog = {
   'screenCapture.dontShowAgain': '次回から表示しない',
   'screenCapture.back': '戻る',
   'screenCapture.confirm': '撮影',
-  'screenCapture.confirmRecording': '録画を開始',
+  'screenCapture.confirmRecording': '録画ツールを開く',
   'screenCapture.recording.body':
     '共有する内容をブラウザが確認します。表示されているものはすべて録画されます。',
   'screenCapture.recording.windowHint':
@@ -85,7 +85,9 @@ const ja: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     '「キャプチャ品質を下げる」を有効にするか、ブラウザウィンドウのサイズを変更してください。',
 
-  'recording.start': '画面を録画',
+  'recording.record': '録画を開始',
+  'recording.startShort': '開始',
+  'recording.start': '録画ツールを開く',
   'recording.microphone': 'マイクを含める',
   'recording.privacyTip': '表示されているものはすべて録画されます。',
   'recording.countdown': '{seconds} 秒後に録画を開始します',
@@ -95,8 +97,6 @@ const ja: WidgetCatalog = {
   'recording.play': '再生',
   'recording.expand': '動画を拡大',
   'recording.resume': '再開',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': '一時停止中',
   'recording.tool.cursor': 'カーソル',
   'recording.tool.pen': 'ペン',
   'recording.tool.laser': 'レーザーポインター',
@@ -130,6 +130,8 @@ const ja: WidgetCatalog = {
   'toast.success.submit': 'バグレポートを送信しました！',
   'toast.error.submit': 'レポートの送信に失敗しました',
   'toast.error.capture': 'スクリーンショットの撮影に失敗しました',
+  'toast.error.draftSave':
+    '下書きを保存できませんでした。ウィジェットを開いたまま、もう一度お試しください。',
 
   'annotation.toolbar.select': '選択',
   'annotation.toolbar.pan': '移動（またはスペースキーを長押し）',

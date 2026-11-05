@@ -19,7 +19,7 @@ export interface SubmitFormDataInput {
   metadata: object;
 }
 
-export const MAX_SUBMIT_FORM_BYTES = 127 * 1024 * 1024;
+export const MAX_SUBMIT_FORM_BYTES = 256 * 1024 * 1024;
 
 interface BuiltSubmitFormData {
   formData: FormData;

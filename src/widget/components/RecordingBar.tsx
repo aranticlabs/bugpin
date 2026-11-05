@@ -9,7 +9,6 @@ import {
   MousePointerClick,
   Pause,
   Pencil,
-  Play,
   Square,
   Target,
   Trash2,
@@ -19,7 +18,6 @@ import {
 import { cn } from '../lib/utils';
 import {
   Alert,
-  Badge,
   Button,
   type ButtonProps,
   Card,
@@ -30,7 +28,12 @@ import {
 } from './ui';
 import { RecordingAnnotationLayer } from './RecordingAnnotationLayer';
 import { useLocale } from '../hooks/use-locale.js';
-import { PEN_COLORS, useRecordingTools, type RecordingTool } from '../hooks/use-recording-tools';
+import {
+  PEN_COLORS,
+  formatShortcut,
+  useRecordingTools,
+  type RecordingTool,
+} from '../hooks/use-recording-tools';
 import { t } from '../i18n/index.js';
 
 const VIEWPORT_MARGIN = 8;
@@ -46,7 +49,7 @@ const BAR_SHADOW_CLASS =
 const SELECTED_COLOR_CLASS = '[box-shadow:0_0_0_2px_var(--ring)]';
 
 // Tailwind's translate utilities rely on @property defaults, which do not apply in a shadow root.
-const DEFAULT_POSITION_STYLE = { left: '50%', bottom: '20px', transform: 'translateX(-50%)' };
+const DEFAULT_POSITION_STYLE = { left: '50%', top: '20px', transform: 'translateX(-50%)' };
 
 export interface RecordingBarPosition {
   x: number;
@@ -54,6 +57,7 @@ export interface RecordingBarPosition {
 }
 
 interface RecordingBarProps {
+  isReady: boolean;
   isCountingDown: boolean;
   countdown: number;
   elapsedMs: number;
@@ -63,6 +67,7 @@ interface RecordingBarProps {
   isWholeScreen: boolean;
   position: RecordingBarPosition | null;
   onPositionChange: (position: RecordingBarPosition) => void;
+  onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -104,6 +109,7 @@ const BarButton: FunctionComponent<BarButtonProps> = ({
 );
 
 export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
+  isReady,
   isCountingDown,
   countdown,
   elapsedMs,
@@ -113,6 +119,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
   isWholeScreen,
   position,
   onPositionChange,
+  onStart,
   onPause,
   onResume,
   onStop,
@@ -121,6 +128,8 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
   useLocale();
   const tools = useRecordingTools(!isCountingDown);
   const barRef = useRef<HTMLDivElement>(null);
+  const countdownRef = useRef<HTMLSpanElement>(null);
+  const keepFocusRef = useRef(false);
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null);
   const positionRef = useRef(position);
   positionRef.current = position;
@@ -135,11 +144,30 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
     keepInViewport();
     window.addEventListener('resize', keepInViewport);
     return () => window.removeEventListener('resize', keepInViewport);
-  }, [isCountingDown, onPositionChange]);
+  }, [isReady, isCountingDown, onPositionChange]);
 
   useEffect(() => {
     barRef.current?.showPopover?.();
   }, []);
+
+  // Starting replaces the focused record button, so focus is carried to the countdown
+  // and then to the stop button instead of falling back to the page.
+  useEffect(() => {
+    if (!keepFocusRef.current) return;
+    if (isCountingDown) {
+      countdownRef.current?.focus();
+    } else if (!isReady) {
+      keepFocusRef.current = false;
+      barRef.current?.querySelector<HTMLButtonElement>('[data-recording-stop]')?.focus();
+    }
+  }, [isReady, isCountingDown]);
+
+  const handleStart = useCallback(() => {
+    const bar = barRef.current;
+    const root = bar?.getRootNode() as DocumentOrShadowRoot | undefined;
+    keepFocusRef.current = !!bar && !!root?.activeElement && bar.contains(root.activeElement);
+    onStart();
+  }, [onStart]);
 
   const handlePointerDown = useCallback((event: JSX.TargetedPointerEvent<HTMLDivElement>) => {
     const bar = barRef.current;
@@ -163,7 +191,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
     dragOffsetRef.current = null;
   }, []);
 
-  const tooltipSide: TooltipSide = position && position.y < TOOLTIP_CLEARANCE ? 'bottom' : 'top';
+  const tooltipSide: TooltipSide = !position || position.y < TOOLTIP_CLEARANCE ? 'bottom' : 'top';
   const showWarning = !isCountingDown && isWholeScreen;
   const hasStrokes = tools.strokes.length > 0;
 
@@ -184,11 +212,11 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
   return (
     <>
       <RecordingAnnotationLayer
-        tool={tools.tool}
+        tool={isCountingDown ? 'cursor' : tools.tool}
         clickEffects={tools.clickEffects}
         color={tools.color}
         strokes={tools.strokes}
-        isActive={!isCountingDown}
+        isActive={!isReady && !isCountingDown}
         isPaused={isPaused}
         onStrokeComplete={tools.addStroke}
       />
@@ -217,49 +245,67 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
           </div>
 
           {isCountingDown && (
-            <span role="status" class="px-2 text-sm font-medium">
+            <span
+              ref={countdownRef}
+              role="status"
+              tabIndex={-1}
+              class="px-2 text-sm font-medium outline-none"
+            >
               {t('recording.countdown', { seconds: countdown })}
             </span>
           )}
 
           {!isCountingDown && (
             <>
-              <div class="flex items-center gap-2 px-1">
-                <Badge
-                  variant={isPaused ? 'secondary' : 'destructive'}
-                  class="gap-1.5 rounded-md px-2 tracking-wide"
-                >
-                  <Circle
-                    class={cn('w-2 h-2 fill-current', !isPaused && 'animate-pulse')}
-                    aria-hidden="true"
-                  />
-                  {t(isPaused ? 'recording.status.paused' : 'recording.status.recording')}
-                </Badge>
-                <span
-                  class={cn(
-                    'text-sm font-semibold tabular-nums',
-                    maxDurationMs - elapsedMs <= NEAR_LIMIT_MS && 'animate-pulse'
-                  )}
-                >
-                  {formatDuration(elapsedMs)}{' '}
-                  <span class="font-normal text-muted-foreground">
-                    / {formatDuration(maxDurationMs)}
-                  </span>
-                </span>
-                {hasMicrophone && <Mic class="w-4 h-4 text-muted-foreground" aria-hidden="true" />}
-              </div>
+              {(!isReady || hasMicrophone) && (
+                <>
+                  <div class="flex items-center gap-2 px-1">
+                    {!isReady && (
+                      <>
+                        <Circle
+                          data-recording-indicator
+                          class={cn(
+                            'w-2.5 h-2.5 shrink-0 fill-current',
+                            isPaused ? 'text-muted-foreground' : 'text-destructive animate-pulse'
+                          )}
+                          aria-hidden="true"
+                        />
+                        <span
+                          class={cn(
+                            'text-sm font-semibold tabular-nums',
+                            maxDurationMs - elapsedMs <= NEAR_LIMIT_MS && 'animate-pulse'
+                          )}
+                        >
+                          {formatDuration(elapsedMs)}{' '}
+                          <span class="font-normal text-muted-foreground">
+                            / {formatDuration(maxDurationMs)}
+                          </span>
+                        </span>
+                      </>
+                    )}
+                    {hasMicrophone && (
+                      <Mic class="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    )}
+                  </div>
 
-              <Separator orientation="vertical" class="h-5 max-[640px]:hidden" />
+                  <Separator orientation="vertical" class="h-5 max-[640px]:hidden" />
+                </>
+              )}
 
               <div class="flex items-center gap-0.5">
                 {toolButton(
                   'cursor',
                   t('recording.tool.cursor'),
-                  'V',
+                  formatShortcut('V'),
                   <MousePointer2 class="w-4 h-4" />
                 )}
                 <div class="relative inline-flex">
-                  {toolButton('pen', t('recording.tool.pen'), 'P', <Pencil class="w-4 h-4" />)}
+                  {toolButton(
+                    'pen',
+                    t('recording.tool.pen'),
+                    formatShortcut('P'),
+                    <Pencil class="w-4 h-4" />
+                  )}
                   <Popover
                     open={tools.tool === 'pen'}
                     side={tooltipSide}
@@ -289,6 +335,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                     <Separator orientation="vertical" class="mx-1 h-5" />
                     <BarButton
                       label={t('recording.tool.undo')}
+                      shortcut={formatShortcut('Z')}
                       side={tooltipSide}
                       variant="ghost"
                       class="h-8 w-8"
@@ -309,10 +356,15 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                     </BarButton>
                   </Popover>
                 </div>
-                {toolButton('laser', t('recording.tool.laser'), 'L', <Target class="w-4 h-4" />)}
+                {toolButton(
+                  'laser',
+                  t('recording.tool.laser'),
+                  formatShortcut('L'),
+                  <Target class="w-4 h-4" />
+                )}
                 <BarButton
                   label={t('recording.tool.clickEffects')}
-                  shortcut="C"
+                  shortcut={formatShortcut('C')}
                   side={tooltipSide}
                   variant={tools.clickEffects ? 'secondary' : 'ghost'}
                   class={cn(!tools.clickEffects && 'text-muted-foreground')}
@@ -330,21 +382,29 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                   label={isPaused ? t('recording.resume') : t('recording.pause')}
                   side={tooltipSide}
                   variant="ghost"
+                  class={cn(
+                    isPaused && 'bg-amber-500 text-black hover:bg-amber-400 hover:text-black'
+                  )}
                   onClick={isPaused ? onResume : onPause}
+                  disabled={isReady}
                 >
-                  {isPaused ? <Play class="w-4 h-4" /> : <Pause class="w-4 h-4" />}
+                  <Pause class="w-4 h-4" />
                 </BarButton>
-                <Tooltip content={t('recording.stop')} side={tooltipSide}>
-                  <Button
-                    variant="destructive"
-                    class="h-9 rounded-md px-3"
-                    onClick={onStop}
-                    aria-label={t('recording.stop')}
-                  >
-                    <Square class="w-4 h-4 fill-current" />
-                    {t('recording.stop')}
-                  </Button>
-                </Tooltip>
+                <BarButton
+                  label={t(isReady ? 'recording.record' : 'recording.stop')}
+                  side={tooltipSide}
+                  variant="destructive"
+                  class="w-auto gap-1.5 px-3 text-sm"
+                  data-recording-stop={isReady ? undefined : ''}
+                  onClick={isReady ? handleStart : onStop}
+                >
+                  {isReady ? (
+                    <Circle class="w-3 h-3 fill-current" aria-hidden="true" />
+                  ) : (
+                    <Square class="w-4 h-4 fill-current" aria-hidden="true" />
+                  )}
+                  <span>{t(isReady ? 'recording.startShort' : 'recording.stop')}</span>
+                </BarButton>
               </div>
             </>
           )}

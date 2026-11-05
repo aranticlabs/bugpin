@@ -3,6 +3,7 @@ import {
   type AutoStopReason,
   type RecordingResult,
   type RecordingSession,
+  isDisplayCaptureAllowed,
   requestMicrophoneTrack,
   requestRecordingStream,
   restrictCaptureToPage,
@@ -18,9 +19,10 @@ const COUNTDOWN_STEP_MS = 1000;
 const SIZE_MARGIN_BYTES = 2 * 1024 * 1024;
 const BYTES_PER_MB = 1024 * 1024;
 
-export type RecordingStatus = 'idle' | 'requesting' | 'countdown' | 'recording';
+export type RecordingStatus = 'idle' | 'requesting' | 'ready' | 'countdown' | 'recording';
 
 export interface RecordingDependencies {
+  isDisplayCaptureAllowed: typeof isDisplayCaptureAllowed;
   requestRecordingStream: typeof requestRecordingStream;
   requestMicrophoneTrack: typeof requestMicrophoneTrack;
   startRecording: typeof startRecording;
@@ -182,6 +184,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     }
 
     sessionRef.current = session;
+    setHasMicrophone(session.hasAudio);
     updateStatus('recording');
     void session.finished.then(async (result) => {
       sessionRef.current = null;
@@ -196,6 +199,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
         if (sessionId) await store.remove(apiKey, sessionId);
       } catch (error) {
         console.error('[BugPin] Failed to save completed recording:', error);
+        if (sessionId) store.release(sessionId);
       } finally {
         updateStatus('idle');
       }
@@ -237,6 +241,11 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
       const requestStream = dependencies?.requestRecordingStream ?? requestRecordingStream;
       const requestMicrophone = dependencies?.requestMicrophoneTrack ?? requestMicrophoneTrack;
       const store = dependencies?.recordingStore ?? recordingStore;
+      const captureAllowed = dependencies?.isDisplayCaptureAllowed ?? isDisplayCaptureAllowed;
+      if (!captureAllowed()) {
+        optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
+        return;
+      }
       if (store.isStartBlocked(apiKey)) {
         optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
         return;
@@ -277,11 +286,15 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
       setIsPaused(false);
       setHasMicrophone(microphone?.readyState === 'live');
       setIsWholeScreen(videoTrack?.getSettings().displaySurface === 'monitor');
-      updateStatus('countdown');
+      updateStatus('ready');
       optionsRef.current.onEnter();
     },
     [cancelCountdown, updateStatus]
   );
+
+  const startCountdown = useCallback(() => {
+    if (statusRef.current === 'ready') updateStatus('countdown');
+  }, [updateStatus]);
 
   const pause = useCallback(() => {
     sessionRef.current?.pause();
@@ -294,7 +307,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   }, []);
 
   const stop = useCallback(() => {
-    if (statusRef.current === 'countdown') {
+    if (statusRef.current === 'ready' || statusRef.current === 'countdown') {
       cancelCountdown();
     } else {
       sessionRef.current?.stop();
@@ -302,7 +315,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   }, [cancelCountdown]);
 
   const discard = useCallback(() => {
-    if (statusRef.current === 'countdown') {
+    if (statusRef.current === 'ready' || statusRef.current === 'countdown') {
       cancelCountdown();
     } else {
       sessionRef.current?.discard();
@@ -317,6 +330,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     hasMicrophone,
     isWholeScreen,
     start,
+    startCountdown,
     pause,
     resume,
     stop,

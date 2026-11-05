@@ -1,18 +1,9 @@
 import { FunctionComponent } from 'preact';
 import { useCallback, useRef, useState } from 'preact/hooks';
-import {
-  CircleAlert,
-  Download,
-  Maximize2,
-  Plus,
-  Trash2,
-  TriangleAlert,
-  Upload,
-  Video,
-  X,
-} from 'lucide-preact';
+import { Download, Maximize2, Trash2, Video, X } from 'lucide-preact';
 import { cn } from '../lib/utils.js';
 import { Button } from './ui';
+import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
 import {
   downloadMedia,
   formatVideoMeta,
@@ -34,7 +25,7 @@ interface ScreenRecordingPanelProps {
   includeMicrophone: boolean;
   onIncludeMicrophoneChange: (value: boolean) => void;
   oversizedRecording: { sizeMb: number; limitMb: number } | null;
-  onDismissOversizedRecording: () => void;
+  onDismissOversizedRecording?: () => void;
 }
 
 const DEFAULT_MAX_VIDEO_SIZE = 50 * 1024 * 1024;
@@ -128,64 +119,43 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
 
   return (
     <div class="flex-auto min-h-0 flex flex-col">
-      {recordingEnabled && (
+      {(recordingEnabled || oversizedRecording || uploadError) && (
         <div class="shrink-0 flex flex-col gap-4 px-6 pt-6 pb-4">
-          {allowMicrophone && (
-            <div class="flex items-center justify-end gap-2 text-xs text-muted-foreground select-none">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <span>{t('recording.microphone')}</span>
-                <input
-                  type="checkbox"
-                  class="peer sr-only"
+          {recordingEnabled && (
+            <>
+              {allowMicrophone && (
+                <MediaOptionToggle
+                  label={t('recording.microphone')}
                   checked={includeMicrophone}
-                  onChange={(e) =>
-                    onIncludeMicrophoneChange((e.target as HTMLInputElement).checked)
-                  }
-                  aria-label={t('recording.microphone')}
+                  onChange={onIncludeMicrophoneChange}
                 />
-                <span
-                  aria-hidden="true"
-                  class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4"
-                />
-              </label>
-            </div>
-          )}
+              )}
 
-          <div class="flex gap-2">
-            <Button class="flex-1" onClick={onRecord} disabled={isStarting}>
-              <Video class="w-4.5 h-4.5" />
-              {t('recording.start')}
-            </Button>
-          </div>
-
-          <p class="text-xs text-muted-foreground">{t('recording.privacyTip')}</p>
-
-          {oversizedRecording && (
-            <div
-              role="alert"
-              class="flex items-start gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-solid border-amber-200 dark:border-amber-800/60 rounded text-amber-800 dark:text-amber-200 text-xs"
-            >
-              <TriangleAlert class="w-4 h-4 flex-shrink-0 mt-px" />
-              <div class="flex-1 leading-relaxed">
-                <p class="font-medium">
-                  {t('recording.oversized', {
-                    size: oversizedRecording.sizeMb,
-                    limit: oversizedRecording.limitMb,
-                  })}
-                </p>
-                <p>{t('recording.oversizedHint')}</p>
+              <div class="flex gap-2">
+                <Button class="flex-1" onClick={onRecord} disabled={isStarting}>
+                  <Video class="w-4.5 h-4.5" />
+                  {t('recording.start')}
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="w-6 h-6"
-                onClick={onDismissOversizedRecording}
-                aria-label={t('aria.close')}
-              >
-                <X class="w-4 h-4" />
-              </Button>
-            </div>
+
+              <p class="text-xs text-muted-foreground">{t('recording.privacyTip')}</p>
+            </>
           )}
+          <MediaCaptureFeedback
+            error={uploadError}
+            warning={
+              oversizedRecording
+                ? {
+                    message: t('recording.oversized', {
+                      size: oversizedRecording.sizeMb,
+                      limit: oversizedRecording.limitMb,
+                    }),
+                    hint: t('recording.oversizedHint'),
+                  }
+                : null
+            }
+            onDismiss={onDismissOversizedRecording}
+          />
         </div>
       )}
 
@@ -205,16 +175,9 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
       <div
         class={cn(
           'flex-auto min-h-0 overflow-y-auto px-6 pb-6 flex flex-col gap-4',
-          !recordingEnabled && 'pt-6'
+          !recordingEnabled && !oversizedRecording && !uploadError && 'pt-6'
         )}
       >
-        {uploadError && (
-          <div class="flex items-center gap-2 px-3 py-2.5 bg-red-50 dark:bg-red-950/50 border border-solid border-red-200 dark:border-red-800 rounded text-red-600 dark:text-red-400 text-sm">
-            <CircleAlert class="w-4.5 h-4.5 flex-shrink-0" />
-            {uploadError}
-          </div>
-        )}
-
         <div
           class={cn(
             'shrink-0 transition-colors',
@@ -236,15 +199,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
           onDrop={handleDrop}
         >
           {clips.length === 0 ? (
-            <button
-              type="button"
-              class="w-full flex flex-col items-center justify-center py-8 px-4 text-muted-foreground text-center cursor-pointer transition-colors hover:text-primary [&_svg]:hover:text-primary"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload class="w-12 h-12 mb-3 text-muted-foreground transition-colors" />
-              <span class="text-sm font-medium mb-1">{t('screenshot.dropzone.title')}</span>
-              <span class="text-xs text-muted-foreground">{t('screenshot.dropzone.subtitle')}</span>
-            </button>
+            <MediaUploadButton hasMedia={false} onClick={() => fileInputRef.current?.click()} />
           ) : (
             <ul class="grid grid-cols-2 gap-3 list-none m-0">
               {clips.map((clip) => (
@@ -268,7 +223,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                       <Maximize2 class="w-4 h-4" />
                     </Button>
                   </div>
-                  <div class="flex justify-between gap-2 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
+                  <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(clip.timestamp)}</span>
                     <span class="tabular-nums">{formatVideoMeta(clip)}</span>
                   </div>
@@ -297,14 +252,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                 </li>
               ))}
               <li>
-                <button
-                  type="button"
-                  class="w-full h-full flex flex-col items-center justify-center gap-2 min-h-28 border-2 border-dashed border-border rounded bg-muted cursor-pointer transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Plus class="w-8 h-8" />
-                  <span class="text-xs">{t('screenshot.addMore')}</span>
-                </button>
+                <MediaUploadButton hasMedia onClick={() => fileInputRef.current?.click()} />
               </li>
             </ul>
           )}

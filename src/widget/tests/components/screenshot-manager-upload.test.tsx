@@ -181,6 +181,63 @@ describe('ScreenshotManager uploads', () => {
     ]);
   });
 
+  for (const populated of [false, true]) {
+    it(`opens each panel's file picker from the ${populated ? 'add-more' : 'empty'} upload button`, () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const image: CapturedMedia = {
+        id: 'image',
+        dataUrl: 'data:image/png;base64,media',
+        mimeType: 'image/png',
+        timestamp: new Date(),
+        annotated: false,
+      };
+      render(
+        <ScreenshotManager
+          media={populated ? [image] : []}
+          onCapture={() => undefined}
+          onUpload={() => undefined}
+          onRemove={() => undefined}
+          onAnnotate={() => undefined}
+          isCapturing={false}
+          enableAnnotation
+          reduceQuality={false}
+          onReduceQualityChange={() => undefined}
+          oversizedCapture={null}
+          onDismissOversizedCapture={() => undefined}
+        />,
+        container
+      );
+      for (const panel of ['screenshots', 'recordings']) {
+        if (panel === 'recordings') {
+          renderVideoPanel(
+            container,
+            populated
+              ? [
+                  {
+                    ...image,
+                    id: 'video',
+                    mimeType: 'video/mp4',
+                  },
+                ]
+              : []
+          );
+        }
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+        input.click = mock(() => undefined);
+        const label = t(populated ? 'screenshot.addMore' : 'screenshot.dropzone.title');
+        const trigger = [...container.querySelectorAll('button')].find((button) =>
+          button.textContent?.includes(label)
+        );
+        expect(trigger).toBeDefined();
+        trigger?.click();
+        expect(input.click).toHaveBeenCalledTimes(1);
+      }
+      render(null, container);
+      container.remove();
+    });
+  }
+
   it('advertises only supported image types', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -452,7 +509,7 @@ describe('ScreenshotManager uploads', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const fallback = container.querySelector('[data-testid="video-preview-fallback"]');
     expect(fallback?.textContent).toContain(t('recording.previewUnavailable'));
-    expect(fallback?.textContent).toContain('0.1 MB');
+    expect(container.textContent).toContain('0.1 MB');
     const remove = container.querySelector(
       `button[title="${t('screenshot.action.remove')}"]`
     ) as HTMLButtonElement;

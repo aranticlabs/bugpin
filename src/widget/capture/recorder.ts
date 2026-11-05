@@ -50,6 +50,7 @@ const AUDIO_CANDIDATES = [
   'video/mp4;codecs=avc1.64003e,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm',
+  'video/mp4',
 ] as const;
 
 function selectMimeType(hasAudio: boolean): string | null {
@@ -61,6 +62,21 @@ function stopTracks(stream: MediaStream, microphone: MediaStreamTrack | null): v
   const tracks = new Set(stream.getTracks());
   if (microphone) tracks.add(microphone);
   tracks.forEach((track) => track.stop());
+}
+
+interface FeaturePolicyDocument {
+  featurePolicy?: { allowsFeature(feature: string): boolean };
+}
+
+// Only Chromium exposes the policy. Elsewhere a blocked picker looks the same as
+// a cancelled one, so the check reports the feature as allowed.
+export function isDisplayCaptureAllowed(): boolean {
+  try {
+    const policy = (document as Document & FeaturePolicyDocument).featurePolicy;
+    return policy?.allowsFeature('display-capture') ?? true;
+  } catch {
+    return true;
+  }
 }
 
 export function isRecordingSupported(): boolean {
@@ -145,12 +161,15 @@ export function startRecording(
 ): RecordingSession {
   let recorder: MediaRecorder;
   let selectedMimeType: string;
-  const hasAudio = microphone?.readyState === 'live';
+  const audioCandidate = microphone?.readyState === 'live' ? selectMimeType(true) : null;
+  const hasAudio = audioCandidate !== null;
   try {
-    if (hasAudio && !stream.getTracks().includes(microphone)) {
+    if (microphone && !hasAudio) {
+      microphone.stop();
+    } else if (microphone && !stream.getTracks().includes(microphone)) {
       stream.addTrack(microphone);
     }
-    const candidate = selectMimeType(hasAudio);
+    const candidate = audioCandidate ?? selectMimeType(false);
     if (!candidate) {
       throw new Error('No supported recording format');
     }

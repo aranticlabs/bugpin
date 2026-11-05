@@ -50,7 +50,7 @@ const en = {
   'screenCapture.dontShowAgain': "Don't show this again",
   'screenCapture.back': 'Back',
   'screenCapture.confirm': 'Take Screenshot',
-  'screenCapture.confirmRecording': 'Start Recording',
+  'screenCapture.confirmRecording': 'Open Recorder',
   'screenCapture.recording.body':
     'Your browser will ask what to share. Everything visible will be recorded.',
   'screenCapture.recording.windowHint':
@@ -85,7 +85,9 @@ const en = {
   'screenshot.error.captureTooLargeHint':
     'Enabling "Reduce capture quality" or resize the browser window.',
 
-  'recording.start': 'Record Screen',
+  'recording.record': 'Start Recording',
+  'recording.startShort': 'Start',
+  'recording.start': 'Open Recorder',
   'recording.microphone': 'Include microphone',
   'recording.privacyTip': 'Everything visible will be recorded.',
   'recording.countdown': 'Recording starts in {seconds}',
@@ -95,8 +97,6 @@ const en = {
   'recording.play': 'Play',
   'recording.expand': 'Expand video',
   'recording.resume': 'Resume',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': 'PAUSED',
   'recording.tool.cursor': 'Cursor',
   'recording.tool.pen': 'Pen',
   'recording.tool.laser': 'Laser pointer',
@@ -130,6 +130,7 @@ const en = {
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',
   'toast.error.capture': 'Failed to capture screenshot',
+  'toast.error.draftSave': 'Failed to save the draft. Keep the widget open and try again.',
 
   'annotation.toolbar.select': 'Select',
   'annotation.toolbar.pan': 'Pan (or hold Space)',

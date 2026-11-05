@@ -7,10 +7,7 @@ const SESSION_STORE = 'sessions';
 const CHUNK_STORE = 'chunks';
 const PENDING_KEY_PREFIX = 'bugpin-recording-pending-';
 const HEARTBEAT_KEY_PREFIX = 'bugpin-recording-heartbeat-';
-const OWNER_TAB_KEY_PREFIX = 'bugpin-recording-owner-tab-';
-const TAB_ID_KEY = 'bugpin-recording-tab-id';
 const STORAGE_USED_KEY = 'bugpin-recording-storage-used';
-const ACTIVE_SESSION_TTL_MS = 15 * 60 * 1000;
 const RECOVERY_LIVENESS_MS = 90 * 1000;
 const RECORDING_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -63,28 +60,39 @@ const writeQueues = new Map<string, Promise<void>>();
 const sessionApiKeys = new Map<string, string>();
 const heartbeatTimes = new Map<string, number>();
 const closedSessions = new Set<string>();
-let tabId: string | null = null;
+let pageHideListenerInstalled = false;
 
 function pendingKey(apiKey: string): string {
   return `${PENDING_KEY_PREFIX}${apiKey}`;
 }
 
-function ownerTabKey(apiKey: string): string {
-  return `${OWNER_TAB_KEY_PREFIX}${apiKey}`;
+function heartbeatKey(apiKey: string): string {
+  return `${HEARTBEAT_KEY_PREFIX}${apiKey}`;
 }
 
-function getTabId(): string {
-  if (tabId) return tabId;
+function chunkRange(sessionId: string): IDBKeyRange {
+  return IDBKeyRange.bound(`${sessionId}:`, `${sessionId}:\uffff`);
+}
+
+function clearHeartbeat(apiKey: string): void {
   try {
-    tabId = window.sessionStorage.getItem(TAB_ID_KEY);
-    if (!tabId) {
-      tabId = crypto.randomUUID();
-      window.sessionStorage.setItem(TAB_ID_KEY, tabId);
-    }
+    localStorage.removeItem(heartbeatKey(apiKey));
   } catch {
-    tabId = crypto.randomUUID();
+    // Liveness then falls back to the heartbeat expiring on its own.
   }
-  return tabId;
+}
+
+// A page that is going away stops sending heartbeats. Clearing the heartbeat
+// lets a reload of the same page recover the recording without waiting for it
+// to expire.
+function installPageHideListener(): void {
+  if (pageHideListenerInstalled || typeof window === 'undefined') return;
+  pageHideListenerInstalled = true;
+  window.addEventListener('pagehide', () => {
+    sessionApiKeys.forEach((apiKey, sessionId) => {
+      if (getPendingSessionId(apiKey) === sessionId) clearHeartbeat(apiKey);
+    });
+  });
 }
 
 function normalizeOwnerEmail(ownerEmail?: string): string | undefined {
@@ -104,8 +112,7 @@ function clearPendingSession(apiKey: string, sessionId: string): void {
   try {
     if (localStorage.getItem(pendingKey(apiKey)) === sessionId) {
       localStorage.removeItem(pendingKey(apiKey));
-      localStorage.removeItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`);
-      localStorage.removeItem(ownerTabKey(apiKey));
+      localStorage.removeItem(heartbeatKey(apiKey));
     }
   } catch {
     // IndexedDB remains the source for cleanup if local storage is unavailable.
@@ -114,7 +121,7 @@ function clearPendingSession(apiKey: string, sessionId: string): void {
 
 function updateHeartbeat(apiKey: string): void {
   try {
-    localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, String(Date.now()));
+    localStorage.setItem(heartbeatKey(apiKey), String(Date.now()));
   } catch {
     // Recovery still works, but cannot distinguish a concurrent active tab.
   }
@@ -131,16 +138,25 @@ function touch(sessionId: string): void {
 
 function getHeartbeat(apiKey: string): number | null {
   try {
-    const value = Number(localStorage.getItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`));
+    const value = Number(localStorage.getItem(heartbeatKey(apiKey)));
     return Number.isFinite(value) && value > 0 ? value : null;
   } catch {
     return null;
   }
 }
 
-function isStaleSessionId(sessionId: string): boolean {
-  const startedAt = sessionStartedAt(sessionId);
-  return !Number.isFinite(startedAt) || Date.now() - startedAt > ACTIVE_SESSION_TTL_MS;
+function isPendingSessionLive(apiKey: string): boolean {
+  const heartbeat = getHeartbeat(apiKey);
+  return heartbeat !== null && Date.now() - heartbeat < RECOVERY_LIVENESS_MS;
+}
+
+async function waitUntilPendingSessionIdle(apiKey: string): Promise<void> {
+  let heartbeat = getHeartbeat(apiKey);
+  while (heartbeat && Date.now() - heartbeat < RECOVERY_LIVENESS_MS) {
+    const remaining = RECOVERY_LIVENESS_MS - Math.max(0, Date.now() - heartbeat);
+    await new Promise((resolve) => setTimeout(resolve, remaining + 10));
+    heartbeat = getHeartbeat(apiKey);
+  }
 }
 
 function sessionStartedAt(sessionId: string): number {
@@ -167,29 +183,24 @@ async function deleteSessionRecords(
   sessionId: string
 ): Promise<void> {
   await writeQueues.get(sessionId)?.catch(() => undefined);
-  const chunks = await database.getAll(CHUNK_STORE);
-  await Promise.all(
-    chunks
-      .filter((chunk) => chunk.sessionId === sessionId)
-      .map((chunk) => database.delete(CHUNK_STORE, chunk.id))
-  );
+  await database.delete(CHUNK_STORE, chunkRange(sessionId));
   await database.delete(SESSION_STORE, sessionId);
   writeQueues.delete(sessionId);
 }
 
 function isStartBlocked(apiKey: string): boolean {
-  const sessionId = getPendingSessionId(apiKey);
-  return sessionId !== null && !isStaleSessionId(sessionId);
+  return getPendingSessionId(apiKey) !== null && isPendingSessionLive(apiKey);
 }
 
+// An abandoned pending session is replaced as the pending pointer, but its
+// records stay in IndexedDB, where recover() still finds them.
 async function begin(input: BeginRecordingInput): Promise<string | null> {
-  const existingSessionId = getPendingSessionId(input.apiKey);
-  if (existingSessionId) return null;
+  if (isStartBlocked(input.apiKey)) return null;
 
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   try {
+    installPageHideListener();
     localStorage.setItem(pendingKey(input.apiKey), sessionId);
-    localStorage.setItem(ownerTabKey(input.apiKey), getTabId());
     localStorage.setItem(STORAGE_USED_KEY, 'true');
     updateHeartbeat(input.apiKey);
     const database = await initDB();
@@ -252,60 +263,78 @@ async function remove(apiKey: string, sessionId: string): Promise<void> {
   }
 }
 
-async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRecording | null> {
-  const sessionId = getPendingSessionId(apiKey);
-  if (!sessionId) return null;
+// Keeps the stored chunks for a later recovery, but stops treating the session
+// as live so other recordings can start.
+function release(sessionId: string): void {
+  const apiKey = sessionApiKeys.get(sessionId);
+  sessionApiKeys.delete(sessionId);
+  heartbeatTimes.delete(sessionId);
+  if (apiKey && getPendingSessionId(apiKey) === sessionId) clearHeartbeat(apiKey);
+}
 
-  let ownerTabId: string | null = null;
+function isStorageUsed(): boolean {
   try {
-    ownerTabId = localStorage.getItem(ownerTabKey(apiKey));
+    return localStorage.getItem(STORAGE_USED_KEY) === 'true';
   } catch {
-    // Heartbeat expiry remains the fallback when storage is unavailable.
+    return false;
   }
-  if (ownerTabId !== getTabId()) {
-    let heartbeat = getHeartbeat(apiKey);
-    while (heartbeat && Date.now() - heartbeat < RECOVERY_LIVENESS_MS) {
-      const remaining = RECOVERY_LIVENESS_MS - Math.max(0, Date.now() - heartbeat);
-      await new Promise((resolve) => setTimeout(resolve, remaining + 10));
-      heartbeat = getHeartbeat(apiKey);
-    }
-  }
+}
+
+async function discardSession(
+  database: IDBPDatabase<RecordingStoreDB>,
+  apiKey: string,
+  sessionId: string
+): Promise<void> {
+  closedSessions.add(sessionId);
+  await deleteSessionRecords(database, sessionId);
+  clearPendingSession(apiKey, sessionId);
+}
+
+async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRecording | null> {
+  const pendingSessionId = getPendingSessionId(apiKey);
+  if (!pendingSessionId && !isStorageUsed()) return null;
 
   try {
     const database = await initDB();
-    const session = await database.get(SESSION_STORE, sessionId);
-    if (!session || session.apiKey !== apiKey) {
-      clearPendingSession(apiKey, sessionId);
-      return null;
-    }
-    if (session.ownerEmail !== normalizeOwnerEmail(ownerEmail)) {
-      closedSessions.add(sessionId);
-      await deleteSessionRecords(database, sessionId);
-      clearPendingSession(apiKey, sessionId);
-      return null;
+    const candidates = (await database.getAll(SESSION_STORE))
+      .filter((session) => session.apiKey === apiKey && !sessionApiKeys.has(session.id))
+      .sort((left, right) => sessionStartedAt(left.id) - sessionStartedAt(right.id));
+    if (pendingSessionId && !candidates.some((session) => session.id === pendingSessionId)) {
+      if (!sessionApiKeys.has(pendingSessionId)) clearPendingSession(apiKey, pendingSessionId);
     }
 
-    const chunks = (await database.getAll(CHUNK_STORE))
-      .filter((chunk) => chunk.sessionId === sessionId)
-      .sort((left, right) => left.index - right.index);
-    if (chunks.length === 0) {
-      closedSessions.add(sessionId);
-      await deleteSessionRecords(database, sessionId);
-      clearPendingSession(apiKey, sessionId);
-      return null;
-    }
+    for (const candidate of candidates) {
+      if (candidate.id === getPendingSessionId(apiKey)) {
+        await waitUntilPendingSessionIdle(apiKey);
+      }
+      const session = await database.get(SESSION_STORE, candidate.id);
+      if (!session) continue;
+      if (session.ownerEmail !== normalizeOwnerEmail(ownerEmail)) {
+        await discardSession(database, apiKey, session.id);
+        continue;
+      }
 
-    return {
-      sessionId,
-      blob: new Blob(
-        chunks.map((chunk) => chunk.blob),
-        { type: session.mimeType }
-      ),
-      mimeType: session.mimeType,
-      durationMs: Math.max(...chunks.map((chunk) => chunk.durationMs)),
-      startedAt: session.startedAt,
-      hasAudio: session.hasAudio,
-    };
+      const chunks = (await database.getAll(CHUNK_STORE, chunkRange(session.id))).sort(
+        (left, right) => left.index - right.index
+      );
+      if (chunks.length === 0) {
+        await discardSession(database, apiKey, session.id);
+        continue;
+      }
+
+      return {
+        sessionId: session.id,
+        blob: new Blob(
+          chunks.map((chunk) => chunk.blob),
+          { type: session.mimeType }
+        ),
+        mimeType: session.mimeType,
+        durationMs: Math.max(...chunks.map((chunk) => chunk.durationMs)),
+        startedAt: session.startedAt,
+        hasAudio: session.hasAudio,
+      };
+    }
+    return null;
   } catch (error) {
     console.error('[BugPin] Failed to recover recording:', error);
     return null;
@@ -363,6 +392,7 @@ export const recordingStore = {
   begin,
   addChunk,
   touch,
+  release,
   remove,
   recover,
   expire,

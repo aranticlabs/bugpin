@@ -4,7 +4,6 @@ import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 
 const PENDING_KEY_PREFIX = 'bugpin-recording-pending-';
 const HEARTBEAT_KEY_PREFIX = 'bugpin-recording-heartbeat-';
-const TAB_ID_KEY = 'bugpin-recording-tab-id';
 const STORAGE_USED_KEY = 'bugpin-recording-storage-used';
 let restoreDom: (() => void) | null = null;
 
@@ -104,7 +103,9 @@ describe('recording store', () => {
     await recordingStore.addChunk(sessionId as string, 0, new Blob([new Uint8Array([1, 2])]), 1000);
     localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, '1');
 
-    const recovered = await recordingStore.recover(apiKey, 'owner@example.COM');
+    // @ts-expect-error - Query params simulate the page after a reload.
+    const reloaded = await import('../../storage/recording-store?ordered-chunks-reload');
+    const recovered = await reloaded.recordingStore.recover(apiKey, 'owner@example.COM');
     expect(recovered).toMatchObject({
       sessionId,
       mimeType: 'video/webm',
@@ -127,9 +128,11 @@ describe('recording store', () => {
     await recordingStore.addChunk(sessionId as string, 0, new Blob([new Uint8Array([1])]), 1000);
     localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, '1');
 
-    expect(await recordingStore.recover(apiKey, 'new@example.com')).toBeNull();
+    // @ts-expect-error - Query params simulate the page after a reload.
+    const reloaded = await import('../../storage/recording-store?owner-mismatch-reload');
+    expect(await reloaded.recordingStore.recover(apiKey, 'new@example.com')).toBeNull();
     expect(localStorage.getItem(`${PENDING_KEY_PREFIX}${apiKey}`)).toBeNull();
-    expect(await recordingStore.recover(apiKey, 'old@example.com')).toBeNull();
+    expect(await reloaded.recordingStore.recover(apiKey, 'old@example.com')).toBeNull();
   });
 
   it('clears completed sessions and blocks a second recent recording', async () => {
@@ -151,20 +154,107 @@ describe('recording store', () => {
     expect(await recordingStore.recover(apiKey)).toBeNull();
   });
 
-  it('keeps a stale pending session available for recovery', async () => {
-    // @ts-expect-error - Query params isolate the module-level database handle.
-    const { recordingStore } = await import('../../storage/recording-store?stale');
-    const apiKey = 'recording-stale';
-    localStorage.setItem(`${PENDING_KEY_PREFIX}${apiKey}`, '1-stale');
+  it('lets a new recording start over an abandoned session and still recovers it', async () => {
+    const apiKey = 'recording-abandoned';
+    // @ts-expect-error - Query params simulate the tab that crashed.
+    const crashed = await import('../../storage/recording-store?abandoned-crashed');
+    const abandonedId = await crashed.recordingStore.begin({
+      apiKey,
+      mimeType: 'video/webm',
+      hasAudio: false,
+    });
+    await crashed.recordingStore.addChunk(abandonedId as string, 0, new Blob(['old']), 1000);
+    localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, String(Date.now() - 91 * 1000));
 
+    // @ts-expect-error - Query params simulate a second tab that stayed open.
+    const { recordingStore } = await import('../../storage/recording-store?abandoned-second');
     expect(recordingStore.isStartBlocked(apiKey)).toBe(false);
     const sessionId = await recordingStore.begin({
       apiKey,
       mimeType: 'video/webm',
       hasAudio: false,
     });
-    expect(sessionId).toBeNull();
-    expect(localStorage.getItem(`${PENDING_KEY_PREFIX}${apiKey}`)).toBe('1-stale');
+    expect(sessionId).not.toBeNull();
+    expect(sessionId).not.toBe(abandonedId);
+    expect(localStorage.getItem(`${PENDING_KEY_PREFIX}${apiKey}`)).toBe(sessionId);
+
+    expect((await recordingStore.recover(apiKey))?.sessionId).toBe(abandonedId);
+  });
+
+  it('blocks a second start only while the pending session keeps a heartbeat', async () => {
+    // @ts-expect-error - Query params isolate the module-level database handle.
+    const { recordingStore } = await import('../../storage/recording-store?liveness');
+    const apiKey = 'recording-liveness';
+    await recordingStore.begin({ apiKey, mimeType: 'video/webm', hasAudio: false });
+    expect(recordingStore.isStartBlocked(apiKey)).toBe(true);
+
+    localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, String(Date.now() - 89 * 1000));
+    expect(recordingStore.isStartBlocked(apiKey)).toBe(true);
+    localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, String(Date.now() - 91 * 1000));
+    expect(recordingStore.isStartBlocked(apiKey)).toBe(false);
+  });
+
+  it('released sessions stop blocking new recordings but stay recoverable', async () => {
+    // @ts-expect-error - Query params isolate the module-level database handle.
+    const { recordingStore } = await import('../../storage/recording-store?release');
+    const apiKey = 'recording-release';
+    const sessionId = await recordingStore.begin({
+      apiKey,
+      mimeType: 'video/webm',
+      hasAudio: false,
+    });
+    await recordingStore.addChunk(sessionId as string, 0, new Blob(['clip']), 1000);
+
+    recordingStore.release(sessionId as string);
+    expect(recordingStore.isStartBlocked(apiKey)).toBe(false);
+    expect((await recordingStore.recover(apiKey))?.sessionId).toBe(sessionId);
+
+    await recordingStore.remove(apiKey, sessionId as string);
+    expect(await recordingStore.recover(apiKey)).toBeNull();
+  });
+
+  it('clears the heartbeat on page hide so a reload recovers without waiting', async () => {
+    // @ts-expect-error - Query params isolate the module-level database handle.
+    const { recordingStore } = await import('../../storage/recording-store?pagehide');
+    const apiKey = 'recording-pagehide';
+    const sessionId = await recordingStore.begin({
+      apiKey,
+      mimeType: 'video/webm',
+      hasAudio: false,
+    });
+    await recordingStore.addChunk(sessionId as string, 0, new Blob(['clip']), 1000);
+    expect(localStorage.getItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`)).not.toBeNull();
+
+    window.dispatchEvent(new Event('pagehide'));
+    expect(localStorage.getItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`)).toBeNull();
+    expect(localStorage.getItem(`${PENDING_KEY_PREFIX}${apiKey}`)).toBe(sessionId);
+  });
+
+  it('does not let a duplicated tab take over a live recording', async () => {
+    // @ts-expect-error - Query params isolate the module-level database handle.
+    const { recordingStore } = await import('../../storage/recording-store?duplicate-original');
+    const apiKey = 'recording-duplicate';
+    const sessionId = await recordingStore.begin({
+      apiKey,
+      mimeType: 'video/webm',
+      hasAudio: false,
+    });
+    await recordingStore.addChunk(sessionId as string, 0, new Blob(['clip']), 1000);
+    window.sessionStorage.setItem('bugpin-recording-tab-id', 'copied-from-original');
+
+    // @ts-expect-error - Query params simulate the duplicated tab.
+    const duplicate = await import('../../storage/recording-store?duplicate-copy');
+    let settled = false;
+    const recovery = duplicate.recordingStore.recover(apiKey).then((result: unknown) => {
+      settled = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    expect(duplicate.recordingStore.isStartBlocked(apiKey)).toBe(true);
+
+    await recordingStore.remove(apiKey, sessionId as string);
+    void recovery;
   });
 
   it('waits for another tab heartbeat to expire and then recovers', async () => {
@@ -177,7 +267,6 @@ describe('recording store', () => {
       hasAudio: false,
     });
     await recordingStore.addChunk(sessionId as string, 0, new Blob(['video']), 1000);
-    window.sessionStorage.setItem(TAB_ID_KEY, 'second-tab');
     const availableSetTimeout = globalThis.setTimeout;
     const availableDateNow = Date.now;
     let now = Date.now();

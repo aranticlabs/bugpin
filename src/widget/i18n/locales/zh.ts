@@ -50,7 +50,7 @@ const zh: WidgetCatalog = {
   'screenCapture.dontShowAgain': '不再显示',
   'screenCapture.back': '返回',
   'screenCapture.confirm': '开始截图',
-  'screenCapture.confirmRecording': '开始录制',
+  'screenCapture.confirmRecording': '打开录制工具',
   'screenCapture.recording.body': '浏览器将询问要共享的内容。所有可见内容都将被录制。',
   'screenCapture.recording.windowHint': '请选择包含此页面的窗口。其他应用可能会被录入。',
 
@@ -80,7 +80,9 @@ const zh: WidgetCatalog = {
   'screenshot.error.captureTooLarge': '截图为 {size}MB（上限 {limit}MB）。',
   'screenshot.error.captureTooLargeHint': '请启用"降低截图质量"或调整浏览器窗口大小。',
 
-  'recording.start': '录制屏幕',
+  'recording.record': '开始录制',
+  'recording.startShort': '开始',
+  'recording.start': '打开录制工具',
   'recording.microphone': '包含麦克风',
   'recording.privacyTip': '所有可见内容都将被录制。',
   'recording.countdown': '{seconds} 秒后开始录制',
@@ -90,8 +92,6 @@ const zh: WidgetCatalog = {
   'recording.play': '播放',
   'recording.expand': '放大视频',
   'recording.resume': '继续',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': '已暂停',
   'recording.tool.cursor': '光标',
   'recording.tool.pen': '画笔',
   'recording.tool.laser': '激光笔',
@@ -123,6 +123,7 @@ const zh: WidgetCatalog = {
   'toast.success.submit': '缺陷报告已成功提交！',
   'toast.error.submit': '报告提交失败',
   'toast.error.capture': '截图失败',
+  'toast.error.draftSave': '无法保存草稿。请保持小部件打开并重试。',
 
   'annotation.toolbar.select': '选择',
   'annotation.toolbar.pan': '平移（或长按空格键）',

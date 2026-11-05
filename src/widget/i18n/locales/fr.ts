@@ -52,7 +52,7 @@ const fr: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Ne plus afficher',
   'screenCapture.back': 'Retour',
   'screenCapture.confirm': 'Prendre la capture',
-  'screenCapture.confirmRecording': "Démarrer l'enregistrement",
+  'screenCapture.confirmRecording': 'Ouvrir l’enregistreur',
   'screenCapture.recording.body':
     'Votre navigateur vous demandera quoi partager. Tout ce qui est visible sera enregistré.',
   'screenCapture.recording.windowHint':
@@ -87,7 +87,9 @@ const fr: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Activez « Réduire la qualité de capture » ou redimensionnez la fenêtre du navigateur.',
 
-  'recording.start': "Enregistrer l'écran",
+  'recording.record': 'Démarrer l’enregistrement',
+  'recording.startShort': 'Démarrer',
+  'recording.start': 'Ouvrir l’enregistreur',
   'recording.microphone': 'Inclure le microphone',
   'recording.privacyTip': 'Tout ce qui est visible sera enregistré.',
   'recording.countdown': "L'enregistrement démarre dans {seconds}",
@@ -97,8 +99,6 @@ const fr: WidgetCatalog = {
   'recording.play': 'Lire',
   'recording.expand': 'Agrandir la vidéo',
   'recording.resume': 'Reprendre',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': 'EN PAUSE',
   'recording.tool.cursor': 'Curseur',
   'recording.tool.pen': 'Stylo',
   'recording.tool.laser': 'Pointeur laser',
@@ -132,6 +132,8 @@ const fr: WidgetCatalog = {
   'toast.success.submit': 'Rapport de bug envoyé avec succès !',
   'toast.error.submit': "Échec de l'envoi du rapport",
   'toast.error.capture': "Échec de la capture d'écran",
+  'toast.error.draftSave':
+    "Impossible d'enregistrer le brouillon. Gardez le widget ouvert et réessayez.",
 
   'annotation.toolbar.select': 'Sélectionner',
   'annotation.toolbar.pan': 'Déplacer (ou maintenir Space)',

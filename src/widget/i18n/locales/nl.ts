@@ -53,7 +53,7 @@ const nl: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Dit niet meer tonen',
   'screenCapture.back': 'Terug',
   'screenCapture.confirm': 'Schermafbeelding maken',
-  'screenCapture.confirmRecording': 'Opname starten',
+  'screenCapture.confirmRecording': 'Recorder openen',
   'screenCapture.recording.body':
     'Uw browser vraagt wat u wilt delen. Alles wat zichtbaar is, wordt opgenomen.',
   'screenCapture.recording.windowHint':
@@ -88,7 +88,9 @@ const nl: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Schakel "Opnamekwaliteit verlagen" in of pas de grootte van het browservenster aan.',
 
-  'recording.start': 'Scherm opnemen',
+  'recording.record': 'Opname starten',
+  'recording.startShort': 'Starten',
+  'recording.start': 'Recorder openen',
   'recording.microphone': 'Microfoon opnemen',
   'recording.privacyTip': 'Alles wat zichtbaar is, wordt opgenomen.',
   'recording.countdown': 'Opname start over {seconds}',
@@ -98,8 +100,6 @@ const nl: WidgetCatalog = {
   'recording.play': 'Afspelen',
   'recording.expand': 'Video vergroten',
   'recording.resume': 'Hervatten',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': 'GEPAUZEERD',
   'recording.tool.cursor': 'Cursor',
   'recording.tool.pen': 'Pen',
   'recording.tool.laser': 'Laseraanwijzer',
@@ -133,6 +133,8 @@ const nl: WidgetCatalog = {
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',
   'toast.error.capture': 'Maken van schermafbeelding mislukt',
+  'toast.error.draftSave':
+    'Het concept kon niet worden opgeslagen. Houd de widget open en probeer het opnieuw.',
 
   'annotation.toolbar.select': 'Selecteren',
   'annotation.toolbar.pan': 'Verschuiven (of houd Spatie ingedrukt)',

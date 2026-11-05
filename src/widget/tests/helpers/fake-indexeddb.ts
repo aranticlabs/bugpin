@@ -81,6 +81,34 @@ class FakeIndex {
   }
 }
 
+class FakeKeyRange {
+  constructor(
+    readonly lower: string,
+    readonly upper: string
+  ) {}
+
+  static bound(lower: string, upper: string) {
+    return new FakeKeyRange(lower, upper);
+  }
+
+  includes(key: string) {
+    return key >= this.lower && key <= this.upper;
+  }
+}
+
+type FakeQuery = string | FakeKeyRange | undefined;
+
+function matchesQuery(key: string, query: FakeQuery) {
+  if (query === undefined) return true;
+  return query instanceof FakeKeyRange ? query.includes(key) : key === query;
+}
+
+function deleteMatching(records: Map<string, unknown>, query: FakeQuery) {
+  for (const key of Array.from(records.keys())) {
+    if (matchesQuery(key, query)) records.delete(key);
+  }
+}
+
 class FakeObjectStore {
   private store: FakeStore;
   private transaction?: FakeTransaction;
@@ -115,10 +143,10 @@ class FakeObjectStore {
     return request;
   }
 
-  delete(key: string) {
+  delete(key: string | FakeKeyRange) {
     const request = new FakeRequest();
     queueMicrotask(() => {
-      this.store.records.delete(key);
+      deleteMatching(this.store.records, key);
       request.succeed(undefined);
       this.transaction?.complete();
     });
@@ -143,10 +171,14 @@ class FakeObjectStore {
     return request;
   }
 
-  getAll() {
+  getAll(query?: FakeQuery) {
     const request = new FakeRequest();
     queueMicrotask(() => {
-      request.succeed(Array.from(this.store.records.values()));
+      request.succeed(
+        Array.from(this.store.records.entries())
+          .filter(([key]) => matchesQuery(key, query))
+          .map(([, value]) => value)
+      );
     });
     return request;
   }
@@ -218,9 +250,9 @@ class FakeDatabase extends FakeEventTarget {
     return keyValue;
   }
 
-  async delete(storeName: string, key: string): Promise<void> {
+  async delete(storeName: string, key: string | FakeKeyRange): Promise<void> {
     const store = this.getStore(storeName);
-    store.records.delete(key);
+    deleteMatching(store.records, key);
   }
 
   async clear(storeName: string): Promise<void> {
@@ -288,4 +320,5 @@ export function installFakeIndexedDB() {
   globalThis.IDBIndex = FakeIndex as unknown as typeof IDBIndex;
   globalThis.IDBRequest = FakeRequest as unknown as typeof IDBRequest;
   globalThis.IDBCursor = FakeCursor as unknown as typeof IDBCursor;
+  globalThis.IDBKeyRange = FakeKeyRange as unknown as typeof IDBKeyRange;
 }

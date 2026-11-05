@@ -96,6 +96,7 @@ let startRecording: ReturnType<
   >
 >;
 let recoveryStore: RecordingDependencies['recordingStore'];
+let isDisplayCaptureAllowed: ReturnType<typeof mock<() => boolean>>;
 let submitReport: ReturnType<typeof mock<typeof submitReportApi>>;
 
 let config: WidgetConfig;
@@ -119,6 +120,7 @@ async function renderOpenApp(overrides: Partial<WidgetConfig> = {}, supported = 
         requestMicrophoneTrack,
         startRecording,
         recordingStore: recoveryStore,
+        isDisplayCaptureAllowed,
         submitReport,
       }}
     />,
@@ -142,6 +144,7 @@ async function renderClosedApp(overrides: Partial<WidgetConfig> = {}, supported 
         requestMicrophoneTrack,
         startRecording,
         recordingStore: recoveryStore,
+        isDisplayCaptureAllowed,
         submitReport,
       }}
     />,
@@ -156,6 +159,12 @@ function startFromDialog(): void {
 
 async function reachRecording(): Promise<void> {
   startFromDialog();
+  await beginFromBar();
+}
+
+async function beginFromBar(): Promise<void> {
+  for (let i = 0; i < 100 && !button(t('recording.record')); i++) await flush();
+  button(t('recording.record'))?.click();
   for (let i = 0; i < 100 && startRecording.mock.calls.length === 0; i++) {
     await flush();
   }
@@ -203,11 +212,13 @@ beforeEach(async () => {
     begin: mock(async () => 'recording-session'),
     addChunk: mock(async () => undefined),
     touch: mock(() => undefined),
+    release: mock(() => undefined),
     remove: mock(async () => undefined),
     recover: mock(async () => null),
     expire: mock(async () => false),
   };
   submitReport = mock(async () => ({ success: true, reportId: 'report-1' }));
+  isDisplayCaptureAllowed = mock(() => true);
   globalThis.window.matchMedia = () =>
     ({
       matches: false,
@@ -482,6 +493,88 @@ describe('App screen recording', () => {
     expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
   });
 
+  it('releases recovery storage when the completed clip cannot be saved', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    spyOn(draftStorage, 'save').mockRejectedValue(new Error('Quota exceeded'));
+
+    current.resolveFinished(makeResult(100));
+    await flush();
+
+    expect(clips()).toHaveLength(1);
+    expect(toast()).toContain(t('toast.error.draftSave'));
+    expect(recoveryStore.release).toHaveBeenCalledWith('recording-session');
+    expect(recoveryStore.remove).toHaveBeenCalledTimes(0);
+    expect(dialogProps?.isRecordingStarting).toBe(false);
+  });
+
+  it('forgets the stored recording once the report is submitted', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    recoveryStore.remove = mock(async () => undefined);
+    spyOn(draftStorage, 'save').mockRejectedValue(new Error('Quota exceeded'));
+    current.resolveFinished(makeResult(100));
+    await flush();
+    expect(recoveryStore.remove).toHaveBeenCalledTimes(0);
+
+    await (dialogProps?.onSubmit as (formData: unknown, media: CapturedMedia[]) => Promise<void>)(
+      dialogProps?.formData,
+      clips()
+    );
+    await flush();
+
+    expect(submitReport).toHaveBeenCalledTimes(1);
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
+  });
+
+  it('forgets the stored recording when its clip is removed', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    current.resolveFinished(makeResult(100));
+    await flush();
+    recoveryStore.remove = mock(async () => undefined);
+
+    (dialogProps?.onRemoveMedia as (id: string) => void)('recording-recording-session');
+    await flush();
+
+    expect(clips()).toHaveLength(0);
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
+  });
+
+  it('recovers a recording abandoned in another tab when the widget opens', async () => {
+    let calls = 0;
+    recoveryStore.recover = mock(async () => {
+      calls += 1;
+      if (calls !== 2) return null;
+      return {
+        sessionId: 'other-tab',
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'video/webm' }),
+        mimeType: 'video/webm',
+        durationMs: 2000,
+        startedAt: new Date().toISOString(),
+        hasAudio: false,
+      };
+    });
+
+    await renderOpenApp();
+
+    expect(clips()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'recording-other-tab' })])
+    );
+    expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'other-tab');
+  });
+
+  it('explains when the page does not allow screen recording', async () => {
+    isDisplayCaptureAllowed = mock(() => false);
+    await renderOpenApp();
+
+    startFromDialog();
+    await flush();
+
+    expect(requestRecordingStream).toHaveBeenCalledTimes(0);
+    expect(toast()).toContain(t('recording.error.unavailable'));
+  });
+
   it('waits for completed recording cleanup before allowing another recording', async () => {
     let finishCleanup: (() => void) | undefined;
     recoveryStore.remove = mock(
@@ -508,6 +601,7 @@ describe('App screen recording', () => {
     track = new FakeTrack();
     current = makeSession();
     startFromDialog();
+    await beginFromBar();
     for (let i = 0; i < 100 && startRecording.mock.calls.length < 2; i++) {
       await flush();
     }
@@ -758,6 +852,20 @@ describe('App screen recording', () => {
     expect(toast()).not.toBeNull();
   });
 
+  it('waits for the bar record button before starting the countdown', async () => {
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.record')); i++) await flush();
+
+    expect(button(t('recording.record'))).not.toBeNull();
+    expect(bar()?.textContent).not.toContain(t('recording.countdown', { seconds: 3 }));
+    expect(startRecording).toHaveBeenCalledTimes(0);
+    track.end();
+    await flush();
+    expect(dialog()).not.toBeNull();
+    expect(track.stopCount).toBeGreaterThan(0);
+  });
+
   it('returns to the form when sharing ends during the countdown', async () => {
     globalThis.setTimeout = originalSetTimeout;
     await renderOpenApp();
@@ -783,6 +891,45 @@ describe('App screen recording', () => {
 
     expect(startRecording).toHaveBeenCalledTimes(0);
     expect(dialog()).not.toBeNull();
+    expect(track.stopCount).toBeGreaterThan(0);
+  });
+
+  it('discards from the ready bar and stops tracks without recording', async () => {
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.record')); i++) await flush();
+
+    button(t('recording.discard'))?.click();
+    await flush();
+
+    expect(startRecording).toHaveBeenCalledTimes(0);
+    expect(dialog()).not.toBeNull();
+    expect(bar()).toBeNull();
+    expect(track.stopCount).toBeGreaterThan(0);
+  });
+
+  it('cancels the ready bar on bugpin:close and stops tracks', async () => {
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.record')); i++) await flush();
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:close'));
+    await flush();
+
+    expect(startRecording).toHaveBeenCalledTimes(0);
+    expect(dialog()).not.toBeNull();
+    expect(track.stopCount).toBeGreaterThan(0);
+  });
+
+  it('stops ready tracks when the widget unmounts', async () => {
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.record')); i++) await flush();
+
+    render(null, container);
+    await flush();
+
+    expect(startRecording).toHaveBeenCalledTimes(0);
     expect(track.stopCount).toBeGreaterThan(0);
   });
 

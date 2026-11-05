@@ -55,6 +55,8 @@ interface WidgetDialogProps {
   onDismissOversizedRecording?: () => void;
 }
 
+const BYTES_PER_MB = 1024 * 1024;
+
 const TAB_ICONS = {
   details: <FileText />,
   media: <Image />,
@@ -101,6 +103,20 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   useLocale();
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
+  const images = media.filter((item) => item.mimeType.startsWith('image/'));
+  const videos = media.filter(
+    (item) =>
+      item.mimeType.startsWith('video/') && (recordingEnabled || item.source !== 'recording')
+  );
+  const oversizedClip =
+    maxVideoSize && videos.find((item) => (item.blob?.size ?? 0) > maxVideoSize);
+  const blockingOversize = oversizedClip
+    ? {
+        sizeMb: Math.round(((oversizedClip.blob?.size ?? 0) / BYTES_PER_MB) * 10) / 10,
+        limitMb: Math.round((maxVideoSize ?? 0) / BYTES_PER_MB),
+      }
+    : null;
+
   const handleInputChange = useCallback(
     (field: keyof FormData, value: string) => {
       onFormDataChange({ ...formData, [field]: value });
@@ -136,14 +152,16 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         onActiveTabChange('details');
         return;
       }
+      if (blockingOversize) {
+        onActiveTabChange('recording');
+        return;
+      }
 
       onSubmit(formData, media);
     },
-    [formData, media, validate, onSubmit, onActiveTabChange]
+    [formData, media, validate, onSubmit, onActiveTabChange, blockingOversize]
   );
 
-  const images = media.filter((item) => item.mimeType.startsWith('image/'));
-  const videos = media.filter((item) => item.mimeType.startsWith('video/'));
   const tabs = [
     { id: 'details', label: t('dialog.tabs.details'), icon: TAB_ICONS.details },
     {
@@ -325,8 +343,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   allowMicrophone={allowRecordingMicrophone}
                   includeMicrophone={includeMicrophone}
                   onIncludeMicrophoneChange={onIncludeMicrophoneChange}
-                  oversizedRecording={oversizedRecording}
-                  onDismissOversizedRecording={onDismissOversizedRecording}
+                  oversizedRecording={blockingOversize ?? oversizedRecording}
+                  onDismissOversizedRecording={
+                    blockingOversize ? undefined : onDismissOversizedRecording
+                  }
                 />
               )}
             </div>
@@ -358,7 +378,11 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 >
                   {isSubmitting ? t('submit.cancelUpload') : t('dialog.buttons.cancel')}
                 </Button>
-                <Button class="flex-1" onClick={handleSubmit} disabled={isSubmitting}>
+                <Button
+                  class="flex-1"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !!blockingOversize}
+                >
                   {isSubmitting && uploadProgress !== null
                     ? t('submit.uploading', { percent: Math.round(uploadProgress * 100) })
                     : t('dialog.buttons.submit')}

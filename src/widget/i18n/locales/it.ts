@@ -51,7 +51,7 @@ const it: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Non mostrare più',
   'screenCapture.back': 'Indietro',
   'screenCapture.confirm': 'Acquisisci screenshot',
-  'screenCapture.confirmRecording': 'Avvia registrazione',
+  'screenCapture.confirmRecording': 'Apri registratore',
   'screenCapture.recording.body':
     'Il browser chiederà cosa condividere. Tutto ciò che è visibile verrà registrato.',
   'screenCapture.recording.windowHint':
@@ -86,7 +86,9 @@ const it: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Attiva "Riduci qualità di acquisizione" o ridimensiona la finestra del browser.',
 
-  'recording.start': 'Registra schermo',
+  'recording.record': 'Avvia registrazione',
+  'recording.startShort': 'Avvia',
+  'recording.start': 'Apri registratore',
   'recording.microphone': 'Includi microfono',
   'recording.privacyTip': 'Tutto ciò che è visibile verrà registrato.',
   'recording.countdown': 'La registrazione inizia tra {seconds}',
@@ -96,8 +98,6 @@ const it: WidgetCatalog = {
   'recording.play': 'Riproduci',
   'recording.expand': 'Ingrandisci video',
   'recording.resume': 'Riprendi',
-  'recording.status.recording': 'REC',
-  'recording.status.paused': 'IN PAUSA',
   'recording.tool.cursor': 'Cursore',
   'recording.tool.pen': 'Penna',
   'recording.tool.laser': 'Puntatore laser',
@@ -131,6 +131,7 @@ const it: WidgetCatalog = {
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',
   'toast.error.capture': 'Cattura dello screenshot non riuscita',
+  'toast.error.draftSave': 'Impossibile salvare la bozza. Tieni aperto il widget e riprova.',
 
   'annotation.toolbar.select': 'Seleziona',
   'annotation.toolbar.pan': 'Sposta (o tieni premuto Spazio)',

@@ -322,7 +322,7 @@ describe('submit API (media + config)', () => {
       opened = true;
     });
     const oversized = new Blob([]);
-    Object.defineProperty(oversized, 'size', { value: 127 * 1024 * 1024 + 1 });
+    Object.defineProperty(oversized, 'size', { value: 256 * 1024 * 1024 + 1 });
 
     const { submitReport } = await import('../../api/submit');
 
