@@ -36,7 +36,21 @@ export function Security() {
   return (
     <div className="max-w-4xl space-y-6">
       <SecuritySettingsCard />
+    </div>
+  );
+}
+
+export function TwoFactor() {
+  return (
+    <div className="max-w-4xl space-y-6">
       <TwoFactorPolicyCard />
+    </div>
+  );
+}
+
+export function PasswordPolicySettings() {
+  return (
+    <div className="max-w-4xl space-y-6">
       <PasswordPolicyCard />
     </div>
   );

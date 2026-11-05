@@ -1,4 +1,5 @@
 import { ApiTokens } from './ApiTokens';
+import { Privacy } from './Privacy';
 import { Webhooks } from './Webhooks';
 import { Settings } from './Settings';
 import { Storage } from './Storage';
@@ -9,6 +10,7 @@ const SETTINGS_SUB_TABS = [
   { hash: 'general', label: 'General' },
   { hash: 'smtp', label: 'SMTP' },
   { hash: 'storage', label: 'Storage' },
+  { hash: 'privacy', label: 'Privacy' },
   { hash: 'api-tokens', label: 'API' },
   { hash: 'webhooks', label: 'Webhooks' },
 ];
@@ -20,6 +22,7 @@ export function SettingsPage() {
         <Settings />
         <SMTP />
         <Storage />
+        <Privacy />
         <ApiTokens />
         <Webhooks />
       </SubPageTabs>

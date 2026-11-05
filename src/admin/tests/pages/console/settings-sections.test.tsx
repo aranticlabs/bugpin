@@ -10,7 +10,7 @@ import {
 import { Settings } from '../../../pages/console/Settings';
 import { Recording } from '../../../pages/widget/Recording';
 import { Screenshot } from '../../../pages/widget/Screenshot';
-import { Security } from '../../../pages/console/Security';
+import { PasswordPolicySettings, Security, TwoFactor } from '../../../pages/console/Security';
 import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
@@ -184,14 +184,13 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Security />);
+    renderWithQuery(<PasswordPolicySettings />);
 
-    await screen.findByLabelText(/requests per minute/i);
     const minLength = await screen.findByLabelText(/minimum length/i);
     await waitFor(() => expect(minLength).toHaveValue(12));
     fireEvent.change(minLength, { target: { value: '16' } });
     await user.click(screen.getByLabelText(/special character/i));
-    await user.click(screen.getAllByRole('button', { name: /save changes/i })[2]);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', {
@@ -210,11 +209,10 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Security />);
+    renderWithQuery(<TwoFactor />);
 
-    await screen.findByLabelText(/requests per minute/i);
     await screen.findAllByText('Admins only');
-    await user.click(screen.getAllByRole('button', { name: /save changes/i })[1]);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'admins' });

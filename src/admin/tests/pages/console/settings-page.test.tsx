@@ -245,6 +245,7 @@ describe('Settings Page', () => {
         'General',
         'SMTP',
         'Storage',
+        'Privacy',
         'API',
         'Webhooks',
       ]);

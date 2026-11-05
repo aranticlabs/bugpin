@@ -23,7 +23,7 @@ describe('AppSidebar', () => {
     expect(await screen.findByRole('link', { name: 'Reports (17)' })).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Projects (2)' })).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText('Security & Privacy')).toBeInTheDocument();
+    expect(screen.getByText('Security')).toBeInTheDocument();
 
     const userButton = screen.getByText('Admin User').closest('button');
     expect(userButton).not.toBeNull();

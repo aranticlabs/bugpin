@@ -200,7 +200,7 @@ export function App() {
               }
             />
             <Route
-              path="security-privacy"
+              path="security"
               element={
                 <AdminRoute>
                   <SecurityPrivacy />

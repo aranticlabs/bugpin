@@ -116,40 +116,40 @@ describe('Layout', () => {
     expect(await screen.findByText('About BugPin')).toBeInTheDocument();
   });
 
-  it('renders the Security breadcrumb on /security-privacy', async () => {
+  it('renders the Security breadcrumb on /security', async () => {
     window.location.hash = '';
 
     renderWithProviders(
       <BrandingProvider>
         <Routes>
-          <Route path="/security-privacy" element={<Layout />}>
+          <Route path="/security" element={<Layout />}>
             <Route index element={<div>Security Content</div>} />
           </Route>
         </Routes>
       </BrandingProvider>,
-      { initialEntries: ['/security-privacy'] }
+      { initialEntries: ['/security'] }
     );
 
-    expect(await screen.findByRole('button', { name: 'Security & Privacy' })).toBeInTheDocument();
-    expect(screen.getByText('Security', { exact: true })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Security' })).toBeInTheDocument();
+    expect(screen.getByText('General', { exact: true })).toBeInTheDocument();
     expect(screen.getByText('Security Content')).toBeInTheDocument();
   });
 
-  it('renders the Privacy breadcrumb for /security-privacy#privacy', async () => {
+  it('renders the Privacy breadcrumb for /settings#privacy', async () => {
     window.location.hash = '#privacy';
 
     renderWithProviders(
       <BrandingProvider>
         <Routes>
-          <Route path="/security-privacy" element={<Layout />}>
+          <Route path="/settings" element={<Layout />}>
             <Route index element={<div>Privacy Content</div>} />
           </Route>
         </Routes>
       </BrandingProvider>,
-      { initialEntries: ['/security-privacy#privacy'] }
+      { initialEntries: ['/settings#privacy'] }
     );
 
-    expect(await screen.findByRole('button', { name: 'Security & Privacy' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByText('Privacy')).toBeInTheDocument();
   });
 

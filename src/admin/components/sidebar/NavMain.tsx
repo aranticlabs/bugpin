@@ -77,7 +77,7 @@ const consoleItems: NavItem[] = [
   { title: 'Settings', url: '/settings', icon: SlidersHorizontal },
   { title: 'Notifications', url: '/notifications', icon: Bell },
   { title: 'Users', url: '/users', icon: UsersRound },
-  { title: 'Security & Privacy', url: '/security-privacy', icon: Shield },
+  { title: 'Security', url: '/security', icon: Shield },
   { title: 'Branding', url: '/branding', icon: Palette },
   { title: 'License', url: '/license', icon: KeyRound },
 ];
