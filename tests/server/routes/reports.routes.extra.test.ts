@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { authService } from '../../../src/server/services/auth.service';
+import { integrationsService } from '../../../src/server/services/integrations.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import { syncQueueService } from '../../../src/server/services/integrations/sync-queue.service';
 import { Result } from '../../../src/server/utils/result';
@@ -64,62 +66,21 @@ let forwardResult = Result.ok({ externalId: '123' });
 let retryReport: Report | null = baseReport;
 let retryIntegrations: Integration[] = [];
 
-const integrationsUrl = new URL(
-  '../../../src/server/services/integrations.service.js',
-  import.meta.url
-).href;
-mock.module(integrationsUrl, () => ({
-  integrationsService: {
-    forwardReport: async () => forwardResult,
-  },
-}));
-
-const reportsRepoUrl = new URL(
-  '../../../src/server/database/repositories/reports.repo.js',
-  import.meta.url
-).href;
-mock.module(reportsRepoUrl, () => ({
-  reportsRepo: {
-    findById: async () => retryReport,
-  },
-}));
-
-const integrationsRepoUrl = new URL(
-  '../../../src/server/database/repositories/integrations.repo.js',
-  import.meta.url
-).href;
-mock.module(integrationsRepoUrl, () => ({
-  integrationsRepo: {
-    findByProjectId: async () => retryIntegrations,
-  },
-}));
-
+// Overrides go on the shared service objects and are restored after each test. Replacing
+// whole modules with mock.module would leak into every test file that runs later.
 const enqueueMock = mock(async () => undefined);
-const syncQueueUrl = new URL(
-  '../../../src/server/services/integrations/sync-queue.service.js',
-  import.meta.url
-).href;
-mock.module(syncQueueUrl, () => ({
-  syncQueueService: {
-    enqueue: enqueueMock,
-    retrySyncForReport: (reportId: string) => syncQueueService.retrySyncForReport(reportId),
-  },
-}));
 
-let reportsRoutes: typeof import('../../../src/server/routes/api/reports').reportsRoutes;
 let tempDir: string | null = null;
 let storedFilePath = '';
 
 const originalAuthService = { ...authService };
 const originalFilesRepo = { ...filesRepo };
+const originalIntegrationsService = { ...integrationsService };
 const originalSyncQueueService = { ...syncQueueService };
 
-beforeAll(async () => {
-  const mod = await import('../../../src/server/routes/api/reports');
-  reportsRoutes = mod.reportsRoutes;
-});
-
 beforeEach(() => {
+  integrationsService.forwardReport = async () => forwardResult;
+
   forwardResult = Result.ok({ externalId: '123' });
   retryReport = baseReport;
   retryIntegrations = [];
@@ -144,7 +105,6 @@ beforeEach(() => {
     createdAt: new Date().toISOString(),
   });
 
-  // Mock retrySyncForReport directly on the singleton (mock.module doesn't reliably intercept it)
   syncQueueService.retrySyncForReport = async (reportId: string) => {
     if (!retryReport) {
       return Result.fail('Report not found', 'NOT_FOUND');
@@ -163,6 +123,7 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(authService, originalAuthService);
   Object.assign(filesRepo, originalFilesRepo);
+  Object.assign(integrationsService, originalIntegrationsService);
   Object.assign(syncQueueService, originalSyncQueueService);
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
