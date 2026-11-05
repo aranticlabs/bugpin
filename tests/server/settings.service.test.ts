@@ -172,6 +172,21 @@ describe('settingsService.update', () => {
     expect(lastUpdates?.privacy).toEqual(privacy);
   });
 
+  it('passes the two-factor and password policies to the repository', async () => {
+    const passwordPolicy = {
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: false,
+      requireNumber: true,
+      requireSymbol: true,
+    };
+    const result = await settingsService.update({ twoFactorPolicy: 'everyone', passwordPolicy });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.twoFactorPolicy).toBe('everyone');
+    expect(lastUpdates?.passwordPolicy).toEqual(passwordPolicy);
+  });
+
   it('persists the global widget language setting', async () => {
     const language = { mode: 'manual' as const, defaultLanguage: 'de' as const };
     const result = await settingsService.update({ language });
