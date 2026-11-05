@@ -90,7 +90,7 @@ describe('ReportDetail', () => {
       { initialEntries: ['/reports/report-1'] }
     );
 
-    expect(await screen.findByText('Screenshots (2)')).toBeInTheDocument();
+    expect(await screen.findByText('Media (2)')).toBeInTheDocument();
     const video = document.querySelector('video');
     expect(video).toHaveAttribute('preload', 'metadata');
     expect(video).toHaveStyle({ maxHeight: '200px' });
