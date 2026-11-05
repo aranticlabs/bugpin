@@ -148,6 +148,14 @@ email.
   slower uploads. See the [reverse proxy guide](https://docs.bugpin.io/installation/reverse-proxy).
   The widget shows upload progress, and reporters can cancel a running upload.
 
+## Offline and failed submissions
+
+If the widget cannot reach the server, it stores the report in the browser and sends it automatically
+once the connection is back, and tells the reporter so. Each report carries a submission id, so
+retries never create a second report. If the server is reachable but the upload is rejected on the
+way, for example by a reverse proxy size limit, the reporter is asked to remove or shrink attachments
+and try again.
+
 ## Privacy and diagnostic capture
 
 The server controls which diagnostic categories the widget may collect. EU Privacy Mode disables
@@ -380,5 +388,6 @@ MIT
 ## Support
 
 - [Documentation](https://docs.bugpin.io)
+- [Changelog](https://github.com/aranticlabs/bugpin/tree/main/Changelog/widget)
 - [Report Issues](https://github.com/bugpin/bugpin/issues)
 - [Discussions](https://github.com/bugpin/bugpin/discussions)
