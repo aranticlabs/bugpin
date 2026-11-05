@@ -8,8 +8,7 @@ import { initDefaultBrandingUrls } from './storage/files.js';
 import { initializeEE } from './utils/ee.js';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-
-const MAX_REQUEST_BODY_SIZE = 128 * 1024 * 1024;
+import { MAX_REQUEST_BODY_SIZE } from './utils/request-limits.js';
 
 async function main(): Promise<void> {
   logger.info('Starting BugPin server...');

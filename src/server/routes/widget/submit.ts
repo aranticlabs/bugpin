@@ -327,7 +327,7 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     (total, file) => total + (file.mimeType.startsWith('video/') ? file.data.length : 0),
     0
   );
-  const reservationResult = await videoQuotaService.reserve(
+  const reservationResult = videoQuotaService.reserve(
     projectResult.value.id,
     incomingVideoBytes,
     maxVideoUploadMbPerDay * 1024 * 1024

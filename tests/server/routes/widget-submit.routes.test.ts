@@ -13,6 +13,7 @@ import {
 } from '../../../src/server/services/widget-package-compatibility.service';
 import { Result } from '../../../src/server/utils/result';
 import { logger } from '../../../src/server/utils/logger';
+import { MAX_REQUEST_BODY_SIZE } from '../../../src/server/utils/request-limits';
 import type { Project, Report, AppSettings } from '../../../src/shared/types';
 
 const baseProject: Project = {
@@ -126,7 +127,7 @@ beforeEach(() => {
   projectsRepo.findByApiKey = async () => projectResult;
   settingsRepo.getAll = async () => baseSettings as AppSettings;
   reportsService.create = async () => Result.ok(baseReport);
-  filesRepo.getVideoSizeByProjectSince = async () => 0;
+  filesRepo.getVideoSizeByProjectSince = () => 0;
   widgetPackageCompatibilityService.observe = async (input) => {
     observedWidgetVersions.push(input);
     return Result.ok(undefined);
@@ -183,6 +184,69 @@ function createVideoSubmitForm(
   form.set(field, new File([bytes], filename, { type: mimeType }));
   return form;
 }
+
+describe('widget submit request body limit', () => {
+  const MB = 1024 * 1024;
+
+  async function submitThroughServer(form: FormData): Promise<Response> {
+    const server = Bun.serve({
+      port: 0,
+      maxRequestBodySize: MAX_REQUEST_BODY_SIZE,
+      fetch: createApp().fetch,
+    });
+    try {
+      return await fetch(`http://localhost:${server.port}/widget/submit`, {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+    } finally {
+      server.stop(true);
+    }
+  }
+
+  beforeEach(() => {
+    projectResult = {
+      ...baseProject,
+      settings: {
+        ...baseProject.settings,
+        screenshot: { maxVideoUploadSizeMb: 100, maxScreenshotSize: 50, maxImageUploadSizeMb: 50 },
+      },
+    };
+  });
+
+  it('covers one maximum-size video and three maximum-size images', () => {
+    expect(MAX_REQUEST_BODY_SIZE).toBeGreaterThanOrEqual((100 + 3 * 50) * MB);
+  });
+
+  it('accepts a maximum-size video with a large screenshot', async () => {
+    let fileSizes: number[] = [];
+    reportsService.create = async (input) => {
+      fileSizes = input.files?.map((file) => file.data.byteLength) ?? [];
+      return Result.ok(baseReport);
+    };
+    const form = createVideoSubmitForm(100 * MB);
+    const image = new Uint8Array(30 * MB);
+    image.set([0x89, 0x50, 0x4e, 0x47]);
+    form.append('media', new File([image], 'screenshot.png', { type: 'image/png' }));
+
+    const res = await submitThroughServer(form);
+
+    expect(res.status).toBe(201);
+    expect(fileSizes).toEqual([100 * MB, 30 * MB]);
+  });
+
+  it('answers an oversized video with a structured error', async () => {
+    const res = await submitThroughServer(createVideoSubmitForm(100 * MB + 1));
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({
+      success: false,
+      error: 'FILE_TOO_LARGE',
+      details: { kind: 'video', limit: 100 * MB },
+    });
+  });
+});
 
 describe('widget routes', () => {
   describe('POST /widget/submit', () => {
@@ -492,7 +556,7 @@ describe('widget routes', () => {
           screenshot: { maxVideoUploadMbPerDay: 1 },
         },
       };
-      filesRepo.getVideoSizeByProjectSince = async () => 1024 * 1024;
+      filesRepo.getVideoSizeByProjectSince = () => 1024 * 1024;
       let createCalled = false;
       reportsService.create = async () => {
         createCalled = true;
@@ -519,7 +583,7 @@ describe('widget routes', () => {
         },
       };
       let quotaChecked = false;
-      filesRepo.getVideoSizeByProjectSince = async () => {
+      filesRepo.getVideoSizeByProjectSince = () => {
         quotaChecked = true;
         return Number.MAX_SAFE_INTEGER;
       };
@@ -542,7 +606,7 @@ describe('widget routes', () => {
           screenshot: { maxVideoUploadMbPerDay: 1 },
         },
       };
-      filesRepo.getVideoSizeByProjectSince = async () => 0;
+      filesRepo.getVideoSizeByProjectSince = () => 0;
 
       let releaseFirst: (() => void) | undefined;
       let markFirstStarted: (() => void) | undefined;
@@ -585,7 +649,7 @@ describe('widget routes', () => {
           screenshot: { maxVideoUploadMbPerDay: 1 },
         },
       };
-      filesRepo.getVideoSizeByProjectSince = async () => 512 * 1024;
+      filesRepo.getVideoSizeByProjectSince = () => 512 * 1024;
 
       const res = await createApp().request('http://localhost/widget/submit', {
         method: 'POST',
@@ -604,7 +668,7 @@ describe('widget routes', () => {
           screenshot: { maxVideoUploadMbPerDay: 1 },
         },
       };
-      filesRepo.getVideoSizeByProjectSince = async () => 0;
+      filesRepo.getVideoSizeByProjectSince = () => 0;
       settingsService.getAll = async () => {
         throw new Error('database unavailable');
       };

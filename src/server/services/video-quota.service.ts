@@ -14,16 +14,17 @@ export class VideoQuotaService {
     private readonly now: () => number = Date.now
   ) {}
 
-  async reserve(
-    projectId: string,
-    incomingBytes: number,
-    limitBytes: number
-  ): Promise<ResultType<() => void>> {
+  /**
+   * Checks stored usage and records the reservation without yielding to the event loop, so a
+   * concurrent upload cannot release its reservation between this check and this reservation
+   * while its stored file is still missing from the usage total this check read.
+   */
+  reserve(projectId: string, incomingBytes: number, limitBytes: number): ResultType<() => void> {
     if (limitBytes <= 0 || incomingBytes <= 0) {
       return Result.ok(() => undefined);
     }
 
-    const storedBytesResult = await Result.tryAsync(
+    const storedBytesResult = Result.try(
       () =>
         this.filesRepository.getVideoSizeByProjectSince(
           projectId,

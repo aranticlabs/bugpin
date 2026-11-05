@@ -143,7 +143,7 @@ export const filesRepo = {
     return result.total ?? 0;
   },
 
-  async getVideoSizeByProjectSince(projectId: string, since: string): Promise<number> {
+  getVideoSizeByProjectSince(projectId: string, since: string): number {
     const result = getDb()
       .query(
         `SELECT SUM(files.size_bytes) AS total
