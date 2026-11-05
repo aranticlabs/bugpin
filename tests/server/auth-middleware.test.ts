@@ -6,6 +6,9 @@ import {
   optionalAuth,
 } from '../../src/server/middleware/auth';
 import { authService } from '../../src/server/services/auth.service';
+import { twoFactorService } from '../../src/server/services/two-factor.service';
+import { registerEEHooks, resetEEHooks } from '../../src/server/utils/ee-hooks';
+import { createDefaultHooks } from '../../src/server/types/ee-plugin';
 import { Result } from '../../src/server/utils/result';
 import type { Session, User } from '../../src/shared/types';
 
@@ -76,9 +79,39 @@ function createContext({
   };
 }
 
+const originalDescribeUser = twoFactorService.describeUser;
+
 afterEach(() => {
   authService.validateSession = originalValidateSession;
+  twoFactorService.describeUser = originalDescribeUser;
+  resetEEHooks();
 });
+
+function registerTokenUser(user: User): void {
+  registerEEHooks({
+    ...createDefaultHooks(),
+    getApiTokenService: () => ({
+      isApiAccessEnabled: () => true,
+      validateToken: async () =>
+        Result.ok({
+          id: 'tok_1',
+          userId: user.id,
+          name: 'CI',
+          scopes: ['read', 'write'],
+          createdAt: new Date().toISOString(),
+          user,
+        }),
+      hasScope: () => true,
+    }),
+  });
+}
+
+function bearerContext(path: string): TestContext {
+  const ctx = createContext({ path });
+  ctx.req.header = (name: string) =>
+    name.toLowerCase() === 'authorization' ? 'Bearer bp_token' : undefined;
+  return ctx;
+}
 
 describe('authMiddleware', () => {
   it('returns 401 when session cookie is missing', async () => {
@@ -167,6 +200,37 @@ describe('authMiddleware', () => {
       );
       expect(nextCalled).toBe(true);
     }
+  });
+
+  it('refuses API tokens of a user who must set up two-factor authentication', async () => {
+    registerTokenUser(baseUser);
+    twoFactorService.describeUser = async (user) => ({ ...user, twoFactorSetupRequired: true });
+
+    const blocked = await authMiddleware(
+      bearerContext('/api/reports') as unknown as never,
+      async () => undefined
+    );
+    expect((blocked as Response).status).toBe(403);
+    expect(await (blocked as Response).json()).toMatchObject({
+      error: 'TWO_FACTOR_SETUP_REQUIRED',
+    });
+  });
+
+  it('accepts API tokens once the user has a second factor', async () => {
+    registerTokenUser(baseUser);
+    twoFactorService.describeUser = async (user) => ({
+      ...user,
+      twoFactorEnabled: true,
+      twoFactorSetupRequired: false,
+    });
+
+    const ctx = bearerContext('/api/reports');
+    let nextCalled = false;
+    await authMiddleware(ctx as unknown as never, async () => {
+      nextCalled = true;
+    });
+    expect(nextCalled).toBe(true);
+    expect((ctx._vars.get('user') as User).twoFactorEnabled).toBe(true);
   });
 
   it.each(['/api/auth/change-password', '/api/auth/logout'])(

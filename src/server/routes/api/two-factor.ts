@@ -18,18 +18,29 @@ twoFactor.get('/', async (c) => {
 
 // Authenticator app setup
 
-twoFactor.post('/totp/setup', async (c) => {
-  const settings = await settingsCacheService.getAll();
-  const result = await twoFactorService.startTotpSetup(c.get('user'), settings.appName || 'BugPin');
-  if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 409);
+twoFactor.post(
+  '/totp/setup',
+  rateLimiter({ name: 'totp-setup', max: 5, window: 60, keyGenerator: userKeyGenerator }),
+  validate({ body: schemas.passwordConfirmation }),
+  async (c) => {
+    const { password } = await c.req.json();
+    const settings = await settingsCacheService.getAll();
+    const result = await twoFactorService.startTotpSetup(
+      c.get('user'),
+      settings.appName || 'BugPin',
+      password
+    );
+    if (!result.success) {
+      const status = result.code === 'INVALID_PASSWORD' ? 400 : 409;
+      return c.json({ success: false, error: result.code, message: result.error }, status);
+    }
+    return c.json({ success: true, ...result.value });
   }
-  return c.json({ success: true, ...result.value });
-});
+);
 
 twoFactor.post(
   '/totp/confirm',
-  rateLimiter({ max: 10, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({ name: 'totp-confirm', max: 10, window: 60, keyGenerator: userKeyGenerator }),
   validate({ body: schemas.twoFactorCode }),
   async (c) => {
     const { code } = await c.req.json();
@@ -43,7 +54,7 @@ twoFactor.post(
 
 twoFactor.post(
   '/totp/disable',
-  rateLimiter({ max: 5, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({ name: 'totp-disable', max: 5, window: 60, keyGenerator: userKeyGenerator }),
   validate({ body: schemas.passwordConfirmation }),
   async (c) => {
     const { password } = await c.req.json();
@@ -59,7 +70,7 @@ twoFactor.post(
 
 twoFactor.post(
   '/recovery-codes',
-  rateLimiter({ max: 5, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({ name: 'recovery-codes', max: 5, window: 60, keyGenerator: userKeyGenerator }),
   validate({ body: schemas.passwordConfirmation }),
   async (c) => {
     const { password } = await c.req.json();

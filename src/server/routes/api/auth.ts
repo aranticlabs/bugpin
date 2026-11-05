@@ -36,7 +36,7 @@ async function startSession(c: Context, result: LoginResult) {
 
 auth.post(
   '/login',
-  rateLimiter({ max: 5, window: 60 }), // 5 attempts per minute
+  rateLimiter({ name: 'login', max: 5, window: 60 }), // 5 attempts per minute
   validate({ body: schemas.login }),
   async (c) => {
     const { email, password } = await c.req.json();
@@ -60,18 +60,25 @@ auth.post(
   }
 );
 
+function secondFactorFailureStatus(code: string | undefined): 401 | 429 {
+  return code === 'TOO_MANY_ATTEMPTS' ? 429 : 401;
+}
+
 // Second login step (authenticator code or recovery code)
 
 auth.post(
   '/login/two-factor',
-  rateLimiter({ max: 10, window: 60 }),
+  rateLimiter({ name: 'login-two-factor', max: 10, window: 60 }),
   validate({ body: schemas.twoFactorLogin }),
   async (c) => {
     const body = await c.req.json();
     const input = body.recoveryCode ? { recoveryCode: body.recoveryCode } : { code: body.code };
     const result = await authService.completeTwoFactorLogin(body.challengeToken, input);
     if (!result.success) {
-      return c.json({ success: false, error: result.code, message: result.error }, 401);
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        secondFactorFailureStatus(result.code)
+      );
     }
     return startSession(c, result.value);
   }
@@ -96,7 +103,7 @@ function originRejected(c: Context) {
 
 auth.post(
   '/login/two-factor/passkey/options',
-  rateLimiter({ max: 10, window: 60 }),
+  rateLimiter({ name: 'login-two-factor-passkey-options', max: 10, window: 60 }),
   validate({ body: schemas.twoFactorPasskeyOptions }),
   async (c) => {
     const rp = await relyingParty(c);
@@ -112,7 +119,7 @@ auth.post(
 
 auth.post(
   '/login/two-factor/passkey',
-  rateLimiter({ max: 10, window: 60 }),
+  rateLimiter({ name: 'login-two-factor-passkey', max: 10, window: 60 }),
   validate({ body: schemas.twoFactorPasskeyLogin }),
   async (c) => {
     const rp = await relyingParty(c);
@@ -127,22 +134,29 @@ auth.post(
       body.response
     );
     if (!result.success) {
-      return c.json({ success: false, error: result.code, message: result.error }, 401);
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        secondFactorFailureStatus(result.code)
+      );
     }
     return startSession(c, result.value);
   }
 );
 
-auth.post('/login/passkey/options', rateLimiter({ max: 10, window: 60 }), async (c) => {
-  const rp = await relyingParty(c);
-  if (!rp) return originRejected(c);
-  const { challengeId, options } = await passkeyService.loginOptions(rp);
-  return c.json({ success: true, challengeId, options });
-});
+auth.post(
+  '/login/passkey/options',
+  rateLimiter({ name: 'login-passkey-options', max: 10, window: 60 }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const { challengeId, options } = await passkeyService.loginOptions(rp);
+    return c.json({ success: true, challengeId, options });
+  }
+);
 
 auth.post(
   '/login/passkey',
-  rateLimiter({ max: 10, window: 60 }),
+  rateLimiter({ name: 'login-passkey', max: 10, window: 60 }),
   validate({ body: schemas.passkeyLogin }),
   async (c) => {
     const rp = await relyingParty(c);

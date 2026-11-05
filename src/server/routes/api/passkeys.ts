@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { rateLimiter, userKeyGenerator } from '../../middleware/rate-limit.js';
 import { passkeyService } from '../../services/passkey.service.js';
+import { twoFactorService } from '../../services/two-factor.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { resolveRelyingParty } from '../../utils/relying-party.js';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
@@ -24,18 +25,32 @@ function originRejected(c: Context) {
 
 passkeys.post(
   '/register/options',
-  rateLimiter({ max: 10, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({
+    name: 'passkey-register-options',
+    max: 5,
+    window: 60,
+    keyGenerator: userKeyGenerator,
+  }),
+  validate({ body: schemas.passwordConfirmation }),
   async (c) => {
     const rp = resolveRelyingParty(c, await settingsCacheService.getAll());
     if (!rp) return originRejected(c);
-    const options = await passkeyService.registrationOptions(c.get('user'), rp);
+    const { password } = await c.req.json();
+    const user = c.get('user');
+    if (!(await twoFactorService.verifyPassword(user.id, password))) {
+      return c.json(
+        { success: false, error: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+        400
+      );
+    }
+    const options = await passkeyService.registrationOptions(user, rp);
     return c.json({ success: true, options });
   }
 );
 
 passkeys.post(
   '/register',
-  rateLimiter({ max: 10, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({ name: 'passkey-register', max: 10, window: 60, keyGenerator: userKeyGenerator }),
   validate({ body: schemas.passkeyRegistration }),
   async (c) => {
     const rp = resolveRelyingParty(c, await settingsCacheService.getAll());
@@ -60,7 +75,7 @@ passkeys.patch('/:id', validate({ body: schemas.passkeyRename }), async (c) => {
 
 passkeys.delete(
   '/:id',
-  rateLimiter({ max: 5, window: 60, keyGenerator: userKeyGenerator }),
+  rateLimiter({ name: 'passkey-remove', max: 5, window: 60, keyGenerator: userKeyGenerator }),
   validate({ body: schemas.passwordConfirmation }),
   async (c) => {
     const { password } = await c.req.json();

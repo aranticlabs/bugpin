@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
+import { sessionsRepo } from '../database/repositories/sessions.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { decryptSecret, encryptSecret, sha256Hex } from '../utils/crypto.js';
 import {
@@ -105,7 +106,10 @@ export const twoFactorService = {
 
   // Authenticator app
 
-  async startTotpSetup(user: User, issuer: string): Promise<Result<TotpSetup>> {
+  async startTotpSetup(user: User, issuer: string, password: string): Promise<Result<TotpSetup>> {
+    if (!(await verifyPassword(user.id, password))) {
+      return Result.fail('Password is incorrect', 'INVALID_PASSWORD');
+    }
     if (await this.hasTotp(user.id)) {
       return Result.fail('An authenticator app is already set up', 'TOTP_ALREADY_ENABLED');
     }
@@ -221,7 +225,9 @@ export const twoFactorService = {
     const user = await usersRepo.findById(userId);
     if (!user) return Result.fail('User not found', 'USER_NOT_FOUND');
     await twoFactorRepo.resetUser(userId);
-    logger.warn('Two-factor authentication reset', { userId });
+    // A reset usually follows a lost or stolen device, so existing sign-ins end too
+    const sessionsEnded = await sessionsRepo.deleteByUserId(userId);
+    logger.warn('Two-factor authentication reset', { userId, sessionsEnded });
     return Result.ok(undefined);
   },
 };

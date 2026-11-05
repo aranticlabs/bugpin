@@ -10,6 +10,7 @@ import {
   runMigrations,
 } from '../../src/server/database/database';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
+import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
@@ -32,7 +33,7 @@ async function setPolicy(twoFactorPolicy: 'off' | 'admins' | 'everyone') {
 }
 
 async function enableTotp(target: User): Promise<{ secret: string; recoveryCodes: string[] }> {
-  const setup = await twoFactorService.startTotpSetup(target, 'BugPin');
+  const setup = await twoFactorService.startTotpSetup(target, 'BugPin', password);
   if (!setup.success) throw new Error(setup.error);
   // Confirm with the previous step so the next login can use the current one
   const code = generateTotpCode(setup.value.secret, timeStep(Date.now()) - 1);
@@ -120,6 +121,45 @@ describe('two-factor login flow', () => {
     expect(result.success ? undefined : result.code).toBe('CHALLENGE_EXPIRED');
   });
 
+  it('locks second-factor sign-in for the account after repeated failures', async () => {
+    const { secret } = await enableTotp(user);
+    const failures: Array<string | undefined> = [];
+    for (let challenge = 0; challenge < 3; challenge++) {
+      const login = await authService.login(user.email, password);
+      if (!login.success || !('twoFactorRequired' in login.value)) throw new Error('no challenge');
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const result = await authService.completeTwoFactorLogin(login.value.challengeToken, {
+          code: '000000',
+        });
+        failures.push(result.success ? undefined : result.code);
+      }
+    }
+    expect(failures.slice(0, 10).every((code) => code === 'INVALID_CODE')).toBe(true);
+    expect(failures.slice(10)).toEqual(['TOO_MANY_ATTEMPTS', 'TOO_MANY_ATTEMPTS']);
+
+    // Even the correct code is refused while the account is locked
+    const login = await authService.login(user.email, password);
+    if (!login.success || !('twoFactorRequired' in login.value)) throw new Error('no challenge');
+    const locked = await authService.completeTwoFactorLogin(login.value.challengeToken, {
+      code: generateTotpCode(secret, timeStep(Date.now())),
+    });
+    expect(locked.success ? undefined : locked.code).toBe('TOO_MANY_ATTEMPTS');
+  });
+
+  it('counts parallel attempts on one challenge before verifying them', async () => {
+    await enableTotp(user);
+    const login = await authService.login(user.email, password);
+    if (!login.success || !('twoFactorRequired' in login.value)) throw new Error('no challenge');
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authService.completeTwoFactorLogin(login.value.challengeToken, { code: '000000' })
+      )
+    );
+    const codes = results.map((result) => (result.success ? undefined : result.code));
+    expect(codes.filter((code) => code === 'INVALID_CODE')).toHaveLength(5);
+    expect(codes.filter((code) => code === 'CHALLENGE_EXPIRED')).toHaveLength(3);
+  });
+
   it('accepts each recovery code once, in any format', async () => {
     const { recoveryCodes } = await enableTotp(user);
     expect(recoveryCodes).toHaveLength(10);
@@ -169,10 +209,21 @@ describe('two-factor policy', () => {
     expect(await twoFactorRepo.countUnusedRecoveryCodes(user.id)).toBe(0);
   });
 
-  it('lets an admin reset every second factor of a user', async () => {
+  it('lets an admin reset every second factor of a user and signs them out', async () => {
     await enableTotp(user);
+    await sessionsRepo.create({
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
     await twoFactorService.resetForUser(user.id);
     expect(await twoFactorService.hasSecondFactor(user.id)).toBe(false);
     expect(await twoFactorRepo.countUnusedRecoveryCodes(user.id)).toBe(0);
+    expect(await sessionsRepo.deleteByUserId(user.id)).toBe(0);
+  });
+
+  it('requires the current password to start authenticator setup', async () => {
+    const result = await twoFactorService.startTotpSetup(user, 'BugPin', 'wrong-password');
+    expect(result.success ? undefined : result.code).toBe('INVALID_PASSWORD');
+    expect(await twoFactorRepo.getTotp(user.id)).toBeNull();
   });
 });

@@ -51,6 +51,16 @@ async function createSessionForUser(
   return { user: await twoFactorService.describeUser(user), session };
 }
 
+function secondFactorAttemptRefused(reason: 'expired' | 'locked'): Result<never> {
+  if (reason === 'locked') {
+    return Result.fail(
+      'Too many failed attempts. Wait 15 minutes, then sign in again.',
+      'TOO_MANY_ATTEMPTS'
+    );
+  }
+  return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
+}
+
 // Password Hashing (using Bun's built-in password API)
 
 const BCRYPT_ROUNDS = 12;
@@ -130,10 +140,9 @@ export const authService = {
     challengeToken: string,
     input: SecondFactorInput
   ): Promise<Result<LoginResult>> {
-    const pending = loginChallengeService.get(challengeToken);
-    if (!pending) {
-      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
-    }
+    const attempt = loginChallengeService.beginAttempt(challengeToken);
+    if (!attempt.ok) return secondFactorAttemptRefused(attempt.reason);
+    const { pending } = attempt;
     const valid =
       'code' in input
         ? await twoFactorService.verifyLoginCode(pending.userId, input.code)
@@ -155,6 +164,7 @@ export const authService = {
       return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
     }
     loginChallengeService.consume(challengeToken);
+    loginChallengeService.recordSuccess(pending.userId);
     const user = await usersRepo.findById(pending.userId);
     if (!user || !user.isActive) {
       return Result.fail('Account is disabled', 'ACCOUNT_DISABLED');
@@ -186,10 +196,9 @@ export const authService = {
     challengeToken: string,
     response: AuthenticationResponseJSON
   ): Promise<Result<LoginResult>> {
-    const pending = loginChallengeService.get(challengeToken);
-    if (!pending) {
-      return Result.fail('The sign-in attempt expired. Sign in again.', 'CHALLENGE_EXPIRED');
-    }
+    const attempt = loginChallengeService.beginAttempt(challengeToken);
+    if (!attempt.ok) return secondFactorAttemptRefused(attempt.reason);
+    const { pending } = attempt;
     if (!(await passkeyService.verifySecondFactor(rp, challengeToken, response))) {
       loginChallengeService.recordFailure(challengeToken);
       logger.warn('Passkey second factor rejected', { userId: pending.userId });

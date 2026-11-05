@@ -6,7 +6,12 @@ import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { TWO_FACTOR_STATUS_KEY, useTwoFactorStatus } from '../../hooks/useTwoFactorStatus';
 import { formatDate } from '../../lib/utils';
-import { passkeysSupported, registerPasskey } from '../../lib/passkeys';
+import {
+  getPasskeyRegistrationOptions,
+  passkeysSupported,
+  registerPasskey,
+  type PasskeyRegistrationOptions,
+} from '../../lib/passkeys';
 import { ChangePasswordForm } from '../ChangePasswordForm';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -17,7 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { PasskeyNameDialog } from './PasskeyNameDialog';
 import { PasswordConfirmDialog } from './PasswordConfirmDialog';
 import { RecoveryCodesDialog } from './RecoveryCodesDialog';
-import { TotpSetupDialog } from './TotpSetupDialog';
+import { TotpSetupDialog, type TotpSetup } from './TotpSetupDialog';
 import type { Passkey } from '@shared/types';
 
 export function SecurityTab() {
@@ -92,11 +97,14 @@ export function TwoFactorCard() {
   const { refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const { data: status, isLoading } = useTwoFactorStatus();
+  const [setupPasswordOpen, setSetupPasswordOpen] = useState(false);
+  const [totpSetup, setTotpSetup] = useState<TotpSetup | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [disableOpen, setDisableOpen] = useState(false);
   const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [newCodes, setNewCodes] = useState<string[] | null>(null);
-  const [addPasskeyOpen, setAddPasskeyOpen] = useState(false);
+  const [addPasskeyPasswordOpen, setAddPasskeyPasswordOpen] = useState(false);
+  const [passkeyOptions, setPasskeyOptions] = useState<PasskeyRegistrationOptions | null>(null);
   const [renaming, setRenaming] = useState<Passkey | null>(null);
   const [removing, setRemoving] = useState<Passkey | null>(null);
 
@@ -137,7 +145,7 @@ export function TwoFactorCard() {
                     Turn off
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => setSetupOpen(true)}>
+                  <Button type="button" onClick={() => setSetupPasswordOpen(true)}>
                     Set up
                   </Button>
                 )
@@ -155,7 +163,7 @@ export function TwoFactorCard() {
                 <Button
                   type="button"
                   variant={status.passkeys.length > 0 ? 'outline' : 'default'}
-                  onClick={() => setAddPasskeyOpen(true)}
+                  onClick={() => setAddPasskeyPasswordOpen(true)}
                   disabled={!passkeysSupported()}
                 >
                   Add passkey
@@ -220,9 +228,26 @@ export function TwoFactorCard() {
         )}
       </CardContent>
 
+      <PasswordConfirmDialog
+        open={setupPasswordOpen}
+        onOpenChange={setSetupPasswordOpen}
+        title="Set up authenticator app"
+        description="Enter your password to set up an authenticator app."
+        confirmLabel="Continue"
+        onConfirm={async (password) => {
+          const response = await api.post<TotpSetup & { success: boolean }>(
+            '/auth/two-factor/totp/setup',
+            { password }
+          );
+          setTotpSetup({ secret: response.data.secret, otpauthUri: response.data.otpauthUri });
+          setSetupOpen(true);
+        }}
+      />
+
       <TotpSetupDialog
         open={setupOpen}
         onOpenChange={setSetupOpen}
+        setup={totpSetup}
         onEnabled={async () => {
           toast.success('Authenticator app turned on');
           await refresh();
@@ -259,15 +284,28 @@ export function TwoFactorCard() {
         }}
       />
 
+      <PasswordConfirmDialog
+        open={addPasskeyPasswordOpen}
+        onOpenChange={setAddPasskeyPasswordOpen}
+        title="Add a passkey"
+        description="Enter your password to add a passkey."
+        confirmLabel="Continue"
+        onConfirm={async (password) => {
+          setPasskeyOptions(await getPasskeyRegistrationOptions(password));
+        }}
+      />
+
+      {/* The options are fetched first so a wrong password is reported in the password dialog */}
       <PasskeyNameDialog
-        open={addPasskeyOpen}
-        onOpenChange={setAddPasskeyOpen}
+        open={passkeyOptions !== null}
+        onOpenChange={(open) => !open && setPasskeyOptions(null)}
         title="Add a passkey"
         description="Name the passkey so you can recognize it later. Your browser then asks you to create it."
         confirmLabel="Continue"
         initialName="Passkey"
         onSubmit={async (name) => {
-          const codes = await registerPasskey(name);
+          if (!passkeyOptions) return;
+          const codes = await registerPasskey(passkeyOptions, name);
           toast.success('Passkey added');
           if (codes) {
             setNewCodes(codes);

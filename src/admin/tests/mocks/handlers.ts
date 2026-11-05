@@ -688,6 +688,53 @@ export const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
+  // Two-factor setup steps that require the current password
+  http.post('/api/auth/two-factor/totp/setup', async ({ request }) => {
+    const body = (await request.json()) as { password?: string };
+    if (!body.password) {
+      return HttpResponse.json(
+        { success: false, error: 'VALIDATION_ERROR', message: 'Password is required' },
+        { status: 400 }
+      );
+    }
+    if (body.password !== 'password123') {
+      return HttpResponse.json(
+        { success: false, error: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+        { status: 400 }
+      );
+    }
+    return HttpResponse.json({
+      success: true,
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/BugPin:admin%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=BugPin',
+    });
+  }),
+
+  http.post('/api/auth/passkeys/register/options', async ({ request }) => {
+    const body = (await request.json()) as { password?: string };
+    if (!body.password) {
+      return HttpResponse.json(
+        { success: false, error: 'VALIDATION_ERROR', message: 'Password is required' },
+        { status: 400 }
+      );
+    }
+    if (body.password !== 'password123') {
+      return HttpResponse.json(
+        { success: false, error: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+        { status: 400 }
+      );
+    }
+    return HttpResponse.json({
+      success: true,
+      options: {
+        rp: { name: 'BugPin', id: 'localhost' },
+        user: { id: 'dXNlci0x', name: 'admin@example.com', displayName: 'Admin User' },
+        challenge: 'Y2hhbGxlbmdl',
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    });
+  }),
+
   // License endpoints
   http.get('/api/license/features', () => {
     return HttpResponse.json({

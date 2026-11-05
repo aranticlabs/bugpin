@@ -35,6 +35,7 @@ async function main(): Promise<void> {
   console.log('Two-factor authentication reset.');
   console.log(`  Email: ${user.email}`);
   console.log('The authenticator app, passkeys and recovery codes were removed.');
+  console.log('The user was signed out of all sessions.');
   console.log('If a two-factor policy applies, the user sets up a new method at the next login.');
 }
 

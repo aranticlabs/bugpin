@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { authService } from '../services/auth.service.js';
+import { twoFactorService } from '../services/two-factor.service.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import type { ApiTokenValidationResult } from '../types/ee-plugin.js';
 import type { User, Session } from '@shared/types';
@@ -80,7 +81,9 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
         403
       );
     }
-    c.set('user', token.user);
+    const tokenUser = await twoFactorService.describeUser(token.user);
+    if (tokenUser.twoFactorSetupRequired) return c.json(twoFactorSetupRequiredBody, 403);
+    c.set('user', tokenUser);
     c.set('apiToken', token);
     return next();
   }

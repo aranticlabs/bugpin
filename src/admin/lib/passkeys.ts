@@ -57,11 +57,24 @@ export async function verifyPasskeySecondFactor(challengeToken: string): Promise
   return result.data.user;
 }
 
-export async function registerPasskey(name: string): Promise<string[] | null> {
-  const { data } = await api.post<{ options: PublicKeyCredentialCreationOptionsJSON }>(
-    '/auth/passkeys/register/options'
+export type PasskeyRegistrationOptions = PublicKeyCredentialCreationOptionsJSON;
+
+/** Confirms the password and fetches the options for the browser prompt */
+export async function getPasskeyRegistrationOptions(
+  password: string
+): Promise<PasskeyRegistrationOptions> {
+  const { data } = await api.post<{ options: PasskeyRegistrationOptions }>(
+    '/auth/passkeys/register/options',
+    { password }
   );
-  const response = await startRegistration({ optionsJSON: data.options });
+  return data.options;
+}
+
+export async function registerPasskey(
+  options: PasskeyRegistrationOptions,
+  name: string
+): Promise<string[] | null> {
+  const response = await startRegistration({ optionsJSON: options });
   const result = await api.post<{ recoveryCodes: string[] | null }>('/auth/passkeys/register', {
     response,
     name,

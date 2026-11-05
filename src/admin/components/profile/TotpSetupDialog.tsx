@@ -18,7 +18,7 @@ import { TotpQrCode } from './TotpQrCode';
 
 type Step = 'scan' | 'verify' | 'codes';
 
-interface TotpSetup {
+export interface TotpSetup {
   secret: string;
   otpauthUri: string;
 }
@@ -33,18 +33,22 @@ function formatSecret(secret: string): string {
   return secret.match(/.{1,4}/g)?.join(' ') ?? secret;
 }
 
-/** Three steps: scan the QR code, confirm a code, save the recovery codes */
+/**
+ * Three steps: scan the QR code, confirm a code, save the recovery codes. The secret comes
+ * from a setup request the caller makes after confirming the password.
+ */
 export function TotpSetupDialog({
   open,
   onOpenChange,
+  setup,
   onEnabled,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  setup: TotpSetup | null;
   onEnabled: () => void | Promise<void>;
 }) {
   const [step, setStep] = useState<Step>('scan');
-  const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
@@ -54,17 +58,10 @@ export function TotpSetupDialog({
   useEffect(() => {
     if (!open) return;
     setStep('scan');
-    setSetup(null);
     setCode('');
     setRecoveryCodes([]);
     setSaved(false);
     setError('');
-    api
-      .post<TotpSetup & { success: boolean }>('/auth/two-factor/totp/setup')
-      .then((response) =>
-        setSetup({ secret: response.data.secret, otpauthUri: response.data.otpauthUri })
-      )
-      .catch((err: unknown) => setError(apiError(err, 'Could not start the setup')));
   }, [open]);
 
   const verify = async (event: React.FormEvent) => {
@@ -124,7 +121,7 @@ export function TotpSetupDialog({
               Scan this QR code with an authenticator app such as 1Password, Bitwarden, Google
               Authenticator or Microsoft Authenticator.
             </p>
-            {setup ? (
+            {setup && (
               <>
                 <div className="flex justify-center">
                   <TotpQrCode uri={setup.otpauthUri} />
@@ -134,12 +131,6 @@ export function TotpSetupDialog({
                   <p className="font-mono select-all">{formatSecret(setup.secret)}</p>
                 </div>
               </>
-            ) : (
-              !error && (
-                <div className="flex justify-center py-8">
-                  <Spinner />
-                </div>
-              )
             )}
             <DialogFooter>
               <Button type="button" onClick={() => setStep('verify')} disabled={!setup}>

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -11,9 +11,12 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ refreshUser: vi.fn() }),
 }));
 
+const passkeys = vi.hoisted(() => ({ registerPasskey: vi.fn() }));
+
 vi.mock('../../lib/passkeys', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/passkeys')>()),
   passkeysSupported: () => true,
+  registerPasskey: passkeys.registerPasskey,
 }));
 
 const status: TwoFactorStatus = {
@@ -41,6 +44,134 @@ function renderCard() {
     </QueryClientProvider>
   );
 }
+
+beforeEach(() => {
+  passkeys.registerPasskey.mockReset();
+});
+
+describe('TwoFactorCard authenticator app setup', () => {
+  it('asks for the password before starting the setup', async () => {
+    const user = userEvent.setup();
+    let setupCalled = false;
+    server.use(
+      http.post('/api/auth/two-factor/totp/setup', () => {
+        setupCalled = true;
+        return HttpResponse.json({ success: true, secret: 'S', otpauthUri: 'otpauth://totp/x' });
+      })
+    );
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /^set up$/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/current password/i)).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /qr code/i })).not.toBeInTheDocument();
+    expect(setupCalled).toBe(false);
+  });
+
+  it('sends the password with the setup request and shows the QR code', async () => {
+    const user = userEvent.setup();
+    let setupBody: unknown = null;
+    server.use(
+      http.post('/api/auth/two-factor/totp/setup', async ({ request }) => {
+        setupBody = await request.json();
+        return HttpResponse.json({
+          success: true,
+          secret: 'JBSWY3DPEHPK3PXP',
+          otpauthUri: 'otpauth://totp/BugPin:admin?secret=JBSWY3DPEHPK3PXP',
+        });
+      })
+    );
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /^set up$/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/current password/i), 'password123');
+    await user.click(within(dialog).getByRole('button', { name: /^continue$/i }));
+
+    expect(await screen.findByRole('img', { name: /qr code/i })).toBeInTheDocument();
+    expect(setupBody).toEqual({ password: 'password123' });
+    expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the password dialog open with an error when the password is wrong', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /^set up$/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/current password/i), 'wrong-password');
+    await user.click(within(dialog).getByRole('button', { name: /^continue$/i }));
+
+    expect(await within(dialog).findByText('Password is incorrect')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/current password/i)).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /qr code/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('TwoFactorCard passkey registration', () => {
+  it('asks for the password before naming the passkey', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /add passkey/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/current password/i)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/^name$/i)).not.toBeInTheDocument();
+  });
+
+  it('sends the password for the options, then names and registers the passkey', async () => {
+    const user = userEvent.setup();
+    let optionsBody: unknown = null;
+    server.use(
+      http.post('/api/auth/passkeys/register/options', async ({ request }) => {
+        optionsBody = await request.json();
+        return HttpResponse.json({ success: true, options: { challenge: 'challenge-1' } });
+      })
+    );
+    passkeys.registerPasskey.mockResolvedValue(null);
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /add passkey/i }));
+    const passwordDialog = await screen.findByRole('dialog');
+    await user.type(within(passwordDialog).getByLabelText(/current password/i), 'password123');
+    await user.click(within(passwordDialog).getByRole('button', { name: /^continue$/i }));
+
+    const nameInput = await screen.findByLabelText(/^name$/i);
+    expect(optionsBody).toEqual({ password: 'password123' });
+    expect(passkeys.registerPasskey).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument();
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Work laptop');
+    await user.click(screen.getByRole('button', { name: /^continue$/i }));
+
+    await waitFor(() =>
+      expect(passkeys.registerPasskey).toHaveBeenCalledWith(
+        { challenge: 'challenge-1' },
+        'Work laptop'
+      )
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the password dialog open with an error when the password is wrong', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: /add passkey/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/current password/i), 'wrong-password');
+    await user.click(within(dialog).getByRole('button', { name: /^continue$/i }));
+
+    expect(await within(dialog).findByText('Password is incorrect')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/current password/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^name$/i)).not.toBeInTheDocument();
+    expect(passkeys.registerPasskey).not.toHaveBeenCalled();
+  });
+});
 
 describe('TwoFactorCard passkeys', () => {
   it('lists passkeys with their last use', async () => {
