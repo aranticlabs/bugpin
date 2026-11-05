@@ -1,8 +1,10 @@
-import type {
-  PrivacySettings,
-  ProjectSettings,
-  ReportMetadata,
-  UserActivityCapturePolicy,
+import {
+  DEFAULT_DIAGNOSTIC_SETTINGS,
+  type DiagnosticSettings,
+  type PrivacySettings,
+  type ProjectSettings,
+  type ReportMetadata,
+  type UserActivityCapturePolicy,
 } from '@shared/types';
 import { redactSensitiveText, stripUrlQueryAndFragment } from '@shared/privacy';
 import { logger } from '../utils/logger.js';
@@ -54,33 +56,38 @@ function sanitizeMetadata(metadata: ReportMetadata, minimizeUrls: boolean): Repo
 export const privacyPolicyService = {
   resolveUserActivityPolicy(
     privacy: PrivacySettings | undefined,
-    projectSettings: ProjectSettings
+    projectSettings: ProjectSettings,
+    defaults: DiagnosticSettings = DEFAULT_DIAGNOSTIC_SETTINGS
   ): UserActivityCapturePolicy {
-    if (privacy?.euPrivacyMode || projectSettings.activityCapture === false) {
+    const activityCapture = projectSettings.activityCapture ?? defaults.activityCapture;
+    if (privacy?.euPrivacyMode || !activityCapture) {
       return 'disabled';
     }
 
     return 'automatic';
   },
 
+  /** Project values win; unset ones fall back to the instance defaults. */
   resolveDiagnosticPolicy(
     privacy: PrivacySettings | undefined,
-    projectSettings: ProjectSettings
+    projectSettings: ProjectSettings,
+    defaults: DiagnosticSettings = DEFAULT_DIAGNOSTIC_SETTINGS
   ): DiagnosticCapturePolicy {
     return {
-      consoleCapture: projectSettings.consoleCapture ?? true,
-      networkCapture: projectSettings.networkCapture ?? true,
-      storageKeysCapture: projectSettings.storageKeysCapture ?? false,
-      userActivityCapture: this.resolveUserActivityPolicy(privacy, projectSettings),
+      consoleCapture: projectSettings.consoleCapture ?? defaults.consoleCapture,
+      networkCapture: projectSettings.networkCapture ?? defaults.networkCapture,
+      storageKeysCapture: projectSettings.storageKeysCapture ?? defaults.storageKeysCapture,
+      userActivityCapture: this.resolveUserActivityPolicy(privacy, projectSettings, defaults),
     };
   },
 
   applySubmissionPolicy(
     metadata: ReportMetadata,
     privacy: PrivacySettings | undefined,
-    projectSettings: ProjectSettings
+    projectSettings: ProjectSettings,
+    defaults: DiagnosticSettings = DEFAULT_DIAGNOSTIC_SETTINGS
   ): ReportMetadata {
-    const policy = this.resolveDiagnosticPolicy(privacy, projectSettings);
+    const policy = this.resolveDiagnosticPolicy(privacy, projectSettings, defaults);
     const submittedActivityCount = metadata.userActivity?.length ?? 0;
     const filtered = sanitizeMetadata(metadata, privacy?.euPrivacyMode === true);
 

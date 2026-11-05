@@ -185,7 +185,7 @@ describe('database lifecycle', () => {
       await initDatabase();
       const db = getDb();
       db.exec(`
-        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
         CREATE TABLE users (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,7 +230,7 @@ describe('database lifecycle', () => {
       await initDatabase();
       const db = getDb();
       db.exec(`
-        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
         CREATE TABLE users (id TEXT PRIMARY KEY);
         INSERT INTO users (id) VALUES ('usr_existing');
         CREATE TABLE migrations (
@@ -255,6 +255,54 @@ describe('database lifecycle', () => {
         .query('SELECT must_change_password FROM users WHERE id = ?')
         .get('usr_existing') as { must_change_password: number };
       expect(row.must_change_password).toBe(0);
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('lets projects with untouched diagnostics follow the instance defaults', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-diagnostics-migration-'));
+    Object.assign(config, { dataDir: baseDir, dbPath: path.join(baseDir, 'bugpin.db') });
+
+    try {
+      await initDatabase();
+      await initSchema();
+      const db = getDb();
+      const insert = db.prepare(
+        'INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings) VALUES (?, ?, ?, ?, ?)'
+      );
+      const untouched = {
+        activityCapture: true,
+        consoleCapture: true,
+        networkCapture: true,
+        storageKeysCapture: false,
+        screenshot: { maxScreenshotSize: 5 },
+      };
+      insert.run('prj_untouched', 'Untouched', 'hash_1', 'pre_1', JSON.stringify(untouched));
+      insert.run(
+        'prj_restricted',
+        'Restricted',
+        'hash_2',
+        'pre_2',
+        JSON.stringify({ ...untouched, networkCapture: false })
+      );
+      insert.run('prj_empty', 'Empty', 'hash_3', 'pre_3', '{}');
+
+      db.exec(
+        fs.readFileSync(path.join(migrationsDir, '011_inherit_default_diagnostics.sql'), 'utf8')
+      );
+
+      const settingsOf = (id: string) =>
+        JSON.parse(
+          (db.query('SELECT settings FROM projects WHERE id = ?').get(id) as { settings: string })
+            .settings
+        );
+      expect(settingsOf('prj_untouched')).toEqual({ screenshot: { maxScreenshotSize: 5 } });
+      expect(settingsOf('prj_restricted')).toEqual({ ...untouched, networkCapture: false });
+      expect(settingsOf('prj_empty')).toEqual({});
     } finally {
       closeDatabase();
       fs.rmSync(baseDir, { recursive: true, force: true });

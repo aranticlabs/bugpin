@@ -20,6 +20,7 @@ import type {
   ProjectLanguageSettings,
   ThemeColors,
   PrivacySettings,
+  DiagnosticSettings,
   TwoFactorPolicy,
 } from '@shared/types';
 import type { PasswordPolicy } from '@shared/password-policy';
@@ -43,6 +44,7 @@ export interface UpdateSettingsInput {
   passwordPolicy?: PasswordPolicy;
   // Privacy settings
   privacy?: Partial<PrivacySettings>;
+  diagnostics?: Partial<DiagnosticSettings>;
   // SMTP settings
   smtpEnabled?: boolean;
   smtpConfig?: {
@@ -270,6 +272,12 @@ export const settingsService = {
       updates.privacy = {
         ...currentSettings.privacy,
         ...input.privacy,
+      };
+    }
+    if (input.diagnostics !== undefined) {
+      updates.diagnostics = {
+        ...(await settingsRepo.getAll()).diagnostics,
+        ...input.diagnostics,
       };
     }
 

@@ -14,7 +14,9 @@ import type {
   LocalizedString,
   ProjectLanguageSettings,
   PrivacySettings,
+  DiagnosticSettings,
 } from '@shared/types';
+import { DEFAULT_DIAGNOSTIC_SETTINGS } from '@shared/types';
 import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
@@ -143,6 +145,7 @@ const KEY_MAP: Record<string, string> = {
   twoFactorPolicy: 'two_factor_policy',
   passwordPolicy: 'password_policy',
   privacy: 'privacy',
+  diagnostics: 'diagnostics',
   smtpEnabled: 'smtp_enabled',
   smtpConfig: 'smtp_config',
   s3Enabled: 's3_enabled',
@@ -246,6 +249,10 @@ export const settingsRepo = {
       privacy: {
         ...DEFAULT_PRIVACY,
         ...(settings.privacy as Partial<PrivacySettings>),
+      },
+      diagnostics: {
+        ...DEFAULT_DIAGNOSTIC_SETTINGS,
+        ...(settings.diagnostics as Partial<DiagnosticSettings>),
       },
       // SMTP settings
       smtpEnabled: (settings.smtpEnabled as boolean) ?? false,

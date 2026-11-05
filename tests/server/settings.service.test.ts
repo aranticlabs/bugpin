@@ -22,6 +22,12 @@ function createBaseSettings(): AppSettings {
     rateLimitPerMinute: 10,
     sessionMaxAgeDays: 7,
     privacy: { euPrivacyMode: false },
+    diagnostics: {
+      activityCapture: true,
+      consoleCapture: true,
+      networkCapture: true,
+      storageKeysCapture: false,
+    },
     smtpEnabled: false,
     smtpConfig: {},
     s3Enabled: false,
@@ -170,6 +176,18 @@ describe('settingsService.update', () => {
 
     expect(result.success).toBe(true);
     expect(lastUpdates?.privacy).toEqual(privacy);
+  });
+
+  it('merges partial diagnostics defaults with the stored ones', async () => {
+    const result = await settingsService.update({ diagnostics: { networkCapture: false } });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.diagnostics).toEqual({
+      activityCapture: true,
+      consoleCapture: true,
+      networkCapture: false,
+      storageKeysCapture: false,
+    });
   });
 
   it('passes the two-factor and password policies to the repository', async () => {

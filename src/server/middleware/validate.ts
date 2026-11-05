@@ -577,6 +577,15 @@ export const schemas = {
         })
         .strict()
         .optional(),
+      diagnostics: z
+        .object({
+          activityCapture: z.boolean().optional(),
+          consoleCapture: z.boolean().optional(),
+          networkCapture: z.boolean().optional(),
+          storageKeysCapture: z.boolean().optional(),
+        })
+        .strict()
+        .optional(),
       widgetLauncherButton: widgetLauncherButtonGlobalSchema.optional(),
       smtpEnabled: z.boolean().optional(),
       smtpConfig: z

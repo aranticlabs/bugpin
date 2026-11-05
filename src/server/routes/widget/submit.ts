@@ -446,7 +446,8 @@ widget.post(
           metadata: privacyPolicyService.applySubmissionPolicy(
             data.metadata as ReportMetadata,
             settings.privacy,
-            projectResult.value.settings
+            projectResult.value.settings,
+            settings.diagnostics
           ),
           reporterEmail: data.reporterEmail || undefined,
           reporterName: data.reporterName || undefined,
@@ -541,7 +542,8 @@ widget.get('/config/:apiKey', async (c) => {
   const globalScreenshot = appSettings.screenshot;
   const diagnosticPolicy = privacyPolicyService.resolveDiagnosticPolicy(
     appSettings.privacy,
-    project.settings
+    project.settings,
+    appSettings.diagnostics
   );
 
   // Use project-level settings if defined, otherwise fall back to global settings.

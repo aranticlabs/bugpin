@@ -106,6 +106,23 @@ describe('settings routes', () => {
     expect(rejected.status).toBe(400);
   });
 
+  it('accepts diagnostics defaults and rejects unknown categories', async () => {
+    const app = createApp();
+    const accepted = await app.request('http://localhost/settings', {
+      method: 'PUT',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ diagnostics: { networkCapture: false, storageKeysCapture: true } }),
+    });
+    expect(accepted.status).toBe(200);
+
+    const rejected = await app.request('http://localhost/settings', {
+      method: 'PUT',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ diagnostics: { screenCapture: true } }),
+    });
+    expect(rejected.status).toBe(400);
+  });
+
   it('returns 400 when settings update fails', async () => {
     settingsService.update = async () => Result.fail('Nope', 'UPDATE_FAILED');
     const app = createApp();

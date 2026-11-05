@@ -552,6 +552,12 @@ export const handlers = [
         invitationExpirationDays: 7,
         updateCheckEnabled: true,
         privacy: { euPrivacyMode: false },
+        diagnostics: {
+          activityCapture: true,
+          consoleCapture: true,
+          networkCapture: true,
+          storageKeysCapture: false,
+        },
         smtpEnabled: false,
         smtpConfig: {
           host: '',

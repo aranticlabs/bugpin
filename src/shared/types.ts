@@ -52,6 +52,21 @@ export interface PrivacySettings {
   euPrivacyMode: boolean;
 }
 
+/** Which diagnostics the widget attaches to reports. Projects can override each value. */
+export interface DiagnosticSettings {
+  activityCapture: boolean;
+  consoleCapture: boolean;
+  networkCapture: boolean;
+  storageKeysCapture: boolean;
+}
+
+export const DEFAULT_DIAGNOSTIC_SETTINGS: DiagnosticSettings = {
+  activityCapture: true,
+  consoleCapture: true,
+  networkCapture: true,
+  storageKeysCapture: false,
+};
+
 // Report Types
 
 export interface ManualReportContext {
@@ -577,6 +592,8 @@ export interface AppSettings {
   passwordPolicy: PasswordPolicy;
   // Privacy settings
   privacy: PrivacySettings;
+  // Diagnostics defaults for every project
+  diagnostics: DiagnosticSettings;
   // SMTP settings
   smtpEnabled: boolean;
   smtpConfig: {

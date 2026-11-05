@@ -147,4 +147,64 @@ describe('privacyPolicyService', () => {
     expect(filtered.networkErrors).toBeUndefined();
     expect(filtered.storageKeys).toBeUndefined();
   });
+
+  it('falls back to the instance diagnostics defaults for unset project values', () => {
+    const instanceDefaults = {
+      activityCapture: false,
+      consoleCapture: true,
+      networkCapture: false,
+      storageKeysCapture: true,
+    };
+
+    expect(
+      privacyPolicyService.resolveDiagnosticPolicy(
+        standardPrivacy,
+        projectSettings({ networkCapture: true }),
+        instanceDefaults
+      )
+    ).toEqual({
+      consoleCapture: true,
+      networkCapture: true,
+      storageKeysCapture: true,
+      userActivityCapture: 'disabled',
+    });
+
+    expect(
+      privacyPolicyService.resolveUserActivityPolicy(
+        standardPrivacy,
+        projectSettings({ activityCapture: true }),
+        instanceDefaults
+      )
+    ).toBe('automatic');
+  });
+
+  it('applies instance diagnostics defaults to submitted metadata', () => {
+    const filtered = privacyPolicyService.applySubmissionPolicy(
+      metadata,
+      standardPrivacy,
+      projectSettings(),
+      {
+        activityCapture: true,
+        consoleCapture: false,
+        networkCapture: true,
+        storageKeysCapture: false,
+      }
+    );
+
+    expect(filtered.consoleErrors).toBeUndefined();
+    expect(filtered.networkErrors).toHaveLength(1);
+    expect(filtered.storageKeys).toBeUndefined();
+    expect(filtered.userActivity).toHaveLength(1);
+  });
+
+  it('keeps EU Privacy Mode above the instance diagnostics defaults', () => {
+    expect(
+      privacyPolicyService.resolveUserActivityPolicy(euPrivacy, projectSettings(), {
+        activityCapture: true,
+        consoleCapture: true,
+        networkCapture: true,
+        storageKeysCapture: false,
+      })
+    ).toBe('disabled');
+  });
 });
