@@ -1,6 +1,13 @@
-import type { ConsoleError, NetworkError, Report, StorageKeys, UserActivity } from '@shared/types';
+import type {
+  ConsoleError,
+  ExportFormat,
+  NetworkError,
+  Report,
+  StorageKeys,
+  UserActivity,
+} from '@shared/types';
 
-export type ExportFormat = 'markdown' | 'plain' | 'aiPrompt' | 'json';
+export type { ExportFormat };
 
 export type ExportSection =
   | 'summary'

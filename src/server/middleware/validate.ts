@@ -2,7 +2,15 @@ import type { MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
 import { RECORDING_QUALITIES } from '@shared/recording-quality';
-import { SUPPORTED_LOCALES, type LocaleCode } from '@shared/types';
+import {
+  EXPORT_ACTIONS,
+  EXPORT_FORMATS,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+  SUPPORTED_LOCALES,
+  THEME_PREFERENCES,
+  type LocaleCode,
+} from '@shared/types';
 
 const webhookEventSchema = z.enum([
   'report.created',
@@ -497,6 +505,28 @@ export const schemas = {
     name: z.string().trim().max(100).optional(),
   }),
   passkeyRename: z.object({ name: z.string().trim().min(1).max(100) }),
+
+  // Per-user Admin Console preferences; unknown keys are rejected
+  updateUserPreferences: z
+    .object({
+      theme: z.enum(THEME_PREFERENCES).optional(),
+      sidebarWidth: z.number().int().min(SIDEBAR_WIDTH_MIN).max(SIDEBAR_WIDTH_MAX).optional(),
+      sidebarOpen: z.boolean().optional(),
+      pinnedProjectsOpen: z.boolean().optional(),
+      reportDetailsOpen: z.boolean().optional(),
+      reportPageInfoOpen: z.boolean().optional(),
+      reportEnvironmentOpen: z.boolean().optional(),
+      reportMessagesOpen: z.boolean().optional(),
+      dialogPreviewOpen: z.boolean().optional(),
+      lastExport: z
+        .object({ format: z.enum(EXPORT_FORMATS), action: z.enum(EXPORT_ACTIONS) })
+        .strict()
+        .optional(),
+      editorLocale: z.enum(localeEnumValues).optional(),
+      dismissedUpdateVersion: z.string().max(100).nullable().optional(),
+      dismissedWidgetWarningId: z.string().max(200).nullable().optional(),
+    })
+    .strict(),
 
   // Update settings request
   updateSettings: z

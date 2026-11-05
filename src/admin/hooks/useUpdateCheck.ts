@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { usePreference } from './useUserPreferences';
 
 const STALE_TIME_MS = 60 * 60 * 1000;
-const UPDATE_DISMISS_KEY = 'bugpin.updateBanner.dismissedVersion';
-const WIDGET_DISMISS_KEY = 'bugpin.widgetPackageWarning.dismissedId';
 
 interface IncompatibleWidgetProject {
   projectId: string;
@@ -33,32 +32,7 @@ interface VersionResponse {
   widgetPackage: WidgetPackageCompatibilityStatus;
 }
 
-function readDismissal(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeDismissal(key: string, value: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // localStorage may be unavailable (private mode, quota); the banner stays dismissed for the session via state.
-  }
-}
-
-function clearDismissal(key: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // localStorage may be unavailable; state still reflects the server response.
-  }
-}
+const keepLegacyValue = (raw: string) => raw;
 
 export function useUpdateCheck() {
   const { user, canLoadData } = useAuth();
@@ -86,41 +60,34 @@ export function useUpdateCheck() {
     affectedProjects: [],
   };
 
-  const [dismissedVersion, setDismissedVersion] = useState<string | null>(() =>
-    readDismissal(UPDATE_DISMISS_KEY)
+  const [dismissedVersion, setDismissedVersion] = usePreference('dismissedUpdateVersion', null, {
+    legacyKey: 'bugpin.updateBanner.dismissedVersion',
+    parseLegacy: keepLegacyValue,
+  });
+  const [dismissedWidgetWarningId, setDismissedWidgetWarningId] = usePreference(
+    'dismissedWidgetWarningId',
+    null,
+    { legacyKey: 'bugpin.widgetPackageWarning.dismissedId', parseLegacy: keepLegacyValue }
   );
-  const [dismissedWidgetWarningId, setDismissedWidgetWarningId] = useState<string | null>(() =>
-    readDismissal(WIDGET_DISMISS_KEY)
-  );
+  const hasWidgetWarning = widgetPackage.incompatible && widgetPackage.warningId !== null;
 
+  // A resolved warning forgets its dismissal, so a later warning shows again.
   useEffect(() => {
-    setDismissedVersion(readDismissal(UPDATE_DISMISS_KEY));
-  }, [latest]);
-
-  useEffect(() => {
-    if (!query.data) return;
-    if (!widgetPackage.incompatible || !widgetPackage.warningId) {
-      clearDismissal(WIDGET_DISMISS_KEY);
+    if (query.data && !hasWidgetWarning && dismissedWidgetWarningId !== null) {
       setDismissedWidgetWarningId(null);
-      return;
     }
-    setDismissedWidgetWarningId(readDismissal(WIDGET_DISMISS_KEY));
-  }, [query.data, widgetPackage.incompatible, widgetPackage.warningId]);
+  }, [query.data, hasWidgetWarning, dismissedWidgetWarningId, setDismissedWidgetWarningId]);
 
   const isDismissed = latest !== null && dismissedVersion === latest;
   const isWidgetWarningDismissed =
     widgetPackage.warningId !== null && dismissedWidgetWarningId === widgetPackage.warningId;
 
   const dismiss = () => {
-    if (!latest) return;
-    writeDismissal(UPDATE_DISMISS_KEY, latest);
-    setDismissedVersion(latest);
+    if (latest) setDismissedVersion(latest);
   };
 
   const dismissWidgetWarning = () => {
-    if (!widgetPackage.warningId) return;
-    writeDismissal(WIDGET_DISMISS_KEY, widgetPackage.warningId);
-    setDismissedWidgetWarningId(widgetPackage.warningId);
+    if (widgetPackage.warningId) setDismissedWidgetWarningId(widgetPackage.warningId);
   };
 
   return {

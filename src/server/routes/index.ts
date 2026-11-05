@@ -8,6 +8,7 @@ import { settingsRoutes } from './api/settings.js';
 import { versionRoutes } from './api/version.js';
 import { integrationsRoutes } from './api/integrations.js';
 import { notificationPreferences } from './api/notification-preferences.js';
+import { userPreferencesRoutes } from './api/user-preferences.js';
 import { storageRoutes } from './api/storage.js';
 import brandingRoutes from './api/branding.js';
 import licenseRoutes from './api/license.js';
@@ -44,6 +45,7 @@ export function createApiRouter(): Hono {
   api.route('/version', versionRoutes);
   api.route('/integrations', integrationsRoutes);
   api.route('/notification-preferences', notificationPreferences);
+  api.route('/user-preferences', userPreferencesRoutes);
   api.route('/license', licenseRoutes);
   api.route('/webhooks/github', githubWebhookRoutes);
 

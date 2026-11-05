@@ -12,6 +12,9 @@ import { ScrollArea } from './ui/scroll-area';
 import { AppSidebar } from './sidebar/AppSidebar';
 import { Footer } from './Footer';
 import { UpdateBanner } from './UpdateBanner';
+import { usePreference } from '../hooks/useUserPreferences';
+import { ThemePreferenceSync } from './ThemePreferenceSync';
+import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
 
 interface RouteCrumbConfig {
   label: string;
@@ -71,6 +74,10 @@ function findRouteConfig(pathname: string): { path: string; config: RouteCrumbCo
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
+  const [sidebarWidth, setSidebarWidth] = usePreference('sidebarWidth', SIDEBAR_WIDTH_DEFAULT, {
+    cache: true,
+  });
+  const [sidebarOpen, setSidebarOpen] = usePreference('sidebarOpen', true, { cache: true });
   const { data: license, isError: licenseError } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
@@ -140,7 +147,15 @@ export function Layout() {
   };
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider
+      open={sidebarOpen}
+      onOpenChange={setSidebarOpen}
+      width={sidebarWidth}
+      minWidth={SIDEBAR_WIDTH_MIN}
+      maxWidth={SIDEBAR_WIDTH_MAX}
+      onWidthChange={setSidebarWidth}
+    >
+      <ThemePreferenceSync />
       <AppSidebar />
       <SidebarInset className="flex flex-col h-screen max-w-[100vw] min-w-0">
         <UpdateBanner />

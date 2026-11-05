@@ -204,6 +204,10 @@ export const mockStats = {
 
 // Default handlers
 export const handlers = [
+  http.get('/api/user-preferences/me', () => HttpResponse.json({ success: true, preferences: {} })),
+  http.patch('/api/user-preferences/me', async ({ request }) =>
+    HttpResponse.json({ success: true, preferences: await request.json() })
+  ),
   // Auth endpoints
   http.get('/api/auth/me', () => {
     return HttpResponse.json({

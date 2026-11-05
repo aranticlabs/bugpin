@@ -1,4 +1,5 @@
-import { useId, useState, useEffect } from 'react';
+import { useId, useEffect } from 'react';
+import { usePreference } from '../../hooks/useUserPreferences';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -17,31 +18,11 @@ const LOCALE_LABELS: Record<LocaleCode, string> = {
   zh: '中文 (简体) (CN)',
 };
 
-const PREFERRED_LOCALE_STORAGE_KEY = 'bugpin.admin.localizedTextEditor.preferredLocale';
-
 function isSupportedLocale(value: string): value is LocaleCode {
   return (SUPPORTED_LOCALES as readonly string[]).includes(value);
 }
 
-function readPreferredLocale(): LocaleCode {
-  if (typeof window === 'undefined') return 'en';
-  try {
-    const stored = window.localStorage.getItem(PREFERRED_LOCALE_STORAGE_KEY);
-    if (stored && isSupportedLocale(stored)) return stored;
-  } catch {
-    // localStorage access can fail (e.g. private mode); fall through to default
-  }
-  return 'en';
-}
-
-function writePreferredLocale(locale: LocaleCode): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(PREFERRED_LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // ignore quota or access errors
-  }
-}
+const parseLegacyLocale = (raw: string) => (isSupportedLocale(raw) ? raw : undefined);
 
 export interface LocalizedTextEditorProps {
   layer: 'project' | 'global';
@@ -75,12 +56,10 @@ export function LocalizedTextEditor({
   const fieldId = useId();
   const switchId = useId();
   const customMode = isCustom(value);
-  const [activeLocale, setActiveLocaleState] = useState<LocaleCode>(() => readPreferredLocale());
-
-  const setActiveLocale = (locale: LocaleCode) => {
-    setActiveLocaleState(locale);
-    writePreferredLocale(locale);
-  };
+  const [activeLocale, setActiveLocale] = usePreference('editorLocale', 'en', {
+    legacyKey: 'bugpin.admin.localizedTextEditor.preferredLocale',
+    parseLegacy: parseLegacyLocale,
+  });
 
   useEffect(() => {
     onActiveLocaleChange?.(activeLocale);

@@ -39,6 +39,37 @@ export const ASSIGNED_TO_ME_FILTER = '__me__';
 /** Statuses of reports that still need work */
 export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
 
+/** Width limits of the resizable navigation sidebar, in pixels */
+export const SIDEBAR_WIDTH_DEFAULT = 256;
+export const SIDEBAR_WIDTH_MIN = 208;
+export const SIDEBAR_WIDTH_MAX = 480;
+
+export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const;
+export type ThemePreference = (typeof THEME_PREFERENCES)[number];
+
+export const EXPORT_FORMATS = ['markdown', 'plain', 'aiPrompt', 'json'] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+export const EXPORT_ACTIONS = ['copy', 'download'] as const;
+export type ExportAction = (typeof EXPORT_ACTIONS)[number];
+
+/** Per-user Admin Console preferences that follow the user across browsers and devices */
+export interface UserPreferences {
+  theme?: ThemePreference;
+  sidebarWidth?: number;
+  sidebarOpen?: boolean;
+  pinnedProjectsOpen?: boolean;
+  reportDetailsOpen?: boolean;
+  reportPageInfoOpen?: boolean;
+  reportEnvironmentOpen?: boolean;
+  reportMessagesOpen?: boolean;
+  dialogPreviewOpen?: boolean;
+  lastExport?: { format: ExportFormat; action: ExportAction };
+  editorLocale?: LocaleCode;
+  dismissedUpdateVersion?: string | null;
+  dismissedWidgetWarningId?: string | null;
+}
+
 export type ReportHistoryAction =
   'created' | 'status_changed' | 'priority_changed' | 'assignee_changed';
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';

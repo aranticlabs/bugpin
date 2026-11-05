@@ -160,6 +160,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Returns undefined outside an AuthProvider instead of throwing, for components also used there */
+export function useOptionalAuth(): AuthContextType | undefined {
+  return useContext(AuthContext);
+}
+
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

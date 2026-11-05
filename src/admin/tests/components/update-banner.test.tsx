@@ -86,6 +86,18 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+function recordPreferenceUpdates(): Array<Record<string, unknown>> {
+  const saved: Array<Record<string, unknown>> = [];
+  server.use(
+    http.patch('/api/user-preferences/me', async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      saved.push(body);
+      return HttpResponse.json({ success: true, preferences: body });
+    })
+  );
+  return saved;
+}
+
 describe('UpdateBanner', () => {
   it('renders for admins when an update is available', async () => {
     mockUserRole('admin');
@@ -153,9 +165,10 @@ describe('UpdateBanner', () => {
     });
   });
 
-  it('hides the banner and stores the dismissed version in localStorage', async () => {
+  it('hides the banner and stores the dismissed version in the user preferences', async () => {
     mockUserRole('admin');
     mockVersion();
+    const saved = recordPreferenceUpdates();
 
     const user = userEvent.setup();
     renderWithProviders(<UpdateBanner />);
@@ -166,7 +179,7 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       expect(screen.queryByText(/A new version of BugPin is available/i)).not.toBeInTheDocument();
     });
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('1.0.7');
+    await waitFor(() => expect(saved).toContainEqual({ dismissedUpdateVersion: '1.0.7' }));
   });
 
   it('reappears when a newer version is published after dismissal', async () => {
@@ -253,6 +266,7 @@ describe('UpdateBanner', () => {
   it('dismisses the widget warning independently from the update notice', async () => {
     mockUserRole('admin');
     mockVersion({ widgetPackage: incompatibleWidgetPackage });
+    const saved = recordPreferenceUpdates();
 
     const user = userEvent.setup();
     renderWithProviders(<UpdateBanner />);
@@ -266,8 +280,8 @@ describe('UpdateBanner', () => {
       expect(screen.queryByText(/widget version unsupported/i)).not.toBeInTheDocument();
     });
     expect(screen.getByText(/A new version of BugPin is available/i)).toBeInTheDocument();
-    expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBe('warning_1');
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    await waitFor(() => expect(saved).toContainEqual({ dismissedWidgetWarningId: 'warning_1' }));
+    expect(saved.some((body) => 'dismissedUpdateVersion' in body)).toBe(false);
   });
 
   it('shows a changed widget warning after an earlier dismissal', async () => {
@@ -287,12 +301,12 @@ describe('UpdateBanner', () => {
     window.localStorage.setItem(WIDGET_STORAGE_KEY, 'warning_1');
     mockUserRole('admin');
     mockVersion({ updateAvailable: false, widgetPackage: cleanWidgetPackage });
+    const saved = recordPreferenceUpdates();
 
     renderWithProviders(<UpdateBanner />);
 
-    await waitFor(() => {
-      expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBeNull();
-    });
+    await waitFor(() => expect(saved).toContainEqual({ dismissedWidgetWarningId: null }));
+    expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBeNull();
   });
 
   it('does not request compatibility status for non-admin users', async () => {

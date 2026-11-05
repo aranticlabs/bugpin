@@ -9,6 +9,7 @@ import type {
   ProjectSettings,
   ProjectSummary,
   RecentReport,
+  UserPreferences,
   User,
   UserRole,
   Session,
@@ -321,4 +322,11 @@ export interface IReporterMessagesRepository {
   create(reportId: string, userId: string, message: string): Promise<ReporterMessage>;
   findByReportId(reportId: string): Promise<ReporterMessage[]>;
   findLatestByReportId(reportId: string): Promise<ReporterMessage | null>;
+}
+
+// User Preferences Repository Interface
+
+export interface IUserPreferencesRepository {
+  get(userId: string): Promise<UserPreferences>;
+  save(userId: string, preferences: UserPreferences): Promise<void>;
 }

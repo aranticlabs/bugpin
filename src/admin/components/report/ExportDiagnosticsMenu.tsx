@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, Copy, Download, FileCode, FileJson, FileText, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Report } from '@shared/types';
+import type { ExportAction, Report, UserPreferences } from '@shared/types';
+import { usePreference } from '../../hooks/useUserPreferences';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -26,14 +27,9 @@ import {
 } from '../../lib/reportExport';
 import { CustomizeExportDialog } from './CustomizeExportDialog';
 
-const STORAGE_KEY = 'bugpin:export-diagnostics:last-used';
+export type { ExportAction };
 
-export type ExportAction = 'copy' | 'download';
-
-interface LastUsed {
-  format: ExportFormat;
-  action: ExportAction;
-}
+type LastUsed = NonNullable<UserPreferences['lastExport']>;
 
 interface ExportDiagnosticsMenuProps {
   report: Report;
@@ -46,44 +42,29 @@ const FORMAT_ROWS: Array<{ format: ExportFormat; icon: typeof FileText }> = [
   { format: 'json', icon: FileJson },
 ];
 
-function readLastUsed(): LastUsed | null {
-  if (typeof window === 'undefined') return null;
+function parseLegacyLastUsed(raw: string): LastUsed | undefined {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<LastUsed>;
-    if (!parsed.format || !parsed.action) return null;
-    return parsed as LastUsed;
+    return parsed.format && parsed.action ? (parsed as LastUsed) : undefined;
   } catch {
-    return null;
-  }
-}
-
-function writeLastUsed(value: LastUsed): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    // Storage may be disabled: silently ignore
+    return undefined;
   }
 }
 
 export function ExportDiagnosticsMenu({ report }: ExportDiagnosticsMenuProps) {
   const [open, setOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [lastUsed, setLastUsed] = useState<LastUsed | null>(null);
-
-  useEffect(() => {
-    setLastUsed(readLastUsed());
-  }, []);
+  const [lastUsed, setLastUsed] = usePreference('lastExport', null, {
+    legacyKey: 'bugpin:export-diagnostics:last-used',
+    parseLegacy: parseLegacyLastUsed,
+  });
 
   const permalink = useMemo(() => buildPermalink(report.id), [report.id]);
 
-  const persistLastUsed = useCallback((format: ExportFormat, action: ExportAction) => {
-    const next: LastUsed = { format, action };
-    writeLastUsed(next);
-    setLastUsed(next);
-  }, []);
+  const persistLastUsed = useCallback(
+    (format: ExportFormat, action: ExportAction) => setLastUsed({ format, action }),
+    [setLastUsed]
+  );
 
   const handleCopy = useCallback(
     async (format: ExportFormat) => {

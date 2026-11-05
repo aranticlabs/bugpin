@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import { renderWithQuery as render } from '../utils';
 import userEvent from '@testing-library/user-event';
 import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';

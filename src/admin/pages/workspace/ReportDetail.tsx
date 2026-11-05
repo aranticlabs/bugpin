@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
 import { useReporterMessages } from '../../hooks/useReporterMessages';
+import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -81,21 +82,25 @@ export function ReportDetail() {
   const isAdmin = user?.role === 'admin';
   const mayEdit = user?.role === 'admin' || user?.role === 'editor';
 
-  const [detailsOpen, setDetailsOpen] = usePersistedOpenState(
-    'bugpin.report-detail.details-open',
-    true
-  );
-  const [pageInfoOpen, setPageInfoOpen] = usePersistedOpenState(
-    'bugpin.report-detail.page-info-open',
-    true
-  );
-  const [environmentOpen, setEnvironmentOpen] = usePersistedOpenState(
-    'bugpin.report-detail.environment-open',
-    true
-  );
-  const [reporterMessagesOpen, setReporterMessagesOpen] = usePersistedOpenState(
-    'bugpin.report-detail.reporter-messages-open',
-    true
+  const [detailsOpen, setDetailsOpen] = usePreference('reportDetailsOpen', true, {
+    legacyKey: 'bugpin.report-detail.details-open',
+    parseLegacy: (raw) => raw === 'true',
+  });
+  const [pageInfoOpen, setPageInfoOpen] = usePreference('reportPageInfoOpen', true, {
+    legacyKey: 'bugpin.report-detail.page-info-open',
+    parseLegacy: (raw) => raw === 'true',
+  });
+  const [environmentOpen, setEnvironmentOpen] = usePreference('reportEnvironmentOpen', true, {
+    legacyKey: 'bugpin.report-detail.environment-open',
+    parseLegacy: (raw) => raw === 'true',
+  });
+  const [reporterMessagesOpen, setReporterMessagesOpen] = usePreference(
+    'reportMessagesOpen',
+    true,
+    {
+      legacyKey: 'bugpin.report-detail.reporter-messages-open',
+      parseLegacy: (raw) => raw === 'true',
+    }
   );
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -1412,36 +1417,6 @@ export function ReportDetail() {
       </AlertDialog>
     </div>
   );
-}
-
-function usePersistedOpenState(
-  key: string,
-  defaultOpen: boolean
-): [boolean, (open: boolean) => void] {
-  const [open, setOpenState] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return defaultOpen;
-    try {
-      const stored = window.localStorage.getItem(key);
-      if (stored === null) return defaultOpen;
-      return stored === 'true';
-    } catch {
-      return defaultOpen;
-    }
-  });
-
-  const setOpen = useCallback(
-    (next: boolean) => {
-      setOpenState(next);
-      try {
-        window.localStorage.setItem(key, String(next));
-      } catch {
-        // localStorage may be unavailable (private mode, quota); state stays in memory.
-      }
-    },
-    [key]
-  );
-
-  return [open, setOpen];
 }
 
 function InfoRow({ label, value, isLink }: { label: string; value?: string; isLink?: boolean }) {
