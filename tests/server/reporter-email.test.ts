@@ -29,7 +29,7 @@ const baseReport: Report = {
 
 function createSendEmailSpy() {
   return mock<(options: SendEmailOptions) => Promise<{ success: boolean }>>(() =>
-    Promise.resolve({ success: true }),
+    Promise.resolve({ success: true })
   );
 }
 

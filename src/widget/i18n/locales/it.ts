@@ -127,6 +127,10 @@ const it: WidgetCatalog = {
     'Il caricamento è troppo grande per il server. Rimuovi alcuni file multimediali e riprova.',
   'submit.error.videoQuota':
     'I caricamenti video sono sospesi per questo progetto. Rimuovi il video per inviare la segnalazione.',
+  'submit.error.rejected':
+    'Il caricamento è stato rifiutato. Gli allegati potrebbero essere troppo grandi. Rimuovili o riducili e riprova.',
+  'submit.queued':
+    'Segnalazione salvata. Verrà inviata automaticamente quando la connessione sarà ripristinata.',
 
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',

@@ -126,6 +126,9 @@ const en = {
     'The upload is too large for the server. Remove some media and try again.',
   'submit.error.videoQuota':
     'Video uploads are paused for this project. Remove the video to submit.',
+  'submit.error.rejected':
+    'The upload was rejected. Your attachments may be too large. Remove or shrink them and try again.',
+  'submit.queued': 'Report saved. It will be sent automatically once the connection is back.',
 
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',

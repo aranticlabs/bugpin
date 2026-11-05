@@ -139,7 +139,7 @@ describe('Result', () => {
     it('should chain successful results', () => {
       const result = Result.ok(5);
       const chained = Result.flatMap(result, (x) =>
-        x > 0 ? Result.ok(x * 2) : Result.fail('Must be positive'),
+        x > 0 ? Result.ok(x * 2) : Result.fail('Must be positive')
       );
       expect(Result.isOk(chained)).toBe(true);
       if (chained.success) {
@@ -150,7 +150,7 @@ describe('Result', () => {
     it('should short-circuit on failure', () => {
       const result = Result.ok(-5);
       const chained = Result.flatMap(result, (x) =>
-        x > 0 ? Result.ok(x * 2) : Result.fail<number>('Must be positive'),
+        x > 0 ? Result.ok(x * 2) : Result.fail<number>('Must be positive')
       );
       expect(Result.isFail(chained)).toBe(true);
     });
@@ -169,7 +169,7 @@ describe('Result', () => {
     it('should chain successful results asynchronously', async () => {
       const result = Result.ok(5);
       const chained = await Result.flatMapAsync(result, async (x) =>
-        x > 0 ? Result.ok(x * 2) : Result.fail<number>('Must be positive'),
+        x > 0 ? Result.ok(x * 2) : Result.fail<number>('Must be positive')
       );
       expect(Result.isOk(chained)).toBe(true);
       if (chained.success) {

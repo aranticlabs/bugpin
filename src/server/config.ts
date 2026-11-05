@@ -13,7 +13,29 @@ const configSchema = z.object({
   nodeEnv: z.enum(['development', 'production', 'test']).default('production'),
   dataDir: z.string(), // Always provided by loadConfig, never uses default
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
+  adminEmail: z.string().email('ADMIN_EMAIL must be a valid email address'),
+  adminPassword: z.string().min(8, 'ADMIN_PASSWORD must be at least 8 characters'),
+  trustProxy: z.enum(['auto', 'always', 'never'], {
+    message: 'TRUST_PROXY must be auto, true or false',
+  }),
 });
+
+function parseTrustProxy(value: string | undefined): string {
+  if (value === undefined) return 'auto';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return 'always';
+  if (normalized === 'false') return 'never';
+  return normalized;
+}
+
+const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
+const DEFAULT_ADMIN_PASSWORD = 'changeme123';
+
+// Empty values (for example `ADMIN_PASSWORD=` in a compose file) count as unset.
+function readEnv(name: string): string | undefined {
+  const value = process.env[name];
+  return value?.trim() ? value : undefined;
+}
 
 /**
  * Get or generate the secret key.
@@ -70,6 +92,9 @@ function loadConfig() {
     nodeEnv,
     dataDir,
     secretKey,
+    adminEmail: readEnv('ADMIN_EMAIL')?.trim() ?? DEFAULT_ADMIN_EMAIL,
+    adminPassword: readEnv('ADMIN_PASSWORD') ?? DEFAULT_ADMIN_PASSWORD,
+    trustProxy: parseTrustProxy(readEnv('TRUST_PROXY')),
   };
 
   const parsed = configSchema.parse(env);
@@ -79,8 +104,7 @@ function loadConfig() {
     // Hardcoded values (port 7301 in dev for Vite proxy, 7300 in production)
     port: isDevelopment ? 7301 : 7300,
     host: '0.0.0.0',
-    adminEmail: 'admin@example.com',
-    adminPassword: 'changeme123',
+    adminEmail: parsed.adminEmail.toLowerCase(),
     // Derived values
     version: VERSION,
     projectRoot,
@@ -94,7 +118,6 @@ function loadConfig() {
     adminDir: path.join(projectRoot, 'dist/admin'),
     widgetDir: path.join(projectRoot, 'src/widget/dist'),
     migrationsDir: path.join(projectRoot, 'src/server/database/migrations'),
-    corsOrigins: ['*'], // Allow all - project whitelists handle domain restrictions
     isDev: parsed.nodeEnv === 'development',
     isProd: parsed.nodeEnv === 'production',
     isTest: parsed.nodeEnv === 'test',

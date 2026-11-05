@@ -56,6 +56,7 @@ export interface CreateReportInput {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  submissionId?: string;
 }
 
 export interface CreateManualReportInput {
@@ -339,6 +340,7 @@ async function createForProject(
     reporterName?: string;
     reporterLocale?: LocaleCode;
     files?: MediaFile[];
+    submissionId?: string;
   },
   options: {
     source: ReportSource;
@@ -390,6 +392,7 @@ async function createForProject(
     reporterEmail: normalizeOptionalText(input.reporterEmail),
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
+    submissionId: input.submissionId,
   };
 
   const report = await reportsRepo.create(reportData);
@@ -484,6 +487,11 @@ async function createForProject(
 // Service
 
 export const reportsService = {
+  /** The report an earlier widget submission with this id created, if any */
+  findIdByWidgetSubmission(projectId: string, submissionId: string): string | null {
+    return reportsRepo.findIdBySubmission(projectId, submissionId);
+  },
+
   /**
    * Create a new bug report (from widget submission)
    */
@@ -506,6 +514,7 @@ export const reportsService = {
         reporterName: input.reporterName,
         reporterLocale: input.reporterLocale,
         files: input.files,
+        submissionId: input.submissionId,
       },
       {
         source: 'widget',

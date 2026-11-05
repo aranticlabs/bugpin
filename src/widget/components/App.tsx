@@ -12,6 +12,7 @@ import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
 import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
+import { createSubmissionId } from '../api/submit-form.js';
 import { draftStorage } from '../storage/draft-storage.js';
 import { recordingStore } from '../storage/recording-store.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
@@ -113,6 +114,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     limitMb: number;
   } | null>(null);
   const uploadControllerRef = useRef<AbortController | null>(null);
+  const submissionIdRef = useRef<string | null>(null);
   const isRecordingStep = step === 'recording';
   const recordingEnabled = useMemo(
     () => config.enableScreenRecording && isRecordingSupportedFn(),
@@ -414,6 +416,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     setActiveTab('details');
     setFormData(getInitialFormData(config));
     draftStorage.clear(config.apiKey);
+    submissionIdRef.current = null;
     setShowCloseConfirm(false);
     setStep('closed');
     setAnnotatingMediaId(null);
@@ -437,6 +440,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         setActiveTab('details');
         setFormData(getInitialFormData(config));
         draftStorage.clear(config.apiKey);
+        submissionIdRef.current = null;
       }
       setShowCloseConfirm(false);
       setStep('closed');
@@ -581,10 +585,15 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const handleRemoveMedia = useCallback(
     (id: string) => {
       forgetStoredRecordings(mediaRef.current.filter((item) => item.id === id));
-      setMedia((prev) => prev.filter((item) => item.id !== id));
+      const nextMedia = mediaRef.current.filter((item) => item.id !== id);
+      mediaRef.current = nextMedia;
+      setMedia(nextMedia);
       setOversizedRecording((current) => (current?.id === id ? null : current));
+      draftStorage.replaceMedia(config.apiKey, nextMedia).catch(() => {
+        setToast({ message: t('toast.error.draftSave'), type: 'error' });
+      });
     },
-    [forgetStoredRecordings]
+    [config.apiKey, forgetStoredRecordings]
   );
 
   const handleAnnotateMedia = useCallback((id: string) => {
@@ -636,9 +645,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           userActivityCapture: config.userActivityCapture === 'automatic',
         });
 
-        // Submit report with all media
-        await submitReportFn(
+        // Retries of the same report reuse its ID so the server can recognize a repeat.
+        submissionIdRef.current ??= createSubmissionId();
+        const result = await submitReportFn(
           {
+            submissionId: submissionIdRef.current,
             apiKey: config.apiKey,
             serverUrl: config.serverUrl,
             title: formData.title,
@@ -660,8 +671,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
         forgetStoredRecordings(mediaItems);
 
-        // Show success toast
-        setToast({ message: t('toast.success.submit'), type: 'success' });
+        setToast(
+          result?.queued
+            ? { message: t('submit.queued'), type: 'info' }
+            : { message: t('toast.success.submit'), type: 'success' }
+        );
 
         // Close modal and clear draft
         handleCloseWidget(true);

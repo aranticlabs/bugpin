@@ -7,6 +7,7 @@ import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type { User, UserRole, Session } from '@shared/types';
+import { passwordPolicyService } from './password-policy.service.js';
 
 // Types
 
@@ -238,9 +239,8 @@ export const invitationsService = {
     }
 
     // Validate password
-    if (!input.password || input.password.length < 8) {
-      return Result.fail('Password must be at least 8 characters', 'WEAK_PASSWORD');
-    }
+    const policyCheck = await passwordPolicyService.validate(input.password ?? '');
+    if (!policyCheck.success) return policyCheck;
 
     // Hash password
     const passwordHash = await hashPassword(input.password);

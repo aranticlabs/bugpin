@@ -1,6 +1,9 @@
 # Dependencies
 node_modules
 
+# Enterprise Edition submodule (formatted in its own repository)
+ee
+
 # Build outputs
 dist
 build

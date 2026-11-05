@@ -111,4 +111,75 @@ describe('Login Page', () => {
       expect(screen.getByText(/invalid|error|failed/i)).toBeInTheDocument();
     });
   });
+
+  it('asks for the second factor and accepts a recovery code', async () => {
+    const user = userEvent.setup();
+    let secondStepBody: Record<string, string> | null = null;
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({
+          success: true,
+          twoFactorRequired: true,
+          challengeToken: 'challenge-1',
+          methods: { totp: true, passkey: false, recoveryCode: true },
+        })
+      ),
+      http.post('/api/auth/login/two-factor', async ({ request }) => {
+        secondStepBody = (await request.json()) as Record<string, string>;
+        return HttpResponse.json({
+          success: true,
+          user: {
+            id: 'usr_1',
+            email: 'admin@example.com',
+            name: 'Admin',
+            role: 'admin',
+            isActive: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        });
+      })
+    );
+    renderLogin();
+
+    await user.type(screen.getByLabelText(/email/i), 'admin@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'a-password');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Two-factor authentication')).toBeInTheDocument();
+    expect(screen.getByText(/6-digit code from your authenticator app/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /use a recovery code/i }));
+    await user.type(screen.getByLabelText(/recovery code/i), 'abcde-fghij');
+    await user.click(screen.getByRole('button', { name: /verify/i }));
+
+    await waitFor(() => {
+      expect(secondStepBody).toEqual({
+        challengeToken: 'challenge-1',
+        recoveryCode: 'abcde-fghij',
+      });
+    });
+  });
+
+  it('goes back to the password step', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({
+          success: true,
+          twoFactorRequired: true,
+          challengeToken: 'challenge-1',
+          methods: { totp: true, passkey: false, recoveryCode: true },
+        })
+      )
+    );
+    renderLogin();
+
+    await user.type(screen.getByLabelText(/email/i), 'admin@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'a-password');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await user.click(await screen.findByRole('button', { name: /back/i }));
+
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+  });
 });

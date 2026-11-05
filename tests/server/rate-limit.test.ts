@@ -1,19 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
-  apiKeyGenerator,
   clearAllRateLimits,
   dynamicRateLimiter,
   getRateLimitInfo,
   rateLimiter,
   resetRateLimit,
   userKeyGenerator,
+  widgetSubmitKeyGenerator,
 } from '../../src/server/middleware/rate-limit';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 
 type TestContext = {
+  env?: { requestIP: () => { address: string } };
   req: {
     url: string;
+    raw: Request;
     header: (name: string) => string | undefined;
     query: (name: string) => string | undefined;
   };
@@ -28,11 +30,13 @@ function createContext({
   headers = {},
   queryParams = {},
   user,
+  peer,
 }: {
   url?: string;
   headers?: Record<string, string>;
   queryParams?: Record<string, string>;
   user?: { id: string };
+  peer?: string;
 } = {}): TestContext {
   const headerStore = new Map<string, string>();
   const headerLookup = new Map(
@@ -40,8 +44,10 @@ function createContext({
   );
 
   return {
+    env: peer === undefined ? undefined : { requestIP: () => ({ address: peer }) },
     req: {
       url,
+      raw: new Request(url),
       header: (name: string) => headerLookup.get(name.toLowerCase()),
       query: (name: string) => queryParams[name],
     },
@@ -103,22 +109,66 @@ describe('rateLimiter', () => {
       error: 'RATE_LIMIT_EXCEEDED',
     });
   });
+
+  it('keeps named limiters in separate buckets for the same key', async () => {
+    const login = rateLimiter({ name: 'login', max: 1, window: 60, keyGenerator: () => 'ip:x' });
+    const twoFactor = rateLimiter({
+      name: 'login-two-factor',
+      max: 1,
+      window: 60,
+      keyGenerator: () => 'ip:x',
+    });
+    const next = async () => undefined;
+
+    await twoFactor(createContext() as unknown as never, next);
+    const loginContext = createContext();
+    const response = await login(loginContext as unknown as never, next);
+    expect(response).toBeUndefined();
+    expect(loginContext._headers.get('X-RateLimit-Remaining')).toBe('0');
+
+    const blocked = await login(createContext() as unknown as never, next);
+    expect((blocked as Response).status).toBe(429);
+  });
 });
 
 describe('key generators', () => {
-  it('uses forwarded-for when present', () => {
-    const ctx = createContext({ headers: { 'x-forwarded-for': '203.0.113.1, 10.0.0.1' } });
-    expect(apiKeyGenerator(ctx as unknown as never)).toBe('ip:203.0.113.1');
+  it('keys on the connection address and ignores spoofed forwarded headers', () => {
+    const ctx = createContext({
+      peer: '198.51.100.4',
+      headers: { 'x-forwarded-for': '203.0.113.1', 'x-real-ip': '203.0.113.2' },
+    });
+    expect(userKeyGenerator(ctx as unknown as never)).toBe('ip:198.51.100.4');
   });
 
-  it('uses x-real-ip when forwarded-for is missing', () => {
-    const ctx = createContext({ headers: { 'x-real-ip': '192.168.1.10' } });
-    expect(userKeyGenerator(ctx as unknown as never)).toBe('ip:192.168.1.10');
+  it('uses the proxy-appended address behind a private proxy', () => {
+    const ctx = createContext({
+      peer: '172.18.0.2',
+      headers: { 'x-forwarded-for': '203.0.113.99, 203.0.113.1' },
+    });
+    expect(userKeyGenerator(ctx as unknown as never)).toBe('ip:203.0.113.1');
   });
 
-  it('uses apiKey when available', () => {
-    const ctx = createContext({ queryParams: { apiKey: 'proj_test' } });
-    expect(apiKeyGenerator(ctx as unknown as never)).toBe('apikey:proj_test');
+  it('gives each visitor of a project its own widget submission bucket', () => {
+    const first = createContext({ peer: '203.0.113.1', headers: { 'x-api-key': 'proj_test' } });
+    const second = createContext({ peer: '203.0.113.2', headers: { 'x-api-key': 'proj_test' } });
+    expect(widgetSubmitKeyGenerator(first as unknown as never)).toBe(
+      'widget:proj_test:ip:203.0.113.1'
+    );
+    expect(widgetSubmitKeyGenerator(second as unknown as never)).toBe(
+      'widget:proj_test:ip:203.0.113.2'
+    );
+  });
+
+  it('keeps widget buckets separate per project for the same visitor', () => {
+    const ctx = createContext({ peer: '203.0.113.1', headers: { 'x-api-key': 'proj_other' } });
+    expect(widgetSubmitKeyGenerator(ctx as unknown as never)).toBe(
+      'widget:proj_other:ip:203.0.113.1'
+    );
+  });
+
+  it('ignores the deprecated apiKey query parameter for widget buckets', () => {
+    const ctx = createContext({ peer: '203.0.113.1', queryParams: { apiKey: 'proj_test' } });
+    expect(widgetSubmitKeyGenerator(ctx as unknown as never)).toBe('widget:none:ip:203.0.113.1');
   });
 
   it('uses user id when available', () => {
@@ -126,9 +176,9 @@ describe('key generators', () => {
     expect(userKeyGenerator(ctx as unknown as never)).toBe('user:user_123');
   });
 
-  it('falls back to hostname when no user or api key', () => {
+  it('does not key on the Host header when the connection address is unknown', () => {
     const ctx = createContext({ url: 'https://bugpin.local/api' });
-    expect(apiKeyGenerator(ctx as unknown as never)).toBe('ip:bugpin.local');
+    expect(userKeyGenerator(ctx as unknown as never)).toBe('ip:unknown');
   });
 });
 

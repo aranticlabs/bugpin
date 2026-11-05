@@ -19,7 +19,7 @@ import type { AppSettings } from '../../src/shared/types';
 async function run() {
   let active = true;
   licenseService.isValid = () => true;
-  licenseService.hasFeature = (feature: string) => feature === 'custom-branding' ? active : true;
+  licenseService.hasFeature = (feature: string) => (feature === 'custom-branding' ? active : true);
   await getEEPlugin()!.initialize();
   const stored = {
     appName: 'Company',
@@ -47,12 +47,16 @@ async function run() {
   const { authService } = await import('../../src/server/services/auth.service');
   const { Result } = await import('../../src/server/utils/result');
   const { emailService: sending } = await import('../../src/server/services/email.service');
-  authService.validateSession = async () => Result.ok({
-    user: { id: 'admin', role: 'admin', isActive: true } as never,
-    session: { id: 'session' } as never,
-  });
+  authService.validateSession = async () =>
+    Result.ok({
+      user: { id: 'admin', role: 'admin', isActive: true } as never,
+      session: { id: 'session' } as never,
+    });
   let sentHtml = '';
-  sending.sendEmail = async (options) => { sentHtml = options.html; return Result.ok(undefined); };
+  sending.sendEmail = async (options) => {
+    sentHtml = options.html;
+    return Result.ok(undefined);
+  };
   const app = createApp();
   try {
     for (const enabled of [true, false, true]) {
@@ -60,8 +64,12 @@ async function run() {
       const result = await brandingService.getBrandingConfig();
       assert.equal(result.success, true);
       if (result.success) {
-        assert.equal(result.value.primaryColor, enabled ? '#123456' : DEFAULT_BRANDING.primaryColor);
-        assert.equal(result.value.adminThemeColors.lightButtonColor,
+        assert.equal(
+          result.value.primaryColor,
+          enabled ? '#123456' : DEFAULT_BRANDING.primaryColor
+        );
+        assert.equal(
+          result.value.adminThemeColors.lightButtonColor,
           enabled ? '#123456' : DEFAULT_ADMIN_BUTTON.lightButtonColor
         );
         assert.equal(result.value.logoLightUrl, enabled ? stored.branding.logoLightUrl : null);
@@ -78,12 +86,20 @@ async function run() {
       for (const prefix of ['/api/templates', '/api/settings/email-templates']) {
         const headers = { cookie: 'session=session', 'Content-Type': 'application/json' };
         const payload = { type: 'newReport', subject: 'Preview', html: htmlColor };
-        const preview = await app.request(prefix + '/preview', { method: 'POST', headers, body: JSON.stringify(payload) });
+        const preview = await app.request(prefix + '/preview', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
         assert.equal(preview.status, 200);
         const previewHtml = (await preview.json()).preview.html;
         assert.ok(previewHtml.includes(enabled ? '#123456' : DEFAULT_BRANDING.primaryColor));
         if (!enabled) assert.ok(!previewHtml.includes('#123456'));
-        const sent = await app.request(prefix + '/send-test', { method: 'POST', headers, body: JSON.stringify({ ...payload, recipientEmail: 'user@example.com' }) });
+        const sent = await app.request(prefix + '/send-test', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...payload, recipientEmail: 'user@example.com' }),
+        });
         assert.equal(sent.status, 200);
         assert.ok(sentHtml.includes(enabled ? '#123456' : DEFAULT_BRANDING.primaryColor));
         if (!enabled) assert.ok(!sentHtml.includes('#123456'));

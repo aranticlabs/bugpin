@@ -95,19 +95,31 @@ docker run -d \
 
 BugPin will be available at `http://localhost:7300`
 
+### Reverse Proxy
+
+BugPin rate-limits logins and widget submissions per client address. It reads `X-Forwarded-For` only from proxies it trusts, set with `TRUST_PROXY`:
+
+| Value            | Behavior                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `auto` (default) | Trust forwarded headers from loopback and private-network proxies (same host or Docker network) |
+| `true`           | Trust forwarded headers from any connecting proxy (for example a CDN with a public address)     |
+| `false`          | Ignore forwarded headers and use the connection address                                         |
+
+The quick-start `docker-compose.yml` publishes port 7300 directly and sets `TRUST_PROXY=false`, so clients cannot choose their own address with a forged header. Behind a reverse proxy, set `TRUST_PROXY=auto` (or `true` for a proxy with a public address) and make sure the proxy sets or appends `X-Forwarded-For`. IPv6 clients are rate-limited per /64 network.
+
 ## Login
 
-Log in with the default credentials:
+On first start, BugPin creates an admin account from these environment variables:
 
-- **Email**: `admin@example.com`
-- **Password**: `changeme123`
+| Variable         | Default             |
+| ---------------- | ------------------- |
+| `ADMIN_EMAIL`    | `admin@example.com` |
+| `ADMIN_PASSWORD` | `changeme123`       |
 
-> [!IMPORTANT]
-> Change the default password immediately after first login:
->
-> 1. Click your profile icon
-> 2. Select "Profile"
-> 3. Update your password
+The initial password only works once. After the first login, BugPin asks you to choose a new password before you can use the Admin Console or the API. Instances that still use the initial password after an update ask for the change on the next login.
+
+> [!NOTE]
+> The variables are only read when no users exist yet. Changing them later does not change an existing account. Development mode (`make dev`) does not require the password change.
 
 ## Create a Project
 

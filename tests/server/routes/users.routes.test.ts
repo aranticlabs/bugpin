@@ -365,7 +365,7 @@ describe('users routes', () => {
     const formData = new FormData();
     formData.append(
       'file',
-      new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' }),
+      new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' })
     );
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {

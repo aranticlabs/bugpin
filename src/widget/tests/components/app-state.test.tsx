@@ -6,6 +6,7 @@ import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 import { draftStorage } from '../../storage/draft-storage';
 import type { SendOptions, SubmitReportInput } from '../../api/submit';
+import { t } from '../../i18n/index';
 
 const captureScreenshot = mock(async () => 'data:image/png;base64,abc');
 const captureContext = mock(() => ({
@@ -16,7 +17,10 @@ const captureContext = mock(() => ({
   timestamp: new Date().toISOString(),
 }));
 const submitReport = mock(
-  async (_input: SubmitReportInput, _options?: SendOptions): Promise<undefined> => undefined
+  async (
+    _input: SubmitReportInput,
+    _options?: SendOptions
+  ): Promise<{ success: boolean; queued?: boolean } | undefined> => undefined
 );
 const clearUserActivity = mock(() => undefined);
 
@@ -563,6 +567,60 @@ describe('App state transitions', () => {
 
     expect(lastDialogProps?.isSubmitting).toBe(false);
     expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('reuses the submission ID on retry and announces a queued report', async () => {
+    submitReport.mockImplementationOnce(async () => {
+      throw new Error(t('submit.error.rejected'));
+    });
+    submitReport.mockImplementationOnce(async () => ({ success: true, queued: true }));
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?submission-id');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(<App config={baseConfig} deps={appDeps} />, container);
+
+    const launcher = container.querySelector(
+      'button[aria-label="Report issue"]'
+    ) as HTMLButtonElement;
+    const form: WidgetFormData = {
+      title: 'Bug title',
+      description: '',
+      priority: 'medium',
+      reporterEmail: '',
+      reporterName: '',
+    };
+    const submit = async () => {
+      await (
+        lastDialogProps?.onSubmit as (data: WidgetFormData, media: unknown[]) => Promise<void>
+      )(form, []);
+      await flush();
+    };
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    await submit();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      t('submit.error.rejected')
+    );
+    await submit();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(t('submit.queued'));
+    expect(container.querySelector('[role="alert"]')?.textContent).not.toContain(
+      t('toast.success.submit')
+    );
+
+    launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    await submit();
+
+    const ids = submitReport.mock.calls.map(([input]) => input.submissionId);
+    expect(ids).toHaveLength(3);
+    expect(ids[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(ids[1]).toBe(ids[0] as string);
+    expect(ids[2]).not.toBe(ids[0] as string);
 
     render(null, container);
     container.remove();
