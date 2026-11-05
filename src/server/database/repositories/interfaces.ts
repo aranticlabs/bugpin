@@ -40,6 +40,7 @@ export interface CreateReportData {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  submissionId?: string;
 }
 
 export interface IReportsRepository {

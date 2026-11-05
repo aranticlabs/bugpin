@@ -421,6 +421,53 @@ describe('widget routes', () => {
       expect(body.reportId).toBe('rpt_1');
     });
 
+    it('answers a repeated submission with the existing report instead of a new one', async () => {
+      const created: string[] = [];
+      const stored = new Map<string, string>();
+      reportsService.findIdByWidgetSubmission = (projectId, submissionId) =>
+        stored.get(`${projectId}:${submissionId}`) ?? null;
+      reportsService.create = async (input) => {
+        // Slow enough that the retry arrives while the first request is still running
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const id = `rpt_${created.length + 1}`;
+        created.push(id);
+        if (input.submissionId) stored.set(`prj_1:${input.submissionId}`, id);
+        return Result.ok({ ...baseReport, id });
+      };
+
+      const app = createApp();
+      const submit = () =>
+        app.request('http://localhost/widget/submit', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+          body: JSON.stringify({ ...validSubmitBody, submissionId: 'sub_0123456789' }),
+        });
+
+      const responses = await Promise.all([submit(), submit()]);
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 201]);
+      const retry = responses.find((res) => res.status === 200);
+      expect(await retry?.json()).toMatchObject({
+        success: true,
+        reportId: 'rpt_1',
+        duplicate: true,
+      });
+      expect(created).toEqual(['rpt_1']);
+
+      const later = await submit();
+      expect(later.status).toBe(200);
+      expect(created).toEqual(['rpt_1']);
+    });
+
+    it('rejects a malformed submission id', async () => {
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify({ ...validSubmitBody, submissionId: 'bad id' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
     it('returns 400 when service fails', async () => {
       reportsService.create = async () => Result.fail('Creation failed', 'CREATE_ERROR');
 

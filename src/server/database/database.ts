@@ -206,7 +206,8 @@ export async function initSchema(): Promise<void> {
       github_issue_number INTEGER NULL,
       github_issue_url TEXT NULL,
       github_synced_at TEXT NULL,
-      reporter_locale TEXT NOT NULL DEFAULT 'en'
+      reporter_locale TEXT NOT NULL DEFAULT 'en',
+      submission_id TEXT
     )
   `);
 
@@ -223,6 +224,12 @@ export async function initSchema(): Promise<void> {
     // Column already exists
   }
 
+  try {
+    db.exec(`ALTER TABLE reports ADD COLUMN submission_id TEXT`);
+  } catch {
+    // Column already exists
+  }
+
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_priority ON reports(priority)`);
@@ -235,6 +242,9 @@ export async function initSchema(): Promise<void> {
   );
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_reports_github_sync_status ON reports(github_sync_status) WHERE github_sync_status IS NOT NULL`
+  );
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_submission ON reports(project_id, submission_id) WHERE submission_id IS NOT NULL`
   );
 
   // Report history table

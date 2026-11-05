@@ -9,6 +9,7 @@ export type MediaItem = MediaData & {
 };
 
 export interface SubmitFormDataInput {
+  submissionId?: string;
   title: string;
   description?: string;
   priority: string;
@@ -40,6 +41,15 @@ export function getExtensionFromMimeType(mimeType: string): string {
   return EXTENSIONS[mimeType] || 'bin';
 }
 
+export function createSubmissionId(): string {
+  const crypto = globalThis.crypto;
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof crypto?.getRandomValues === 'function') crypto.getRandomValues(bytes);
+  else bytes.forEach((_, index) => (bytes[index] = Math.random() * 256));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function getMediaBlob(item: MediaData): Blob {
   return item.blob ?? dataUrlToBlob(item.dataUrl);
 }
@@ -48,6 +58,7 @@ export function buildSubmitFormData(input: SubmitFormDataInput): BuiltSubmitForm
   const formData = new FormData();
   const media = input.media ?? [];
   const data = JSON.stringify({
+    submissionId: input.submissionId,
     title: input.title,
     description: input.description,
     priority: input.priority,

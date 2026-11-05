@@ -27,6 +27,36 @@ function sanitizeForDisplay(value: string): string {
   return value.replace(CONTROL_CHARS_PATTERN, '').slice(0, MAX_DISPLAY_LENGTH);
 }
 
+// Retries of one widget submission (offline buffer, other tabs) wait for the first
+// request instead of creating a second report next to it.
+const submissionsInFlight = new Map<string, Promise<void>>();
+
+function holdSubmission(key: string): () => void {
+  let release: () => void = () => undefined;
+  submissionsInFlight.set(
+    key,
+    new Promise<void>((resolve) => {
+      release = resolve;
+    })
+  );
+  return () => {
+    submissionsInFlight.delete(key);
+    release();
+  };
+}
+
+interface RequestTimeoutServer {
+  timeout(request: Request, seconds: number): void;
+}
+
+function isRequestTimeoutServer(value: unknown): value is RequestTimeoutServer {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { timeout?: unknown }).timeout === 'function'
+  );
+}
+
 // Validation Schemas
 
 const submitReportSchema = z.object({
@@ -36,6 +66,10 @@ const submitReportSchema = z.object({
   reporterName: z.string().optional(),
   reporterEmail: z.string().email().optional().or(z.literal('')),
   locale: z.string().optional(),
+  submissionId: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{8,64}$/)
+    .optional(),
   metadata: z.object({
     url: z.string(),
     title: z.string().optional(),
@@ -120,6 +154,10 @@ widget.post(
         400
       );
     }
+
+    // Recordings can wait in the remux queue without any bytes flowing, which the
+    // server-wide idle timeout would treat as a dead connection.
+    if (isRequestTimeoutServer(c.env)) c.env.timeout(c.req.raw, 0);
 
     // Get API key from header only
     const apiKey = c.req.header('x-api-key');
@@ -222,188 +260,217 @@ widget.post(
     }
 
     const data = validation.data;
-
-    // Filter and prepare media files data
-    const settings = await settingsCacheService.getAll();
-    const projScreenshot = projectResult.value.settings?.screenshot;
-    const globalScreenshot = settings.screenshot;
-    const maxScreenshotMb =
-      projScreenshot?.maxScreenshotSize ?? globalScreenshot.maxScreenshotSize ?? 10;
-    const maxImageMb =
-      projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb ?? 10;
-    const maxVideoMb =
-      projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb ?? 50;
-    const maxVideoUploadMbPerDay =
-      projScreenshot?.maxVideoUploadMbPerDay ?? globalScreenshot.maxVideoUploadMbPerDay ?? 2048;
-    const enableScreenRecording =
-      projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording ?? false;
-    if (!enableScreenRecording && mediaFiles.some((file) => file.isRecording)) {
-      return c.json(
-        {
-          success: false,
-          error: 'SCREEN_RECORDING_DISABLED',
-          message: 'Screen recording is disabled for this project.',
-        },
-        403
-      );
-    }
-    const imageLimitMb = Math.max(maxScreenshotMb, maxImageMb);
-    const maxFileSizeBytes = imageLimitMb * 1024 * 1024;
-    const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
-    const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
-
-    const media: Array<{
-      data: Buffer;
-      filename: string;
-      mimeType: string;
-      isRecording: boolean;
-    }> = [];
-    for (const { file, isRecording } of mediaFiles) {
-      const mimeType = normalizeMimeType(file.type);
-      // Reject unsupported types before copying file contents.
-      if (!allowedTypes.includes(mimeType)) {
-        logger.warn('Media file rejected: invalid MIME type', {
-          filename: file.name,
-          mimeType,
-        });
+    const projectId = projectResult.value.id;
+    const submissionKey = data.submissionId ? `${projectId}:${data.submissionId}` : null;
+    if (submissionKey && data.submissionId) {
+      for (
+        let pending = submissionsInFlight.get(submissionKey);
+        pending;
+        pending = submissionsInFlight.get(submissionKey)
+      ) {
+        await pending;
+      }
+      const existingId = reportsService.findIdByWidgetSubmission(projectId, data.submissionId);
+      if (existingId) {
         return c.json(
           {
-            success: false,
-            error: 'UNSUPPORTED_MEDIA_TYPE',
-            message: `Unsupported media type "${sanitizeForDisplay(mimeType)}" for "${sanitizeForDisplay(file.name)}".`,
-            details: { filename: file.name, mimeType },
+            success: true,
+            reportId: existingId,
+            duplicate: true,
+            message: 'Bug report already received',
           },
-          415
+          200
         );
       }
+    }
+    const releaseSubmission = submissionKey ? holdSubmission(submissionKey) : () => undefined;
 
-      // Reject oversized files before copying file contents.
-      const isVideo = mimeType.startsWith('video/');
-      const sizeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
-      if (file.size > sizeLimit) {
-        const limitMb = Math.round(sizeLimit / (1024 * 1024));
-        const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
-        logger.warn('Media file rejected: too large', {
-          filename: file.name,
-          size: file.size,
-          limit: sizeLimit,
-        });
+    try {
+      // Filter and prepare media files data
+      const settings = await settingsCacheService.getAll();
+      const projScreenshot = projectResult.value.settings?.screenshot;
+      const globalScreenshot = settings.screenshot;
+      const maxScreenshotMb =
+        projScreenshot?.maxScreenshotSize ?? globalScreenshot.maxScreenshotSize ?? 10;
+      const maxImageMb =
+        projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb ?? 10;
+      const maxVideoMb =
+        projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb ?? 50;
+      const maxVideoUploadMbPerDay =
+        projScreenshot?.maxVideoUploadMbPerDay ?? globalScreenshot.maxVideoUploadMbPerDay ?? 2048;
+      const enableScreenRecording =
+        projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording ?? false;
+      if (!enableScreenRecording && mediaFiles.some((file) => file.isRecording)) {
         return c.json(
           {
             success: false,
-            error: 'FILE_TOO_LARGE',
-            message: `${isVideo ? 'Video' : 'Image'} "${sanitizeForDisplay(file.name)}" is ${sizeMb}MB; maximum is ${limitMb}MB.`,
-            details: {
-              filename: file.name,
-              size: file.size,
-              limit: sizeLimit,
-              kind: isVideo ? 'video' : 'image',
+            error: 'SCREEN_RECORDING_DISABLED',
+            message: 'Screen recording is disabled for this project.',
+          },
+          403
+        );
+      }
+      const imageLimitMb = Math.max(maxScreenshotMb, maxImageMb);
+      const maxFileSizeBytes = imageLimitMb * 1024 * 1024;
+      const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
+      const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
+
+      const media: Array<{
+        data: Buffer;
+        filename: string;
+        mimeType: string;
+        isRecording: boolean;
+      }> = [];
+      for (const { file, isRecording } of mediaFiles) {
+        const mimeType = normalizeMimeType(file.type);
+        // Reject unsupported types before copying file contents.
+        if (!allowedTypes.includes(mimeType)) {
+          logger.warn('Media file rejected: invalid MIME type', {
+            filename: file.name,
+            mimeType,
+          });
+          return c.json(
+            {
+              success: false,
+              error: 'UNSUPPORTED_MEDIA_TYPE',
+              message: `Unsupported media type "${sanitizeForDisplay(mimeType)}" for "${sanitizeForDisplay(file.name)}".`,
+              details: { filename: file.name, mimeType },
             },
-          },
-          413
-        );
+            415
+          );
+        }
+
+        // Reject oversized files before copying file contents.
+        const isVideo = mimeType.startsWith('video/');
+        const sizeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
+        if (file.size > sizeLimit) {
+          const limitMb = Math.round(sizeLimit / (1024 * 1024));
+          const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+          logger.warn('Media file rejected: too large', {
+            filename: file.name,
+            size: file.size,
+            limit: sizeLimit,
+          });
+          return c.json(
+            {
+              success: false,
+              error: 'FILE_TOO_LARGE',
+              message: `${isVideo ? 'Video' : 'Image'} "${sanitizeForDisplay(file.name)}" is ${sizeMb}MB; maximum is ${limitMb}MB.`,
+              details: {
+                filename: file.name,
+                size: file.size,
+                limit: sizeLimit,
+                kind: isVideo ? 'video' : 'image',
+              },
+            },
+            413
+          );
+        }
+
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          media.push({
+            data: buffer,
+            filename: file.name,
+            mimeType,
+            isRecording,
+          });
+        } catch (error) {
+          logger.error('Failed to process media file', error, { filename: file.name });
+          return c.json(
+            {
+              success: false,
+              error: 'FILE_READ_ERROR',
+              message: `Failed to read uploaded file "${sanitizeForDisplay(file.name)}"`,
+              details: { filename: file.name },
+            },
+            400
+          );
+        }
       }
 
-      try {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        media.push({
-          data: buffer,
-          filename: file.name,
-          mimeType,
-          isRecording,
+      const incomingVideoBytes = media.reduce(
+        (total, file) => total + (file.mimeType.startsWith('video/') ? file.data.length : 0),
+        0
+      );
+      const reservationResult = videoQuotaService.reserve(
+        projectResult.value.id,
+        incomingVideoBytes,
+        maxVideoUploadMbPerDay * 1024 * 1024
+      );
+      if (!reservationResult.success) {
+        if (reservationResult.code === 'VIDEO_QUOTA_EXCEEDED') {
+          return c.json(
+            {
+              success: false,
+              error: reservationResult.code,
+              message: reservationResult.error,
+            },
+            429
+          );
+        }
+
+        logger.error('Failed to check video upload quota', {
+          projectId: projectResult.value.id,
+          error: reservationResult.error,
         });
-      } catch (error) {
-        logger.error('Failed to process media file', error, { filename: file.name });
-        return c.json(
-          {
-            success: false,
-            error: 'FILE_READ_ERROR',
-            message: `Failed to read uploaded file "${sanitizeForDisplay(file.name)}"`,
-            details: { filename: file.name },
-          },
-          400
-        );
-      }
-    }
-
-    const incomingVideoBytes = media.reduce(
-      (total, file) => total + (file.mimeType.startsWith('video/') ? file.data.length : 0),
-      0
-    );
-    const reservationResult = videoQuotaService.reserve(
-      projectResult.value.id,
-      incomingVideoBytes,
-      maxVideoUploadMbPerDay * 1024 * 1024
-    );
-    if (!reservationResult.success) {
-      if (reservationResult.code === 'VIDEO_QUOTA_EXCEEDED') {
         return c.json(
           {
             success: false,
             error: reservationResult.code,
-            message: reservationResult.error,
+            message: 'Unable to verify the video upload limit.',
           },
-          429
+          500
         );
       }
 
-      logger.error('Failed to check video upload quota', {
-        projectId: projectResult.value.id,
-        error: reservationResult.error,
-      });
-      return c.json(
-        {
-          success: false,
-          error: reservationResult.code,
-          message: 'Unable to verify the video upload limit.',
-        },
-        500
-      );
-    }
+      try {
+        const globalSettingsResult = await settingsService.getAll();
+        const globalLanguage = globalSettingsResult.success
+          ? globalSettingsResult.value.language
+          : undefined;
+        const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
+        const reporterLocale = resolveSubmitLocale({
+          claimed: data.locale,
+          projectMode: effectiveLanguage?.mode,
+          projectDefault: effectiveLanguage?.defaultLanguage,
+        });
 
-    try {
-      const globalSettingsResult = await settingsService.getAll();
-      const globalLanguage = globalSettingsResult.success
-        ? globalSettingsResult.value.language
-        : undefined;
-      const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
-      const reporterLocale = resolveSubmitLocale({
-        claimed: data.locale,
-        projectMode: effectiveLanguage?.mode,
-        projectDefault: effectiveLanguage?.defaultLanguage,
-      });
+        const result = await reportsService.create({
+          apiKey,
+          title: data.title,
+          description: data.description,
+          priority: data.priority,
+          files: media,
+          annotations: data.annotations as object,
+          metadata: privacyPolicyService.applySubmissionPolicy(
+            data.metadata as ReportMetadata,
+            settings.privacy,
+            projectResult.value.settings
+          ),
+          reporterEmail: data.reporterEmail || undefined,
+          reporterName: data.reporterName || undefined,
+          reporterLocale,
+          submissionId: data.submissionId,
+        });
 
-      const result = await reportsService.create({
-        apiKey,
-        title: data.title,
-        description: data.description,
-        priority: data.priority,
-        files: media,
-        annotations: data.annotations as object,
-        metadata: privacyPolicyService.applySubmissionPolicy(
-          data.metadata as ReportMetadata,
-          settings.privacy,
-          projectResult.value.settings
-        ),
-        reporterEmail: data.reporterEmail || undefined,
-        reporterName: data.reporterName || undefined,
-        reporterLocale,
-      });
+        if (!result.success) {
+          return c.json({ success: false, error: result.code, message: result.error }, 400);
+        }
 
-      if (!result.success) {
-        return c.json({ success: false, error: result.code, message: result.error }, 400);
+        return c.json(
+          {
+            success: true,
+            reportId: result.value.id,
+            message: 'Bug report submitted successfully',
+          },
+          201
+        );
+      } finally {
+        reservationResult.value();
       }
-
-      return c.json(
-        {
-          success: true,
-          reportId: result.value.id,
-          message: 'Bug report submitted successfully',
-        },
-        201
-      );
     } finally {
-      reservationResult.value();
+      releaseSubmission();
     }
   }
 );

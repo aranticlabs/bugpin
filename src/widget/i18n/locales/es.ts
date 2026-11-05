@@ -128,6 +128,9 @@ const es: WidgetCatalog = {
     'La subida es demasiado grande para el servidor. Elimina algunos archivos y vuelve a intentarlo.',
   'submit.error.videoQuota':
     'Las subidas de vídeo están pausadas para este proyecto. Elimina el vídeo para enviar el informe.',
+  'submit.error.rejected':
+    'Se ha rechazado la subida. Es posible que los archivos adjuntos sean demasiado grandes. Elimínalos o redúcelos y vuelve a intentarlo.',
+  'submit.queued': 'Informe guardado. Se enviará automáticamente cuando se recupere la conexión.',
 
   'toast.success.submit': '¡Informe enviado correctamente!',
   'toast.error.submit': 'No se ha podido enviar el informe',
