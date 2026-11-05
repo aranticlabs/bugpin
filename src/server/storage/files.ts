@@ -11,7 +11,7 @@ import type { FileType } from '@shared/types';
 
 // Allowed MIME types per file category
 
-export const ALLOWED_IMAGE_MIME_TYPES = [
+const ALLOWED_IMAGE_MIME_TYPES = [
   'image/png',
   'image/jpeg',
   'image/jpg',
@@ -19,9 +19,9 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/webp',
 ] as const;
 
-export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'] as const;
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'] as const;
 
-export const ALLOWED_ATTACHMENT_MIME_TYPES = [
+const ALLOWED_ATTACHMENT_MIME_TYPES = [
   'application/pdf',
   'text/plain',
   'application/json',
@@ -211,7 +211,9 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
   const fileId = generateFileId();
   const ext = getExtension(mimeType);
   const storedFilename = `${fileId}.${ext}`;
-  const buffer = Buffer.from(data);
+  const buffer = Buffer.isBuffer(data)
+    ? data
+    : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
   // Get image dimensions if applicable (needed for both local and S3)
   let width: number | undefined;

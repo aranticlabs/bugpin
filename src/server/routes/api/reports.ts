@@ -329,6 +329,7 @@ reports.get('/:reportId/files/:fileId', async (c) => {
     size: file.sizeBytes,
     mimeType: file.mimeType,
     cacheControl: 'private, max-age=86400',
+    headOnly: c.req.method === 'HEAD',
   });
 
   return response ?? c.json({ success: false, error: 'NOT_FOUND', message: 'File not found' }, 404);

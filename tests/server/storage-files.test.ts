@@ -214,6 +214,32 @@ describe('file storage', () => {
     expect(await deleteFile(dirPath)).toBe(false);
   });
 
+  it('reads only the requested bytes when the storage provider supports ranges', async () => {
+    const originalHooks = getEEHooks();
+    const rangeCalls: Array<[string, number, number]> = [];
+    let wholeReads = 0;
+    const provider = {
+      read: async () => {
+        wholeReads++;
+        return Result.ok(new Uint8Array());
+      },
+      readRange: async (filePath: string, start: number, end: number) => {
+        rangeCalls.push([filePath, start, end]);
+        return Result.ok(new TextEncoder().encode('2345'));
+      },
+    } as StorageProvider;
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+
+    try {
+      const data = await createStoredFileHandle('s3://bucket/file').readRange(2, 5);
+      expect(Buffer.from(data as Uint8Array).toString()).toBe('2345');
+      expect(rangeCalls).toEqual([['s3://bucket/file', 2, 5]]);
+      expect(wholeReads).toBe(0);
+    } finally {
+      registerEEHooks(originalHooks);
+    }
+  });
+
   it('falls back to a whole-object read for older storage providers', async () => {
     const originalHooks = getEEHooks();
     let reads = 0;

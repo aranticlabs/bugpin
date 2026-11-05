@@ -2,7 +2,9 @@ import type { StoredFileHandle } from '../storage/files.js';
 
 export type ByteRange = { start: number; end: number };
 
-const MAX_REMOTE_OPEN_ENDED_RANGE_BYTES = 8 * 1024 * 1024;
+// Remote objects are buffered before they are sent, so each ranged response is capped. A 206 whose
+// Content-Range is shorter than requested is valid, and media elements request the remainder.
+const MAX_REMOTE_RANGE_BYTES = 8 * 1024 * 1024;
 
 export function parseRangeHeader(
   header: string | undefined,
@@ -42,6 +44,7 @@ export async function createFileResponse(options: {
   size: number;
   mimeType: string;
   cacheControl: string;
+  headOnly?: boolean;
 }): Promise<Response | null> {
   const parsedRange = parseRangeHeader(options.rangeHeader, options.size);
   const sharedHeaders = {
@@ -61,29 +64,24 @@ export async function createFileResponse(options: {
   }
 
   if (!parsedRange) {
+    const headers = {
+      ...sharedHeaders,
+      'Content-Type': options.mimeType,
+      'Content-Length': options.size.toString(),
+    };
+    if (options.headOnly) return new Response(null, { headers });
+
     const data = await options.handle.read();
     if (!data) return null;
-    return new Response(data, {
-      headers: {
-        ...sharedHeaders,
-        'Content-Type': options.mimeType,
-        'Content-Length': options.size.toString(),
-      },
-    });
+    return new Response(data, { headers });
   }
 
   const range = { ...parsedRange };
-  if (
-    options.handle.kind === 'remote' &&
-    /^bytes=\d+-$/.test(options.rangeHeader?.trim().toLowerCase() ?? '')
-  ) {
-    range.end = Math.min(range.end, range.start + MAX_REMOTE_OPEN_ENDED_RANGE_BYTES - 1);
+  if (options.handle.kind === 'remote') {
+    range.end = Math.min(range.end, range.start + MAX_REMOTE_RANGE_BYTES - 1);
   }
 
-  const data = await options.handle.readRange(range.start, range.end);
-  if (!data) return null;
-
-  return new Response(data, {
+  const init = {
     status: 206,
     headers: {
       ...sharedHeaders,
@@ -91,5 +89,10 @@ export async function createFileResponse(options: {
       'Content-Length': (range.end - range.start + 1).toString(),
       'Content-Range': `bytes ${range.start}-${range.end}/${options.size}`,
     },
-  });
+  };
+  if (options.headOnly) return new Response(null, init);
+
+  const data = await options.handle.readRange(range.start, range.end);
+  if (!data) return null;
+  return new Response(data, init);
 }
