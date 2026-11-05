@@ -20,7 +20,7 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { normalizeUrl } from '../utils/validators.js';
-import { remuxRecording } from './video-remux.service.js';
+import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
   Report,
   ReportFilter,
@@ -33,6 +33,7 @@ import type {
   FileType,
   FileRecord,
   LocaleCode,
+  Project,
 } from '@shared/types';
 
 // Types
@@ -158,10 +159,77 @@ async function validateSubmittedFiles(files: MediaFile[] | undefined): Promise<R
   return Result.ok(undefined);
 }
 
+interface RecordingPolicy {
+  allowMicrophone: boolean;
+  maxDurationSeconds: number;
+}
+
+// Browsers stop recorders asynchronously and container timestamps round, so a recording stopped
+// exactly at the limit can measure slightly longer.
+const RECORDING_DURATION_TOLERANCE_SECONDS = 5;
+const DEFAULT_MAX_RECORDING_DURATION_SECONDS = 180;
+
+async function resolveRecordingPolicy(
+  project: Pick<Project, 'settings'>
+): Promise<RecordingPolicy> {
+  const settings = await settingsCacheService.getAll();
+  const projectScreenshot = project.settings?.screenshot;
+  const globalScreenshot = settings.screenshot;
+  return {
+    allowMicrophone:
+      projectScreenshot?.allowRecordingMicrophone ??
+      globalScreenshot?.allowRecordingMicrophone ??
+      false,
+    maxDurationSeconds:
+      projectScreenshot?.maxRecordingDurationSeconds ??
+      globalScreenshot?.maxRecordingDurationSeconds ??
+      DEFAULT_MAX_RECORDING_DURATION_SECONDS,
+  };
+}
+
+/**
+ * Recordings the server cannot parse are kept, matching the remux fallback: the same bytes are
+ * accepted through the regular media field, so failing closed here would not add protection.
+ */
+async function checkRecordingPolicy(
+  file: MediaFile,
+  policy: RecordingPolicy
+): Promise<Result<void>> {
+  const inspection = await inspectRecording(file);
+  if (!inspection.success) {
+    logger.warn('Recording inspection failed, skipping policy checks', {
+      filename: file.filename,
+      reason: inspection.error,
+      code: inspection.code,
+    });
+    return Result.ok(undefined);
+  }
+
+  if (inspection.value.hasAudio && !policy.allowMicrophone) {
+    return Result.fail(
+      'Recording contains audio but microphone recording is disabled',
+      'RECORDING_AUDIO_NOT_ALLOWED'
+    );
+  }
+
+  if (
+    inspection.value.durationSeconds >
+    policy.maxDurationSeconds + RECORDING_DURATION_TOLERANCE_SECONDS
+  ) {
+    return Result.fail(
+      `Recording is ${Math.round(inspection.value.durationSeconds)} seconds; maximum is ${policy.maxDurationSeconds} seconds`,
+      'RECORDING_TOO_LONG'
+    );
+  }
+
+  return Result.ok(undefined);
+}
+
 async function saveSubmittedFiles(
   reportId: string,
   files: MediaFile[] | undefined,
-  strict: boolean
+  strict: boolean,
+  recordingPolicy: RecordingPolicy | undefined
 ): Promise<Result<void>> {
   if (!files?.length) {
     return Result.ok(undefined);
@@ -182,6 +250,22 @@ async function saveSubmittedFiles(
           mimeType: file.mimeType,
           reason: validation.error,
           code: validation.code,
+        });
+        continue;
+      }
+    }
+
+    if (file.isRecording && recordingPolicy) {
+      const policyCheck = await checkRecordingPolicy(file, recordingPolicy);
+      if (!policyCheck.success) {
+        if (strict) {
+          return policyCheck;
+        }
+        logger.warn('Submitted file rejected', {
+          filename: file.filename,
+          mimeType: file.mimeType,
+          reason: policyCheck.error,
+          code: policyCheck.code,
         });
         continue;
       }
@@ -310,10 +394,14 @@ async function createForProject(
 
   const report = await reportsRepo.create(reportData);
 
+  const recordingPolicy = input.files?.some((file) => file.isRecording)
+    ? await resolveRecordingPolicy(project)
+    : undefined;
   const saveFilesResult = await saveSubmittedFiles(
     report.id,
     input.files,
-    options.strictFileValidation
+    options.strictFileValidation,
+    recordingPolicy
   );
   if (!saveFilesResult.success) {
     if (options.strictFileValidation) {

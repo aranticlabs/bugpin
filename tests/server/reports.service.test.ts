@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { reportsService } from '../../src/server/services/reports.service';
+import * as videoRemuxService from '../../src/server/services/video-remux.service';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
@@ -212,7 +213,14 @@ beforeEach(() => {
   reportHistoryService.record = async () => undefined;
 
   settingsCacheService.getAll = async () =>
-    ({ screenshot: { maxScreenshotSize: 10, useScreenCaptureAPI: false } }) as AppSettings;
+    ({
+      screenshot: {
+        maxScreenshotSize: 10,
+        useScreenCaptureAPI: false,
+        allowRecordingMicrophone: true,
+        maxRecordingDurationSeconds: 180,
+      },
+    }) as AppSettings;
 });
 
 afterEach(() => {
@@ -537,6 +545,126 @@ describe('reportsService.create', () => {
     const saved = Buffer.from(await Bun.file(fileCreateRecords[1]!.path).arrayBuffer());
     expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
     expect(saved).not.toEqual(recording);
+  });
+
+  async function submitRecording(filename: string, mimeType: string) {
+    const recording = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux', filename)
+    ).bytes();
+    return reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Policy recording',
+      metadata: baseMetadata,
+      files: [
+        { filename: 'screenshot.png', mimeType: 'image/png', data: validPngBuffer },
+        { filename, mimeType, data: recording, isRecording: true },
+      ],
+    });
+  }
+
+  it('rejects a recording with audio when the global setting disallows the microphone', async () => {
+    settingsCacheService.getAll = async () =>
+      ({
+        screenshot: { allowRecordingMicrophone: false, maxRecordingDurationSeconds: 180 },
+      }) as AppSettings;
+
+    const result = await submitRecording('chrome-vp9-opus.webm', 'video/webm');
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['screenshot']);
+    expect(warningCalls).toContainEqual({
+      message: 'Submitted file rejected',
+      context: expect.objectContaining({
+        filename: 'chrome-vp9-opus.webm',
+        code: 'RECORDING_AUDIO_NOT_ALLOWED',
+      }),
+    });
+  });
+
+  it('keeps a silent recording when the microphone is disallowed', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { screenshot: { allowRecordingMicrophone: false } },
+    };
+
+    const result = await submitRecording('chrome-vp9.webm', 'video/webm');
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['screenshot', 'video']);
+  });
+
+  it('lets a project override allow microphone audio over the global setting', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { screenshot: { allowRecordingMicrophone: true } },
+    };
+    settingsCacheService.getAll = async () =>
+      ({ screenshot: { allowRecordingMicrophone: false } }) as AppSettings;
+
+    const result = await submitRecording('chrome-with-audio.mp4', 'video/mp4');
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['screenshot', 'video']);
+  });
+
+  it('rejects a recording longer than the maximum duration plus tolerance', async () => {
+    const recordingInspection = spyOn(videoRemuxService, 'inspectRecording').mockResolvedValue(
+      Result.ok({ hasAudio: false, durationSeconds: 15.5 })
+    );
+    projectByApiKey = {
+      ...baseProject,
+      settings: { screenshot: { maxRecordingDurationSeconds: 10 } },
+    };
+
+    try {
+      const result = await submitRecording('chrome-vp9.webm', 'video/webm');
+
+      expect(result.success).toBe(true);
+      expect(fileCreateTypes).toEqual(['screenshot']);
+      expect(warningCalls).toContainEqual({
+        message: 'Submitted file rejected',
+        context: expect.objectContaining({ code: 'RECORDING_TOO_LONG' }),
+      });
+    } finally {
+      recordingInspection.mockRestore();
+    }
+  });
+
+  it('keeps a recording within the duration tolerance', async () => {
+    const recordingInspection = spyOn(videoRemuxService, 'inspectRecording').mockResolvedValue(
+      Result.ok({ hasAudio: false, durationSeconds: 14.5 })
+    );
+    projectByApiKey = {
+      ...baseProject,
+      settings: { screenshot: { maxRecordingDurationSeconds: 10 } },
+    };
+
+    try {
+      const result = await submitRecording('chrome-vp9.webm', 'video/webm');
+
+      expect(result.success).toBe(true);
+      expect(fileCreateTypes).toEqual(['screenshot', 'video']);
+    } finally {
+      recordingInspection.mockRestore();
+    }
+  });
+
+  it('does not inspect uploaded videos outside the recording field', async () => {
+    settingsCacheService.getAll = async () =>
+      ({ screenshot: { allowRecordingMicrophone: false } }) as AppSettings;
+    const video = await Bun.file(
+      path.join(import.meta.dir, '../fixtures/video-remux/chrome-with-audio.mp4')
+    ).bytes();
+
+    const result = await reportsService.create({
+      apiKey: 'proj_key',
+      title: 'Uploaded video with audio',
+      metadata: baseMetadata,
+      files: [{ filename: 'upload.mp4', mimeType: 'video/mp4', data: video }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(fileCreateTypes).toEqual(['video']);
   });
 
   it('keeps videos allowed by a project override above the global limit', async () => {
