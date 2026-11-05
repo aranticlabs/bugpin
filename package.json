@@ -43,9 +43,9 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "@types/node": "^26.2.0",
-    "knip": "^6.32.2",
-    "prettier": "^3.9.6",
+    "@types/node": "^26.6.6",
+    "knip": "^6.44.1",
+    "prettier": "^3.9.10",
     "typescript": "^7.0.2"
   },
   "overrides": {

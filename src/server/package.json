@@ -15,16 +15,16 @@
     "reset-password": "bun run scripts/reset-password.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1115.0",
-    "hono": "^4.13.11",
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "hono": "^4.13.16",
     "mediabunny": "1.64.0",
-    "nodemailer": "^10.1.4",
+    "nodemailer": "^10.3.1",
     "sharp": "^0.35.5",
-    "zod": "^4.6.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "@types/nodemailer": "^8.0.1",
+    "@types/nodemailer": "^8.0.2",
     "bun-types": "1.4.4",
     "typescript": "^7.0.2"
   }
