@@ -253,6 +253,36 @@ describe('github service', () => {
     });
   }
 
+  it('treats a non-boolean public video setting as disabled', async () => {
+    let issueBody = '';
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      issueBody = (JSON.parse(init?.body as string) as { body: string }).body;
+      return Response.json({ number: 123, html_url: 'https://github.com/org/repo/issues/123' });
+    }) as typeof fetch;
+    const files: FileRecord[] = [
+      {
+        id: 'video_1',
+        reportId: baseReport.id,
+        type: 'screenshot',
+        filename: 'recording.mp4',
+        path: '/recording.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: 10,
+        createdAt: baseReport.createdAt,
+      },
+    ];
+    const storedConfig = JSON.parse(
+      '{"owner":"org","repo":"repo","accessToken":"token","publicVideoLinks":"false"}'
+    ) as Parameters<typeof createGitHubIssue>[1];
+
+    await createGitHubIssue({ ...baseReport, files }, storedConfig);
+
+    expect(issueBody).toContain(
+      `[Video attached: recording.mp4](https://app.example.com/admin/reports/${baseReport.id})`
+    );
+    expect(issueBody).not.toContain('/api/public/files/');
+  });
+
   it('returns error when create GitHub issue fails', async () => {
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ message: 'Bad request' }), { status: 400 });

@@ -216,6 +216,16 @@ interface ValidationOptions {
 
 // Middleware
 
+// Updates do not carry the integration type, so typed keys are checked for every integration.
+// Only GitHub reads publicVideoLinks; it must be a real boolean because it grants public access.
+const integrationConfigSchema = z
+  .record(z.string(), z.unknown())
+  .refine(
+    (config) =>
+      config.publicVideoLinks === undefined || typeof config.publicVideoLinks === 'boolean',
+    { message: 'publicVideoLinks must be a boolean', path: ['publicVideoLinks'] }
+  );
+
 /**
  * Validation middleware factory
  * Validates request body, query, and/or params against Zod schemas
@@ -577,13 +587,13 @@ export const schemas = {
     projectId: z.string().min(1, 'Project ID is required'),
     type: z.enum(['github', 'jira', 'slack', 'linear', 'webhook']),
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    config: z.record(z.string(), z.unknown()),
+    config: integrationConfigSchema,
   }),
 
   // Update integration request
   updateIntegration: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
+    config: integrationConfigSchema.optional(),
     isActive: z.boolean().optional(),
   }),
 

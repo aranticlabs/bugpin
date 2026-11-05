@@ -3,11 +3,58 @@ import { integrationsRepo } from '../database/repositories/integrations.repo.js'
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { createStoredFileHandle, type StoredFileHandle } from '../storage/files.js';
 import { Result } from '../utils/result.js';
-import type { FileRecord, GitHubIntegrationConfig } from '@shared/types';
+import type { FileRecord, GitHubIntegrationConfig, Integration, Report } from '@shared/types';
 
 interface PublicFile {
   file: FileRecord;
   handle: StoredFileHandle;
+}
+
+function repositoryKey(owner: string, repo: string): string {
+  return `${owner}/${repo}`.toLowerCase();
+}
+
+function issueRepositoryKey(issueUrl: string | null | undefined): string | null {
+  if (!issueUrl) return null;
+  let url: URL;
+  try {
+    url = new URL(issueUrl);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== 'github.com') return null;
+  const [owner, repo, kind] = url.pathname.split('/').filter(Boolean);
+  return owner && repo && kind === 'issues' ? repositoryKey(owner, repo) : null;
+}
+
+/**
+ * Reports do not store which integration created their issue, so the issue URLs (from automatic
+ * sync and from manual forwarding) identify the repositories the report was sent to.
+ */
+function getIssueRepositories(report: Report): Set<string> {
+  const issueUrls = [
+    report.githubIssueUrl,
+    ...(report.forwardedTo ?? [])
+      .filter((reference) => reference.type === 'github')
+      .map((reference) => reference.url),
+  ];
+  const repositories = new Set<string>();
+  for (const issueUrl of issueUrls) {
+    const key = issueRepositoryKey(issueUrl);
+    if (key) repositories.add(key);
+  }
+  return repositories;
+}
+
+function allowsPublicVideo(integration: Integration, issueRepositories: Set<string>): boolean {
+  if (!integration.isActive || integration.type !== 'github') return false;
+  const config = integration.config as GitHubIntegrationConfig;
+  return (
+    config.publicVideoLinks === true &&
+    typeof config.owner === 'string' &&
+    typeof config.repo === 'string' &&
+    issueRepositories.has(repositoryKey(config.owner, config.repo))
+  );
 }
 
 export const publicFilesService = {
@@ -25,12 +72,13 @@ export const publicFilesService = {
         return Result.fail('File not found', 'NOT_FOUND');
       }
 
-      const integrations = await integrationsRepo.findActiveByProjectId(report.projectId);
-      const publicVideoEnabled = integrations.some(
-        (integration) =>
-          integration.isActive &&
-          integration.type === 'github' &&
-          (integration.config as GitHubIntegrationConfig).publicVideoLinks === true
+      const issueRepositories = getIssueRepositories(report);
+      const integrations =
+        issueRepositories.size > 0
+          ? await integrationsRepo.findActiveByProjectId(report.projectId)
+          : [];
+      const publicVideoEnabled = integrations.some((integration) =>
+        allowsPublicVideo(integration, issueRepositories)
       );
 
       if (!publicVideoEnabled) {

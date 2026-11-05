@@ -29,7 +29,8 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
       size: file.sizeBytes,
       mimeType: file.mimeType,
       cacheControl:
-        file.type === 'video' ? 'private, max-age=86400' : 'public, max-age=31536000, immutable',
+        file.type === 'video' ? 'private, max-age=300' : 'public, max-age=31536000, immutable',
+      headOnly: c.req.method === 'HEAD',
     });
 
     if (!response) {

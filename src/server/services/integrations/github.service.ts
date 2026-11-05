@@ -427,7 +427,7 @@ ${metadata.userActivity
         if (githubUrl) {
           body += `\n${githubFileMarkdown(screenshot.filename, githubUrl, screenshot.mimeType.startsWith('image/'))}\n`;
         } else if (screenshot.mimeType.startsWith('video/')) {
-          if (githubConfig.publicVideoLinks && appUrl) {
+          if (githubConfig.publicVideoLinks === true && appUrl) {
             const videoUrl = `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`;
             body += `\n[${screenshot.filename}](${videoUrl}) _(Video)_\n`;
           } else if (reportUrl) {
@@ -458,7 +458,7 @@ ${metadata.userActivity
         if (githubUrl) {
           body += `\n${githubFileMarkdown(attachment.filename, githubUrl, attachment.mimeType.startsWith('image/'))}\n`;
         } else if (attachment.mimeType.startsWith('video/')) {
-          if (githubConfig.publicVideoLinks && appUrl) {
+          if (githubConfig.publicVideoLinks === true && appUrl) {
             const videoUrl = `${appUrl}/api/public/files/${report.id}/${attachment.filename}`;
             body += `\n[${attachment.filename}](${videoUrl}) _(Video)_\n`;
           } else if (reportUrl) {

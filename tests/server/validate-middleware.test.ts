@@ -190,4 +190,26 @@ describe('validate middleware', () => {
       }).success
     ).toBe(false);
   });
+
+  it('accepts only boolean public video link settings in integration configs', () => {
+    const config = { owner: 'org', repo: 'repo', accessToken: 'token' };
+    const create = (publicVideoLinks: unknown) =>
+      schemas.createIntegration.safeParse({
+        projectId: 'prj_1',
+        type: 'github',
+        name: 'GitHub',
+        config: { ...config, publicVideoLinks },
+      }).success;
+    const update = (publicVideoLinks: unknown) =>
+      schemas.updateIntegration.safeParse({ config: { ...config, publicVideoLinks } }).success;
+
+    for (const valid of [true, false, undefined]) {
+      expect(create(valid)).toBe(true);
+      expect(update(valid)).toBe(true);
+    }
+    for (const invalid of ['false', 'true', 1, null]) {
+      expect(create(invalid)).toBe(false);
+      expect(update(invalid)).toBe(false);
+    }
+  });
 });
