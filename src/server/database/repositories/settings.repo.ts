@@ -1,5 +1,6 @@
 import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { getDb } from '../database.js';
+import { normalizePasswordPolicy, type PasswordPolicy } from '@shared/password-policy';
 import type {
   AppSettings,
   GlobalWidgetLauncherButtonSettings,
@@ -138,6 +139,7 @@ const KEY_MAP: Record<string, string> = {
   invitationExpirationDays: 'invitation_expiration_days',
   updateCheckEnabled: 'update_check_enabled',
   enforceHttps: 'enforce_https',
+  passwordPolicy: 'password_policy',
   privacy: 'privacy',
   smtpEnabled: 'smtp_enabled',
   smtpConfig: 'smtp_config',
@@ -236,6 +238,7 @@ export const settingsRepo = {
       updateCheckEnabled: (settings.updateCheckEnabled as boolean) ?? true,
       // Security settings
       enforceHttps: (settings.enforceHttps as boolean) ?? false,
+      passwordPolicy: normalizePasswordPolicy(settings.passwordPolicy as Partial<PasswordPolicy>),
       // Privacy settings
       privacy: {
         ...DEFAULT_PRIVACY,

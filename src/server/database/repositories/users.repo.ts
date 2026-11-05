@@ -19,6 +19,7 @@ interface UserRow {
   role: UserRole;
   is_active: number;
   must_change_password: number;
+  password_changed_at: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -39,6 +40,7 @@ function mapRowToUser(row: UserRow): User {
     role: row.role,
     isActive: row.is_active === 1,
     mustChangePassword: row.must_change_password === 1,
+    passwordChangedAt: row.password_changed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at ?? undefined,
@@ -217,8 +219,8 @@ export const usersRepo = {
     const db = getDb();
     const now = new Date().toISOString();
     const result = db.run(
-      'UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
-      [passwordHash, now, id]
+      'UPDATE users SET password_hash = ?, must_change_password = 0, password_changed_at = ?, updated_at = ? WHERE id = ?',
+      [passwordHash, now, now, id]
     );
     return result.changes > 0;
   },

@@ -217,7 +217,7 @@ describe('database lifecycle', () => {
     }
   });
 
-  it('adds must_change_password to existing users without requiring a change', async () => {
+  it('adds the password fields to existing users without requiring a change', async () => {
     const snapshot = { ...config };
     const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-migration-'));
 
@@ -262,7 +262,7 @@ describe('database lifecycle', () => {
     }
   });
 
-  it('records the must_change_password migration when the schema already has the column', async () => {
+  it('records the password fields migration when the schema already has the columns', async () => {
     const snapshot = { ...config };
     const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-bootstrap-'));
 
@@ -278,8 +278,8 @@ describe('database lifecycle', () => {
 
       const applied = getDb()
         .query('SELECT name FROM migrations WHERE name = ?')
-        .get('006_add_user_must_change_password.sql') as { name?: string } | undefined;
-      expect(applied?.name).toBe('006_add_user_must_change_password.sql');
+        .get('006_add_user_password_fields.sql') as { name?: string } | undefined;
+      expect(applied?.name).toBe('006_add_user_password_fields.sql');
     } finally {
       closeDatabase();
       fs.rmSync(baseDir, { recursive: true, force: true });

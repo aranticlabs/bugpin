@@ -536,6 +536,13 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       settings: {
+        passwordPolicy: {
+          minLength: 12,
+          requireUppercase: true,
+          requireLowercase: false,
+          requireNumber: true,
+          requireSymbol: false,
+        },
         appName: 'BugPin',
         appUrl: 'https://bugpin.example.com',
         retentionDays: 90,

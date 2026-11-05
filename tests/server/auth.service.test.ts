@@ -7,6 +7,7 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { logger } from '../../src/server/utils/logger';
 import { config } from '../../src/server/config';
 import type { Session, User } from '../../src/shared/types';
+import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 
 const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
@@ -108,6 +109,7 @@ beforeEach(() => {
   settingsRepo.getAll = async () =>
     ({
       sessionMaxAgeDays: 7,
+      passwordPolicy: DEFAULT_PASSWORD_POLICY,
     }) as never;
 
   logger.info = () => undefined;

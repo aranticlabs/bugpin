@@ -462,6 +462,16 @@ export const schemas = {
       invitationExpirationDays: z.number().int().min(1).max(365).optional(),
       widgetDialog: themeColorsSchema.strict().optional(),
       enforceHttps: z.boolean().optional(),
+      passwordPolicy: z
+        .object({
+          minLength: z.number().int().min(8).max(128),
+          requireUppercase: z.boolean(),
+          requireLowercase: z.boolean(),
+          requireNumber: z.boolean(),
+          requireSymbol: z.boolean(),
+        })
+        .strict()
+        .optional(),
       s3Enabled: z.boolean().optional(),
       s3Config: z
         .object({

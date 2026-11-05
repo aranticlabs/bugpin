@@ -1,4 +1,5 @@
 import type { RecordingQuality } from './recording-quality';
+import type { PasswordPolicy } from './password-policy';
 
 // Locale Types
 
@@ -324,6 +325,7 @@ export interface User {
   role: UserRole;
   isActive: boolean;
   mustChangePassword?: boolean;
+  passwordChangedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
@@ -520,6 +522,7 @@ export interface AppSettings {
   updateCheckEnabled: boolean;
   // Security settings
   enforceHttps: boolean;
+  passwordPolicy: PasswordPolicy;
   // Privacy settings
   privacy: PrivacySettings;
   // SMTP settings

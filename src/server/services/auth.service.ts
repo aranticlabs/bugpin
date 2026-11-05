@@ -1,6 +1,7 @@
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { sessionsRepo } from '../database/repositories/sessions.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
+import { passwordPolicyService } from './password-policy.service.js';
 import { config } from '../config.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
@@ -153,9 +154,8 @@ export const authService = {
     }
 
     // Validate new password
-    if (newPassword.length < 8) {
-      return Result.fail('Password must be at least 8 characters', 'WEAK_PASSWORD');
-    }
+    const policyCheck = await passwordPolicyService.validate(newPassword);
+    if (!policyCheck.success) return policyCheck;
 
     if (newPassword === currentPassword) {
       return Result.fail(

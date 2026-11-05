@@ -7,6 +7,7 @@ import { rateLimiter } from '../../middleware/rate-limit.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
 import { getClientIp } from '../../utils/client-ip.js';
+import { passwordPolicyService } from '../../services/password-policy.service.js';
 
 const auth = new Hono();
 
@@ -48,6 +49,12 @@ auth.post(
     });
   }
 );
+
+// Password policy (public, so the invitation page can show the rules before sign-in)
+
+auth.get('/password-policy', async (c) => {
+  return c.json({ success: true, policy: await passwordPolicyService.getPolicy() });
+});
 
 // Logout
 
