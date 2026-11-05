@@ -35,7 +35,7 @@ describe('ScreenshotSettingsForm', () => {
 });
 
 describe('RecordingSettingsForm', () => {
-  it('keeps zero explicit and does not disable the quota when cleared', () => {
+  it('keeps zero explicit and does not change the quota while the field is empty', () => {
     const onChange = vi.fn();
     render(
       <RecordingSettingsForm
@@ -61,11 +61,82 @@ describe('RecordingSettingsForm', () => {
     fireEvent.change(input, { target: { value: '0' } });
     expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 0 });
 
+    const callsBeforeClearing = onChange.mock.calls.length;
     fireEvent.change(input, { target: { value: '' } });
-    expect(onChange).toHaveBeenLastCalledWith({ maxVideoUploadMbPerDay: 4096 });
+    expect(onChange).toHaveBeenCalledTimes(callsBeforeClearing);
+    expect(input).toHaveValue(null);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Enter a whole number from 0 to 1048576.')).toBeInTheDocument();
   });
 
-  it('enables recording controls only when recording is enabled', async () => {
+  it('flags out-of-range numbers inline and restores the saved value on blur', () => {
+    const onChange = vi.fn();
+    render(
+      <RecordingSettingsForm
+        value={{ enableScreenRecording: true, maxVideoUploadSizeMb: 50 }}
+        onChange={onChange}
+      />
+    );
+
+    const input = screen.getByLabelText(/max\. video upload size/i);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText('Enter a whole number from 1 to 100.')).toBeInTheDocument();
+
+    fireEvent.blur(input);
+    expect(input).toHaveValue(50);
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '75' } });
+    expect(onChange).toHaveBeenLastCalledWith({
+      enableScreenRecording: true,
+      maxVideoUploadSizeMb: 75,
+    });
+  });
+
+  it('copies the inherited values when a project switches to custom settings', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onCustomToggle = vi.fn();
+    render(
+      <RecordingSettingsForm
+        value={{}}
+        onChange={onChange}
+        showCustomToggle
+        useCustomSettings={false}
+        onCustomToggle={onCustomToggle}
+        globalSettings={{
+          screenshot: {
+            useScreenCaptureAPI: false,
+            maxScreenshotSize: 10,
+            maxImageUploadSizeMb: 10,
+            maxVideoUploadSizeMb: 40,
+            maxVideoUploadMbPerDay: 1024,
+            enableScreenRecording: true,
+            allowRecordingMicrophone: true,
+            maxRecordingDurationSeconds: 120,
+            recordingQuality: 'low',
+          },
+        }}
+      />
+    );
+
+    await user.click(screen.getByRole('switch', { name: /use custom settings/i }));
+
+    expect(onCustomToggle).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith({
+      maxVideoUploadSizeMb: 40,
+      maxVideoUploadMbPerDay: 1024,
+      enableScreenRecording: true,
+      allowRecordingMicrophone: true,
+      maxRecordingDurationSeconds: 120,
+      recordingQuality: 'low',
+    });
+  });
+
+  it('enables recording controls only when recording is enabled, but always the video limits', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const { rerender } = render(<RecordingSettingsForm value={{}} onChange={onChange} />);
@@ -73,15 +144,16 @@ describe('RecordingSettingsForm', () => {
     const controls = () => [
       screen.getByRole('combobox', { name: /video quality/i }),
       screen.getByLabelText(/max\. recording duration/i),
-      screen.getByLabelText(/max\. video upload size/i),
-      screen.getByLabelText(/daily video upload limit/i),
       screen.getByRole('switch', { name: /allow microphone recording/i }),
     ];
+    const videoLimits = () => [
+      screen.getByLabelText(/max\. video upload size/i),
+      screen.getByLabelText(/daily video upload limit/i),
+    ];
     controls().forEach((control) => expect(control).toBeDisabled());
-    const banner = () => screen.getByRole('alert');
+    videoLimits().forEach((control) => expect(control).toBeEnabled());
     const guide = () => screen.getByRole('link', { name: /reverse proxy guide/i });
-    expect(banner()).toHaveAttribute('aria-disabled', 'true');
-    expect(guide()).toHaveAttribute('tabindex', '-1');
+    expect(guide()).not.toHaveAttribute('tabindex');
 
     await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
     expect(onChange).toHaveBeenLastCalledWith({ enableScreenRecording: true });
@@ -93,8 +165,7 @@ describe('RecordingSettingsForm', () => {
       />
     );
     controls().forEach((control) => expect(control).toBeEnabled());
-    expect(banner()).toHaveAttribute('aria-disabled', 'false');
-    expect(guide()).not.toHaveAttribute('tabindex');
+    videoLimits().forEach((control) => expect(control).toBeEnabled());
     expect(screen.getByLabelText(/max\. recording duration/i)).toHaveAttribute('max', '600');
     expect(screen.getByRole('link', { name: /reverse proxy guide/i })).toBeInTheDocument();
   });

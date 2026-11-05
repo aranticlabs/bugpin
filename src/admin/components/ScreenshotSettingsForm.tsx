@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react';
 import { Label } from './ui/label';
-import { Input } from './ui/input';
+import { SettingsNumberInput } from './SettingsNumberInput';
 import { Switch } from './ui/switch';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
@@ -50,14 +50,23 @@ export function ScreenshotSettingsForm({
             checked={useCustomSettings}
             onCheckedChange={(checked) => {
               onCustomToggle?.(checked);
-              if (!checked) {
-                // Reset to undefined when switching to global defaults
-                onChange({
-                  useScreenCaptureAPI: undefined,
-                  maxScreenshotSize: undefined,
-                  maxImageUploadSizeMb: undefined,
-                });
-              }
+              // Turning custom settings on copies the inherited values, so the project keeps
+              // them even when nothing else is changed before saving.
+              onChange(
+                checked
+                  ? {
+                      ...value,
+                      useScreenCaptureAPI: effectiveUseScreenCaptureAPI,
+                      maxScreenshotSize: effectiveMaxScreenshotSize,
+                      maxImageUploadSizeMb: effectiveMaxImageUploadSizeMb,
+                    }
+                  : {
+                      ...value,
+                      useScreenCaptureAPI: undefined,
+                      maxScreenshotSize: undefined,
+                      maxImageUploadSizeMb: undefined,
+                    }
+              );
             }}
           />
         </div>
@@ -69,15 +78,12 @@ export function ScreenshotSettingsForm({
           {/* Max Screenshot Size */}
           <div className="space-y-2">
             <Label htmlFor="max-screenshot-size">Max. Screenshot Size (MB)</Label>
-            <Input
+            <SettingsNumberInput
               id="max-screenshot-size"
-              type="number"
               min={1}
               max={50}
               value={effectiveMaxScreenshotSize}
-              onChange={(e) =>
-                onChange({ ...value, maxScreenshotSize: parseInt(e.target.value) || 10 })
-              }
+              onChange={(sizeMb) => onChange({ ...value, maxScreenshotSize: sizeMb })}
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">
@@ -88,15 +94,12 @@ export function ScreenshotSettingsForm({
           {/* Max Upload File Size */}
           <div className="space-y-2">
             <Label htmlFor="max-image-upload-size">Max. Image Upload Size (MB)</Label>
-            <Input
+            <SettingsNumberInput
               id="max-image-upload-size"
-              type="number"
               min={1}
               max={50}
               value={effectiveMaxImageUploadSizeMb}
-              onChange={(e) =>
-                onChange({ ...value, maxImageUploadSizeMb: parseInt(e.target.value) || 10 })
-              }
+              onChange={(sizeMb) => onChange({ ...value, maxImageUploadSizeMb: sizeMb })}
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">

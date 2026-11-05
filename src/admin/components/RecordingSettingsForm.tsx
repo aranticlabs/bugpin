@@ -9,8 +9,8 @@ import {
 import { cn } from '../lib/utils';
 import { Alert, AlertDescription } from './ui/alert';
 import { Label } from './ui/label';
-import { Input } from './ui/input';
 import { Switch } from './ui/switch';
+import { SettingsNumberInput } from './SettingsNumberInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
@@ -87,17 +87,27 @@ export function RecordingSettingsForm({
             checked={useCustomSettings}
             onCheckedChange={(checked) => {
               onCustomToggle?.(checked);
-              if (!checked) {
-                // Reset to undefined when switching to global defaults
-                onChange({
-                  maxVideoUploadSizeMb: undefined,
-                  maxVideoUploadMbPerDay: undefined,
-                  enableScreenRecording: undefined,
-                  allowRecordingMicrophone: undefined,
-                  maxRecordingDurationSeconds: undefined,
-                  recordingQuality: undefined,
-                });
-              }
+              // Turning custom settings on copies the inherited values, so the project keeps
+              // them even when nothing else is changed before saving.
+              onChange(
+                checked
+                  ? {
+                      maxVideoUploadSizeMb: effectiveMaxVideoUploadSizeMb,
+                      maxVideoUploadMbPerDay: effectiveMaxVideoUploadMbPerDay,
+                      enableScreenRecording: effectiveEnableScreenRecording,
+                      allowRecordingMicrophone: effectiveAllowRecordingMicrophone,
+                      maxRecordingDurationSeconds: effectiveMaxRecordingDurationSeconds,
+                      recordingQuality: effectiveRecordingQuality,
+                    }
+                  : {
+                      maxVideoUploadSizeMb: undefined,
+                      maxVideoUploadMbPerDay: undefined,
+                      enableScreenRecording: undefined,
+                      allowRecordingMicrophone: undefined,
+                      maxRecordingDurationSeconds: undefined,
+                      recordingQuality: undefined,
+                    }
+              );
             }}
           />
         </div>
@@ -160,21 +170,14 @@ export function RecordingSettingsForm({
 
               <div className="space-y-2">
                 <Label htmlFor="max-recording-duration">Max. Recording Duration (seconds)</Label>
-                <Input
+                <SettingsNumberInput
                   id="max-recording-duration"
-                  type="number"
                   min={10}
                   max={600}
                   value={effectiveMaxRecordingDurationSeconds}
-                  onChange={(e) => {
-                    const parsedValue = Number.parseInt(e.target.value, 10);
-                    onChange({
-                      ...value,
-                      maxRecordingDurationSeconds: Number.isNaN(parsedValue)
-                        ? effectiveMaxRecordingDurationSeconds
-                        : parsedValue,
-                    });
-                  }}
+                  onChange={(seconds) =>
+                    onChange({ ...value, maxRecordingDurationSeconds: seconds })
+                  }
                   disabled={fieldsDisabled}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -190,19 +193,19 @@ export function RecordingSettingsForm({
                     reach the limit.
                   </p>
                 )}
+            </div>
 
+            {/* Video limits also apply to uploaded video files, so they stay editable when recording is off. */}
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="max-video-upload-size">Max. Video Upload Size (MB)</Label>
-                <Input
+                <SettingsNumberInput
                   id="max-video-upload-size"
-                  type="number"
                   min={1}
                   max={100}
                   value={effectiveMaxVideoUploadSizeMb}
-                  onChange={(e) =>
-                    onChange({ ...value, maxVideoUploadSizeMb: parseInt(e.target.value) || 50 })
-                  }
-                  disabled={fieldsDisabled}
+                  onChange={(sizeMb) => onChange({ ...value, maxVideoUploadSizeMb: sizeMb })}
+                  disabled={disabled}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum allowed size for uploaded videos (1-100 MB)
@@ -211,28 +214,26 @@ export function RecordingSettingsForm({
 
               <div className="space-y-2">
                 <Label htmlFor="max-video-upload-per-day">Daily Video Upload Limit (MB)</Label>
-                <Input
+                <SettingsNumberInput
                   id="max-video-upload-per-day"
-                  type="number"
                   min={0}
                   max={1048576}
                   value={effectiveMaxVideoUploadMbPerDay}
-                  onChange={(e) => {
-                    const parsedValue = Number.parseInt(e.target.value, 10);
-                    onChange({
-                      ...value,
-                      maxVideoUploadMbPerDay: Number.isNaN(parsedValue)
-                        ? effectiveMaxVideoUploadMbPerDay
-                        : parsedValue,
-                    });
-                  }}
-                  disabled={fieldsDisabled}
+                  onChange={(limitMb) => onChange({ ...value, maxVideoUploadMbPerDay: limitMb })}
+                  disabled={disabled}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum video data accepted per project in 24 hours. Use 0 to disable the limit.
                 </p>
               </div>
+            </div>
 
+            <div
+              className={cn(
+                'space-y-4',
+                !effectiveEnableScreenRecording && '[&_label]:opacity-50 [&_p]:opacity-50'
+              )}
+            >
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5 pr-4">
                   <Label htmlFor="allow-recording-microphone">Allow Microphone Recording</Label>
@@ -249,30 +250,23 @@ export function RecordingSettingsForm({
                   disabled={fieldsDisabled}
                 />
               </div>
-
-              <Alert
-                className={cn(
-                  'border-primary/20 bg-primary/10',
-                  !effectiveEnableScreenRecording && 'pointer-events-none opacity-50'
-                )}
-                aria-disabled={!effectiveEnableScreenRecording}
-              >
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Your reverse proxy must accept uploads up to the configured video size and allow
-                  enough time for slower uploads.{' '}
-                  <a
-                    href="https://docs.bugpin.io/installation/reverse-proxy"
-                    tabIndex={effectiveEnableScreenRecording ? undefined : -1}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 underline"
-                  >
-                    Reverse proxy guide <ExternalLink className="h-3 w-3" />
-                  </a>
-                </AlertDescription>
-              </Alert>
             </div>
+
+            <Alert className="border-primary/20 bg-primary/10">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Your reverse proxy must accept uploads up to the configured video size and allow
+                enough time for slower uploads.{' '}
+                <a
+                  href="https://docs.bugpin.io/installation/reverse-proxy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline"
+                >
+                  Reverse proxy guide <ExternalLink className="h-3 w-3" />
+                </a>
+              </AlertDescription>
+            </Alert>
           </div>
         </>
       )}
