@@ -95,6 +95,36 @@ describe('sidebar ui', () => {
     expect(document.cookie).toContain('sidebar:state=true');
   });
 
+  it('restores the collapsed state from the cookie', () => {
+    document.cookie = 'sidebar:state=false; path=/';
+    render(<SidebarDemo />);
+
+    expect(document.querySelector('[data-side]')?.getAttribute('data-state')).toBe('collapsed');
+
+    document.cookie = 'sidebar:state=; path=/; max-age=0';
+  });
+
+  it('falls back to defaultOpen when no cookie is set', () => {
+    document.cookie = 'sidebar:state=; path=/; max-age=0';
+    render(<SidebarDemo />);
+
+    expect(document.querySelector('[data-side]')?.getAttribute('data-state')).toBe('expanded');
+  });
+
+  it('toggles from the rail, which uses a click cursor instead of a resize cursor', async () => {
+    const user = userEvent.setup();
+    document.cookie = 'sidebar:state=; path=/; max-age=0';
+    render(<SidebarDemo />);
+
+    const rail = document.querySelector('[data-sidebar="rail"]') as HTMLButtonElement | null;
+    expect(rail).not.toBeNull();
+    expect(rail?.className).toContain('cursor-pointer');
+    expect(rail?.className).not.toMatch(/cursor-[ew]-resize/);
+
+    await user.click(rail as HTMLButtonElement);
+    expect(document.querySelector('[data-side]')?.getAttribute('data-state')).toBe('collapsed');
+  });
+
   it('renders mobile sidebar when viewport is narrow', async () => {
     const user = userEvent.setup();
     const originalWidth = window.innerWidth;
