@@ -18,7 +18,7 @@ mock.module(eeUrl, () => ({
         feature: 'custom-branding',
         upgradeUrl: 'https://bugpin.io/pricing',
       },
-      402,
+      402
     );
   },
 }));

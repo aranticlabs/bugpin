@@ -227,7 +227,7 @@ describe('authService.changePassword', () => {
       baseUser.id,
       validPassword,
       'newpass123',
-      'sess_current',
+      'sess_current'
     );
     expect(result.success).toBe(true);
     expect(updatedPasswordId).toBe(baseUser.id);

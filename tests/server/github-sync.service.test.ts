@@ -514,14 +514,18 @@ describe('githubSyncService', () => {
 it('does not commit sync results or errors after the project is deselected during a request', async () => {
   for (const mode of ['create', 'update', 'failure', 'throw']) {
     reportById = { ...baseReport, ...(mode === 'update' ? { githubIssueNumber: 123 } : {}) };
-    updateSyncPayload = undefined; updateLastUsedId = null;
+    updateSyncPayload = undefined;
+    updateLastUsedId = null;
     projectLicenseService.checkAccess = () => Result.ok(undefined);
     const started = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     const remote = async () => {
-      started.resolve(); await finish.promise;
+      started.resolve();
+      await finish.promise;
       if (mode === 'throw') throw new Error('Remote error');
-      return mode === 'failure' ? { success: false, error: 'Remote error' } : { success: true, issueNumber: 123, issueUrl: 'https://example.com/123' };
+      return mode === 'failure'
+        ? { success: false, error: 'Remote error' }
+        : { success: true, issueNumber: 123, issueUrl: 'https://example.com/123' };
     };
     githubService.createIssue = remote;
     githubService.updateIssue = remote;

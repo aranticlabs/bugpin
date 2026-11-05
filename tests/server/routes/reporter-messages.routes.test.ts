@@ -48,11 +48,9 @@ beforeEach(() => {
       session: baseSession,
     });
 
-  reporterMessagesService.send = async (_reportId, _userId, _message) =>
-    Result.ok(baseMessage);
+  reporterMessagesService.send = async (_reportId, _userId, _message) => Result.ok(baseMessage);
 
-  reporterMessagesService.listByReport = async () =>
-    Result.ok([baseMessage]);
+  reporterMessagesService.listByReport = async () => Result.ok([baseMessage]);
 });
 
 afterEach(() => {
@@ -97,8 +95,7 @@ describe('reporter-messages routes POST', () => {
   });
 
   it('returns 404 when service returns NOT_FOUND', async () => {
-    reporterMessagesService.send = async () =>
-      Result.fail('Report not found', 'NOT_FOUND');
+    reporterMessagesService.send = async () => Result.fail('Report not found', 'NOT_FOUND');
 
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/reporter-messages', {

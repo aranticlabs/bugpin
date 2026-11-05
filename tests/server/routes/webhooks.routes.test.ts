@@ -17,7 +17,7 @@ mock.module(eeUrl, () => ({
         feature: 'webhooks',
         upgradeUrl: 'https://bugpin.io/pricing',
       },
-      402,
+      402
     );
   },
 }));
