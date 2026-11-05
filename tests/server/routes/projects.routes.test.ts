@@ -61,6 +61,8 @@ beforeEach(() => {
     });
 
   projectsService.list = async () => Result.ok(listResult);
+  projectsService.listSummaries = async () =>
+    Result.ok(listResult.map(({ id, name, isActive }) => ({ id, name, isActive })));
   projectsService.getById = async () => {
     if (!projectResult) {
       return Result.fail('Not found', 'NOT_FOUND');
@@ -88,6 +90,29 @@ function createApp() {
 }
 
 describe('projects routes', () => {
+  it('rejects the full project list for viewers', async () => {
+    authService.validateSession = async () =>
+      Result.ok({ user: { ...baseUser, role: 'viewer' }, session: baseSession });
+    const app = createApp();
+    const res = await app.request('http://localhost/projects', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('lists project summaries without API keys for viewers', async () => {
+    authService.validateSession = async () =>
+      Result.ok({ user: { ...baseUser, role: 'viewer' }, session: baseSession });
+    const app = createApp();
+    const res = await app.request('http://localhost/projects/summaries', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { projects: Record<string, unknown>[] };
+    expect(body.projects).toEqual([{ id: 'prj_1', name: 'Project' }]);
+    expect(body.projects[0]).not.toHaveProperty('apiKey');
+  });
+
   it('lists projects', async () => {
     const app = createApp();
     const res = await app.request('http://localhost/projects', {

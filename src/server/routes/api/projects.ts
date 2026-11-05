@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { projectsService } from '../../services/projects.service.js';
+import { workspaceViewsService } from '../../services/workspace-views.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 
@@ -21,6 +22,57 @@ projects.get('/', authorize(['admin']), async (c) => {
     success: true,
     projects: result.value,
   });
+});
+
+// List project names for every role, without API keys or settings
+
+projects.get('/summaries', authorize(['admin', 'editor', 'viewer']), async (c) => {
+  const result = await projectsService.listSummaries();
+
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+
+  return c.json({
+    success: true,
+    projects: result.value,
+  });
+});
+
+// The signed-in user's pinned projects (every role)
+
+projects.get('/pinned', async (c) => {
+  const result = await workspaceViewsService.listPinnedProjects(c.get('user').id);
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+  return c.json({ success: true, projects: result.value });
+});
+
+projects.put('/pinned/order', validate({ body: schemas.reorderProjects }), async (c) => {
+  const body = await c.req.json();
+  const result = await workspaceViewsService.reorderPinnedProjects(
+    c.get('user').id,
+    body.projectIds
+  );
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+  return c.json({ success: true });
+});
+
+projects.put('/:id/pin', validate({ params: schemas.id }), async (c) => {
+  const result = await workspaceViewsService.pinProject(c.get('user').id, c.req.param('id'));
+  if (!result.success) {
+    const status = result.code === 'NOT_FOUND' ? 404 : 400;
+    return c.json({ success: false, error: result.code, message: result.error }, status);
+  }
+  return c.json({ success: true });
+});
+
+projects.delete('/:id/pin', validate({ params: schemas.id }), async (c) => {
+  await workspaceViewsService.unpinProject(c.get('user').id, c.req.param('id'));
+  return c.json({ success: true });
 });
 
 // Get Project by ID (Admin only)

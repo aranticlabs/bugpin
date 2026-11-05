@@ -376,6 +376,16 @@ export const reportsRepo = {
     return result.count;
   },
 
+  async countPerProject(statuses: ReportStatus[]): Promise<Record<string, number>> {
+    const placeholders = statuses.map(() => '?').join(', ');
+    const rows = getDb()
+      .query(
+        `SELECT project_id, COUNT(*) as count FROM reports WHERE status IN (${placeholders}) GROUP BY project_id`
+      )
+      .all(...statuses) as { project_id: string; count: number }[];
+    return Object.fromEntries(rows.map((row) => [row.project_id, row.count]));
+  },
+
   /**
    * Get report statistics
    */

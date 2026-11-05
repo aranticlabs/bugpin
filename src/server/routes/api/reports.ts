@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { reportsService } from '../../services/reports.service.js';
+import { workspaceViewsService } from '../../services/workspace-views.service.js';
 import { syncQueueService } from '../../services/integrations/sync-queue.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
-import type { ReportStatus, ReportPriority } from '@shared/types';
+import { ASSIGNED_TO_ME_FILTER, type ReportStatus, type ReportPriority } from '@shared/types';
 import { normalizeMimeType } from '@shared/mime';
 import { createFileResponse } from '../../utils/range.js';
 
@@ -22,7 +23,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     source: query.source as 'widget' | 'manual' | undefined,
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],
-    assignedTo: query.assignedTo,
+    assignedTo: query.assignedTo === ASSIGNED_TO_ME_FILTER ? c.get('user').id : query.assignedTo,
     search: query.search,
     page: parseInt(query.page || '1'),
     limit: parseInt(query.limit || '20'),
@@ -168,6 +169,36 @@ reports.get('/stats/overview', async (c) => {
     success: true,
     stats: result.value,
   });
+});
+
+// Counts for the sidebar report views of the signed-in user
+
+reports.get('/views/counts', async (c) => {
+  const result = await workspaceViewsService.getViewCounts(c.get('user').id);
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+  return c.json({ success: true, counts: result.value });
+});
+
+// Reports the signed-in user opened recently
+
+reports.get('/recent', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '3') || 3;
+  const result = await workspaceViewsService.listRecentReports(c.get('user').id, limit);
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+  return c.json({ success: true, reports: result.value });
+});
+
+reports.post('/:id/views', validate({ params: schemas.id }), async (c) => {
+  const result = await workspaceViewsService.recordReportView(c.get('user').id, c.req.param('id'));
+  if (!result.success) {
+    const status = result.code === 'NOT_FOUND' ? 404 : 400;
+    return c.json({ success: false, error: result.code, message: result.error }, status);
+  }
+  return c.json({ success: true });
 });
 
 // Get Report by ID

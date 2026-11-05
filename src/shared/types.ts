@@ -33,6 +33,12 @@ export type ReportSource = 'widget' | 'manual';
 /** URL/query value for filtering reports with no assignee */
 export const UNASSIGNED_FILTER = '__unassigned__';
 
+/** URL/query value for filtering reports assigned to the signed-in user */
+export const ASSIGNED_TO_ME_FILTER = '__me__';
+
+/** Statuses of reports that still need work */
+export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
+
 export type ReportHistoryAction =
   'created' | 'status_changed' | 'priority_changed' | 'assignee_changed';
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
@@ -308,6 +314,27 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+}
+
+export type ProjectSummary = Pick<Project, 'id' | 'name' | 'isActive' | 'licenseLocked'> & {
+  activeReportsCount?: number;
+  reportsCount?: number;
+};
+
+export type PinnedProject = ProjectSummary & { activeReportsCount: number };
+
+export interface RecentReport {
+  id: string;
+  title: string;
+  projectId: string;
+  status: ReportStatus;
+  viewedAt: string;
+}
+
+export interface ReportViewCounts {
+  assignedToMe: number;
+  unassigned: number;
+  active: number;
 }
 
 export interface DefaultProjectReference {

@@ -7,6 +7,8 @@ import type {
   ReportSource,
   Project,
   ProjectSettings,
+  ProjectSummary,
+  RecentReport,
   User,
   UserRole,
   Session,
@@ -51,6 +53,7 @@ export interface IReportsRepository {
   delete(id: string): Promise<boolean>;
   bulkUpdate(ids: string[], updates: Partial<Report>): Promise<number>;
   countByProject(projectId: string): Promise<number>;
+  countPerProject(statuses: ReportStatus[]): Promise<Record<string, number>>;
   getStats(projectId?: string): Promise<{
     total: number;
     byStatus: Record<ReportStatus, number>;
@@ -170,6 +173,21 @@ export interface IPasswordResetTokensRepository {
   findValidByHash(tokenHash: string): Promise<PasswordResetToken | null>;
   markUsed(id: string): Promise<boolean>;
   deleteByUserId(userId: string): Promise<number>;
+}
+
+// Workspace View Repository Interfaces
+
+export interface IPinnedProjectsRepository {
+  listForUser(userId: string): Promise<ProjectSummary[]>;
+  count(userId: string): Promise<number>;
+  pin(userId: string, projectId: string): Promise<void>;
+  unpin(userId: string, projectId: string): Promise<boolean>;
+  reorder(userId: string, projectIds: string[]): Promise<void>;
+}
+
+export interface IRecentReportsRepository {
+  record(userId: string, reportId: string, keep: number): Promise<void>;
+  listForUser(userId: string, limit: number): Promise<RecentReport[]>;
 }
 
 // File Repository Interface

@@ -49,6 +49,7 @@ beforeEach(() => {
   projectsRepo.findById = async () => projectById;
   projectsRepo.findByApiKey = async () => projectByApiKey;
   projectsRepo.findAll = async () => [baseProject];
+  reportsRepo.countPerProject = async () => ({ [baseProject.id]: 3 });
   projectsRepo.update = async (id, updates) => {
     lastProjectUpdates = updates;
     return updateReturnsProject ? { ...updateReturnsProject, ...updates, id } : null;
@@ -116,6 +117,23 @@ describe('projectsService.getById/getByApiKey/list', () => {
   it('lists projects', async () => {
     const result = await projectsService.list();
     expect(result.success).toBe(true);
+  });
+
+  it('lists project summaries without API keys or settings', async () => {
+    const result = await projectsService.listSummaries();
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    for (const summary of result.value) {
+      expect(Object.keys(summary).sort()).toEqual([
+        'activeReportsCount',
+        'id',
+        'isActive',
+        'licenseLocked',
+        'name',
+        'reportsCount',
+      ]);
+      expect(summary.activeReportsCount).toBe(3);
+    }
   });
 });
 

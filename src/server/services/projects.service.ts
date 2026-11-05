@@ -5,7 +5,12 @@ import { usersService } from './users.service.js';
 import { Result } from '../utils/result.js';
 import { checkProjectLicense, ProjectLicenseError } from '../utils/project-license.js';
 import { logger } from '../utils/logger.js';
-import type { Project, ProjectSettings } from '@shared/types';
+import {
+  ACTIVE_REPORT_STATUSES,
+  type Project,
+  type ProjectSettings,
+  type ProjectSummary,
+} from '@shared/types';
 
 // Types
 
@@ -88,6 +93,21 @@ export const projectsService = {
       projects.map((project) => ({
         ...project,
         licenseLocked: !checkProjectLicense(project.id).success,
+      }))
+    );
+  },
+
+  async listSummaries(): Promise<Result<ProjectSummary[]>> {
+    const projects = await projectsRepo.findAll();
+    const activeCounts = await reportsRepo.countPerProject(ACTIVE_REPORT_STATUSES);
+    return Result.ok(
+      projects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        isActive: project.isActive,
+        licenseLocked: !checkProjectLicense(project.id).success,
+        activeReportsCount: activeCounts[project.id] ?? 0,
+        reportsCount: project.reportsCount,
       }))
     );
   },
