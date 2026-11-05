@@ -28,6 +28,9 @@ services:
       # Initial admin account, used only when no users exist yet
       # - ADMIN_EMAIL=admin@example.com
       # - ADMIN_PASSWORD=choose-a-strong-initial-password
+      # Which proxies may set X-Forwarded-For: auto (loopback and private networks, default),
+      # true (any proxy) or false (none). Use false when port 7300 is exposed without a proxy.
+      # - TRUST_PROXY=auto
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
       interval: 30s

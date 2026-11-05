@@ -10,10 +10,11 @@ function loadAdminConfig(env: Record<string, string>) {
   const dataDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-config-'));
   try {
     const script = `const { config } = await import(${JSON.stringify(configPath)});
-console.log(JSON.stringify({ email: config.adminEmail, password: config.adminPassword }));`;
+console.log(JSON.stringify({ email: config.adminEmail, password: config.adminPassword, trustProxy: config.trustProxy }));`;
     const baseEnv = { ...process.env };
     delete baseEnv.ADMIN_EMAIL;
     delete baseEnv.ADMIN_PASSWORD;
+    delete baseEnv.TRUST_PROXY;
     const result = Bun.spawnSync([process.execPath, '-e', script], {
       env: { ...baseEnv, NODE_ENV: 'test', DATA_DIR: dataDir, ...env },
     });
@@ -31,7 +32,7 @@ describe('admin bootstrap credentials from the environment', () => {
   it('falls back to the documented defaults', () => {
     const result = loadAdminConfig({});
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
+    expect(JSON.parse(result.stdout)).toMatchObject({
       email: 'admin@example.com',
       password: 'changeme123',
     });
@@ -43,7 +44,7 @@ describe('admin bootstrap credentials from the environment', () => {
       ADMIN_PASSWORD: 'a-long-initial-password',
     });
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
+    expect(JSON.parse(result.stdout)).toMatchObject({
       email: 'owner@example.test',
       password: 'a-long-initial-password',
     });
@@ -52,7 +53,7 @@ describe('admin bootstrap credentials from the environment', () => {
   it('treats empty values as unset', () => {
     const result = loadAdminConfig({ ADMIN_EMAIL: '', ADMIN_PASSWORD: '   ' });
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
+    expect(JSON.parse(result.stdout)).toMatchObject({
       email: 'admin@example.com',
       password: 'changeme123',
     });
@@ -66,5 +67,25 @@ describe('admin bootstrap credentials from the environment', () => {
     const shortPassword = loadAdminConfig({ ADMIN_PASSWORD: 'short' });
     expect(shortPassword.exitCode).not.toBe(0);
     expect(shortPassword.stderr).toContain('ADMIN_PASSWORD must be at least 8 characters');
+  });
+});
+
+describe('TRUST_PROXY', () => {
+  it.each([
+    [undefined, 'auto'],
+    ['auto', 'auto'],
+    ['true', 'always'],
+    ['TRUE', 'always'],
+    ['false', 'never'],
+  ])('maps %s to %s', (value, expected) => {
+    const result = loadAdminConfig(value === undefined ? {} : { TRUST_PROXY: value });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).trustProxy).toBe(expected);
+  });
+
+  it('refuses to start with an unknown value', () => {
+    const result = loadAdminConfig({ TRUST_PROXY: 'sometimes' });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('TRUST_PROXY must be auto, true or false');
   });
 });

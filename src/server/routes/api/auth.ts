@@ -6,6 +6,7 @@ import { validate, schemas } from '../../middleware/validate.js';
 import { rateLimiter } from '../../middleware/rate-limit.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
+import { getClientIp } from '../../utils/client-ip.js';
 
 const auth = new Hono();
 
@@ -19,10 +20,7 @@ auth.post(
     const { email, password } = await c.req.json();
 
     // Get IP and user agent for session
-    const ipAddress =
-      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-      c.req.header('x-real-ip') ||
-      undefined;
+    const ipAddress = getClientIp(c);
     const userAgent = c.req.header('user-agent');
 
     const result = await authService.login(email, password, ipAddress, userAgent);

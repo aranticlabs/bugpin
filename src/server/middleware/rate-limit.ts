@@ -1,5 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { settingsCacheService } from '../services/settings-cache.service.js';
+import { getClientIp } from '../utils/client-ip.js';
 
 // Types
 
@@ -93,25 +94,10 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
 }
 
 /**
- * Default key generator - uses IP address
+ * Default key generator - uses the client address (see getClientIp for proxy handling)
  */
 function defaultKeyGenerator(c: Context): string {
-  // Try to get real IP from headers (for proxied requests)
-  const forwardedFor = c.req.header('x-forwarded-for');
-  if (forwardedFor) {
-    const ips = forwardedFor.split(',');
-    return `ip:${ips[0].trim()}`;
-  }
-
-  const realIp = c.req.header('x-real-ip');
-  if (realIp) {
-    return `ip:${realIp}`;
-  }
-
-  // Fall back to connection info (may not be available in all environments)
-  // For Bun, we can try to get the IP from the request
-  const url = new URL(c.req.url);
-  return `ip:${url.hostname}`;
+  return `ip:${getClientIp(c) ?? 'unknown'}`;
 }
 
 /**
@@ -126,15 +112,13 @@ export function userKeyGenerator(c: Context): string {
 }
 
 /**
- * Create key generator for API key-based rate limiting
+ * Key generator for widget submissions: one bucket per client address and project key.
+ * The project key is public, so a bucket per key alone would let any visitor use up
+ * the allowance of every other reporter on that project.
  */
-export function apiKeyGenerator(c: Context): string {
-  // Get API key from header (preferred) or query (deprecated)
-  const apiKey = c.req.header('x-api-key') || c.req.query('apiKey');
-  if (apiKey) {
-    return `apikey:${apiKey}`;
-  }
-  return defaultKeyGenerator(c);
+export function widgetSubmitKeyGenerator(c: Context): string {
+  const apiKey = c.req.header('x-api-key') ?? 'none';
+  return `widget:${apiKey}:${defaultKeyGenerator(c)}`;
 }
 
 /**

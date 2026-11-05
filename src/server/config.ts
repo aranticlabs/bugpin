@@ -15,7 +15,18 @@ const configSchema = z.object({
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
   adminEmail: z.string().email('ADMIN_EMAIL must be a valid email address'),
   adminPassword: z.string().min(8, 'ADMIN_PASSWORD must be at least 8 characters'),
+  trustProxy: z.enum(['auto', 'always', 'never'], {
+    message: 'TRUST_PROXY must be auto, true or false',
+  }),
 });
+
+function parseTrustProxy(value: string | undefined): string {
+  if (value === undefined) return 'auto';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return 'always';
+  if (normalized === 'false') return 'never';
+  return normalized;
+}
 
 const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
 const DEFAULT_ADMIN_PASSWORD = 'changeme123';
@@ -83,6 +94,7 @@ function loadConfig() {
     secretKey,
     adminEmail: readEnv('ADMIN_EMAIL')?.trim() ?? DEFAULT_ADMIN_EMAIL,
     adminPassword: readEnv('ADMIN_PASSWORD') ?? DEFAULT_ADMIN_PASSWORD,
+    trustProxy: parseTrustProxy(readEnv('TRUST_PROXY')),
   };
 
   const parsed = configSchema.parse(env);

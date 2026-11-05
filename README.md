@@ -95,6 +95,18 @@ docker run -d \
 
 BugPin will be available at `http://localhost:7300`
 
+### Reverse Proxy
+
+BugPin rate-limits logins and widget submissions per client address. It reads `X-Forwarded-For` only from proxies it trusts, set with `TRUST_PROXY`:
+
+| Value            | Behavior                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `auto` (default) | Trust forwarded headers from loopback and private-network proxies (same host or Docker network) |
+| `true`           | Trust forwarded headers from any connecting proxy (for example a CDN with a public address)     |
+| `false`          | Ignore forwarded headers and use the connection address                                         |
+
+Set `TRUST_PROXY=false` when BugPin is reachable directly without a reverse proxy, so clients cannot choose their own address with a forged header.
+
 ## Login
 
 On first start, BugPin creates an admin account from these environment variables:
