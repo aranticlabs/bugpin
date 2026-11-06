@@ -219,7 +219,7 @@ function StorageSettingsSection() {
         onDiscard={() => setFormData(savedS3)}
       />
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
           <div className="space-y-0.5">
             <Label htmlFor="s3-enabled" className="text-base">
               Enable S3 Storage
@@ -525,7 +525,7 @@ function MigrationSection() {
         {/* Migration Controls */}
         {hasLocalFiles && !isRunning && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
               <div className="space-y-0.5">
                 <Label htmlFor="delete-local" className="text-base">
                   Delete local files after upload
@@ -558,7 +558,7 @@ function MigrationSection() {
         )}
 
         {!hasLocalFiles && !isRunning && (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-600">
+          <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success">
             All files are already stored in S3. No migration needed.
           </div>
         )}

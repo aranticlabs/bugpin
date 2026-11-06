@@ -373,7 +373,7 @@ describe('WidgetLauncherButtonSettingsForm', () => {
     expect(screen.queryByTestId('launcher-preview-tooltip')).not.toBeInTheDocument();
     const tooltip = await screen.findByTestId('launcher-preview-tooltip', {}, { timeout: 1000 });
     expect(tooltip).toHaveTextContent('Found a bug?');
-    expect(tooltip).toHaveStyle({ borderRadius: '4px', fontSize: '12px', padding: '6px 12px' });
+    expect(tooltip).toHaveClass('rounded-[4px]', 'text-xs', 'px-3', 'py-1.5', 'font-widget');
   });
 
   it('uses 0.05 rem distance steps and rounds cleanly on blur', () => {
@@ -483,16 +483,15 @@ describe('WidgetLauncherButtonSettingsForm', () => {
     );
     const button = screen.getByRole('button');
     const wrapper = button.parentElement;
-    expect(wrapper).toHaveStyle({
-      top: 'calc(100% - 20px)',
-      left: 'calc(100% - 20px)',
-      transform: 'translate(-100%, -100%)',
-    });
+    expect(wrapper).toHaveStyle({ top: 'calc(100% - 20px)', left: 'calc(100% - 20px)' });
+    expect(wrapper).toHaveClass('-translate-x-full', '-translate-y-full');
 
     rerender(<WidgetLauncherPreview value={{ position: 'top-left' }} globalSettings={undefined} />);
     expect(screen.getByRole('button')).toBe(button);
     expect(button.parentElement).toBe(wrapper);
-    expect(wrapper).toHaveStyle({ top: '20px', left: '20px', transform: 'translate(0, 0)' });
+    expect(wrapper).toHaveStyle({ top: '20px', left: '20px' });
+    expect(wrapper).not.toHaveClass('-translate-x-full');
+    expect(wrapper).not.toHaveClass('-translate-y-full');
     expect(wrapper).toHaveClass('motion-reduce:transition-none');
   });
 

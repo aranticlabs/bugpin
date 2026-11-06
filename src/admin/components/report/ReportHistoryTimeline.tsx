@@ -1,22 +1,11 @@
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Spinner } from '../ui/spinner';
-import { formatDateTime } from '../../lib/utils';
+import { formatDateTime } from '../../lib/format';
 import type { ReportHistoryEntry } from '@shared/types';
+import { REPORT_PRIORITY_LABELS, REPORT_STATUS_LABELS } from './ReportStatusPriority';
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  lowest: 'Lowest',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  highest: 'Highest',
-};
+const STATUS_LABELS: Record<string, string> = REPORT_STATUS_LABELS;
+const PRIORITY_LABELS: Record<string, string> = REPORT_PRIORITY_LABELS;
 
 function formatHistoryMessage(entry: ReportHistoryEntry): string {
   const actor = entry.userName ?? 'System';

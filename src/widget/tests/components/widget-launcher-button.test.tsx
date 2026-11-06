@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('WidgetLauncherButton', () => {
-  it('shows tooltip on hover and uses dark hover colors', async () => {
+  it('shows tooltip on hover and exposes the dark theme colors as CSS variables', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -85,8 +85,12 @@ describe('WidgetLauncherButton', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // Hover colors apply at once; the tooltip waits for the hover delay.
-    expect((button as HTMLButtonElement).style.backgroundColor).toBe('rgb(51, 51, 51)');
+    const wrapper = container.firstElementChild as HTMLDivElement;
+    expect(wrapper.style.getPropertyValue('--launcher-bg')).toBe('#222222');
+    expect(wrapper.style.getPropertyValue('--launcher-bg-hover')).toBe('#333333');
+    expect(button?.classList.contains('hover:bg-(--launcher-bg-hover)')).toBe(true);
+    expect(button?.classList.contains('focus-visible:bg-(--launcher-bg-hover)')).toBe(true);
+    // The tooltip waits for the hover delay.
     expect(container.textContent).not.toContain('Need help?');
 
     await waitForTooltipDelay();
@@ -180,7 +184,7 @@ describe('WidgetLauncherButton', () => {
     expect(tooltip.textContent).toBe('Need help?');
     expect(tooltip.className).toContain('top-full');
     // Mocked rects: button center 60, tooltip 120 wide -> centered left edge 0, shifted to 4.
-    expect(tooltip.style.transform).toBe('translateX(-50%) translateX(4px)');
+    expect(tooltip.style.getPropertyValue('--tooltip-shift')).toBe('4px');
 
     render(null, container);
     container.remove();

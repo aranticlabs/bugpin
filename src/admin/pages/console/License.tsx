@@ -267,7 +267,11 @@ export function License() {
               <div className="flex items-center gap-2">
                 <Badge
                   variant={isLicensed ? 'default' : 'secondary'}
-                  className={isLicensed ? 'bg-green-600' : undefined}
+                  className={
+                    isLicensed
+                      ? 'bg-success text-success-foreground hover:bg-success/80'
+                      : undefined
+                  }
                 >
                   {isLicensed && <Check className="h-3 w-3 mr-1" />}
                   {isLicensed
@@ -280,7 +284,7 @@ export function License() {
                 </Badge>
               </div>
               {isLicensed && status?.warning && (
-                <p role="alert" className="text-sm text-orange-500">
+                <p role="alert" className="text-sm text-warning">
                   {status.warning}
                 </p>
               )}
@@ -317,7 +321,7 @@ export function License() {
                           year: 'numeric',
                         })}
                     {daysRemaining > 0 && daysRemaining <= 30 && (
-                      <span className="text-orange-500 ml-2">({daysRemaining} days left)</span>
+                      <span className="ml-2 text-warning">({daysRemaining} days left)</span>
                     )}
                   </p>
                 </div>
@@ -476,7 +480,7 @@ export function License() {
                     setSelectedIds(null);
                   }}
                   rows={4}
-                  className="field-sizing-content min-h-[100px] resize-none font-mono text-sm"
+                  className="field-sizing-content min-h-25 resize-none font-mono text-sm"
                 />
               </div>
               <div className="flex items-center gap-4">

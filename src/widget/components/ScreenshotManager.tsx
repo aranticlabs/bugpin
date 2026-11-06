@@ -3,7 +3,13 @@ import { useState, useCallback, useRef } from 'preact/hooks';
 import { Camera, Pencil, Download, Trash2, Play, Pause } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { Button } from './ui';
-import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
+import {
+  MEDIA_DROPZONE_ACTIVE_CLASS,
+  MEDIA_DROPZONE_CLASS,
+  MediaCaptureFeedback,
+  MediaOptionToggle,
+  MediaUploadButton,
+} from './MediaPanelShared';
 import { useLocale } from '../hooks/use-locale.js';
 import { useObjectUrl } from '../hooks/use-object-url.js';
 import { getLocale, t } from '../i18n/index.js';
@@ -312,7 +318,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
             multiple
-            style={{ display: 'none' }}
+            class="hidden"
             onChange={handleFileInput}
           />
         </div>
@@ -344,10 +350,9 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
         <div
           class={cn(
             'shrink-0 transition-colors',
-            media.length === 0 &&
-              'min-h-40 border-2 border-dashed border-border rounded bg-muted hover:border-primary hover:bg-primary/5',
+            media.length === 0 && ['min-h-40', MEDIA_DROPZONE_CLASS],
             media.length > 0 && 'min-h-0',
-            isDragging && 'border-2 border-dashed border-primary rounded bg-primary/5'
+            isDragging && MEDIA_DROPZONE_ACTIVE_CLASS
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -367,7 +372,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                     {/* Badges */}
                     <div class="absolute top-1.5 left-1.5 flex gap-1">
                       {item.annotated && (
-                        <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-blue-100 dark:bg-blue-900/70 text-blue-700 dark:text-blue-300">
+                        <span class="px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-info text-info-foreground">
                           {t('screenshot.badge.annotated')}
                         </span>
                       )}
@@ -407,7 +412,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="w-7 h-7 bg-background hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 text-foreground"
+                      class="w-7 h-7 bg-background hover:bg-destructive/10 hover:text-destructive text-foreground"
                       onClick={() => onRemove(item.id)}
                       title={t('screenshot.action.remove')}
                       aria-label={t('screenshot.action.remove')}

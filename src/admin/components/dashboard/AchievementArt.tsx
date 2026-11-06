@@ -10,21 +10,18 @@ interface Palette {
 interface SceneContext {
   /** Prefix for gradient ids, unique per rendered badge */
   id: string;
-  /** Color for fine light strokes that sit on the background, like the spider web */
-  line: string;
-  /** False on paper, where night-sky details would not make sense */
-  dark: boolean;
 }
 
+/** Color for fine light strokes that sit on the background, like the spider web */
+const LINE_COLOR = '#f8fafc';
+
 interface BadgeDefinition {
-  title: string;
   palette: Palette;
   scene: (context: SceneContext) => ReactNode;
 }
 
 const BADGES: Record<AchievementId, BadgeDefinition> = {
   hatchling: {
-    title: 'Hatchling',
     palette: { from: '#bbf7d0', to: '#34d399', rim: '#047857' },
     scene: () => (
       <>
@@ -50,7 +47,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   cocoon: {
-    title: 'Cocoon',
     palette: { from: '#ecfccb', to: '#84cc16', rim: '#3f6212' },
     scene: ({ id }) => (
       <>
@@ -87,7 +83,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   butterfly: {
-    title: 'Butterfly',
     palette: { from: '#ede9fe', to: '#8b5cf6', rim: '#5b21b6' },
     scene: ({ id }) => (
       <>
@@ -126,9 +121,8 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   firefly: {
-    title: 'Firefly',
-    palette: { from: '#312e81', to: '#0f172a', rim: '#1e1b4b' },
-    scene: ({ id, dark }) => (
+    palette: { from: '#312e81', to: '#0f172a', rim: '#4338ca' },
+    scene: ({ id }) => (
       <>
         <defs>
           <radialGradient id={`${id}-glow`}>
@@ -137,16 +131,15 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
             <stop offset="100%" stopColor="#facc15" stopOpacity={0} />
           </radialGradient>
         </defs>
-        {dark &&
-          [
-            [18, 22, 0.8],
-            [46, 19, 0.6],
-            [48, 38, 0.7],
-            [17, 42, 0.5],
-            [25, 15, 0.5],
-          ].map(([cx, cy, r]) => (
-            <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="#fff" opacity={0.8} />
-          ))}
+        {[
+          [18, 22, 0.8],
+          [46, 19, 0.6],
+          [48, 38, 0.7],
+          [17, 42, 0.5],
+          [25, 15, 0.5],
+        ].map(([cx, cy, r]) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="#fff" opacity={0.8} />
+        ))}
         <circle cx="37" cy="40" r="14" fill={`url(#${id}-glow)`} />
         <ellipse
           cx="27"
@@ -193,7 +186,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   dragonfly: {
-    title: 'Dragonfly',
     palette: { from: '#e0f2fe', to: '#38bdf8', rim: '#0369a1' },
     scene: () => (
       <>
@@ -217,7 +209,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   ladybug: {
-    title: 'Ladybug',
     palette: { from: '#fef9c3', to: '#facc15', rim: '#a16207' },
     scene: ({ id }) => (
       <>
@@ -264,9 +255,8 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     ),
   },
   web_weaver: {
-    title: 'Web weaver',
-    palette: { from: '#64748b', to: '#1e293b', rim: '#0f172a' },
-    scene: ({ line }) => {
+    palette: { from: '#64748b', to: '#1e293b', rim: '#475569' },
+    scene: () => {
       const spokes = Array.from({ length: 8 }, (_, index) => (index * Math.PI) / 4);
       const ring = (radius: number) =>
         spokes
@@ -274,7 +264,7 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
           .join(' ');
       return (
         <>
-          <g stroke={line} strokeOpacity={0.85} fill="none" strokeWidth={0.8}>
+          <g stroke={LINE_COLOR} strokeOpacity={0.85} fill="none" strokeWidth={0.8}>
             {spokes.map((angle) => (
               <line
                 key={angle}
@@ -288,7 +278,7 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
               <polygon key={radius} points={ring(radius)} />
             ))}
           </g>
-          <line x1="40" y1="30" x2="40" y2="40" stroke={line} strokeWidth={0.7} />
+          <line x1="40" y1="30" x2="40" y2="40" stroke={LINE_COLOR} strokeWidth={0.7} />
           <g stroke="#111827" strokeWidth={0.9} strokeLinecap="round">
             {[-1, 1].map((side) =>
               [-2, 0, 2].map((offset) => (
@@ -308,7 +298,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
     },
   },
   amber: {
-    title: 'Amber find',
     palette: { from: '#ffedd5', to: '#fb923c', rim: '#9a3412' },
     scene: ({ id }) => (
       <>
@@ -366,7 +355,7 @@ function HexFrame({ badge, id }: { badge: BadgeDefinition; id: string }) {
       <path d={HEX} fill={palette.rim} />
       <path d={INNER_HEX} fill={`url(#${id}-bg)`} />
       <g clipPath={`url(#${id}-clip)`}>
-        {badge.scene({ id, line: '#f8fafc', dark: true })}
+        {badge.scene({ id })}
         <path d="M11 20 L32 8 L53 20 L53 26 Q32 18 11 26 Z" fill="#fff" opacity={0.18} />
       </g>
       <path d={INNER_HEX} fill="none" stroke="#fff" strokeOpacity={0.35} strokeWidth={1} />
@@ -377,15 +366,24 @@ function HexFrame({ badge, id }: { badge: BadgeDefinition; id: string }) {
 /** Illustrated hexagonal medallion for an achievement */
 export function AchievementArt({
   achievement,
+  label,
   className,
 }: {
   achievement: AchievementId;
+  /** Accessible name; omit when nearby text already names the achievement. */
+  label?: string;
   className?: string;
 }) {
   const id = useId().replace(/:/g, '');
   const definition = BADGES[achievement];
   return (
-    <svg viewBox="0 0 64 64" className={className} role="img" aria-label={definition.title}>
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
       <HexFrame badge={definition} id={id} />
     </svg>
   );

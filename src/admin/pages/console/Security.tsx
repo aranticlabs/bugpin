@@ -192,7 +192,7 @@ export function NetworkSettingsCard() {
       />
       <CardContent className="space-y-6 pt-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label htmlFor="enforce-https">Enforce HTTPS</Label>
               <p className="text-xs text-muted-foreground">

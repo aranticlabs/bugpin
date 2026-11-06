@@ -5,6 +5,166 @@
 /* @custom-variant is a Tailwind CSS v4 feature - ignore unknown at-rule warning */
 @custom-variant dark (&:is(.bugpin-theme-dark *));
 
+/*
+ * Browsers ignore @property inside a shadow root, and Tailwind only emits its unconditional
+ * fallback for older engines, so the --tw-* variables that shadow, ring, translate, scale,
+ * filter and outline utilities compose would otherwise start out undefined.
+ * Keep this list in sync with the @property rules in the compiled CSS.
+ */
+@layer properties {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    --tw-translate-x: 0;
+    --tw-translate-y: 0;
+    --tw-translate-z: 0;
+    --tw-scale-x: 1;
+    --tw-scale-y: 1;
+    --tw-scale-z: 1;
+    --tw-rotate-x: initial;
+    --tw-rotate-y: initial;
+    --tw-rotate-z: initial;
+    --tw-skew-x: initial;
+    --tw-skew-y: initial;
+    --tw-space-y-reverse: 0;
+    --tw-border-style: solid;
+    --tw-leading: initial;
+    --tw-font-weight: initial;
+    --tw-tracking: initial;
+    --tw-ordinal: initial;
+    --tw-slashed-zero: initial;
+    --tw-numeric-figure: initial;
+    --tw-numeric-spacing: initial;
+    --tw-numeric-fraction: initial;
+    --tw-shadow: 0 0 #0000;
+    --tw-shadow-color: initial;
+    --tw-shadow-alpha: 100%;
+    --tw-inset-shadow: 0 0 #0000;
+    --tw-inset-shadow-color: initial;
+    --tw-inset-shadow-alpha: 100%;
+    --tw-ring-color: initial;
+    --tw-ring-shadow: 0 0 #0000;
+    --tw-inset-ring-color: initial;
+    --tw-inset-ring-shadow: 0 0 #0000;
+    --tw-ring-inset: initial;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-offset-color: #fff;
+    --tw-ring-offset-shadow: 0 0 #0000;
+    --tw-outline-style: solid;
+    --tw-blur: initial;
+    --tw-brightness: initial;
+    --tw-contrast: initial;
+    --tw-grayscale: initial;
+    --tw-hue-rotate: initial;
+    --tw-invert: initial;
+    --tw-opacity: initial;
+    --tw-saturate: initial;
+    --tw-sepia: initial;
+    --tw-drop-shadow: initial;
+    --tw-drop-shadow-color: initial;
+    --tw-drop-shadow-alpha: 100%;
+    --tw-drop-shadow-size: initial;
+    --tw-backdrop-blur: initial;
+    --tw-backdrop-brightness: initial;
+    --tw-backdrop-contrast: initial;
+    --tw-backdrop-grayscale: initial;
+    --tw-backdrop-hue-rotate: initial;
+    --tw-backdrop-invert: initial;
+    --tw-backdrop-opacity: initial;
+    --tw-backdrop-saturate: initial;
+    --tw-backdrop-sepia: initial;
+    --tw-duration: initial;
+    --tw-content: '';
+  }
+}
+
+/*
+ * rem follows the host page's root font size, even inside the Shadow DOM, so every
+ * length the widget's utilities resolve to is pinned in px.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+
+  --spacing: 4px;
+
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+
+  --container-3xs: 256px;
+  --container-2xs: 288px;
+  --container-xs: 320px;
+  --container-sm: 384px;
+  --container-md: 448px;
+  --container-lg: 512px;
+  --container-xl: 576px;
+  --container-2xl: 672px;
+  --container-3xl: 768px;
+  --container-4xl: 896px;
+  --container-5xl: 1024px;
+  --container-6xl: 1152px;
+  --container-7xl: 1280px;
+
+  --radius: 4px;
+  --radius-xs: 2px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 32px;
+}
+
+/* Design tokens via @theme inline (Tailwind v4 pattern) */
+/* stylelint-disable-next-line at-rule-no-unknown */
+@theme inline {
+  /* UI colors mapped to CSS variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-hover-foreground: var(--primary-hover-foreground);
+
+  /* Radius tokens */
+  --radius-sm: calc(var(--bugpin-radius) - 4px);
+  --radius-md: calc(var(--bugpin-radius) - 2px);
+  --radius-lg: var(--bugpin-radius);
+  --radius-xl: calc(var(--bugpin-radius) + 4px);
+
+  /* Shadow tokens */
+  --shadow-sm: var(--bugpin-shadow-sm);
+  --shadow: var(--bugpin-shadow);
+  --shadow-lg: var(--bugpin-shadow-lg);
+
+  /* Inlined because the minifier rounds integers this large inside custom properties */
+  --z-index-top: 2147483647;
+  --z-index-overlay: 2147483646;
+  --z-index-bottom: -2147483648;
+}
+
 /* Base reset - Shadow DOM handles isolation */
 @layer base {
   * {
@@ -47,109 +207,71 @@
   }
 
   h1 {
-    font-size: 1.25rem;
+    font-size: 20px;
   }
   h2 {
-    font-size: 1rem;
+    font-size: 16px;
   }
   h3 {
-    font-size: 0.9375rem;
+    font-size: 15px;
   }
   h4,
   h5,
   h6 {
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
   p {
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
     color: var(--foreground);
   }
 
-  /* Design tokens via @theme inline (Tailwind v4 pattern) */
-  /* stylelint-disable-next-line at-rule-no-unknown */
-  @theme inline {
-    /* BugPin Primary Color Palette */
-    --color-bugpin-primary-50: #e6f3f9;
-    --color-bugpin-primary-100: #cbe7f2;
-    --color-bugpin-primary-200: #9ed1e6;
-    --color-bugpin-primary-300: #6ab8d8;
-    --color-bugpin-primary-400: #2e9bc6;
-    --color-bugpin-primary-500: #0e84b1;
-    --color-bugpin-primary-600: #036f9b;
-    --color-bugpin-primary-700: #02658d;
-    --color-bugpin-primary-800: #024f6f;
-    --color-bugpin-primary-900: #013a52;
-    --color-bugpin-primary-950: #012738;
-
-    /* UI colors mapped to CSS variables */
-    --color-background: var(--background);
-    --color-foreground: var(--foreground);
-    --color-muted: var(--muted);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-border: var(--border);
-    --color-input: var(--input);
-    --color-ring: var(--ring);
-    --color-destructive: var(--destructive);
-    --color-destructive-foreground: var(--destructive-foreground);
-    --color-primary: var(--primary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary-hover: var(--primary-hover);
-    --color-primary-hover-foreground: var(--primary-hover-foreground);
-
-    /* Radius token */
-    --radius-DEFAULT: var(--radius);
-    --radius-sm: calc(var(--radius) - 2px);
-    --radius-md: calc(var(--radius) - 4px);
-    --radius-lg: calc(var(--radius) + 2px);
-
-    /* Shadow tokens */
-    --shadow-sm: var(--shadow-sm);
-    --shadow-DEFAULT: var(--shadow);
-    --shadow-lg: var(--shadow-lg);
-  }
-
   /* Widget root CSS variables */
   #bugpin-root {
+    /* Inherited properties set on the host page would otherwise reach every element. */
+    all: initial;
+    display: block;
+    direction: ltr;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     font-size: 14px;
     line-height: 1.5;
 
-    /* BugPin Primary Color Palette (for reference in JS) */
-    --bugpin-primary-50: #e6f3f9;
-    --bugpin-primary-100: #cbe7f2;
-    --bugpin-primary-200: #9ed1e6;
-    --bugpin-primary-300: #6ab8d8;
-    --bugpin-primary-400: #2e9bc6;
-    --bugpin-primary-500: #0e84b1;
-    --bugpin-primary-600: #036f9b;
+    /* BugPin primary colors used as the default dialog button colors */
     --bugpin-primary-700: #02658d;
     --bugpin-primary-800: #024f6f;
-    --bugpin-primary-900: #013a52;
-    --bugpin-primary-950: #012738;
 
     /* Light mode defaults */
     --background: #ffffff;
     --foreground: #0a0a0a;
     --muted: #f5f5f5;
-    --muted-foreground: #737373;
-    --border: #e5e5e5;
-    --input: #e5e5e5;
-    --ring: #a3a3a3;
-    --destructive: #ef4444;
+    --destructive: #b91c1c;
     --destructive-foreground: #fafafa;
-    --radius: 0.5rem;
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --success: #047857;
+    --success-foreground: #fafafa;
+    --warning: #92400e;
+    --warning-foreground: #fafafa;
+    --info: #0369a1;
+    --info-foreground: #fafafa;
+    --bugpin-radius: 8px;
+    --bugpin-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --bugpin-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --bugpin-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
     color: var(--foreground);
   }
 
-  /* Dynamic primary colors from App.tsx */
+  /*
+   * Border, input, ring and muted text colors are mixed from the background and foreground
+   * where those are set, so dialog colors configured on the server keep their contrast.
+   */
   .bugpin-container {
     color-scheme: light;
+    color: var(--foreground);
+    --border: color-mix(in srgb, var(--foreground) 11%, var(--background));
+    --input: color-mix(in srgb, var(--foreground) 11%, var(--background));
+    --ring: color-mix(in srgb, var(--foreground) 38%, var(--background));
+    --muted-foreground: color-mix(in srgb, var(--foreground) 57%, var(--background));
     --primary: var(--button-color, var(--bugpin-primary-700));
     --primary-foreground: var(--button-text-color, #fafafa);
     --primary-hover: var(--button-hover-color, var(--bugpin-primary-800));
@@ -163,10 +285,30 @@
     --background: #0a0a0a;
     --foreground: #fafafa;
     --muted: #262626;
-    --muted-foreground: #a3a3a3;
-    --border: #262626;
-    --input: #262626;
-    --ring: #d4d4d4;
+    --border: color-mix(in srgb, var(--foreground) 12%, var(--background));
+    --input: color-mix(in srgb, var(--foreground) 12%, var(--background));
+    --ring: color-mix(in srgb, var(--foreground) 84%, var(--background));
+    --muted-foreground: color-mix(in srgb, var(--foreground) 64%, var(--background));
+    --destructive: #f87171;
+    --destructive-foreground: #0a0a0a;
+    --success: #34d399;
+    --success-foreground: #0a0a0a;
+    --warning: #fbbf24;
+    --warning-foreground: #0a0a0a;
+    --info: #38bdf8;
+    --info-foreground: #0a0a0a;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+      scale: none !important;
+    }
   }
 
   /* Keyframe animations */
@@ -201,12 +343,6 @@
     }
   }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
   @keyframes bugpin-tooltip-fade-in {
     from {
       opacity: 0;
@@ -214,22 +350,5 @@
     to {
       opacity: 1;
     }
-  }
-
-  /* Priority colors (semantic - not Tailwind utilities) */
-  .priority-lowest {
-    color: #6b7280;
-  }
-  .priority-low {
-    color: #3b82f6;
-  }
-  .priority-medium {
-    color: #f59e0b;
-  }
-  .priority-high {
-    color: #ef4444;
-  }
-  .priority-highest {
-    color: #dc2626;
   }
 }

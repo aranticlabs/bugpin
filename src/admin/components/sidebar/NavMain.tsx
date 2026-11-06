@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cn } from '../../lib/utils';
 import { Link, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react';
@@ -102,7 +103,7 @@ function sameParams(search: string, params: Record<string, string>): boolean {
 function CountBadge({ count, className }: { count?: number; className?: string }) {
   if (count === undefined) return null;
   return (
-    <SidebarMenuBadge className={`text-muted-foreground ${className ?? ''}`}>
+    <SidebarMenuBadge className={cn('text-muted-foreground', className ?? '')}>
       {count}
     </SidebarMenuBadge>
   );

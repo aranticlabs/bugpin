@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
+import { UserAvatar } from './UserAvatar';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, CircleCheck, UserPlus } from 'lucide-react';
 import { api } from '../../api/client';
 import { Card, CardContent, CardHeader } from '../ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -21,25 +21,15 @@ import { Spinner } from '../ui/spinner';
 import { ReportPriorityLabel, ReportStatusLabel } from '../report/ReportStatusPriority';
 import { DASHBOARD_ORIGIN } from './OverviewCards';
 import { reportOriginState } from '../../lib/reportOrigin';
-import { daysSince, formatTimeAgo, initials } from '../../lib/dashboard';
+import { daysSince, formatTimeAgo } from '../../lib/dashboard';
 import { useUpdateDashboardReport, type DashboardReportList } from '../../hooks/useDashboard';
 import {
   ASSIGNED_TO_ME_FILTER,
   XP_BY_PRIORITY,
   type DashboardAttentionItem,
   type Report,
-  type ReportAssignee,
   type User,
 } from '@shared/types';
-
-function AssigneeAvatar({ assignee }: { assignee: ReportAssignee }) {
-  return (
-    <Avatar className="size-6" title={assignee.name}>
-      {assignee.avatarUrl && <AvatarImage src={assignee.avatarUrl} alt="" />}
-      <AvatarFallback className="text-[10px]">{initials(assignee.name)}</AvatarFallback>
-    </Avatar>
-  );
-}
 
 function ReportRow({
   id,
@@ -55,11 +45,11 @@ function ReportRow({
   trailing?: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/40">
+    <div className="flex flex-col gap-2 px-6 py-3 transition-colors hover:bg-primary-tint sm:flex-row sm:items-center sm:gap-3">
       <Link
         to={`/reports/${id}`}
         state={reportOriginState(DASHBOARD_ORIGIN)}
-        className="min-w-0 flex-1"
+        className="min-w-0 flex-1 rounded-sm focus-visible:focus-ring"
       >
         <p className="truncate text-sm font-medium">{title}</p>
         <p className="truncate text-xs text-muted-foreground">{detail}</p>
@@ -75,7 +65,7 @@ function ReportRow({
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      <CircleCheck className="size-8 text-emerald-500" />
+      <CircleCheck className="size-8 text-success" />
       <p className="font-medium">{title}</p>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
@@ -150,7 +140,7 @@ function NeedsAttentionList({
           detail={`${item.projectName} · ${attentionDetail(item)}`}
           trailing={
             item.assignee ? (
-              <AssigneeAvatar assignee={item.assignee} />
+              <UserAvatar name={item.assignee.name} avatarUrl={item.assignee.avatarUrl} showName />
             ) : canEdit ? (
               <AssignMenu reportId={item.id} currentUserId={currentUserId} />
             ) : (
@@ -165,7 +155,7 @@ function NeedsAttentionList({
 
 function AssignedList({ reports, showXp }: { reports: Report[] | undefined; showXp: boolean }) {
   const update = useUpdateDashboardReport();
-  if (!reports) return <Spinner className="mx-auto my-10 text-primary" />;
+  if (!reports) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
   if (reports.length === 0) {
     return (
       <EmptyState title="Your queue is clear" description="Nothing assigned to you right now." />
@@ -204,7 +194,7 @@ function AssignedList({ reports, showXp }: { reports: Report[] | undefined; show
 }
 
 function RecentReportsTable({ reports }: { reports: Report[] | undefined }) {
-  if (!reports) return <Spinner className="mx-auto my-10 text-primary" />;
+  if (!reports) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
   if (reports.length === 0) {
     return (
       <EmptyState
@@ -250,7 +240,11 @@ function RecentReportsTable({ reports }: { reports: Report[] | undefined }) {
             <TableCell className="hidden md:table-cell">
               {report.assignee ? (
                 <div className="flex items-center gap-2">
-                  <AssigneeAvatar assignee={report.assignee} />
+                  <UserAvatar
+                    name={report.assignee.name}
+                    avatarUrl={report.assignee.avatarUrl}
+                    showName
+                  />
                   <span className="text-sm">{report.assignee.name}</span>
                 </div>
               ) : (
@@ -328,14 +322,14 @@ export function ReportListsCard({
           <TabsList className="w-fit">
             <TabsTrigger value="attention">
               Needs attention
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+              <Badge variant="secondary" size="sm" className="ml-1">
                 {needsAttentionTotal}
               </Badge>
             </TabsTrigger>
             {canEdit && (
               <TabsTrigger value="mine">
                 Assigned to you
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                <Badge variant="secondary" size="sm" className="ml-1">
                   {assigned?.total ?? 0}
                 </Badge>
               </TabsTrigger>

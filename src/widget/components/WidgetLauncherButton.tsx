@@ -129,51 +129,36 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
     }
   }, [tooltipVisible, resolvedTooltipText]);
 
-  // Select colors based on theme and hover state
-  const buttonColor = isDarkMode
-    ? isHovered
-      ? darkButtonHoverColor
-      : darkButtonColor
-    : isHovered
-      ? lightButtonHoverColor
-      : lightButtonColor;
-
-  const textColor = isDarkMode
-    ? isHovered
-      ? darkTextHoverColor
-      : darkTextColor
-    : isHovered
-      ? lightTextHoverColor
-      : lightTextColor;
-
-  // Base colors for tooltip (always use non-hover colors)
-  const tooltipBgColor = isDarkMode ? darkButtonColor : lightButtonColor;
-  const tooltipTextColor = isDarkMode ? darkTextColor : lightTextColor;
-
-  const borderRadius = buttonShape === 'round' ? '50%' : '8px';
+  const launcherVars = {
+    '--launcher-bg': isDarkMode ? darkButtonColor : lightButtonColor,
+    '--launcher-bg-hover': isDarkMode ? darkButtonHoverColor : lightButtonHoverColor,
+    '--launcher-fg': isDarkMode ? darkTextColor : lightTextColor,
+    '--launcher-fg-hover': isDarkMode ? darkTextHoverColor : lightTextHoverColor,
+  };
   const ariaLabel = resolvedButtonText || t('aria.launcher');
   const tooltipBelow = position.startsWith('top');
 
-  // For round shape, padding scales with icon size (half the icon size)
-  const padding = buttonShape === 'round' ? `${buttonIconSize / 2}${buttonSizeUnit}` : '12px 20px';
-
   return (
     <div
-      class="fixed z-[2147483647]"
-      style={getPositionStyle(position, buttonOffsetX, buttonOffsetY, buttonSizeUnit)}
+      class="fixed z-top"
+      style={{
+        ...getPositionStyle(position, buttonOffsetX, buttonOffsetY, buttonSizeUnit),
+        ...launcherVars,
+      }}
     >
       <button
         ref={buttonRef}
         class={cn(
-          'relative flex items-center justify-center gap-2 border-none text-sm font-medium cursor-pointer shadow-lg transition-all duration-200',
+          'group/launcher relative flex items-center justify-center gap-2 border-none text-sm font-medium cursor-pointer shadow-lg transition-all duration-200',
+          'bg-(--launcher-bg) text-(--launcher-fg) hover:bg-(--launcher-bg-hover) hover:text-(--launcher-fg-hover) focus-visible:bg-(--launcher-bg-hover) focus-visible:text-(--launcher-fg-hover)',
+          buttonShape === 'round' ? 'rounded-full' : 'rounded-lg px-5 py-3',
           enableHoverScaleEffect && 'hover:scale-110 hover:shadow-xl active:scale-105'
         )}
-        style={{
-          backgroundColor: buttonColor,
-          color: textColor,
-          borderRadius: borderRadius,
-          padding: padding,
-        }}
+        style={
+          buttonShape === 'round'
+            ? { padding: `${buttonIconSize / 2}${buttonSizeUnit}` }
+            : undefined
+        }
         onClick={onClick}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -190,7 +175,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         {hasPendingRecording && (
           <span
             data-testid="bugpin-pending-recording"
-            class="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 border-2 border-solid border-white"
+            class="absolute top-0 right-0 w-3 h-3 rounded-full bg-destructive border-2 border-solid border-(--launcher-bg) group-hover/launcher:border-(--launcher-bg-hover) group-focus-visible/launcher:border-(--launcher-bg-hover)"
             aria-hidden="true"
           />
         )}
@@ -200,16 +185,10 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         <div
           ref={tooltipRef}
           class={cn(
-            'absolute px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md',
+            'absolute left-1/2 translate-x-[calc(-50%+var(--tooltip-shift))] px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-top opacity-0 animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md bg-(--launcher-bg) text-(--launcher-fg)',
             tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
           )}
-          style={{
-            backgroundColor: tooltipBgColor,
-            color: tooltipTextColor,
-            opacity: 0,
-            left: '50%',
-            transform: `translateX(-50%) translateX(${tooltipShift}px)`,
-          }}
+          style={{ '--tooltip-shift': `${tooltipShift}px` }}
         >
           {resolvedTooltipText}
         </div>

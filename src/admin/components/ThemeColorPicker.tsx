@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cn } from '../lib/utils';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { ColorPicker } from './ui/color-picker';
@@ -162,7 +163,7 @@ export function ThemeColorPicker({
 
   const colorGrid = (mode: 'light' | 'dark') => (
     <div
-      className={`grid grid-cols-2 gap-x-4 gap-y-3 ${showSurfaceColors ? 'md:grid-cols-3' : ''}`}
+      className={cn('grid grid-cols-2 gap-x-4 gap-y-3', showSurfaceColors ? 'md:grid-cols-3' : '')}
     >
       {fieldsFor(mode).map(({ key, label, fallback }) => (
         <div key={key} className="space-y-2">

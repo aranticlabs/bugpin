@@ -1,5 +1,5 @@
 import { cn } from '../lib/utils';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
@@ -97,18 +97,6 @@ const PX_PER_REM = 16;
 
 // The preview box is much smaller than a real page, so large offsets are capped to keep the button visible.
 const MAX_PREVIEW_OFFSET_PX = 64;
-
-// Computed styles of the real widget tooltip, which renders with its own font
-// stack and Tailwind scale inside the Shadow DOM rather than the Admin Console theme.
-const WIDGET_TOOLTIP_STYLE = {
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif",
-  fontSize: '12px',
-  fontWeight: 400,
-  lineHeight: '16px',
-  padding: '6px 12px',
-  borderRadius: '4px',
-  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-} as const;
 
 const EDGE_LABELS: Record<string, string> = {
   top: 'Top',
@@ -230,33 +218,17 @@ function LauncherPreview({
     );
   }, [tooltipVisible, tooltipText, position, buttonOffsetX, buttonSizeUnit]);
 
-  // For preview, we'll use light mode by default (you can add theme detection if needed)
   const isDarkMode = theme === 'dark';
 
-  // Select colors based on theme and hover state
-  const buttonColor = isDarkMode
-    ? isHovered
-      ? darkButtonHoverColor
-      : darkButtonColor
-    : isHovered
-      ? lightButtonHoverColor
-      : lightButtonColor;
+  // The tooltip uses the base (non-hover) colors, matching the real widget.
+  const colorVars = {
+    '--launcher-bg': isDarkMode ? darkButtonColor : lightButtonColor,
+    '--launcher-fg': isDarkMode ? darkTextColor : lightTextColor,
+    '--launcher-bg-hover': isDarkMode ? darkButtonHoverColor : lightButtonHoverColor,
+    '--launcher-fg-hover': isDarkMode ? darkTextHoverColor : lightTextHoverColor,
+  } as CSSProperties;
 
-  const textColor = isDarkMode
-    ? isHovered
-      ? darkTextHoverColor
-      : darkTextColor
-    : isHovered
-      ? lightTextHoverColor
-      : lightTextColor;
-
-  // Tooltip uses base button color (non-hover), matching the real widget behavior
-  const tooltipBgColor = isDarkMode ? darkButtonColor : lightButtonColor;
-  const tooltipTextColor = isDarkMode ? darkTextColor : lightTextColor;
-
-  const borderRadius = buttonShape === 'round' ? '50%' : '8px';
   const iconSizePx = toPx(buttonIconSize, buttonSizeUnit);
-  const padding = buttonShape === 'round' ? `${iconSizePx / 2}px` : '12px 20px';
 
   // Get the icon component
   const IconComponent = AVAILABLE_ICONS.find((i) => i.value === buttonIcon)?.icon;
@@ -266,9 +238,9 @@ function LauncherPreview({
   const previewOffsetX = Math.min(offsetX, MAX_PREVIEW_OFFSET_PX);
   const previewOffsetY = Math.min(offsetY, MAX_PREVIEW_OFFSET_PX);
   const positionStyle = {
+    ...colorVars,
     top: vertical === 'top' ? `${previewOffsetY}px` : `calc(100% - ${previewOffsetY}px)`,
     left: horizontal === 'left' ? `${previewOffsetX}px` : `calc(100% - ${previewOffsetX}px)`,
-    transform: `translate(${horizontal === 'left' ? '0' : '-100%'}, ${vertical === 'top' ? '0' : '-100%'})`,
     maxWidth: `calc(100% - ${previewOffsetX}px)`,
   };
 
@@ -317,29 +289,31 @@ function LauncherPreview({
       </div>
       <div
         ref={wrapperRef}
-        className="absolute inline-block w-max transition-[top,left,transform] duration-300 ease-in-out motion-reduce:transition-none"
+        data-testid="launcher-preview-wrapper"
+        className={cn(
+          'absolute inline-block w-max transition-[top,left,translate] duration-300 ease-in-out motion-reduce:transition-none',
+          horizontal !== 'left' && '-translate-x-full',
+          vertical !== 'top' && '-translate-y-full'
+        )}
         style={positionStyle}
       >
+        {/* Radii mirror the widget's own launcher, which does not use the Admin Console radius scale */}
         <button
           ref={buttonRef}
           type="button"
-          className="inline-flex items-center justify-center gap-2 border-none cursor-pointer font-medium shadow-lg transition-colors duration-200"
-          style={{
-            backgroundColor: buttonColor,
-            color: textColor,
-            borderRadius: borderRadius,
-            padding: padding,
-            fontSize: '14px',
-            fontWeight: 500,
-            transform: isHovered && enableHoverScaleEffect ? 'scale(1.1)' : 'scale(1)',
-            transition: enableHoverScaleEffect
-              ? 'background-color 0.2s ease, color 0.2s ease, transform 0.3s ease, box-shadow 0.3s ease'
-              : 'background-color 0.2s ease, color 0.2s ease',
-            boxShadow:
-              isHovered && enableHoverScaleEffect
-                ? '0 8px 20px rgba(0, 0, 0, 0.25)'
-                : '0 4px 12px rgba(0, 0, 0, 0.15)',
-          }}
+          className={cn(
+            'inline-flex cursor-pointer items-center justify-center gap-2 border-none text-sm font-medium',
+            'bg-(--launcher-bg) text-(--launcher-fg) shadow-[0_4px_12px_rgb(0_0_0/0.15)]',
+            'hover:bg-(--launcher-bg-hover) hover:text-(--launcher-fg-hover)',
+            'focus-visible:bg-(--launcher-bg-hover) focus-visible:text-(--launcher-fg-hover) focus-visible:focus-ring',
+            'transition-[background-color,color,scale,box-shadow] duration-200',
+            buttonShape === 'round'
+              ? 'rounded-full p-(--launcher-padding)'
+              : 'rounded-[8px] px-5 py-3',
+            enableHoverScaleEffect &&
+              'duration-300 hover:scale-110 hover:shadow-[0_8px_20px_rgb(0_0_0/0.25)]'
+          )}
+          style={{ '--launcher-padding': `${iconSizePx / 2}px` } as CSSProperties}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           onClick={(e) => e.preventDefault()}
@@ -353,17 +327,13 @@ function LauncherPreview({
           <div
             ref={tooltipRef}
             data-testid="launcher-preview-tooltip"
-            className={`absolute left-1/2 pointer-events-none whitespace-nowrap ${
+            className={cn(
+              'pointer-events-none absolute left-1/2 whitespace-nowrap',
+              'translate-x-[calc(-50%+var(--tooltip-shift))] opacity-0 animate-tooltip-in',
+              'rounded-[4px] bg-(--launcher-bg) px-3 py-1.5 font-widget text-xs font-normal text-(--launcher-fg) shadow-md',
               tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
-            }`}
-            style={{
-              ...WIDGET_TOOLTIP_STYLE,
-              backgroundColor: tooltipBgColor,
-              color: tooltipTextColor,
-              opacity: 0,
-              animation: 'bugpin-tooltip-fade-in 0.2s ease-in-out forwards',
-              transform: `translateX(-50%) translateX(${tooltipShift}px)`,
-            }}
+            )}
+            style={{ '--tooltip-shift': `${tooltipShift}px` } as CSSProperties}
           >
             {tooltipText}
           </div>

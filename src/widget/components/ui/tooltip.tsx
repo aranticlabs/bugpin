@@ -1,19 +1,8 @@
-import { ComponentChildren, FunctionComponent, JSX } from 'preact';
+import { ComponentChildren, FunctionComponent } from 'preact';
 import { useState } from 'preact/hooks';
 import { cn } from '../../lib/utils';
 
 export type TooltipSide = 'top' | 'bottom';
-
-export function sideStyle(side: TooltipSide, offset: number): JSX.CSSProperties {
-  return {
-    left: '50%',
-    // Tailwind's translate utilities rely on @property defaults, which do not apply in a shadow root.
-    transform: 'translateX(-50%)',
-    ...(side === 'top'
-      ? { bottom: `calc(100% + ${offset}px)` }
-      : { top: `calc(100% + ${offset}px)` }),
-  };
-}
 
 export interface TooltipProps {
   content: string;
@@ -36,10 +25,10 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({ content, side = 'top'
       <span
         role="tooltip"
         class={cn(
-          'pointer-events-none invisible absolute z-20 whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground group-hover/tooltip:visible',
+          'pointer-events-none invisible absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground group-hover/tooltip:visible',
+          side === 'top' ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]',
           !pointerFocused && 'group-has-[:focus-visible]/tooltip:visible'
         )}
-        style={sideStyle(side, 6)}
       >
         {content}
       </span>

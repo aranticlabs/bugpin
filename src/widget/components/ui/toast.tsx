@@ -13,12 +13,12 @@ interface ToastProps {
   topLayer?: boolean;
 }
 
-const TOP_LAYER_STYLE = { inset: 'auto', bottom: '5rem', right: '1.25rem' };
-
 const toastVariants: Record<ToastType, string> = {
-  success: 'bg-green-50 border-green-200 text-green-600',
-  error: 'bg-red-50 border-red-200 text-red-600',
-  info: 'bg-blue-50 border-blue-200 text-blue-600',
+  success:
+    'bg-[color-mix(in_srgb,var(--success)_10%,var(--background))] border-success/30 text-success',
+  error:
+    'bg-[color-mix(in_srgb,var(--destructive)_10%,var(--background))] border-destructive/30 text-destructive',
+  info: 'bg-[color-mix(in_srgb,var(--info)_10%,var(--background))] border-info/30 text-info',
 };
 
 export const Toast: FunctionComponent<ToastProps> = ({
@@ -43,9 +43,8 @@ export const Toast: FunctionComponent<ToastProps> = ({
     <div
       ref={toastRef}
       popover={topLayer ? 'manual' : undefined}
-      style={topLayer ? TOP_LAYER_STYLE : undefined}
       class={cn(
-        'fixed bottom-20 right-5 z-[2147483647] flex items-center gap-3 px-5 py-4 border border-solid rounded text-sm shadow-lg animate-[slideIn_0.3s_ease-out]',
+        'fixed inset-auto bottom-20 right-5 z-top flex items-center gap-3 px-5 py-4 border border-solid rounded text-sm shadow-lg animate-[slideIn_0.3s_ease-out]',
         topLayer && 'm-0',
         toastVariants[type]
       )}

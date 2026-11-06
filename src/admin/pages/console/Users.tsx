@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { cn } from '../../lib/utils';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -231,13 +232,13 @@ export function Users() {
             ) : (
               data?.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="max-w-[260px]">
+                  <TableCell className="max-w-65">
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar key={user.avatarUrl || 'no-avatar'}>
                         {user.avatarUrl && user.avatarUrl.trim() !== '' ? (
                           <AvatarImage src={user.avatarUrl} alt={user.name || 'User'} />
                         ) : (
-                          <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300">
+                          <AvatarFallback className="bg-brand-subtle text-brand-subtle-foreground">
                             {user.name?.charAt(0).toUpperCase() || 'U'}
                           </AvatarFallback>
                         )}
@@ -261,7 +262,7 @@ export function Users() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className="h-9 w-[240px] justify-between text-left font-normal"
+                          className="h-9 w-60 justify-between text-left font-normal"
                         >
                           <span className="truncate">
                             {getDefaultProjectsLabel(getDefaultProjects(user))}
@@ -276,7 +277,7 @@ export function Users() {
                             New reports from selected projects are assigned to {user.name}.
                           </p>
                           {!isAssignableUser(user) ? (
-                            <p className="mt-2 text-xs text-amber-600">
+                            <p className="mt-2 text-xs text-warning">
                               This user must be active and have accepted their invitation before
                               they can be added to new default projects.
                             </p>
@@ -302,9 +303,10 @@ export function Users() {
                               return (
                                 <label
                                   key={project.id}
-                                  className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent ${
+                                  className={cn(
+                                    'flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-primary-tint',
                                     disabled ? 'pointer-events-none opacity-60' : ''
-                                  }`}
+                                  )}
                                 >
                                   <Checkbox
                                     checked={checked}
@@ -335,7 +337,7 @@ export function Users() {
                       onValueChange={(value) => updateMutation.mutate({ id: user.id, role: value })}
                       disabled={user.id === currentUser?.id || isPendingInvitation(user)}
                     >
-                      <SelectTrigger className="w-[120px]">
+                      <SelectTrigger className="w-30">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -366,7 +368,10 @@ export function Users() {
                       >
                         <Badge
                           variant="outline"
-                          className={`cursor-pointer ${user.isActive ? 'status-active' : 'status-inactive'}`}
+                          className={cn(
+                            'cursor-pointer',
+                            user.isActive ? 'status-active' : 'status-inactive'
+                          )}
                         >
                           {user.isActive ? 'Active' : 'Inactive'}
                         </Badge>

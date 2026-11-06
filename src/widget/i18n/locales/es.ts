@@ -155,6 +155,13 @@ const es: WidgetCatalog = {
   'annotation.toolbar.zoomReset':
     'Restablecer zoom ({percent}%) - Mantén pulsado Espacio para desplazar',
   'annotation.toolbar.strokeWidth': '{width}px',
+  'annotation.color.red': 'Rojo',
+  'annotation.color.orange': 'Naranja',
+  'annotation.color.yellow': 'Amarillo',
+  'annotation.color.green': 'Verde',
+  'annotation.color.blue': 'Azul',
+  'annotation.color.purple': 'Morado',
+  'annotation.color.black': 'Negro',
   'annotation.defaultText': 'Texto',
   'annotation.buttons.cancel': 'Cancelar',
   'annotation.buttons.done': 'Hecho',

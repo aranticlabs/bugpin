@@ -52,7 +52,7 @@ export function TemplatePreview({ html, subject }: TemplatePreviewProps) {
       <iframe
         ref={iframeRef}
         title="Email Preview"
-        className="w-full h-[400px] bg-white"
+        className="w-full h-100 bg-white"
         sandbox="allow-same-origin"
       />
     </div>

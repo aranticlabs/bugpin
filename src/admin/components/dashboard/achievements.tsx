@@ -12,7 +12,7 @@ import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ReportPriorityLabel } from '../report/ReportStatusPriority';
-import { AchievementArt } from './achievement-art';
+import { AchievementArt } from './AchievementArt';
 import { TeamTab } from './TeamTab';
 import { cn } from '../../lib/utils';
 import { formatDay } from '../../lib/dashboard';
@@ -89,15 +89,20 @@ export function unlockedAchievements(achievements: AchievementProgress[]): Achie
 export function AchievementBadge({
   achievement,
   unlocked,
+  decorative = false,
   className,
 }: {
   achievement: AchievementId;
   unlocked: boolean;
+  /** Hide from assistive tech when the surrounding card already names the achievement. */
+  decorative?: boolean;
   className?: string;
 }) {
+  const title = ACHIEVEMENTS[achievement].title;
   return (
     <AchievementArt
       achievement={achievement}
+      label={decorative ? undefined : `${title}, ${unlocked ? 'unlocked' : 'locked'}`}
       className={cn('shrink-0', !unlocked && 'opacity-40 grayscale', className)}
     />
   );
@@ -124,7 +129,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
             {game.xp.toLocaleString()} XP
           </p>
         </div>
-        <Progress value={percent} className="h-2" />
+        <Progress value={percent} className="h-2" aria-label="Progress to the next level" />
         <p className="text-xs text-muted-foreground">
           {game.nextLevelXp === null
             ? 'You reached the top level'
@@ -151,16 +156,23 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
                 <span
                   className={cn(
                     'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums',
-                    done && 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+                    done && 'bg-success/15 text-success',
                     current && 'bg-primary text-primary-foreground',
                     !done && !current && 'bg-muted'
                   )}
                 >
-                  {done ? <Check className="size-3.5" /> : level}
+                  {done ? (
+                    <>
+                      <Check className="size-3.5" aria-hidden />
+                      <span className="sr-only">Level {level}, reached</span>
+                    </>
+                  ) : (
+                    level
+                  )}
                 </span>
                 <span className={cn('flex-1', current && 'font-medium')}>{levelTitle(level)}</span>
                 {current && (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                  <Badge variant="secondary" size="sm">
                     You are here
                   </Badge>
                 )}
@@ -221,21 +233,32 @@ function AchievementCard({ achievement }: { achievement: AchievementProgress }) 
         unlocked ? 'bg-card' : 'border-dashed bg-muted/20'
       )}
     >
-      <AchievementBadge achievement={achievement.id} unlocked={unlocked} className="size-20" />
+      <AchievementBadge
+        achievement={achievement.id}
+        unlocked={unlocked}
+        decorative
+        className="size-20"
+      />
       <p className={cn('mt-1 text-sm font-medium', !unlocked && 'text-muted-foreground')}>
         {copy.title}
+        <span className="sr-only">{unlocked ? ', unlocked' : ', locked'}</span>
       </p>
       <p className="min-h-12 text-xs text-muted-foreground">{copy.description}</p>
       <div className="mt-auto w-full pt-2">
         {unlocked ? (
-          <p className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
-            <Check className="size-3 text-emerald-500" />
+          <p className="flex items-center justify-center gap-1 text-2xs text-muted-foreground">
+            <Check className="size-3 text-success" aria-hidden />
+            <span className="sr-only">Unlocked on </span>
             {formatDay(achievement.unlockedAt as string)}
           </p>
         ) : (
           <div className="space-y-1">
-            <Progress value={(achievement.current / achievement.target) * 100} className="h-1" />
-            <p className="text-[11px] tabular-nums text-muted-foreground">
+            <Progress
+              value={(achievement.current / achievement.target) * 100}
+              className="h-1"
+              aria-label={`${copy.title} progress`}
+            />
+            <p className="text-2xs tabular-nums text-muted-foreground">
               {achievement.current} / {achievement.target}
             </p>
           </div>
@@ -342,7 +365,12 @@ export function UnlockDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader className="items-center text-center">
           {achievementId && (
-            <AchievementBadge achievement={achievementId} unlocked className="mb-2 size-24" />
+            <AchievementBadge
+              achievement={achievementId}
+              unlocked
+              decorative
+              className="mb-2 size-24"
+            />
           )}
           <DialogTitle>Achievement unlocked: {copy?.title}</DialogTitle>
           <DialogDescription className="text-center">{copy?.description}</DialogDescription>

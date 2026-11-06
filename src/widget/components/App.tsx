@@ -1,4 +1,4 @@
-import { FunctionComponent } from 'preact';
+import { FunctionComponent, JSX } from 'preact';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks';
 import { WidgetConfig } from '../config.js';
 import { WidgetLauncherButton } from './WidgetLauncherButton.js';
@@ -19,6 +19,7 @@ import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
 import { useScreenRecording, type RecordingDependencies } from '../hooks/use-screen-recording.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
+import { cn } from '../lib/utils.js';
 
 type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording';
 
@@ -48,6 +49,31 @@ function getInitialFormData(config: WidgetConfig): FormData {
   };
 }
 
+// Dialog colors come from the server config; the launcher applies its own colors.
+function dialogThemeVars(config: WidgetConfig, theme: 'light' | 'dark'): JSX.CSSProperties {
+  return theme === 'dark'
+    ? {
+        '--button-color': config.dialogDarkButtonColor,
+        '--button-text-color': config.dialogDarkTextColor,
+        '--button-hover-color': config.dialogDarkButtonHoverColor,
+        '--button-hover-text-color': config.dialogDarkTextHoverColor,
+        '--background': config.dialogDarkBackgroundColor,
+        '--muted': config.dialogDarkSecondaryColor,
+        '--input-background': config.dialogDarkInputColor,
+        '--foreground': config.dialogDarkForegroundColor,
+      }
+    : {
+        '--button-color': config.dialogLightButtonColor,
+        '--button-text-color': config.dialogLightTextColor,
+        '--button-hover-color': config.dialogLightButtonHoverColor,
+        '--button-hover-text-color': config.dialogLightTextHoverColor,
+        '--background': config.dialogLightBackgroundColor,
+        '--muted': config.dialogLightSecondaryColor,
+        '--input-background': config.dialogLightInputColor,
+        '--foreground': config.dialogLightForegroundColor,
+      };
+}
+
 type AppDependencies = {
   WidgetDialog: typeof WidgetDialog;
   AnnotationCanvas: typeof AnnotationCanvas;
@@ -73,7 +99,6 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const isRecordingSupportedFn = deps?.isRecordingSupported ?? isRecordingSupported;
   const recordingStoreFn = deps?.recordingStore ?? recordingStore;
   useLocale();
-  const containerRef = useRef<HTMLDivElement>(null);
   const effectiveTheme = useEffectiveTheme(config.theme);
   const [step, setStep] = useState<WidgetStep>('closed');
   const stepRef = useRef<WidgetStep>('closed');
@@ -311,50 +336,6 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       });
     }
   }, [step, draftLoaded, draftStorageReady, config.apiKey, config.reporterEmail]);
-
-  // Apply theme-based CSS variables for dialog styling (uses dialog colors, not launcher colors)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (effectiveTheme === 'dark') {
-      container.style.setProperty('--button-color', config.dialogDarkButtonColor);
-      container.style.setProperty('--button-text-color', config.dialogDarkTextColor);
-      container.style.setProperty('--button-hover-color', config.dialogDarkButtonHoverColor);
-      container.style.setProperty('--button-hover-text-color', config.dialogDarkTextHoverColor);
-      container.style.setProperty('--background', config.dialogDarkBackgroundColor);
-      container.style.setProperty('--muted', config.dialogDarkSecondaryColor);
-      container.style.setProperty('--input-background', config.dialogDarkInputColor);
-      container.style.setProperty('--foreground', config.dialogDarkForegroundColor);
-    } else {
-      container.style.setProperty('--button-color', config.dialogLightButtonColor);
-      container.style.setProperty('--button-text-color', config.dialogLightTextColor);
-      container.style.setProperty('--button-hover-color', config.dialogLightButtonHoverColor);
-      container.style.setProperty('--button-hover-text-color', config.dialogLightTextHoverColor);
-      container.style.setProperty('--background', config.dialogLightBackgroundColor);
-      container.style.setProperty('--muted', config.dialogLightSecondaryColor);
-      container.style.setProperty('--input-background', config.dialogLightInputColor);
-      container.style.setProperty('--foreground', config.dialogLightForegroundColor);
-    }
-  }, [
-    effectiveTheme,
-    config.dialogLightButtonColor,
-    config.dialogLightTextColor,
-    config.dialogLightButtonHoverColor,
-    config.dialogLightTextHoverColor,
-    config.dialogLightBackgroundColor,
-    config.dialogLightSecondaryColor,
-    config.dialogLightInputColor,
-    config.dialogLightForegroundColor,
-    config.dialogDarkButtonColor,
-    config.dialogDarkTextColor,
-    config.dialogDarkButtonHoverColor,
-    config.dialogDarkTextHoverColor,
-    config.dialogDarkBackgroundColor,
-    config.dialogDarkSecondaryColor,
-    config.dialogDarkInputColor,
-    config.dialogDarkForegroundColor,
-  ]);
 
   const handleOpenWidget = useCallback(() => {
     if (isRecordingStep) return;
@@ -718,7 +699,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     : null;
 
   return (
-    <div ref={containerRef} class={`bugpin-container bugpin-theme-${effectiveTheme}`}>
+    <div
+      class={cn('bugpin-container', `bugpin-theme-${effectiveTheme}`)}
+      style={dialogThemeVars(config, effectiveTheme)}
+    >
       {!isRecordingStep && (
         <WidgetLauncherButton
           position={config.position}
@@ -768,7 +752,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       )}
 
       {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
-        <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
+        <div class="fixed inset-0 z-overlay bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
           <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
             <AnnotationCanvasComponent
               screenshot={annotatingMedia.dataUrl}
@@ -821,7 +805,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
       {/* Close confirmation dialog */}
       {showCloseConfirm && (
-        <div class="fixed inset-0 z-[2147483647] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
+        <div class="fixed inset-0 z-top bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
           <div
             class="relative w-full max-w-sm bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
             role="dialog"

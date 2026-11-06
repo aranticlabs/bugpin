@@ -68,7 +68,15 @@ interface AnnotationCanvasProps {
   onCancel: () => void;
 }
 
-const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#000000'];
+const COLORS = [
+  { value: '#ef4444', labelKey: 'annotation.color.red' },
+  { value: '#f97316', labelKey: 'annotation.color.orange' },
+  { value: '#eab308', labelKey: 'annotation.color.yellow' },
+  { value: '#22c55e', labelKey: 'annotation.color.green' },
+  { value: '#3b82f6', labelKey: 'annotation.color.blue' },
+  { value: '#8b5cf6', labelKey: 'annotation.color.purple' },
+  { value: '#000000', labelKey: 'annotation.color.black' },
+] as const;
 const STROKE_WIDTHS = [2, 4, 6, 8];
 
 // Global generation counter for pixelate race condition prevention
@@ -1063,12 +1071,14 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
         {/* Colors */}
         <div class="flex items-center gap-1">
-          {COLORS.map((color) => (
+          {COLORS.map(({ value: color, labelKey }) => (
             <button
               key={color}
               class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
               onClick={() => setActiveColor(color)}
-              title={color}
+              title={t(labelKey)}
+              aria-label={t(labelKey)}
+              aria-pressed={activeColor === color}
             >
               <span
                 class={cn(

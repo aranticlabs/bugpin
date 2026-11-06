@@ -23,7 +23,7 @@ export function ReporterNotificationSettingsForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
           <Label htmlFor="reporter-email-enabled" className="text-sm font-normal">
             Email Notifications
@@ -42,7 +42,7 @@ export function ReporterNotificationSettingsForm({
         inert={!effectiveEmailEnabled}
         className={cn('space-y-4', !effectiveEmailEnabled && 'section-disabled')}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="reporter-new-report" className="text-sm font-normal">
               New Reports
@@ -62,7 +62,7 @@ export function ReporterNotificationSettingsForm({
             disabled={disabled}
           />
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="reporter-status-change" className="text-sm font-normal">
               Status Changes
@@ -80,7 +80,7 @@ export function ReporterNotificationSettingsForm({
             disabled={disabled}
           />
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="reporter-priority-change" className="text-sm font-normal">
               Priority Changes
@@ -98,7 +98,7 @@ export function ReporterNotificationSettingsForm({
             disabled={disabled}
           />
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="reporter-assignment-change" className="text-sm font-normal">
               Assignment Changes
@@ -118,7 +118,7 @@ export function ReporterNotificationSettingsForm({
             disabled={disabled}
           />
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="reporter-messaging" className="text-sm font-normal">
               Messaging System

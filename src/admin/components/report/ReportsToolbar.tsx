@@ -96,7 +96,7 @@ export function ReportsToolbar({
       <div className="order-last flex w-full flex-wrap items-center gap-2 xl:contents">
         <Select value={status || 'all'} onValueChange={(value) => onFilterChange('status', value)}>
           <SelectTrigger
-            className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[170px]"
+            className="min-w-32 flex-1 xl:min-w-20 xl:max-w-42.5"
             aria-label="Filter by status"
           >
             <SelectValue placeholder="All statuses" />
@@ -116,7 +116,7 @@ export function ReportsToolbar({
           onValueChange={(value) => onFilterChange('priority', value)}
         >
           <SelectTrigger
-            className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[150px]"
+            className="min-w-32 flex-1 xl:min-w-20 xl:max-w-37.5"
             aria-label="Filter by priority"
           >
             <SelectValue placeholder="All priorities" />
@@ -137,7 +137,7 @@ export function ReportsToolbar({
             onValueChange={(value) => onFilterChange('projectId', value)}
           >
             <SelectTrigger
-              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
+              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-45"
               aria-label="Filter by project"
             >
               <SelectValue placeholder="All projects" />
@@ -159,7 +159,7 @@ export function ReportsToolbar({
             onValueChange={(value) => onFilterChange('assignedTo', value)}
           >
             <SelectTrigger
-              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
+              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-45"
               aria-label="Filter by assignee"
             >
               <SelectValue placeholder="All assignees" />

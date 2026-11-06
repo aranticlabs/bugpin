@@ -157,7 +157,7 @@ export function ReportBoard<T extends ReportBoardItem>({
       {marquee.rect && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-50 rounded-sm border border-primary bg-primary/10"
+          className="pointer-events-none fixed z-50 rounded-sm border border-primary/60 bg-primary-tint/40"
           style={marquee.rect}
         />
       )}
@@ -306,7 +306,7 @@ export function ReportBoardColumn({
       className={cn(
         'group/column relative flex min-w-0 flex-col overflow-hidden rounded-lg border bg-muted/50 transition-colors',
         shownExpanded ? 'min-h-48 p-2' : 'py-3',
-        isDropTarget && 'border-primary bg-primary/10'
+        isDropTarget && 'border-primary/60 bg-primary-tint'
       )}
     >
       {shownExpanded && (
@@ -440,7 +440,8 @@ export function ReportBoardCard({
       className={cn(
         'group relative overflow-visible p-3 shadow-sm transition-[color,background-color,border-color,opacity] hover:border-primary/50',
         movable && handleRef && 'cursor-grab active:cursor-grabbing',
-        (isDragging || selected) && 'ring-2 ring-primary',
+        selected && 'border-primary/60 bg-primary-tint hover:border-primary/60',
+        isDragging && 'ring-2 ring-primary/40',
         isDragging && 'shadow-lg',
         isDragging && groupCount === 2 && STACK_OF_TWO,
         isDragging && groupCount !== undefined && groupCount > 2 && STACK_OF_MORE,

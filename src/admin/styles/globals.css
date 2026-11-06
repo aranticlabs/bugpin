@@ -5,58 +5,22 @@
 /* Dark mode custom variant for Tailwind v4 */
 @custom-variant dark (&:is(.dark *));
 
-.launcher-preview-margin {
-  background: rgb(14 165 233 / 22%);
-  opacity: 0;
-  animation: launcher-margin-highlight 1s ease-out;
-}
-
-[data-preview-theme='light'] .launcher-preview-margin {
-  background: rgb(14 165 233 / 26%);
-}
-
-/* Same fade as the widget's launcher tooltip, so the preview appears with the same timing */
-@keyframes bugpin-tooltip-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes launcher-margin-highlight {
-  0%,
-  30% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .launcher-preview-margin {
-    animation-timing-function: step-end;
-  }
-}
-
 /* BugPin Primary Color Palette */
 :root {
-  --bugpin-primary-50: #e6f3f9;
-  --bugpin-primary-100: #cbe7f2;
-  --bugpin-primary-200: #9ed1e6;
-  --bugpin-primary-300: #6ab8d8;
-  --bugpin-primary-400: #2e9bc6;
-  --bugpin-primary-500: #0e84b1;
-  --bugpin-primary-600: #036f9b;
-  --bugpin-primary-700: #02658d;
-  --bugpin-primary-800: #024f6f;
-  --bugpin-primary-900: #013a52;
-  --bugpin-primary-950: #012738;
+  --bugpin-primary-50: oklch(0.956 0.016 226.97);
+  --bugpin-primary-100: oklch(0.911 0.033 223.42);
+  --bugpin-primary-200: oklch(0.832 0.06 225.19);
+  --bugpin-primary-300: oklch(0.744 0.09 226.59);
+  --bugpin-primary-400: oklch(0.648 0.114 229.36);
+  --bugpin-primary-500: oklch(0.577 0.115 232);
+  --bugpin-primary-600: oklch(0.512 0.108 235.05);
+  --bugpin-primary-700: oklch(0.478 0.1 234.69);
+  --bugpin-primary-800: oklch(0.403 0.084 234.52);
+  --bugpin-primary-900: oklch(0.328 0.068 233.64);
+  --bugpin-primary-950: oklch(0.257 0.052 232.9);
 }
 
-/* Light mode (default) - Neutral gray theme */
+/* Light mode (default) */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -65,10 +29,12 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --primary-hover: oklch(0.269 0 0);
-  --primary-hover-foreground: oklch(0.985 0 0);
+  /* Matches the default admin button colors served by the branding API */
+  --primary: var(--bugpin-primary-700);
+  --primary-foreground: oklch(1 0 0);
+  --primary-hover: var(--bugpin-primary-800);
+  --primary-hover-foreground: oklch(1 0 0);
+  --primary-tint: color-mix(in oklch, var(--primary) 5%, white);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -77,14 +43,22 @@
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.508 0.118 165.612);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.555 0.163 48.998);
+  --warning-foreground: oklch(0.985 0 0);
+  --info: oklch(0.5 0.134 242.749);
+  --info-foreground: oklch(0.985 0 0);
+  --brand-subtle: var(--bugpin-primary-100);
+  --brand-subtle-foreground: var(--bugpin-primary-700);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-1: oklch(0.546 0.245 262.881);
   --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --chart-3: oklch(0.666 0.179 58.318);
+  --chart-4: oklch(0.558 0.288 302.321);
+  --chart-5: oklch(0.586 0.253 17.585);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -103,10 +77,11 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --primary-hover: oklch(0.85 0 0);
-  --primary-hover-foreground: oklch(0.205 0 0);
+  --primary: var(--bugpin-primary-700);
+  --primary-foreground: oklch(1 0 0);
+  --primary-hover: var(--bugpin-primary-600);
+  --primary-hover-foreground: oklch(1 0 0);
+  --primary-tint: color-mix(in oklch, var(--primary) 12%, var(--card));
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -115,14 +90,22 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.765 0.177 163.223);
+  --success-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.746 0.16 232.661);
+  --info-foreground: oklch(0.205 0 0);
+  --brand-subtle: var(--bugpin-primary-900);
+  --brand-subtle-foreground: var(--bugpin-primary-300);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --chart-1: oklch(0.707 0.165 254.624);
+  --chart-2: oklch(0.704 0.14 182.503);
+  --chart-3: oklch(0.828 0.189 84.429);
+  --chart-4: oklch(0.714 0.203 305.504);
+  --chart-5: oklch(0.712 0.194 13.428);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.922 0 0);
@@ -133,11 +116,34 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Hover tint in the brand hue: fixed lightness and a little chroma keep it blue instead of grey */
+@supports (color: oklch(from red l c h)) {
+  :root {
+    --primary-tint: oklch(from var(--primary) 0.97 0.01 h);
+  }
+  .dark {
+    --primary-tint: oklch(from var(--primary) 0.25 0.025 h);
+  }
+}
+
 /* Map CSS variables to Tailwind theme */
 @theme inline {
   --font-sans:
     'Geist Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
     'Segoe UI Symbol', 'Noto Color Emoji';
+
+  /* The widget renders inside a Shadow DOM with its own font stack; previews of it use this one */
+  --font-widget: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --animate-tooltip-in: bugpin-tooltip-fade-in 0.2s ease-in-out forwards;
 
   /* BugPin primary color palette */
   --color-bugpin-primary-50: var(--bugpin-primary-50);
@@ -163,7 +169,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-hover-foreground: var(--primary-hover-foreground);
-  --color-primary-brand: var(--color-primary-brand);
+  --color-primary-tint: var(--primary-tint);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -172,9 +178,22 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-subtle-foreground: var(--brand-subtle-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -183,38 +202,75 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius: var(--radius);
 }
 
-/* Appearance dialog theme buttons — sm on desktop, larger on mobile */
-@layer utilities {
-  .appearance-theme-btn {
-    height: 2rem;
-    padding-inline: 0.75rem;
-    font-size: 0.75rem;
+/* Same fade as the widget's launcher tooltip, so the preview appears with the same timing */
+@keyframes bugpin-tooltip-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
-/* Mobile touch targets — larger tap areas below md (768px) */
-@layer utilities {
-  @media (max-width: 767px) {
-    [data-sidebar='menu-button'][data-size='default'] {
-      @apply h-12 text-base;
-    }
-
-    [data-sidebar='menu-sub-button'] {
-      @apply h-10 text-base;
-    }
-
-    .dropdown-menu-item {
-      @apply py-3 text-base;
-    }
-
-    .appearance-theme-btn {
-      height: 3rem;
-      font-size: 0.875rem;
-    }
+@keyframes launcher-margin-highlight {
+  0%,
+  30% {
+    opacity: 1;
   }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Keyboard focus indicator shared by every interactive primitive */
+@utility focus-ring {
+  outline: none;
+  @apply ring-2 ring-ring ring-offset-2 ring-offset-background;
+}
+
+@utility launcher-preview-margin {
+  background: oklch(0.685 0.148 237.32 / 22%);
+  opacity: 0;
+  animation: launcher-margin-highlight 1s ease-out;
+
+  [data-preview-theme='light'] & {
+    background: oklch(0.685 0.148 237.32 / 26%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation-timing-function: step-end;
+  }
+}
+
+/* Template variable placeholder in the email editor and its source rendering */
+@utility variable-chip {
+  @apply inline-flex items-center rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary;
+}
+
+/* Active/Inactive status */
+.status-active {
+  @apply text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/50;
+}
+.status-inactive {
+  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
+}
+
+/* Fields that do not apply in the current configuration */
+.section-disabled {
+  @apply select-none opacity-60 grayscale;
+}
+
+/* Connection status */
+.status-online {
+  @apply text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/50;
+}
+.status-offline {
+  @apply text-red-600 bg-red-50 dark:text-red-300 dark:bg-red-900/50;
+}
+.status-unknown {
+  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
 }
 
 /* Base styles */
@@ -225,6 +281,7 @@
     scrollbar-color: var(--muted-foreground) transparent;
   }
 
+  /* Browsers without scrollbar-color support (Safari) only style scrollbars through these */
   *::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -261,59 +318,21 @@
   #root {
     @apply h-full;
   }
-}
 
-/* Priority colors - distinct hues for better differentiation */
-.priority-lowest {
-  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
-}
-.priority-low {
-  @apply text-sky-600 bg-sky-50 dark:text-sky-300 dark:bg-sky-900/50;
-}
-.priority-medium {
-  @apply text-yellow-700 bg-yellow-100 dark:text-yellow-200 dark:bg-yellow-900/50;
-}
-.priority-high {
-  @apply text-red-700 bg-red-300 dark:text-red-300 dark:bg-red-900/50;
-}
-.priority-highest {
-  @apply text-violet-800 bg-violet-300 dark:text-violet-200 dark:bg-violet-800/60;
-}
+  html[data-col-resizing] {
+    cursor: col-resize;
+    user-select: none;
+  }
 
-/* Status colors */
-.status-open {
-  @apply text-sky-600 bg-sky-50 dark:text-sky-300 dark:bg-sky-900/50;
-}
-.status-in_progress {
-  @apply text-yellow-700 bg-yellow-100 dark:text-yellow-200 dark:bg-yellow-900/50;
-}
-.status-resolved {
-  @apply text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/50;
-}
-.status-closed {
-  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
-}
-
-/* Active/Inactive status */
-.status-active {
-  @apply text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/50;
-}
-.status-inactive {
-  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
-}
-
-/* Fields that do not apply in the current configuration */
-.section-disabled {
-  @apply select-none opacity-60 grayscale;
-}
-
-/* Connection status */
-.status-online {
-  @apply text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/50;
-}
-.status-offline {
-  @apply text-red-600 bg-red-50 dark:text-red-300 dark:bg-red-900/50;
-}
-.status-unknown {
-  @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
+  /* Spinners keep turning because they carry state; the launcher margin keeps its own step timing */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.animate-spin, .launcher-preview-margin),
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

@@ -56,7 +56,7 @@ export function NavUser() {
                 {user.avatarUrl && user.avatarUrl.trim() !== '' ? (
                   <AvatarImage src={user.avatarUrl} alt={user.name} />
                 ) : (
-                  <AvatarFallback className="rounded-lg bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300">
+                  <AvatarFallback className="rounded-lg bg-brand-subtle text-brand-subtle-foreground">
                     {user.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 )}

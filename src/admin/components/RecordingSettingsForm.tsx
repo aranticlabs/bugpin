@@ -188,7 +188,7 @@ export function RecordingSettingsForm({
       </SettingRows>
 
       {effective.enableScreenRecording && estimatedSizeMb > effective.maxVideoUploadSizeMb && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
+        <p className="text-xs text-warning">
           A full-length recording at this quality is about {estimatedSizeMb} MB, above the{' '}
           {effective.maxVideoUploadSizeMb} MB upload limit. Recordings stop early when they reach
           the limit.

@@ -143,7 +143,7 @@ export function LocalizedTextEditor({
                   <span className="flex items-center gap-2">
                     <span>{LOCALE_LABELS[code]}</span>
                     {showRequiredMark ? (
-                      <span className="text-red-500" aria-label="required">
+                      <span className="text-destructive" aria-label="required">
                         *
                       </span>
                     ) : null}

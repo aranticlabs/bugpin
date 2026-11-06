@@ -176,7 +176,7 @@ export function MyNotificationsCard() {
             />
             {formSwitch.dialog}
             {/* Per-project toggle */}
-            <div className="flex items-center justify-between pb-3 border-b">
+            <div className="flex items-center justify-between gap-4 pb-3 border-b">
               <div className="space-y-0.5">
                 <Label htmlFor="per-project-toggle" className="text-sm font-medium">
                   Customize per project

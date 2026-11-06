@@ -16,6 +16,9 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import { Spinner } from '../../components/ui/spinner';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { Button } from '../../components/ui/button';
+import { AlertCircle } from 'lucide-react';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import {
   ActivityCard,
@@ -154,9 +157,20 @@ export function Dashboard() {
           </div>
         </div>
 
-        {!overview.data ? (
+        {!overview.data && overview.isError ? (
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" aria-hidden />
+            <AlertTitle>The dashboard could not be loaded</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              Check your connection and try again.
+              <Button size="sm" variant="outline" onClick={() => overview.refetch()}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : !overview.data ? (
           <div className="flex h-64 items-center justify-center">
-            <Spinner size="lg" className="text-primary" />
+            <Spinner size="lg" className="text-primary" label="Loading dashboard" />
           </div>
         ) : (
           <div className="space-y-4">

@@ -157,6 +157,13 @@ const nl: WidgetCatalog = {
   'annotation.toolbar.zoomReset':
     'Zoom resetten ({percent}%) - houd Spatie ingedrukt om te verschuiven',
   'annotation.toolbar.strokeWidth': '{width}px',
+  'annotation.color.red': 'Rood',
+  'annotation.color.orange': 'Oranje',
+  'annotation.color.yellow': 'Geel',
+  'annotation.color.green': 'Groen',
+  'annotation.color.blue': 'Blauw',
+  'annotation.color.purple': 'Paars',
+  'annotation.color.black': 'Zwart',
   'annotation.defaultText': 'Tekst',
   'annotation.buttons.cancel': 'Annuleren',
   'annotation.buttons.done': 'Klaar',

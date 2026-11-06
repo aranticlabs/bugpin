@@ -52,7 +52,7 @@ export function TablePagination({
               if (next) onPageSizeChange(next);
             }}
           >
-            <SelectTrigger className="h-8 w-[72px]" aria-label="Rows per page">
+            <SelectTrigger className="h-8 w-18" aria-label="Rows per page">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

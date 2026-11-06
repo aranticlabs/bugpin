@@ -15,28 +15,6 @@
     <!-- Theme colors -->
     <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <!-- Branding CSS variables -->
-    <style id="branding-styles">
-      :root {
-        --color-primary-brand: #02658D;
-      }
-    </style>
-    <script>
-      // Fetch and apply branding config on load
-      fetch('/api/branding/config')
-        .then(r => r.json())
-        .then(data => {
-          if (data.success && data.config && data.config.primaryColor) {
-            document.documentElement.style.setProperty(
-              '--color-primary-brand',
-              data.config.primaryColor
-            );
-          }
-        })
-        .catch(() => {
-          // Silently fail - use default color
-        });
-    </script>
   </head>
   <body>
     <div id="root"></div>

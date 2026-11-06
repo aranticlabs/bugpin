@@ -1,14 +1,13 @@
 import { useState } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { UserAvatar } from './UserAvatar';
 import { Badge } from '../ui/badge';
 import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDashboardTeam } from '../../hooks/useDashboard';
-import { initials } from '../../lib/dashboard';
 import { cn } from '../../lib/utils';
 import { AchievementBadge, levelTitle } from './achievements';
-import { TEAM_PERIODS, type TeamMember, type TeamPeriod } from '@shared/types';
+import { TEAM_PERIODS, type TeamPeriod } from '@shared/types';
 
 const PERIOD_LABEL: Record<TeamPeriod, string> = {
   '30d': 'Last 30 days',
@@ -22,21 +21,12 @@ const PODIUM = [
   'bg-amber-700/20 text-amber-800 dark:text-amber-500',
 ];
 
-function MemberAvatar({ member, className }: { member: TeamMember; className?: string }) {
-  return (
-    <Avatar className={className}>
-      {member.avatarUrl && <AvatarImage src={member.avatarUrl} alt="" />}
-      <AvatarFallback className="text-xs">{initials(member.name)}</AvatarFallback>
-    </Avatar>
-  );
-}
-
 export function TeamTab() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<TeamPeriod>('30d');
   const { data, isLoading, isError } = useDashboardTeam(period);
 
-  if (isLoading) return <Spinner className="mx-auto my-10 text-primary" />;
+  if (isLoading) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
   if (isError || !data) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
@@ -87,12 +77,12 @@ export function TeamTab() {
                   {index + 1}
                 </span>
               )}
-              <MemberAvatar member={member} className="size-8" />
+              <UserAvatar name={member.name} avatarUrl={member.avatarUrl} size="md" />
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <span className="truncate">{member.name}</span>
                   {member.id === user?.id && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                    <Badge variant="secondary" size="sm">
                       You
                     </Badge>
                   )}
@@ -115,7 +105,7 @@ export function TeamTab() {
                 <p className="text-sm font-medium tabular-nums">
                   {(data.ranking ? member.periodXp : member.xp).toLocaleString()} XP
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   {data.ranking && period !== 'all' ? PERIOD_LABEL[period].toLowerCase() : 'total'}
                 </p>
               </div>

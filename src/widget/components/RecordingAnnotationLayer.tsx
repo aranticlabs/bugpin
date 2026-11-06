@@ -14,12 +14,10 @@ import {
   type WheelTarget,
   wheelTarget,
 } from '../lib/page-geometry';
+import { adoptStylesheet } from '../lib/adopt-stylesheet';
 import { cn } from '../lib/utils';
 
-const LAYER_CLASS = 'fixed inset-0 z-[2147483646] h-full w-full';
-const FRAME_WIDTH = 4;
-const FRAME_COLOR = '#dc2626';
-const FRAME_PAUSED_COLOR = '#737373';
+const LAYER_CLASS = 'fixed inset-0 z-overlay h-full w-full';
 const PEN_WIDTH = 4;
 const LASER_COLOR = '#ef4444';
 const LASER_TRAIL_MS = 800;
@@ -323,10 +321,10 @@ function drawLaser(
 
 // The widget's own host element is exempt so the recording bar keeps a normal cursor.
 function hideHostCursor(): () => void {
-  const style = document.createElement('style');
-  style.textContent = 'html, html *:not([data-bugpin-exclude]) { cursor: none !important; }';
-  document.head.appendChild(style);
-  return () => style.remove();
+  return adoptStylesheet(
+    document,
+    'html, html *:not([data-bugpin-exclude]) { cursor: none !important; }'
+  );
 }
 
 const hasColor = ({ backgroundColor }: CSSStyleDeclaration) =>
@@ -602,8 +600,8 @@ export const RecordingAnnotationLayer: FunctionComponent<RecordingAnnotationLaye
         <div
           data-recording-backdrop
           aria-hidden="true"
-          class="pointer-events-none fixed inset-0"
-          style={{ ...pageBackground(), zIndex: -2147483648 }}
+          class="pointer-events-none fixed inset-0 z-bottom"
+          style={pageBackground()}
         />
       )}
       <canvas
@@ -628,12 +626,10 @@ export const RecordingAnnotationLayer: FunctionComponent<RecordingAnnotationLaye
         popover="manual"
         class={cn(
           LAYER_CLASS,
-          'pointer-events-none m-0 border-0 bg-transparent p-0',
+          'pointer-events-none m-0 border-0 bg-transparent p-0 inset-ring-4',
+          isPaused ? 'inset-ring-muted-foreground' : 'inset-ring-destructive',
           !isActive && 'hidden'
         )}
-        style={{
-          boxShadow: `inset 0 0 0 ${FRAME_WIDTH}px ${isPaused ? FRAME_PAUSED_COLOR : FRAME_COLOR}`,
-        }}
       />
     </>
   );

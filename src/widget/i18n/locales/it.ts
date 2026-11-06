@@ -155,6 +155,13 @@ const it: WidgetCatalog = {
   'annotation.toolbar.zoomReset':
     'Reimposta zoom ({percent}%) - Tieni premuto Spazio per spostarti',
   'annotation.toolbar.strokeWidth': '{width}px',
+  'annotation.color.red': 'Rosso',
+  'annotation.color.orange': 'Arancione',
+  'annotation.color.yellow': 'Giallo',
+  'annotation.color.green': 'Verde',
+  'annotation.color.blue': 'Blu',
+  'annotation.color.purple': 'Viola',
+  'annotation.color.black': 'Nero',
   'annotation.defaultText': 'Testo',
   'annotation.buttons.cancel': 'Annulla',
   'annotation.buttons.done': 'Fatto',

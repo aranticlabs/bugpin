@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ScrollArea } from '../components/ui/scroll-area';
+import { cn } from '../lib/utils';
 import { useTheme } from '../contexts/ThemeContext';
 import { Spinner } from '../components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -172,11 +173,11 @@ const NAV_SECTIONS = [
 function getStatusBadgeClasses(status: string): string {
   switch (status) {
     case 'Completed':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400';
+      return 'bg-success/10 text-success';
     case 'Pending':
-      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400';
+      return 'bg-warning/10 text-warning';
     case 'Failed':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400';
+      return 'bg-destructive/10 text-destructive';
     default:
       return 'bg-gray-100 text-gray-700 dark:bg-gray-900/50 dark:text-gray-400';
   }
@@ -426,10 +427,7 @@ export function TestWidgetPage() {
 
       {/* API Key Notice Banner */}
       {apiKey && (
-        <div
-          className="text-white px-5 py-3 text-center text-sm flex-shrink-0"
-          style={{ backgroundColor: '#02658D' }}
-        >
+        <div className="flex-shrink-0 bg-bugpin-primary-700 px-5 py-3 text-center text-sm text-white">
           API key:{' '}
           <code className="bg-white/15 px-1.5 py-0.5 rounded font-mono text-xs">{apiKey}</code>
           <Button
@@ -478,7 +476,7 @@ export function TestWidgetPage() {
           <nav className="py-5">
             {NAV_SECTIONS.map((section) => (
               <div key={section.title} className="mb-6">
-                <div className="px-5 text-[11px] uppercase text-zinc-500 font-semibold mb-2">
+                <div className="mb-2 px-5 text-2xs font-semibold uppercase text-zinc-500">
                   {section.title}
                 </div>
                 {section.items.map((item) => {
@@ -486,10 +484,11 @@ export function TestWidgetPage() {
                   return (
                     <div
                       key={item.label}
-                      className={`px-5 py-3 flex items-center gap-3 cursor-pointer transition-colors hover:bg-zinc-700 ${
-                        item.active ? 'bg-zinc-700 border-l-3 pl-[17px]' : ''
-                      }`}
-                      style={item.active ? { borderLeftColor: '#02658D' } : undefined}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-700',
+                        item.active &&
+                          'bg-zinc-700 shadow-[inset_3px_0_0_var(--color-bugpin-primary-700)]'
+                      )}
                     >
                       <Icon className="w-5 h-5" />
                       <span>{item.label}</span>
@@ -548,11 +547,10 @@ export function TestWidgetPage() {
                     <div className="text-sm text-muted-foreground mb-2">{stat.label}</div>
                     <div className="text-3xl font-bold mb-2">{stat.value}</div>
                     <div
-                      className={`text-sm flex items-center gap-1 ${
-                        stat.positive
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}
+                      className={cn(
+                        'text-sm flex items-center gap-1',
+                        stat.positive ? 'text-success' : 'text-destructive'
+                      )}
                     >
                       {stat.positive ? '↑' : '↓'} {stat.change} from last month
                     </div>
@@ -572,7 +570,11 @@ export function TestWidgetPage() {
                   {CHART_BARS.map((bar, index) => (
                     <div
                       key={index}
-                      className={`flex-1 ${bar.color} rounded-t transition-all hover:opacity-80`}
+                      className={cn(
+                        'flex-1',
+                        bar.color,
+                        'rounded-t transition-all hover:opacity-80'
+                      )}
                       style={{ height: `${bar.height}%` }}
                     />
                   ))}
@@ -580,7 +582,7 @@ export function TestWidgetPage() {
                 <div className="flex gap-5 mt-4 flex-wrap">
                   {CHART_LEGEND.map((item) => (
                     <div key={item.label} className="flex items-center gap-2 text-sm">
-                      <div className={`w-4 h-4 rounded ${item.color}`} />
+                      <div className={cn('w-4 h-4 rounded', item.color)} />
                       <span>{item.label}</span>
                     </div>
                   ))}
@@ -614,9 +616,10 @@ export function TestWidgetPage() {
                         <TableCell>{txn.amount}</TableCell>
                         <TableCell>
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClasses(
-                              txn.status
-                            )}`}
+                            className={cn(
+                              'px-3 py-1 rounded-full text-xs font-semibold',
+                              getStatusBadgeClasses(txn.status)
+                            )}
                           >
                             {txn.status}
                           </span>

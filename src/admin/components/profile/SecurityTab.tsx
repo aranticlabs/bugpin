@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { TWO_FACTOR_STATUS_KEY, useTwoFactorStatus } from '../../hooks/useTwoFactorStatus';
-import { formatDate } from '../../lib/utils';
+import { formatDate } from '../../lib/format';
 import {
   getPasskeyRegistrationOptions,
   passkeysSupported,

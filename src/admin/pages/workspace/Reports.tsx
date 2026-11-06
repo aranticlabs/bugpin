@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { reportOriginState } from '../../lib/reportOrigin';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../api/client';
@@ -159,6 +160,28 @@ function parseStatusFilter(value: string): ReportStatus[] {
   return statuses.length > 0 ? statuses : [...REPORT_STATUSES];
 }
 
+// Rows also open on click for pointer users; the title link is the keyboard and screen reader path.
+function ReportTitleLink({
+  reportId,
+  title,
+  state,
+}: {
+  reportId: string;
+  title: string;
+  state: ReturnType<typeof reportOriginState>;
+}) {
+  return (
+    <Link
+      to={`/reports/${reportId}`}
+      state={state}
+      onClick={(event) => event.stopPropagation()}
+      className="block rounded-sm font-medium hover:underline focus-visible:focus-ring"
+    >
+      {title}
+    </Link>
+  );
+}
+
 export function Reports({
   projectId: fixedProjectId,
   headerStart,
@@ -206,13 +229,12 @@ export function Reports({
   const fixedProjectName = fixedProjectId
     ? projectsData?.find((project) => project.id === fixedProjectId)?.name
     : undefined;
+  const reportOrigin = reportOriginState({
+    path: location.pathname + location.search,
+    label: fixedProjectId ? (fixedProjectName ?? 'Project') : 'Reports',
+  });
   const openReport = (reportId: string) =>
-    navigate(`/reports/${reportId}`, {
-      state: reportOriginState({
-        path: location.pathname + location.search,
-        label: fixedProjectId ? (fixedProjectName ?? 'Project') : 'Reports',
-      }),
-    });
+    navigate(`/reports/${reportId}`, { state: reportOrigin });
 
   const { data: assignableUsers = [] } = useQuery({
     queryKey: ['assignable-users'],
@@ -861,7 +883,10 @@ export function Reports({
               data?.data?.map((report: Report) => (
                 <Card
                   key={report.id}
-                  className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
+                  className={cn(
+                    'cursor-pointer hover:bg-primary-tint',
+                    selectedIds.has(report.id) ? 'bg-muted/30' : ''
+                  )}
                   onClick={() => openReport(report.id)}
                 >
                   <CardContent className="p-4">
@@ -876,7 +901,11 @@ export function Reports({
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium">{report.title}</p>
+                        <ReportTitleLink
+                          reportId={report.id}
+                          title={report.title}
+                          state={reportOrigin}
+                        />
                         {report.licenseLocked && (
                           <p className="text-xs text-muted-foreground">Read-only · License limit</p>
                         )}
@@ -925,7 +954,7 @@ export function Reports({
             <Table stickyHeader>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px]">
+                  <TableHead className="w-12.5">
                     <Checkbox
                       checked={
                         data?.data?.length > 0 &&
@@ -970,7 +999,7 @@ export function Reports({
                     direction={sort.direction}
                     onSort={handleSort}
                   />
-                  <TableHead className="w-[50px]">
+                  <TableHead className="w-12.5">
                     <RefreshCw className="h-4 w-4" />
                   </TableHead>
                   <SortableTableHead
@@ -999,7 +1028,10 @@ export function Reports({
                   data?.data?.map((report: Report) => (
                     <TableRow
                       key={report.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
+                      className={cn(
+                        'cursor-pointer hover:bg-primary-tint',
+                        selectedIds.has(report.id) ? 'bg-muted/30' : ''
+                      )}
                       onClick={() => openReport(report.id)}
                     >
                       <TableCell onClick={(e) => e.stopPropagation()}>
@@ -1012,7 +1044,11 @@ export function Reports({
                         />
                       </TableCell>
                       <TableCell className="w-[45%] min-w-48 max-w-0">
-                        <p className="font-medium">{report.title}</p>
+                        <ReportTitleLink
+                          reportId={report.id}
+                          title={report.title}
+                          state={reportOrigin}
+                        />
                         {report.licenseLocked && (
                           <p className="text-xs text-muted-foreground">Read-only · License limit</p>
                         )}

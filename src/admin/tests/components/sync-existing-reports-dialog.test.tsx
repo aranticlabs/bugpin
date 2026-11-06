@@ -46,8 +46,10 @@ describe('SyncExistingReportsDialog', () => {
   it('defaults to future reports option', () => {
     renderWithProviders(<SyncExistingReportsDialog {...defaultProps} />);
 
-    const futureOption = screen.getByText('Only sync future reports').closest('button');
-    expect(futureOption).toHaveClass('border-primary');
+    expect(screen.getByRole('radio', { name: /only sync future reports/i })).toBeChecked();
+    expect(screen.getByText('Only sync future reports').closest('label')).toHaveClass(
+      'border-primary'
+    );
   });
 
   it('calls onClose when Cancel is clicked', async () => {

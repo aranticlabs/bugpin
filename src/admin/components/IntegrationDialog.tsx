@@ -442,7 +442,7 @@ export function IntegrationDialog({
                   // Show "token saved" state when editing
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-muted rounded-md border">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success" />
                       <span className="text-sm">Token saved</span>
                       <span className="text-xs text-muted-foreground">••••••••••••••••</span>
                     </div>
@@ -570,7 +570,7 @@ export function IntegrationDialog({
 
               {/* Labels Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="enable-labels">Add labels to issues</Label>
                     {!hasRepository && (
@@ -591,7 +591,7 @@ export function IntegrationDialog({
                 {enableLabels && (
                   <div className="pt-2 border-t">
                     {labelsError ? (
-                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="text-sm text-warning">
                         Unable to load labels. Token needs <strong>Metadata: Read</strong>{' '}
                         permission.{' '}
                         <a
@@ -659,7 +659,7 @@ export function IntegrationDialog({
 
               {/* Assignees Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="enable-assignees">Assign issues to users</Label>
                     {!hasRepository && (
@@ -680,7 +680,7 @@ export function IntegrationDialog({
                 {enableAssignees && (
                   <div className="pt-2 border-t">
                     {assigneesError ? (
-                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="text-sm text-warning">
                         Unable to load assignees. Token needs <strong>Metadata: Read</strong>{' '}
                         permission.{' '}
                         <a
@@ -749,7 +749,7 @@ export function IntegrationDialog({
 
               {/* File Transfer Mode Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <Label htmlFor="enable-upload">Upload files to GitHub</Label>
                   <Switch
                     id="enable-upload"
@@ -770,7 +770,7 @@ export function IntegrationDialog({
               </div>
 
               <div className="space-y-2 border rounded-lg p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <Label htmlFor="public-video-links">Public video links</Label>
                   <Switch
                     id="public-video-links"
@@ -785,7 +785,7 @@ export function IntegrationDialog({
 
               {/* Automatic Sync Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <Label htmlFor="enable-sync">Automatic sync</Label>
                   <Switch
                     id="enable-sync"

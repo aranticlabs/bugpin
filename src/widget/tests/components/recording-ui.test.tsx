@@ -238,14 +238,15 @@ describe('RecordingBar', () => {
     expect(button(t('recording.pause'))).toBeNull();
   });
 
-  it('starts at top center without relying on translate utilities', async () => {
+  it('starts at top center until it is dragged', async () => {
     await mount(<RecordingBar {...barProps} />);
     const bar = container.querySelector('[data-bugpin-exclude]') as HTMLElement;
 
-    expect(bar.style.left).toBe('50%');
-    expect(bar.style.top).toBe('20px');
-    expect(bar.style.bottom).toBe('');
-    expect(bar.style.transform).toBe('translateX(-50%)');
+    for (const name of ['left-1/2', 'top-5', '-translate-x-1/2']) {
+      expect(bar.classList.contains(name)).toBe(true);
+    }
+    expect(bar.style.left).toBe('');
+    expect(bar.style.top).toBe('');
     expect(bar.classList.contains('rounded-xl')).toBe(true);
     expect(container.querySelector('[data-recording-drag-handle]')).not.toBeNull();
   });
@@ -254,12 +255,12 @@ describe('RecordingBar', () => {
     const tooltip = () =>
       button(t('recording.pause'))?.parentElement?.querySelector('[role="tooltip"]') as HTMLElement;
     await mount(<RecordingBar {...barProps} />);
-    expect(tooltip().style.top).toContain('100%');
-    expect(tooltip().style.bottom).toBe('');
+    expect(tooltip().classList.contains('top-[calc(100%+6px)]')).toBe(true);
+    expect(tooltip().classList.contains('bottom-[calc(100%+6px)]')).toBe(false);
 
     await mount(<RecordingBar {...barProps} position={{ x: 100, y: 500 }} />);
-    expect(tooltip().style.bottom).toContain('100%');
-    expect(tooltip().style.top).toBe('');
+    expect(tooltip().classList.contains('bottom-[calc(100%+6px)]')).toBe(true);
+    expect(tooltip().classList.contains('top-[calc(100%+6px)]')).toBe(false);
   });
 
   it('shows elapsed and maximum time outside any live region', async () => {
@@ -285,7 +286,7 @@ describe('RecordingBar', () => {
     expect(onResume).toHaveBeenCalledTimes(1);
     expect(button(t('recording.pause'))).toBeNull();
     expect(container.textContent).not.toContain('PAUSED');
-    expect(button(t('recording.resume'))?.classList.contains('bg-amber-500')).toBe(true);
+    expect(button(t('recording.resume'))?.classList.contains('bg-warning')).toBe(true);
     const indicator = container.querySelector('[data-recording-indicator]');
     expect(indicator?.classList.contains('animate-pulse')).toBe(false);
     expect(indicator?.classList.contains('text-muted-foreground')).toBe(true);
@@ -631,10 +632,11 @@ describe('RecordingBar', () => {
   it('frames the page in red and turns the frame gray while paused', async () => {
     await mount(<RecordingBar {...barProps} />);
     const frame = () => container.querySelector('[data-recording-frame]') as HTMLElement;
-    expect(frame().style.boxShadow).toContain('#dc2626');
+    expect(frame().classList.contains('inset-ring-destructive')).toBe(true);
 
     await mount(<RecordingBar {...barProps} isPaused />);
-    expect(frame().style.boxShadow).toContain('#737373');
+    expect(frame().classList.contains('inset-ring-muted-foreground')).toBe(true);
+    expect(frame().classList.contains('inset-ring-destructive')).toBe(false);
   });
 
   describe('tools', () => {

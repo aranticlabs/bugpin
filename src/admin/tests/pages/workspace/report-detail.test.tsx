@@ -112,9 +112,9 @@ describe('ReportDetail', () => {
     expect(await screen.findByText('Media (2)')).toBeInTheDocument();
     const video = document.querySelector('video');
     expect(video).toHaveAttribute('preload', 'metadata');
-    expect(video).toHaveStyle({ maxHeight: '200px' });
+    expect(video).toHaveClass('max-h-50');
     expect(video).toHaveClass('object-contain');
-    expect(screen.getByRole('img', { name: 'screen.png' })).toHaveStyle({ maxHeight: '200px' });
+    expect(screen.getByRole('img', { name: 'screen.png' })).toHaveClass('max-h-50');
 
     await user.click(screen.getByRole('img', { name: 'screen.png' }));
     expect(await screen.findByText('Open in new tab')).toBeInTheDocument();

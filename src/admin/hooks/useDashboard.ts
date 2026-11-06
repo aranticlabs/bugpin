@@ -8,6 +8,7 @@ import type {
   DashboardPersonal,
   DashboardRange,
   GamificationSelf,
+  GamificationSettings,
   GamificationTeam,
   Report,
   TeamPeriod,
@@ -127,5 +128,12 @@ export function useUpdateDashboardReport() {
     onError: (error: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(error.response?.data?.message || 'Failed to update the report');
     },
+  });
+}
+
+export function useGamificationSettings() {
+  return useQuery({
+    queryKey: ['gamification'],
+    queryFn: async () => (await api.get('/gamification')).data.gamification as GamificationSettings,
   });
 }

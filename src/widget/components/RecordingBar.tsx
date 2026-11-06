@@ -42,14 +42,7 @@ const TOOLTIP_CLEARANCE = 90;
 const PEN_TRAY_OFFSET = 14;
 const PEN_TRAY_OFFSET_BELOW_WARNING = 58;
 const ACTIVE_TOOL_CLASS = 'bg-foreground text-background hover:bg-foreground/90';
-
-// Tailwind's shadow and ring utilities rely on @property defaults, which do not apply in a shadow root.
-const BAR_SHADOW_CLASS =
-  '[box-shadow:0_0_0_1px_rgb(255_255_255/0.25),0_25px_50px_-12px_rgb(0_0_0/0.5)]';
-const SELECTED_COLOR_CLASS = '[box-shadow:0_0_0_2px_var(--ring)]';
-
-// Tailwind's translate utilities rely on @property defaults, which do not apply in a shadow root.
-const DEFAULT_POSITION_STYLE = { left: '50%', top: '20px', transform: 'translateX(-50%)' };
+const BAR_SHADOW_CLASS = 'shadow-2xl shadow-black/50 ring-1 ring-white/25';
 
 export interface RecordingBarPosition {
   x: number;
@@ -225,12 +218,11 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
         data-bugpin-exclude
         popover="manual"
         class={cn(
-          'bugpin-theme-dark [--destructive:#dc2626] fixed z-[2147483647] m-0 flex w-max max-w-[calc(100vw-16px)] cursor-default select-none flex-col gap-1.5 overflow-visible p-1.5 [inset:auto]',
-          BAR_SHADOW_CLASS
+          'bugpin-theme-dark fixed inset-auto z-top m-0 flex w-max max-w-[calc(100vw-16px)] cursor-default select-none flex-col gap-1.5 overflow-visible p-1.5',
+          BAR_SHADOW_CLASS,
+          !position && 'left-1/2 top-5 -translate-x-1/2'
         )}
-        style={
-          position ? { left: `${position.x}px`, top: `${position.y}px` } : DEFAULT_POSITION_STYLE
-        }
+        style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
@@ -322,7 +314,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                         label={t(labelKey)}
                         side={tooltipSide}
                         variant={tools.color === value ? 'secondary' : 'ghost'}
-                        class={cn('h-8 w-8', tools.color === value && SELECTED_COLOR_CLASS)}
+                        class={cn('h-8 w-8', tools.color === value && 'ring-2 ring-ring')}
                         aria-pressed={tools.color === value}
                         onClick={() => tools.setColor(value)}
                       >
@@ -383,7 +375,8 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                   side={tooltipSide}
                   variant="ghost"
                   class={cn(
-                    isPaused && 'bg-amber-500 text-black hover:bg-amber-400 hover:text-black'
+                    isPaused &&
+                      'bg-warning text-warning-foreground hover:bg-warning/90 hover:text-warning-foreground'
                   )}
                   onClick={isPaused ? onResume : onPause}
                   disabled={isReady}

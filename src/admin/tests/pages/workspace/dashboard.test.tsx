@@ -117,7 +117,7 @@ describe('Dashboard Page', () => {
       )
     );
     renderWithProviders(<Dashboard />);
-    await user.click(await screen.findByRole('button', { name: 'Show levels' }));
+    await user.click(await screen.findByRole('button', { name: /show levels/i }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: "Hunter's log" })).toBeInTheDocument();
     expect(within(dialog).getByText('Resolved within 60 min')).toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('Dashboard Page', () => {
       })
     );
     renderWithProviders(<Dashboard />);
-    await user.click(await screen.findByRole('button', { name: 'Show levels' }));
+    await user.click(await screen.findByRole('button', { name: /show levels/i }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('tab', { name: 'Team' }));
 

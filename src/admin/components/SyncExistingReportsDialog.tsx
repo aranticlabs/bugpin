@@ -9,9 +9,10 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { Button } from './ui/button';
-import { Label } from './ui/label';
 import { Spinner } from './ui/spinner';
-import { CheckCircle2 } from 'lucide-react';
+import { cn } from '../lib/utils';
+
+type SyncOption = 'all' | 'future';
 
 interface SyncExistingReportsDialogProps {
   open: boolean;
@@ -28,8 +29,25 @@ export function SyncExistingReportsDialog({
   integrationId,
   unsyncedCount,
 }: SyncExistingReportsDialogProps) {
-  const [syncOption, setSyncOption] = useState<'all' | 'future'>('future');
+  const [syncOption, setSyncOption] = useState<SyncOption>('future');
   const syncMutation = useSyncExistingReports();
+
+  const options: { value: SyncOption; title: string; description: string }[] = [
+    ...(unsyncedCount > 0
+      ? [
+          {
+            value: 'all' as const,
+            title: 'Sync all existing reports',
+            description: `Queue ${unsyncedCount} existing report${unsyncedCount > 1 ? 's' : ''} for sync`,
+          },
+        ]
+      : []),
+    {
+      value: 'future',
+      title: 'Only sync future reports',
+      description: 'Only new reports will be synced to GitHub',
+    },
+  ];
 
   const handleConfirm = async () => {
     if (syncOption === 'all' && unsyncedCount > 0) {
@@ -59,52 +77,33 @@ export function SyncExistingReportsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-2">
-          {unsyncedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setSyncOption('all')}
-              className={`w-full flex items-start space-x-3 p-3 rounded-lg border text-left transition-colors ${
-                syncOption === 'all' ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-              }`}
+        <fieldset className="space-y-2 py-4">
+          <legend className="sr-only">Which reports to sync</legend>
+          {options.map((option) => (
+            <label
+              key={option.value}
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-focus-visible:focus-ring',
+                syncOption === option.value
+                  ? 'border-primary bg-primary/5'
+                  : 'hover:bg-primary-tint'
+              )}
             >
-              <div
-                className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                  syncOption === 'all' ? 'border-primary' : 'border-muted-foreground'
-                }`}
-              >
-                {syncOption === 'all' && <CheckCircle2 className="h-3 w-3 text-primary" />}
-              </div>
-              <Label className="cursor-pointer flex-1">
-                <div className="font-medium">Sync all existing reports</div>
-                <p className="text-sm text-muted-foreground font-normal">
-                  Queue {unsyncedCount} existing report{unsyncedCount > 1 ? 's' : ''} for sync
-                </p>
-              </Label>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setSyncOption('future')}
-            className={`w-full flex items-start space-x-3 p-3 rounded-lg border text-left transition-colors ${
-              syncOption === 'future' ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-            }`}
-          >
-            <div
-              className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                syncOption === 'future' ? 'border-primary' : 'border-muted-foreground'
-              }`}
-            >
-              {syncOption === 'future' && <CheckCircle2 className="h-3 w-3 text-primary" />}
-            </div>
-            <Label className="cursor-pointer flex-1">
-              <div className="font-medium">Only sync future reports</div>
-              <p className="text-sm text-muted-foreground font-normal">
-                Only new reports will be synced to GitHub
-              </p>
-            </Label>
-          </button>
-        </div>
+              <input
+                type="radio"
+                name="sync-option"
+                value={option.value}
+                checked={syncOption === option.value}
+                onChange={() => setSyncOption(option.value)}
+                className="mt-0.5 size-4 shrink-0 accent-primary outline-none"
+              />
+              <span className="flex-1 space-y-0.5">
+                <span className="block text-sm font-medium">{option.title}</span>
+                <span className="block text-sm text-muted-foreground">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>

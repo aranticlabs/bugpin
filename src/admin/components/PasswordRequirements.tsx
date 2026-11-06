@@ -17,7 +17,7 @@ export function PasswordRequirements({
           key={check.rule}
           className={cn(
             'flex items-center gap-1.5',
-            check.met ? 'text-emerald-600 dark:text-emerald-500' : 'text-muted-foreground'
+            check.met ? 'text-success' : 'text-muted-foreground'
           )}
         >
           {check.met ? (

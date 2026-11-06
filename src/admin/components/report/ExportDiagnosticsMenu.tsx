@@ -120,7 +120,7 @@ export function ExportDiagnosticsMenu({ report }: ExportDiagnosticsMenuProps) {
               return (
                 <div
                   key={format}
-                  className="flex items-center justify-between rounded-sm px-2 py-1.5 text-sm"
+                  className="flex items-center justify-between rounded-sm px-2 py-1.5 text-sm transition-colors focus-within:bg-primary-tint hover:bg-primary-tint"
                 >
                   <span className="flex items-center gap-2 text-foreground">
                     <Icon className="h-4 w-4 text-muted-foreground" />
@@ -129,20 +129,22 @@ export function ExportDiagnosticsMenu({ report }: ExportDiagnosticsMenuProps) {
                   <div className="flex items-center gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => handleCopy(format)}
                           aria-label={`Copy ${label} to clipboard`}
-                          className="relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="relative text-muted-foreground hover:text-foreground"
                         >
-                          <Copy className="h-4 w-4" />
+                          <Copy />
                           {isLastCopy && (
                             <span
                               aria-hidden="true"
                               className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
                             />
                           )}
-                        </button>
+                        </Button>
                       </TooltipTrigger>
                       <TooltipContent>
                         {isLastCopy ? 'Copy to clipboard (last used)' : 'Copy to clipboard'}
@@ -150,20 +152,22 @@ export function ExportDiagnosticsMenu({ report }: ExportDiagnosticsMenuProps) {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => handleDownload(format)}
                           aria-label={`Download as .${extension}`}
-                          className="relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="relative text-muted-foreground hover:text-foreground"
                         >
-                          <Download className="h-4 w-4" />
+                          <Download />
                           {isLastDownload && (
                             <span
                               aria-hidden="true"
                               className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
                             />
                           )}
-                        </button>
+                        </Button>
                       </TooltipTrigger>
                       <TooltipContent>
                         {isLastDownload

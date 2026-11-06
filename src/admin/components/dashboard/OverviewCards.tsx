@@ -2,11 +2,16 @@ import { Link } from 'react-router-dom';
 import { ArrowDownRight, ArrowUpRight, Bug, Info } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { REPORT_STATUS_LABELS, ReportPriorityLabel } from '../report/ReportStatusPriority';
-import { ChartLegend, MiniChart, TrendChart } from './charts';
+import {
+  REPORT_PRIORITY_LABELS,
+  REPORT_STATUS_LABELS,
+  ReportPriorityLabel,
+  reportPriorityBarClass,
+} from '../report/ReportStatusPriority';
+import { MiniChart, SeriesLegend, TrendChart, type ChartSeries } from './charts';
+import { TrendBadge } from './TrendBadge';
 import { cn } from '../../lib/utils';
 import { reportOriginState } from '../../lib/reportOrigin';
 import { formatDay, formatHours, formatTimeAgo, initials } from '../../lib/dashboard';
@@ -22,14 +27,6 @@ import {
 } from '@shared/types';
 
 export const DASHBOARD_ORIGIN = { path: '/', label: 'Dashboard' };
-
-const PRIORITY_BAR: Record<ReportPriority, string> = {
-  highest: 'bg-red-500',
-  high: 'bg-orange-600 dark:bg-orange-500',
-  medium: 'bg-amber-600 dark:bg-amber-500',
-  low: 'bg-muted-foreground/70',
-  lowest: 'bg-muted-foreground/35',
-};
 
 type KpiDelta = 'count' | 'percent' | 'hours';
 
@@ -131,8 +128,12 @@ function KpiCard({ definition, kpi }: { definition: KpiDefinition; kpi: Dashboar
           <span className="text-sm text-muted-foreground">{definition.label}</span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" aria-label={`About ${definition.label}`}>
-                <Info className="size-3.5 text-muted-foreground" />
+              <button
+                type="button"
+                aria-label={`About ${definition.label}`}
+                className="-m-1.5 rounded-sm p-1.5 text-muted-foreground hover:text-foreground focus-visible:focus-ring"
+              >
+                <Info className="size-3.5" aria-hidden />
               </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-64">{definition.hint}</TooltipContent>
@@ -144,18 +145,10 @@ function KpiCard({ definition, kpi }: { definition: KpiDefinition; kpi: Dashboar
               {definition.format(kpi.value)}
             </span>
             {delta && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'gap-0.5 border-transparent',
-                  good
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-red-500/10 text-red-600 dark:text-red-400'
-                )}
-              >
+              <TrendBadge good={good}>
                 <TrendIcon className="size-3" />
                 {delta}
-              </Badge>
+              </TrendBadge>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -171,7 +164,7 @@ function KpiCard({ definition, kpi }: { definition: KpiDefinition; kpi: Dashboar
             name={definition.pointName}
             format={chartFormat}
           />
-          <div className="flex justify-between text-[10px] text-muted-foreground">
+          <div className="flex justify-between text-2xs text-muted-foreground">
             <span>{days.length} days ago</span>
             <span>Today</span>
           </div>
@@ -221,6 +214,21 @@ export function IntakeChartCard({
           created: day.created,
           resolved: day.resolved,
         }));
+  const series: ChartSeries[] = [
+    {
+      label: 'Received',
+      tone: 'chart-1',
+      values: buckets.map((bucket) => bucket.created),
+      area: true,
+    },
+    {
+      label: 'Resolved',
+      tone: 'chart-2',
+      values: buckets.map((bucket) => bucket.resolved),
+      area: true,
+      dashed: true,
+    },
+  ];
   return (
     <Card className={cn('min-w-0', className)}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
@@ -231,30 +239,13 @@ export function IntakeChartCard({
             {range === 90 && ', per week'}
           </CardDescription>
         </div>
-        <ChartLegend
-          items={[
-            { label: 'Received', color: 'var(--chart-1)' },
-            { label: 'Resolved', color: 'var(--chart-2)' },
-          ]}
-        />
+        <SeriesLegend series={series} />
       </CardHeader>
       <CardContent>
         <TrendChart
+          title="Reports received and resolved"
           labels={buckets.map((bucket) => bucket.label)}
-          series={[
-            {
-              label: 'Received',
-              color: 'var(--chart-1)',
-              values: buckets.map((bucket) => bucket.created),
-              area: true,
-            },
-            {
-              label: 'Resolved',
-              color: 'var(--chart-2)',
-              values: buckets.map((bucket) => bucket.resolved),
-              area: true,
-            },
-          ]}
+          series={series}
         />
       </CardContent>
     </Card>
@@ -276,17 +267,18 @@ export function BacklogPriorityCard({
         <CardDescription>{total} open or in progress</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+        {/* The list below carries the same counts, so the bar is hidden from assistive tech */}
+        <div className="flex h-3 gap-px overflow-hidden rounded-full bg-muted" aria-hidden>
           {REPORT_PRIORITIES.filter((priority) => backlog[priority] > 0).map((priority) => (
             <Tooltip key={priority}>
               <TooltipTrigger asChild>
                 <div
-                  className={PRIORITY_BAR[priority]}
+                  className={reportPriorityBarClass(priority)}
                   style={{ width: `${(backlog[priority] / total) * 100}%` }}
                 />
               </TooltipTrigger>
               <TooltipContent>
-                {backlog[priority]} {priority}
+                {backlog[priority]} {REPORT_PRIORITY_LABELS[priority]}
               </TooltipContent>
             </Tooltip>
           ))}
@@ -355,7 +347,7 @@ export function ActivityCard({
               {activity.map((item) => (
                 <div key={item.id} className="flex gap-3">
                   <Avatar className="size-7">
-                    <AvatarFallback className="text-[10px]">
+                    <AvatarFallback className="text-2xs">
                       {item.userName ? initials(item.userName) : <Bug className="size-3.5" />}
                     </AvatarFallback>
                   </Avatar>

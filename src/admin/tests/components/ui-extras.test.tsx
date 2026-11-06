@@ -18,7 +18,7 @@ describe('ui primitives', () => {
     );
 
     expect(screen.getByPlaceholderText('Write a note')).toBeInTheDocument();
-    expect(screen.getByTestId('separator').className).toContain('w-[1px]');
+    expect(screen.getByTestId('separator').className).toContain('w-px');
   });
 
   it('toggles collapsible content', async () => {

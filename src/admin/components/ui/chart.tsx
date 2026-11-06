@@ -16,13 +16,19 @@ function useChart() {
   return context;
 }
 
+const CSS_IDENTIFIER = /^[\w-]+$/;
+const CSS_COLOR = /^[\w\s#%(),.\-/]+$/;
+
 function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
-  const colors = Object.entries(config).filter(([, item]) => item.color);
-  if (!colors.length) return null;
+  const colors = Object.entries(config).filter(
+    (entry): entry is [string, { label?: React.ReactNode; color: string }] =>
+      CSS_IDENTIFIER.test(entry[0]) && !!entry[1].color && CSS_COLOR.test(entry[1].color)
+  );
+  if (!colors.length || !CSS_IDENTIFIER.test(id)) return null;
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: `[data-chart=${id}] {\n${colors
+        __html: `[data-chart="${id}"] {\n${colors
           .map(([key, item]) => `  --color-${key}: ${item.color};`)
           .join('\n')}\n}`,
       }}
@@ -36,10 +42,16 @@ function ChartContainer({
   children,
   config,
   initialHeight = 200,
+  title,
+  dataTable,
   ...props
-}: React.ComponentProps<'div'> & {
+}: Omit<React.ComponentProps<'div'>, 'title'> & {
   config: ChartConfig;
   initialHeight?: number;
+  /** Accessible name of the figure. */
+  title?: string;
+  /** Visually hidden table with the plotted values, read by screen readers instead of the SVG. */
+  dataTable?: React.ReactNode;
   children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>['children'];
 }) {
   const uniqueId = React.useId();
@@ -50,13 +62,16 @@ function ChartContainer({
       <div
         data-slot="chart"
         data-chart={chartId}
+        role={title ? 'figure' : undefined}
+        aria-label={title}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-surface]:outline-hidden",
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className
         )}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
+        {dataTable}
         <RechartsPrimitive.ResponsiveContainer
           initialDimension={{ width: 1, height: initialHeight }}
         >
@@ -67,7 +82,10 @@ function ChartContainer({
   );
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip;
+function ChartTooltip(props: React.ComponentProps<typeof RechartsPrimitive.Tooltip>) {
+  // Recharts positions its tooltip wrapper with inline styles and offers no class hook for it.
+  return <RechartsPrimitive.Tooltip wrapperStyle={{ zIndex: 10 }} {...props} />;
+}
 
 interface ChartTooltipContentProps {
   active?: boolean;
@@ -110,10 +128,10 @@ function ChartTooltipContent({
             <div key={key} className="flex w-full items-center gap-2">
               <div
                 className={cn(
-                  'shrink-0 rounded-[2px]',
+                  'shrink-0 rounded-[2px] bg-(--indicator-color)',
                   indicator === 'dot' ? 'size-2.5' : 'h-2.5 w-1'
                 )}
-                style={{ backgroundColor: color }}
+                style={{ '--indicator-color': color } as React.CSSProperties}
               />
               <span className="text-muted-foreground">{itemConfig?.label ?? item.name}</span>
               <span className="ml-auto pl-3 font-mono font-medium tabular-nums text-foreground">

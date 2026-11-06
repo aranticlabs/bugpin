@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useGamificationSettings } from '../../hooks/useDashboard';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -258,7 +259,7 @@ function RoleAndAccessSection({ user, isSelf }: { user: User; isSelf: boolean })
                 return (
                   <label
                     key={project.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent"
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-primary-tint"
                   >
                     <Checkbox
                       checked={checked}
@@ -644,10 +645,7 @@ function gamificationNote(user: User, settings: GamificationSettings): string {
 
 function GamificationSection({ user }: { user: User }) {
   const queryClient = useQueryClient();
-  const { data: settings } = useQuery({
-    queryKey: ['gamification'],
-    queryFn: async () => (await api.get('/gamification')).data.gamification as GamificationSettings,
-  });
+  const { data: settings } = useGamificationSettings();
   const setEnabled = useUserMutation(
     (enabled: boolean) => api.put('/gamification', { users: { [user.id]: enabled } }),
     'Gamification updated',
@@ -787,7 +785,7 @@ export function UserDetail() {
           {user.avatarUrl ? (
             <AvatarImage src={user.avatarUrl} alt={user.name} />
           ) : (
-            <AvatarFallback className="bg-bugpin-primary-100 text-lg text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300">
+            <AvatarFallback className="bg-brand-subtle text-lg text-brand-subtle-foreground">
               {user.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           )}

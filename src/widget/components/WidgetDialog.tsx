@@ -184,7 +184,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'details';
 
   return (
-    <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
+    <div class="fixed inset-0 z-overlay bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
       <div
         class="relative w-full max-w-3xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
         role="dialog"

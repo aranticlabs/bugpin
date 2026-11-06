@@ -156,6 +156,13 @@ const de: WidgetCatalog = {
   'annotation.toolbar.zoomReset':
     'Zoom zurücksetzen ({percent}%) - Space gedrückt halten zum Verschieben',
   'annotation.toolbar.strokeWidth': '{width}px',
+  'annotation.color.red': 'Rot',
+  'annotation.color.orange': 'Orange',
+  'annotation.color.yellow': 'Gelb',
+  'annotation.color.green': 'Grün',
+  'annotation.color.blue': 'Blau',
+  'annotation.color.purple': 'Lila',
+  'annotation.color.black': 'Schwarz',
   'annotation.defaultText': 'Text',
   'annotation.buttons.cancel': 'Abbrechen',
   'annotation.buttons.done': 'Fertig',

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../ui/button';
 import { Check, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -31,18 +32,17 @@ export function CopySectionButton({ label, getContent, className }: CopySectionB
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={handleClick}
             onPointerDown={(event) => event.stopPropagation()}
             aria-label={`Copy ${label}`}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-              className
-            )}
+            className={cn('text-muted-foreground hover:text-foreground', className)}
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          </button>
+            {copied ? <Check /> : <Copy />}
+          </Button>
         </TooltipTrigger>
         <TooltipContent>{copied ? 'Copied' : `Copy ${label}`}</TooltipContent>
       </Tooltip>

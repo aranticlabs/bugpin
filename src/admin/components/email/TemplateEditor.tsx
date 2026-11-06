@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { cn } from '../../lib/utils';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -182,7 +183,7 @@ export function TemplateEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm max-w-none min-h-[300px] p-4 focus:outline-none [&_.variable-node]:inline-flex [&_.variable-node]:items-center [&_.variable-node]:px-1.5 [&_.variable-node]:py-0.5 [&_.variable-node]:rounded [&_.variable-node]:text-xs [&_.variable-node]:font-medium [&_.variable-node]:bg-primary/10 [&_.variable-node]:text-primary [&_.variable-node]:border [&_.variable-node]:border-primary/20',
+          'prose prose-sm max-w-none min-h-75 p-4 focus:outline-none [&_.variable-node]:variable-chip',
       },
     },
   });
@@ -385,13 +386,16 @@ export function TemplateEditor({
                 </p>
                 <ScrollArea className="max-h-48">
                   {availableVariables.map((variable) => (
-                    <button
+                    <Button
                       key={variable}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => insertVariable(variable)}
-                      className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors font-mono"
+                      className="w-full justify-start font-mono text-sm font-normal"
                     >
                       {`{{${variable}}}`}
-                    </button>
+                    </Button>
                   ))}
                 </ScrollArea>
               </div>
@@ -412,7 +416,7 @@ export function TemplateEditor({
         {mode === 'wysiwyg' ? (
           <EditorContent
             editor={editor}
-            className="bg-background [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:p-4 [&_.ProseMirror:focus]:outline-none"
+            className="bg-background [&_.ProseMirror]:min-h-75 [&_.ProseMirror]:p-4 [&_.ProseMirror:focus]:outline-none [&_.ProseMirror:focus-visible]:ring-2 [&_.ProseMirror:focus-visible]:ring-inset [&_.ProseMirror:focus-visible]:ring-ring"
           />
         ) : (
           <Textarea
@@ -420,7 +424,7 @@ export function TemplateEditor({
             value={sourceValue}
             onChange={handleSourceChange}
             placeholder={placeholder}
-            className="min-h-[300px] font-mono text-sm rounded-none border-0 resize-none focus-visible:ring-0"
+            className="min-h-75 font-mono text-sm rounded-none border-0 resize-none focus-visible:ring-0"
           />
         )}
       </div>
@@ -446,7 +450,7 @@ function ToolbarButton({ onClick, isActive, disabled, tooltip, children }: Toolb
           size="sm"
           onClick={onClick}
           disabled={disabled}
-          className={`h-8 w-8 p-0 ${isActive ? 'bg-muted' : ''}`}
+          className={cn('h-8 w-8 p-0', isActive ? 'bg-muted' : '')}
         >
           {children}
         </Button>

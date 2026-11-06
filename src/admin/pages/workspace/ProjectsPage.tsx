@@ -28,7 +28,8 @@ import {
 import { api } from '../../api/client';
 import { licenseApi } from '../../api/license';
 import { useAuth } from '../../contexts/AuthContext';
-import { cn, formatDateTime } from '../../lib/utils';
+import { cn } from '../../lib/utils';
+import { formatDateTime } from '../../lib/format';
 import { sortableSensors } from '../../lib/sortable-sensors';
 import { SortableTableHead, type SortDirection } from '../../components/SortableTableHead';
 import { usePreference } from '../../hooks/useUserPreferences';
@@ -558,7 +559,7 @@ export function ProjectsPage() {
             }
           >
             <SelectTrigger
-              className="w-[150px] lg:w-auto lg:min-w-24 lg:max-w-[150px] lg:flex-1"
+              className="w-37.5 lg:w-auto lg:min-w-24 lg:max-w-37.5 lg:flex-1"
               aria-label="Filter by status"
             >
               <SelectValue />

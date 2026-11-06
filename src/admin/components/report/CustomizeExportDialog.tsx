@@ -156,7 +156,7 @@ export function CustomizeExportDialog({
                   return (
                     <div
                       key={key}
-                      className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 hover:bg-muted/50"
+                      className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 hover:bg-primary-tint"
                     >
                       <div className="flex items-center gap-2">
                         <Checkbox
@@ -247,7 +247,7 @@ interface RedactionToggleProps {
 
 function RedactionToggle({ id, label, checked, onChange }: RedactionToggleProps) {
   return (
-    <div className="flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-muted/50">
+    <div className="flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-primary-tint">
       <Checkbox id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5" />
       <label htmlFor={id} className="text-sm leading-tight cursor-pointer select-none">
         {label}

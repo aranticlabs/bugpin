@@ -1,4 +1,5 @@
 import { Integration } from '@shared/types';
+import { cn } from '../../lib/utils';
 import { IntegrationTypeDefinition } from '../../lib/integration-types';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -74,7 +75,7 @@ export function IntegrationTypeCard({
           <p className="truncate text-sm font-medium">{integration.name}</p>
           <Badge
             variant="outline"
-            className={`text-xs ${integration.isActive ? 'status-active' : 'status-inactive'}`}
+            className={cn('text-xs', integration.isActive ? 'status-active' : 'status-inactive')}
           >
             {integration.isActive ? 'Active' : 'Inactive'}
           </Badge>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useGamificationSettings } from '../../hooks/useDashboard';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { Badge } from '../../components/ui/badge';
@@ -34,10 +35,7 @@ function changedUsers(draft: GamificationSettings, saved: GamificationSettings) 
 
 export function Gamification() {
   const queryClient = useQueryClient();
-  const { data: saved, isLoading } = useQuery({
-    queryKey: ['gamification'],
-    queryFn: async () => (await api.get('/gamification')).data.gamification as GamificationSettings,
-  });
+  const { data: saved, isLoading } = useGamificationSettings();
   const [draft, setDraft] = useState<GamificationSettings | null>(null);
 
   useEffect(() => {

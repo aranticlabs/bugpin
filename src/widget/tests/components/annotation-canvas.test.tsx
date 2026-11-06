@@ -157,9 +157,11 @@ describe('AnnotationCanvas', () => {
       'Pen tool not active'
     );
 
-    const blueButton = container.querySelector('button[title="#3b82f6"]') as HTMLButtonElement;
+    const blueButton = container.querySelector('button[aria-label="Blue"]') as HTMLButtonElement;
+    expect(blueButton.getAttribute('aria-pressed')).toBe('false');
     blueButton.click();
     await waitFor(() => canvas.freeDrawingBrush?.color === '#3b82f6', 'Brush color not updated');
+    expect(blueButton.getAttribute('aria-pressed')).toBe('true');
 
     const widthButton = container.querySelector('button[title="8px"]') as HTMLButtonElement;
     widthButton.click();

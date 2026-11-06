@@ -18,6 +18,7 @@ import {
   stopUserActivityCapture,
 } from './capture/context.js';
 import { buildWidgetConfigUrl } from './api/config-url.js';
+import { adoptStylesheet } from './lib/adopt-stylesheet.js';
 
 // Widget styles (will be injected into Shadow DOM)
 import styles from './styles/main.css?inline';
@@ -166,10 +167,7 @@ function createWidget(config: WidgetConfig, languageInputs: InitLanguageInputs =
   // Attach Shadow DOM
   const shadow = container.attachShadow({ mode: 'open' });
 
-  // Inject styles
-  const styleElement = document.createElement('style');
-  styleElement.textContent = styles;
-  shadow.appendChild(styleElement);
+  adoptStylesheet(shadow, styles);
 
   // Create render target
   const root = document.createElement('div');

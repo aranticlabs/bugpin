@@ -41,7 +41,7 @@ export function NotificationSettingsForm({
     <div className="space-y-4">
       {/* Use Custom Notifications Toggle */}
       {showCustomToggle && (
-        <div className="flex items-center justify-between pb-3 border-b">
+        <div className="flex items-center justify-between gap-4 pb-3 border-b">
           <div className="space-y-0.5">
             <Label htmlFor="use-custom-notifications" className="text-sm font-medium">
               Use Custom Notifications
@@ -75,7 +75,7 @@ export function NotificationSettingsForm({
       {(!showCustomToggle || useCustomSettings) && (
         <>
           {/* Email Notifications */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label htmlFor="default-email-enabled" className="text-sm font-normal">
                 Email Notifications
@@ -96,7 +96,7 @@ export function NotificationSettingsForm({
             className={cn('space-y-4', !effectiveEmailEnabled && 'section-disabled')}
           >
             {/* New Reports */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label htmlFor="default-new-report" className="text-sm font-normal">
                   New Reports
@@ -112,7 +112,7 @@ export function NotificationSettingsForm({
             </div>
 
             {/* Status Changes */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label htmlFor="default-status-change" className="text-sm font-normal">
                   Status Changes
@@ -128,7 +128,7 @@ export function NotificationSettingsForm({
             </div>
 
             {/* Priority Changes */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label htmlFor="default-priority-change" className="text-sm font-normal">
                   Priority Changes
@@ -146,7 +146,7 @@ export function NotificationSettingsForm({
             </div>
 
             {/* Assignments */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label htmlFor="default-assignment" className="text-sm font-normal">
                   Assignments
@@ -162,7 +162,7 @@ export function NotificationSettingsForm({
             </div>
 
             {/* Deletions */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label htmlFor="default-deletion" className="text-sm font-normal">
                   Deletions

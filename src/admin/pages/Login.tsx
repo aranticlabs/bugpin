@@ -315,25 +315,22 @@ function TwoFactorForm({
           .filter((option) => option !== method)
           .map((option) => (
             <span key={option} className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className="text-primary underline-offset-4 hover:underline"
+                variant="link"
+                className="h-auto p-0"
                 onClick={() => switchMethod(option)}
               >
                 {METHOD_LINKS[option]}
-              </button>
+              </Button>
               <span className="text-muted-foreground" aria-hidden="true">
                 ·
               </span>
             </span>
           ))}
-        <button
-          type="button"
-          className="text-primary underline-offset-4 hover:underline"
-          onClick={onBack}
-        >
+        <Button type="button" variant="link" className="h-auto p-0" onClick={onBack}>
           Back
-        </button>
+        </Button>
       </div>
     </form>
   );

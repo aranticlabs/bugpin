@@ -1,5 +1,6 @@
 import { FunctionComponent, JSX } from 'preact';
 import { cn } from '../../lib/utils';
+import { FORM_CONTROL_CLASS, FORM_CONTROL_ERROR_CLASS } from './form-control';
 
 export interface TextareaProps extends JSX.HTMLAttributes<HTMLTextAreaElement> {
   class?: string;
@@ -17,10 +18,9 @@ export const Textarea: FunctionComponent<TextareaProps> = ({
   return (
     <textarea
       class={cn(
-        'min-h-20 w-full px-3 py-2 border border-solid border-input rounded-sm text-sm font-sans text-foreground bg-[var(--input-background,transparent)] resize-y transition-colors',
-        'placeholder:text-muted-foreground',
-        'focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20',
-        error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+        FORM_CONTROL_CLASS,
+        'min-h-20 resize-y',
+        error && FORM_CONTROL_ERROR_CLASS,
         className
       )}
       aria-invalid={error ? 'true' : undefined}

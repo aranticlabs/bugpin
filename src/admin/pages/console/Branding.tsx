@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
+import { ImageUploadTile } from '../../components/ImageUploadTile';
+import { cn } from '../../lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Cropper from 'react-easy-crop';
@@ -23,7 +25,7 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog';
 import { ThemeColorPicker } from '../../components/ThemeColorPicker';
-import { Upload, RotateCcw, Camera, Trash2 } from 'lucide-react';
+import { Upload, RotateCcw, Trash2 } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
 import { getCroppedImg } from '../../lib/imageUtils';
@@ -315,9 +317,10 @@ function IconSection() {
             {/* Light Mode Icon - light background */}
             <div className="space-y-3">
               <Label>Light Mode</Label>
-              <div
-                className="relative group cursor-pointer w-20 h-20"
-                onClick={() => openDialog('light')}
+              <ImageUploadTile
+                label="Change light mode icon"
+                onActivate={() => openDialog('light')}
+                className="w-20 h-20"
               >
                 <div className="w-20 h-20 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
                   {config?.iconLightUrl ? (
@@ -334,19 +337,16 @@ function IconSection() {
                     />
                   )}
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
 
             {/* Dark Mode Icon - dark background */}
             <div className="space-y-3">
               <Label>Dark Mode</Label>
-              <div
-                className="relative group cursor-pointer w-20 h-20"
-                onClick={() => openDialog('dark')}
+              <ImageUploadTile
+                label="Change dark mode icon"
+                onActivate={() => openDialog('dark')}
+                className="w-20 h-20"
               >
                 <div className="w-20 h-20 rounded-lg border bg-black flex items-center justify-center overflow-hidden">
                   {config?.iconDarkUrl ? (
@@ -363,11 +363,7 @@ function IconSection() {
                     />
                   )}
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
           </div>
         </CardContent>
@@ -385,9 +381,10 @@ function IconSection() {
             {/* Current Icon Preview */}
             <div className="flex justify-center">
               <div
-                className={`w-32 h-32 rounded-lg border flex items-center justify-center overflow-hidden ${
+                className={cn(
+                  'w-32 h-32 rounded-lg border flex items-center justify-center overflow-hidden',
                   dialogOpen === 'light' ? 'bg-white' : 'bg-black'
-                }`}
+                )}
               >
                 {dialogOpen && getIconUrl(dialogOpen) ? (
                   <img
@@ -613,9 +610,10 @@ function LogoSection() {
             {/* Light Mode Logo - light background */}
             <div className="space-y-3">
               <Label>Light Mode</Label>
-              <div
-                className="relative group cursor-pointer w-full h-20 mx-auto"
-                onClick={() => setDialogOpen('light')}
+              <ImageUploadTile
+                label="Change light mode logo"
+                onActivate={() => setDialogOpen('light')}
+                className="w-full h-20 mx-auto"
               >
                 <div className="w-full h-20 rounded-lg border bg-white flex items-center justify-center overflow-hidden px-4">
                   {config?.logoLightUrl ? (
@@ -632,19 +630,16 @@ function LogoSection() {
                     />
                   )}
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
 
             {/* Dark Mode Logo - dark background */}
             <div className="space-y-3">
               <Label>Dark Mode</Label>
-              <div
-                className="relative group cursor-pointer w-full h-20 mx-auto"
-                onClick={() => setDialogOpen('dark')}
+              <ImageUploadTile
+                label="Change dark mode logo"
+                onActivate={() => setDialogOpen('dark')}
+                className="w-full h-20 mx-auto"
               >
                 <div className="w-full h-20 rounded-lg border bg-black flex items-center justify-center overflow-hidden px-4">
                   {config?.logoDarkUrl ? (
@@ -661,11 +656,7 @@ function LogoSection() {
                     />
                   )}
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
           </div>
         </CardContent>
@@ -683,9 +674,10 @@ function LogoSection() {
             {/* Current Logo Preview */}
             <div className="flex justify-center">
               <div
-                className={`w-full max-w-xs h-24 rounded-lg border flex items-center justify-center overflow-hidden px-4 ${
+                className={cn(
+                  'w-full max-w-xs h-24 rounded-lg border flex items-center justify-center overflow-hidden px-4',
                   dialogOpen === 'light' ? 'bg-white' : 'bg-black'
-                }`}
+                )}
               >
                 {dialogOpen && getLogoUrl(dialogOpen) ? (
                   <img
@@ -861,9 +853,10 @@ function FaviconSection() {
             {/* Light Mode Favicon */}
             <div className="space-y-3">
               <Label>Light Mode</Label>
-              <div
-                className="relative group cursor-pointer w-20 h-20"
-                onClick={() => setDialogOpen('light')}
+              <ImageUploadTile
+                label="Change light mode favicon"
+                onActivate={() => setDialogOpen('light')}
+                className="w-20 h-20"
               >
                 <div className="w-20 h-20 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
                   <img
@@ -872,28 +865,21 @@ function FaviconSection() {
                     className="w-10 h-10"
                   />
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
 
             {/* Dark Mode Favicon */}
             <div className="space-y-3">
               <Label>Dark Mode</Label>
-              <div
-                className="relative group cursor-pointer w-20 h-20"
-                onClick={() => setDialogOpen('dark')}
+              <ImageUploadTile
+                label="Change dark mode favicon"
+                onActivate={() => setDialogOpen('dark')}
+                className="w-20 h-20"
               >
                 <div className="w-20 h-20 rounded-lg border bg-black flex items-center justify-center overflow-hidden">
                   <img src={getFaviconUrl('dark')} alt="Dark mode favicon" className="w-10 h-10" />
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
+              </ImageUploadTile>
             </div>
           </div>
         </CardContent>
@@ -911,9 +897,10 @@ function FaviconSection() {
             {/* Current Favicon Preview */}
             <div className="flex justify-center">
               <div
-                className={`w-32 h-32 rounded-lg border flex items-center justify-center overflow-hidden ${
+                className={cn(
+                  'w-32 h-32 rounded-lg border flex items-center justify-center overflow-hidden',
                   dialogOpen === 'light' ? 'bg-white' : 'bg-black'
-                }`}
+                )}
               >
                 {dialogOpen && (
                   <img

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 import type {
   GlobalWidgetLauncherButtonSettings,
   LocaleCode,
@@ -73,13 +74,17 @@ function PreviewCard({
     <Collapsible open={open} onOpenChange={setOpen} asChild>
       <Card>
         <CardHeader
-          className={`flex flex-row items-start justify-between gap-4 space-y-0 ${open ? 'pb-3' : ''}`}
+          className={cn(
+            'flex flex-row items-start justify-between gap-4 space-y-0',
+            open ? 'pb-3' : ''
+          )}
         >
           <CollapsibleTrigger className="flex flex-1 items-start gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <ChevronDown
-              className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+              className={cn(
+                'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
                 open ? '' : '-rotate-90'
-              }`}
+              )}
               aria-hidden="true"
             />
             {heading}
@@ -94,6 +99,9 @@ function PreviewCard({
   );
 }
 
+// Stands in for the customer's page behind the widget preview, so it ignores the Admin Console theme.
+const HOST_PAGE_BACKGROUND = { dark: 'bg-neutral-900', light: 'bg-neutral-100' } as const;
+
 export function LauncherPreviewCard({
   launcher,
   launcherGlobals,
@@ -106,11 +114,7 @@ export function LauncherPreviewCard({
   return (
     <PreviewCard description="Hover over the button to see its effects.">
       {(mode) => (
-        <div
-          className={`relative min-h-[200px] rounded-lg border ${
-            mode === 'dark' ? 'bg-neutral-900' : 'bg-neutral-100'
-          }`}
-        >
+        <div className={cn('relative min-h-50 rounded-lg border', HOST_PAGE_BACKGROUND[mode])}>
           <WidgetLauncherPreview
             value={launcher}
             globalSettings={launcherGlobals}
@@ -127,9 +131,7 @@ export function DialogPreviewCard({ colors }: { colors: ThemeColors }) {
   return (
     <PreviewCard description="How the report dialog looks with these colors." collapsible>
       {(mode) => (
-        <div
-          className={`rounded-lg border p-6 ${mode === 'dark' ? 'bg-neutral-900' : 'bg-neutral-100'}`}
-        >
+        <div className={cn('rounded-lg border p-6', HOST_PAGE_BACKGROUND[mode])}>
           <div className="mx-auto max-w-3xl [zoom:0.85]">
             <WidgetDialogPreview colors={colors} mode={mode} />
           </div>

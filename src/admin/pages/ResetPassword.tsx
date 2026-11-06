@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { cn } from '../lib/utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -114,11 +115,12 @@ export function ResetPassword() {
       <CenteredCard>
         <CardHeader className="text-center">
           <div
-            className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full ${
+            className={cn(
+              'mx-auto w-12 h-12 flex items-center justify-center rounded-full',
               isDone
-                ? 'bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300'
+                ? 'bg-brand-subtle text-brand-subtle-foreground'
                 : 'bg-destructive/10 text-destructive'
-            }`}
+            )}
           >
             {isDone ? <CheckCircle2 className="w-7 h-7" /> : <AlertCircle className="w-7 h-7" />}
           </div>
@@ -144,7 +146,7 @@ export function ResetPassword() {
   return (
     <CenteredCard>
       <CardHeader className="text-center">
-        <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-full bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300">
+        <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-full bg-brand-subtle text-brand-subtle-foreground">
           <KeyRound className="w-7 h-7" />
         </div>
         <CardTitle className="text-2xl mt-4">Choose a New Password</CardTitle>

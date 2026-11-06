@@ -3,6 +3,11 @@ import { CircleAlert, Plus, TriangleAlert, Upload, X } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { t } from '../i18n';
 
+export const MEDIA_DROPZONE_CLASS =
+  'border-2 border-dashed border-border rounded bg-muted hover:border-primary hover:bg-primary/5';
+export const MEDIA_DROPZONE_ACTIVE_CLASS =
+  'border-2 border-dashed border-primary rounded bg-primary/5';
+
 export const MediaOptionToggle: FunctionComponent<{
   label: string;
   checked: boolean;
@@ -24,7 +29,7 @@ export const MediaOptionToggle: FunctionComponent<{
       />
       <span
         aria-hidden="true"
-        class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] peer-focus-visible:[outline:2px_solid_var(--primary)] peer-focus-visible:outline-offset-2 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:[transform:translateX(1rem)]"
+        class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] peer-focus-visible:[outline:2px_solid_var(--primary)] peer-focus-visible:outline-offset-2 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4"
       />
     </label>
   </div>
@@ -40,7 +45,10 @@ export const MediaUploadButton: FunctionComponent<{
     class={cn(
       'w-full flex flex-col items-center justify-center text-center cursor-pointer transition-colors focus-visible:[outline:2px_solid_var(--primary)] focus-visible:outline-offset-2',
       hasMedia
-        ? 'h-full gap-2 min-h-28 border-2 border-dashed border-border rounded bg-muted hover:border-primary hover:bg-primary/5 hover:[&_svg]:text-primary hover:[&_span]:text-primary'
+        ? [
+            'h-full gap-2 min-h-28 hover:[&_svg]:text-primary hover:[&_span]:text-primary',
+            MEDIA_DROPZONE_CLASS,
+          ]
         : 'py-8 px-4 text-muted-foreground hover:text-primary hover:[&_svg]:text-primary'
     )}
   >
@@ -72,7 +80,7 @@ export const MediaCaptureFeedback: FunctionComponent<{
     {warning && (
       <div
         role="alert"
-        class="flex items-start gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-solid border-amber-200 dark:border-amber-800/60 rounded text-amber-800 dark:text-amber-200 text-xs"
+        class="flex items-start gap-2 px-3 py-2.5 bg-warning/10 border border-solid border-warning/30 rounded text-warning text-xs"
       >
         <TriangleAlert class="w-4 h-4 flex-shrink-0 mt-px" />
         <div class="min-w-0 flex-1 leading-relaxed [overflow-wrap:anywhere]">
@@ -83,7 +91,7 @@ export const MediaCaptureFeedback: FunctionComponent<{
           <button
             type="button"
             onClick={onDismiss}
-            class="flex-shrink-0 -mt-0.5 -mr-1 p-1 rounded text-inherit hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors focus-visible:[outline:2px_solid_currentColor] focus-visible:outline-offset-2"
+            class="flex-shrink-0 -mt-0.5 -mr-1 p-1 rounded text-inherit hover:bg-warning/15 transition-colors focus-visible:[outline:2px_solid_currentColor] focus-visible:outline-offset-2"
             aria-label={t('aria.close')}
           >
             <X class="w-3.5 h-3.5" />
@@ -94,7 +102,7 @@ export const MediaCaptureFeedback: FunctionComponent<{
     {error && (
       <div
         role="alert"
-        class="flex items-center gap-2 px-3 py-2.5 bg-red-50 dark:bg-red-950/50 border border-solid border-red-200 dark:border-red-800 rounded text-red-600 dark:text-red-400 text-sm [overflow-wrap:anywhere]"
+        class="flex items-center gap-2 px-3 py-2.5 bg-destructive/10 border border-solid border-destructive/30 rounded text-destructive text-sm [overflow-wrap:anywhere]"
       >
         <CircleAlert class="w-4.5 h-4.5 flex-shrink-0" />
         <span class="min-w-0">{error}</span>

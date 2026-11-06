@@ -3,7 +3,7 @@ import type { Report, User } from '@shared/types';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Spinner } from '../ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { formatDate as formatAbsoluteDate } from '../../lib/utils';
+import { formatDate as formatAbsoluteDate } from '../../lib/format';
 
 export function formatRelativeDate(dateString: string): string {
   const date = new Date(dateString);
@@ -37,7 +37,7 @@ export function GitHubSyncIcon({ report }: { report: Report }) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-green-600 hover:text-green-700"
+              className="text-success hover:text-success/80"
             >
               <CheckCircle className="h-4 w-4" />
             </a>
@@ -55,7 +55,7 @@ export function GitHubSyncIcon({ report }: { report: Report }) {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="text-amber-500">
+            <span className="text-warning">
               <Spinner size="sm" />
             </span>
           </TooltipTrigger>
@@ -110,7 +110,7 @@ export function AssigneeDisplay({
     <div className="flex items-center gap-2 min-w-0">
       <Avatar className={compact ? 'h-6 w-6' : 'h-8 w-8'}>
         {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.name} /> : null}
-        <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-[10px]">
+        <AvatarFallback className="bg-brand-subtle text-2xs text-brand-subtle-foreground">
           {fallback}
         </AvatarFallback>
       </Avatar>

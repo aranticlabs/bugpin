@@ -1,7 +1,8 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ChevronDown, FileText, Image as ImageIcon, Video, X } from 'lucide-react';
 import { ThemeColorPicker } from './ThemeColorPicker';
 import type { ThemeColors } from '@shared/types';
+import { cn } from '../lib/utils';
 
 const DEFAULT_WIDGET_COLORS: Required<ThemeColors> = {
   lightButtonColor: '#02658D',
@@ -42,8 +43,8 @@ export function resolveDialogColors(
 
 // Fixed widget theme tokens that the dialog colors do not override.
 const WIDGET_THEME_TOKENS = {
-  light: { border: '#e5e5e5', mutedForeground: '#737373' },
-  dark: { border: '#262626', mutedForeground: '#a3a3a3' },
+  light: { border: '#e5e5e5', mutedForeground: '#737373', destructive: '#ef4444' },
+  dark: { border: '#262626', mutedForeground: '#a3a3a3', destructive: '#ef4444' },
 } as const;
 
 function PreviewField({
@@ -59,7 +60,7 @@ function PreviewField({
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-[var(--wp-foreground)]">
         {label}
-        {required && <span className="ml-0.5 text-[#ef4444]">*</span>}
+        {required && <span className="ml-0.5 text-(--wp-destructive)">*</span>}
       </span>
       {children}
     </div>
@@ -76,7 +77,6 @@ export function WidgetDialogPreview({
   colors: ThemeColors;
   mode: 'light' | 'dark';
 }) {
-  const [submitHovered, setSubmitHovered] = useState(false);
   const dark = mode === 'dark';
   const tokens = WIDGET_THEME_TOKENS[mode];
   const style = {
@@ -86,6 +86,7 @@ export function WidgetDialogPreview({
     '--wp-foreground': dark ? colors.darkForegroundColor : colors.lightForegroundColor,
     '--wp-border': tokens.border,
     '--wp-muted-foreground': tokens.mutedForeground,
+    '--wp-destructive': tokens.destructive,
     '--wp-primary': dark ? colors.darkButtonColor : colors.lightButtonColor,
     '--wp-primary-foreground': dark ? colors.darkTextColor : colors.lightTextColor,
     '--wp-primary-hover': dark ? colors.darkButtonHoverColor : colors.lightButtonHoverColor,
@@ -112,11 +113,12 @@ export function WidgetDialogPreview({
           ].map(({ label, icon: Icon, active }) => (
             <span
               key={label}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+              className={cn(
+                'flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium',
                 active
                   ? 'bg-[var(--wp-background)] text-[var(--wp-foreground)] shadow-sm'
                   : 'text-[var(--wp-muted-foreground)]'
-              }`}
+              )}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
               {label}
@@ -127,19 +129,22 @@ export function WidgetDialogPreview({
 
       <div className="flex flex-col gap-4 p-6">
         <PreviewField label="Title" required>
-          <div className={`${PREVIEW_INPUT_CLASS} text-[var(--wp-muted-foreground)]`}>
+          <div className={cn(PREVIEW_INPUT_CLASS, 'text-[var(--wp-muted-foreground)]')}>
             Brief description of the issue
           </div>
         </PreviewField>
         <PreviewField label="Description">
           <div
-            className={`${PREVIEW_INPUT_CLASS} h-20 items-start py-2 text-[var(--wp-muted-foreground)]`}
+            className={cn(
+              PREVIEW_INPUT_CLASS,
+              'h-20 items-start py-2 text-[var(--wp-muted-foreground)]'
+            )}
           >
             Steps to reproduce, expected behavior, etc.
           </div>
         </PreviewField>
         <PreviewField label="Priority">
-          <div className={`${PREVIEW_INPUT_CLASS} justify-between`}>
+          <div className={cn(PREVIEW_INPUT_CLASS, 'justify-between')}>
             Medium
             <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </div>
@@ -150,15 +155,7 @@ export function WidgetDialogPreview({
         <span className="flex h-10 flex-1 items-center justify-center rounded-md border border-[var(--wp-border)] bg-[var(--wp-background)] text-sm font-medium">
           Cancel
         </span>
-        <span
-          onMouseEnter={() => setSubmitHovered(true)}
-          onMouseLeave={() => setSubmitHovered(false)}
-          className={`flex h-10 flex-1 cursor-default items-center justify-center rounded-md text-sm font-medium transition-colors ${
-            submitHovered
-              ? 'bg-[var(--wp-primary-hover)] text-[var(--wp-primary-hover-foreground)]'
-              : 'bg-[var(--wp-primary)] text-[var(--wp-primary-foreground)]'
-          }`}
-        >
+        <span className="flex h-10 flex-1 cursor-default items-center justify-center rounded-md bg-[var(--wp-primary)] text-sm font-medium text-[var(--wp-primary-foreground)] transition-colors hover:bg-[var(--wp-primary-hover)] hover:text-[var(--wp-primary-hover-foreground)]">
           Submit Report
         </span>
       </div>

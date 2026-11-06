@@ -3,7 +3,13 @@ import { useCallback, useRef, useState } from 'preact/hooks';
 import { Download, Maximize2, Trash2, Video, X } from 'lucide-preact';
 import { cn } from '../lib/utils.js';
 import { Button } from './ui';
-import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
+import {
+  MEDIA_DROPZONE_ACTIVE_CLASS,
+  MEDIA_DROPZONE_CLASS,
+  MediaCaptureFeedback,
+  MediaOptionToggle,
+  MediaUploadButton,
+} from './MediaPanelShared';
 import {
   downloadMedia,
   formatVideoMeta,
@@ -181,10 +187,9 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
         <div
           class={cn(
             'shrink-0 transition-colors',
-            clips.length === 0 &&
-              'min-h-40 border-2 border-dashed border-border rounded bg-muted hover:border-primary hover:bg-primary/5',
+            clips.length === 0 && ['min-h-40', MEDIA_DROPZONE_CLASS],
             clips.length > 0 && 'min-h-0',
-            isDragging && 'border-2 border-dashed border-primary rounded bg-primary/5'
+            isDragging && MEDIA_DROPZONE_ACTIVE_CLASS
           )}
           onDragOver={(event) => {
             event.preventDefault();
@@ -209,7 +214,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                 >
                   <div class="relative aspect-video bg-gray-800">
                     <VideoPreview item={clip} controls />
-                    <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 pointer-events-none">
+                    <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-muted text-foreground pointer-events-none">
                       {t('screenshot.badge.video')}
                     </span>
                     <Button
@@ -241,7 +246,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="w-7 h-7 bg-background hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 text-foreground"
+                      class="w-7 h-7 bg-background hover:bg-destructive/10 hover:text-destructive text-foreground"
                       onClick={() => onRemove(clip.id)}
                       title={t('screenshot.action.remove')}
                       aria-label={t('screenshot.action.remove')}
@@ -269,7 +274,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
           role="dialog"
           aria-modal="true"
           aria-label={t('recording.expand')}
-          class="fixed inset-0 z-[2147483647] flex items-center justify-center p-6 bg-black/90"
+          class="fixed inset-0 z-top flex items-center justify-center p-6 bg-black/90"
           onClick={() => setExpandedClipId(null)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') setExpandedClipId(null);
@@ -286,7 +291,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
             <X class="w-6 h-6" />
           </Button>
           <div
-            class="w-[calc(100vw-3rem)] h-[calc(100vh-6rem)] overflow-hidden rounded-lg bg-black shadow-2xl"
+            class="w-[calc(100vw-48px)] h-[calc(100vh-96px)] overflow-hidden rounded-lg bg-black shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <VideoPreview item={expandedClip} controls />

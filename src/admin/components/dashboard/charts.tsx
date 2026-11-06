@@ -3,9 +3,51 @@ import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, XAxis, YAxis }
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '../ui/chart';
 import { cn } from '../../lib/utils';
 
+export type ChartTone =
+  'chart-1' | 'chart-2' | 'chart-3' | 'chart-4' | 'chart-5' | 'muted-foreground';
+
+// Literal class names so Tailwind generates every tone.
+const TONE_BACKGROUND: Record<ChartTone, string> = {
+  'chart-1': 'bg-chart-1',
+  'chart-2': 'bg-chart-2',
+  'chart-3': 'bg-chart-3',
+  'chart-4': 'bg-chart-4',
+  'chart-5': 'bg-chart-5',
+  'muted-foreground': 'bg-muted-foreground',
+};
+
+const TONE_BORDER: Record<ChartTone, string> = {
+  'chart-1': 'border-chart-1',
+  'chart-2': 'border-chart-2',
+  'chart-3': 'border-chart-3',
+  'chart-4': 'border-chart-4',
+  'chart-5': 'border-chart-5',
+  'muted-foreground': 'border-muted-foreground',
+};
+
+export function toneBackground(tone: ChartTone): string {
+  return TONE_BACKGROUND[tone];
+}
+
+const TREND_CHART_SIZES = {
+  default: { className: 'h-55', px: 220 },
+  compact: { className: 'h-50', px: 200 },
+} as const;
+
+export type TrendChartSize = keyof typeof TREND_CHART_SIZES;
+
+export function trendChartHeightClass(size: TrendChartSize): string {
+  return TREND_CHART_SIZES[size].className;
+}
+
+function formatCell(value: number | null, format?: (value: number) => string): string {
+  if (value === null) return 'No data';
+  return format ? format(value) : String(value);
+}
+
 export interface ChartSeries {
   label: string;
-  color: string;
+  tone: ChartTone;
   values: (number | null)[];
   area?: boolean;
   dashed?: boolean;
@@ -41,12 +83,24 @@ export function MiniChart({
   const id = useId();
   const fill = gradientId(id, 'mini');
   const config: ChartConfig = { value: { label: name, color: 'var(--chart-1)' } };
+  const table = (
+    <table className="sr-only">
+      <caption>{name}</caption>
+      <tbody>
+        {points.map((point) => (
+          <tr key={point.label}>
+            <th scope="row">{point.label}</th>
+            <td>{formatCell(point.value, format)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
   const tooltip = (
     <ChartTooltip
       isAnimationActive={false}
       cursor={kind === 'bar' ? false : { strokeDasharray: '3 3' }}
       allowEscapeViewBox={{ x: false, y: true }}
-      wrapperStyle={{ zIndex: 10 }}
       content={<ChartTooltipContent valueFormatter={(value) => (format ? format(value) : value)} />}
     />
   );
@@ -58,6 +112,8 @@ export function MiniChart({
     <ChartContainer
       config={config}
       initialHeight={40}
+      title={name}
+      dataTable={table}
       className={cn('aspect-auto h-10 w-full', className)}
     >
       {kind === 'bar' ? (
@@ -115,18 +171,45 @@ export function MiniChart({
 }
 
 export function TrendChart({
+  title,
   labels,
   series,
-  height = 220,
+  size = 'default',
 }: {
+  title: string;
   labels: string[];
   series: ChartSeries[];
-  height?: number;
+  size?: TrendChartSize;
 }) {
   const id = useId();
   const keys = series.map((_, index) => `s${index}`);
   const config: ChartConfig = Object.fromEntries(
-    series.map((item, index) => [keys[index], { label: item.label, color: item.color }])
+    series.map((item, index) => [keys[index], { label: item.label, color: `var(--${item.tone})` }])
+  );
+  const table = (
+    <table className="sr-only">
+      <caption>{title}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Period</th>
+          {series.map((item) => (
+            <th key={item.label} scope="col">
+              {item.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {labels.map((label, row) => (
+          <tr key={label}>
+            <th scope="row">{label}</th>
+            {series.map((item) => (
+              <td key={item.label}>{formatCell(item.values[row], item.format)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
   const data = labels.map((label, row) => ({
     label,
@@ -137,9 +220,10 @@ export function TrendChart({
   return (
     <ChartContainer
       config={config}
-      initialHeight={height}
-      className="aspect-auto w-full min-w-0"
-      style={{ height }}
+      initialHeight={TREND_CHART_SIZES[size].px}
+      title={title}
+      dataTable={table}
+      className={cn('aspect-auto w-full min-w-0', TREND_CHART_SIZES[size].className)}
     >
       <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
         <defs>
@@ -204,12 +288,23 @@ export function TrendChart({
   );
 }
 
-export function ChartLegend({ items }: { items: { label: string; color: string }[] }) {
+export function SeriesLegend({
+  series,
+}: {
+  series: Pick<ChartSeries, 'label' | 'tone' | 'dashed'>[];
+}) {
   return (
-    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-      {items.map((item) => (
+    <div
+      className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+      aria-hidden
+    >
+      {series.map((item) => (
         <span key={item.label} className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full" style={{ background: item.color }} />
+          {item.dashed ? (
+            <span className={cn('w-3 border-t-2 border-dashed', TONE_BORDER[item.tone])} />
+          ) : (
+            <span className={cn('size-2 rounded-full', TONE_BACKGROUND[item.tone])} />
+          )}
           {item.label}
         </span>
       ))}

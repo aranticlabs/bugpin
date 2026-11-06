@@ -86,7 +86,9 @@ function InheritedBadge() {
   return (
     // The negative margin keeps the badge inside the title's line height, so the header does not
     // grow when the badge appears.
-    <Badge className="-my-0.5 h-5 px-2 py-0 text-[11px] font-medium">Inherited</Badge>
+    <Badge size="sm" className="-my-0.5 px-2 font-medium">
+      Inherited
+    </Badge>
   );
 }
 
@@ -602,7 +604,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
                 </Select>
 
                 {isMissingAssignedUser ? (
-                  <p className="text-sm text-amber-600">
+                  <p className="text-sm text-warning">
                     The current default assignee is no longer assignable. New reports stay
                     unassigned until you choose another user.
                   </p>

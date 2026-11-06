@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -49,7 +49,6 @@ import {
   Download,
   ExternalLink,
   Send,
-  X,
   ZoomIn,
   AlertCircle,
   RefreshCw,
@@ -64,7 +63,14 @@ import {
 } from '../../components/ui/collapsible';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Spinner } from '../../components/ui/spinner';
-import { formatDate, formatDateTime } from '../../lib/utils';
+import { formatDate, formatDateTime } from '../../lib/format';
+import { cn } from '../../lib/utils';
+import { ImageLightbox } from '../../components/report/ImageLightbox';
+import {
+  activityTypeTone,
+  consoleEntryTone,
+  networkErrorTone,
+} from '../../components/report/logTone';
 import {
   buildPermalink,
   defaultExportOptions,
@@ -87,6 +93,35 @@ import {
 
 const UNASSIGNED_VALUE = '__unassigned__';
 const PRIORITY_ORDER: ReportPriority[] = ['lowest', 'low', 'medium', 'high', 'highest'];
+
+function SectionTrigger({
+  title,
+  count,
+  standalone = false,
+}: {
+  title: string;
+  /** Shown in parentheses after the title */
+  count?: ReactNode;
+  /** True when the trigger spans the whole header, with no action button beside it */
+  standalone?: boolean;
+}) {
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        'flex cursor-pointer items-center justify-between p-6 text-left outline-none transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        standalone ? 'w-full rounded-t-xl' : 'flex-1 rounded-tl-xl'
+      )}
+    >
+      <CardTitle>
+        {title}
+        {count !== undefined && (
+          <span className="ml-2 text-sm font-normal text-muted-foreground">({count})</span>
+        )}
+      </CardTitle>
+      <ChevronDown className="ml-2 h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180" />
+    </CollapsibleTrigger>
+  );
+}
 
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -499,7 +534,7 @@ export function ReportDetail() {
                 <CardTitle>{files.length === 1 ? 'Media' : `Media (${files.length})`}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`grid gap-4 ${files.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div className={cn('grid gap-4', files.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
                   {files.map((file: { id: string; mimeType: string; filename: string }) => {
                     const fileUrl = `/api/reports/${id}/files/${file.id}`;
                     const isVideo = file.mimeType?.startsWith('video/');
@@ -511,8 +546,10 @@ export function ReportDetail() {
                             src={fileUrl}
                             controls
                             preload="metadata"
-                            className="w-full rounded-lg border bg-black object-contain"
-                            style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
+                            className={cn(
+                              'w-full rounded-lg border bg-black object-contain',
+                              files.length > 1 ? 'max-h-50' : 'max-h-100'
+                            )}
                           />
                         ) : (
                           <button
@@ -523,13 +560,15 @@ export function ReportDetail() {
                                 filename: file.filename || `screenshot-${file.id}.png`,
                               })
                             }
-                            className="w-full cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-primary rounded-lg"
+                            className="w-full cursor-zoom-in rounded-lg focus-visible:focus-ring"
                           >
                             <img
                               src={fileUrl}
                               alt={file.filename || 'Screenshot'}
-                              className="w-full rounded-lg border object-contain bg-muted"
-                              style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
+                              className={cn(
+                                'w-full rounded-lg border bg-muted object-contain',
+                                files.length > 1 ? 'max-h-50' : 'max-h-100'
+                              )}
                             />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
                               <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
@@ -555,48 +594,7 @@ export function ReportDetail() {
           )}
 
           {/* Image Lightbox */}
-          {viewingImage && (
-            <div
-              className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-              onClick={() => setViewingImage(null)}
-            >
-              <button
-                type="button"
-                onClick={() => setViewingImage(null)}
-                className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
-              >
-                <X className="w-8 h-8" />
-              </button>
-              <img
-                src={viewingImage.url}
-                alt="Full size screenshot"
-                className="max-w-full max-h-full object-contain"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div
-                className="absolute bottom-4 right-4 flex items-center gap-4"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <a
-                  href={viewingImage.url}
-                  download={viewingImage.filename}
-                  className="text-white hover:text-gray-300 transition-colors flex items-center gap-2"
-                >
-                  <Download className="w-5 h-5" />
-                  Download
-                </a>
-                <a
-                  href={viewingImage.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-white hover:text-gray-300 transition-colors flex items-center gap-2"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  Open in new tab
-                </a>
-              </div>
-            </div>
-          )}
+          <ImageLightbox image={viewingImage} onClose={() => setViewingImage(null)} />
 
           {/* Description */}
           <Card>
@@ -621,15 +619,7 @@ export function ReportDetail() {
             <Collapsible>
               <Card>
                 <CardHeader className="flex-row items-center justify-between space-y-0 p-0">
-                  <CollapsibleTrigger className="flex flex-1 items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-tl-xl">
-                    <CardTitle>
-                      Console Output
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        ({consoleErrors.length})
-                      </span>
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
+                  <SectionTrigger title="Console Output" count={consoleErrors.length} />
                   <div className="pr-3 pl-1">
                     <CopySectionButton
                       label="console output"
@@ -639,7 +629,7 @@ export function ReportDetail() {
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="pt-4">
-                    <ScrollArea className="max-h-[600px]" contentClassName="space-y-2 pr-2">
+                    <ScrollArea className="max-h-150" contentClassName="space-y-2 pr-2">
                       {consoleErrors.map(
                         (
                           err: { type: string; message: string; source?: string; line?: number },
@@ -647,11 +637,10 @@ export function ReportDetail() {
                         ) => (
                           <div
                             key={i}
-                            className={`px-4 py-2 rounded-lg text-sm font-mono ${
-                              err.type === 'warn'
-                                ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
-                                : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-200'
-                            }`}
+                            className={cn(
+                              'rounded-lg px-4 py-2 font-mono text-sm',
+                              consoleEntryTone(err.type)
+                            )}
                           >
                             <span className="font-semibold uppercase text-xs mr-2">
                               [{err.type}]
@@ -678,15 +667,7 @@ export function ReportDetail() {
             <Collapsible>
               <Card>
                 <CardHeader className="flex-row items-center justify-between space-y-0 p-0">
-                  <CollapsibleTrigger className="flex flex-1 items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-tl-xl">
-                    <CardTitle>
-                      Network Errors
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        ({networkErrors.length})
-                      </span>
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
+                  <SectionTrigger title="Network Errors" count={networkErrors.length} />
                   <div className="pr-3 pl-1">
                     <CopySectionButton
                       label="network errors"
@@ -703,13 +684,10 @@ export function ReportDetail() {
                       ) => (
                         <div
                           key={i}
-                          className={`px-4 py-2 rounded-lg text-sm font-mono ${
-                            err.status === 0 || err.status >= 500
-                              ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-200'
-                              : err.status >= 400
-                                ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-200'
-                                : 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
-                          }`}
+                          className={cn(
+                            'rounded-lg px-4 py-2 font-mono text-sm',
+                            networkErrorTone(err.status)
+                          )}
                         >
                           <span className="font-semibold">
                             {err.status === 0 ? 'Network Error' : err.status} {err.statusText}
@@ -731,15 +709,10 @@ export function ReportDetail() {
             <Collapsible>
               <Card>
                 <CardHeader className="flex-row items-center justify-between space-y-0 p-0">
-                  <CollapsibleTrigger className="flex flex-1 items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-tl-xl">
-                    <CardTitle>
-                      User Activity Trail
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        ({userActivity.length} events)
-                      </span>
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
+                  <SectionTrigger
+                    title="User Activity Trail"
+                    count={`${userActivity.length} events`}
+                  />
                   <div className="pr-3 pl-1">
                     <CopySectionButton
                       label="user activity"
@@ -749,7 +722,7 @@ export function ReportDetail() {
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="pt-4">
-                    <ScrollArea className="max-h-[480px]" contentClassName="space-y-2 pr-2">
+                    <ScrollArea className="max-h-120" contentClassName="space-y-2 pr-2">
                       {userActivity.map(
                         (
                           activity: {
@@ -766,19 +739,10 @@ export function ReportDetail() {
                             className="flex items-start gap-3 px-3 py-2 rounded-lg bg-muted/50 text-sm"
                           >
                             <span
-                              className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium uppercase ${
-                                activity.type === 'button'
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                  : activity.type === 'link'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                                    : activity.type === 'input'
-                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                      : activity.type === 'select'
-                                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                                        : activity.type === 'checkbox'
-                                          ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
-                                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                              }`}
+                              className={cn(
+                                'shrink-0 rounded px-2 py-0.5 text-xs font-medium uppercase',
+                                activityTypeTone(activity.type)
+                              )}
                             >
                               {activity.type}
                             </span>
@@ -851,19 +815,14 @@ export function ReportDetail() {
               <Collapsible>
                 <Card>
                   <CardHeader className="flex-row items-center justify-between space-y-0 p-0">
-                    <CollapsibleTrigger className="flex flex-1 items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-tl-xl">
-                      <CardTitle>
-                        Storage Keys
-                        <span className="ml-2 text-sm font-normal text-muted-foreground">
-                          (
-                          {(report.metadata.storageKeys.cookies?.length || 0) +
-                            (report.metadata.storageKeys.localStorage?.length || 0) +
-                            (report.metadata.storageKeys.sessionStorage?.length || 0)}
-                          )
-                        </span>
-                      </CardTitle>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                    </CollapsibleTrigger>
+                    <SectionTrigger
+                      title="Storage Keys"
+                      count={
+                        (report.metadata.storageKeys.cookies?.length || 0) +
+                        (report.metadata.storageKeys.localStorage?.length || 0) +
+                        (report.metadata.storageKeys.sessionStorage?.length || 0)
+                      }
+                    />
                     <div className="pr-3 pl-1">
                       <CopySectionButton
                         label="storage keys"
@@ -873,7 +832,7 @@ export function ReportDetail() {
                   </CardHeader>
                   <CollapsibleContent>
                     <CardContent className="pt-4">
-                      <ScrollArea className="max-h-[400px]">
+                      <ScrollArea className="max-h-100">
                         <table className="w-full text-sm">
                           <thead className="sticky top-0 bg-background">
                             <tr className="border-b">
@@ -936,10 +895,7 @@ export function ReportDetail() {
           <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
             <Card>
               <CardHeader className="p-0">
-                <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-t-xl">
-                  <CardTitle>Details</CardTitle>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                </CollapsibleTrigger>
+                <SectionTrigger title="Details" standalone />
               </CardHeader>
               <CollapsibleContent>
                 <CardContent className="space-y-4 pt-4">
@@ -964,19 +920,20 @@ export function ReportDetail() {
                           report.reporterEmail &&
                           messagingEnabled && (
                             <div className="mt-2 space-y-2">
-                              <button
+                              <Button
                                 type="button"
+                                variant="link"
+                                className="h-auto gap-1 p-0 [&_svg]:size-3"
                                 onClick={() => {
                                   setShowResolveMessage(!showResolveMessage);
                                   if (showResolveMessage) setResolveMessage('');
                                 }}
-                                className="text-sm text-primary hover:underline flex items-center gap-1"
                               >
-                                <MessageSquare className="h-3 w-3" />
+                                <MessageSquare />
                                 {showResolveMessage
                                   ? 'Cancel message'
                                   : 'Send a message to the reporter?'}
-                              </button>
+                              </Button>
                               {showResolveMessage && (
                                 <>
                                   <Textarea
@@ -1122,10 +1079,7 @@ export function ReportDetail() {
             <Collapsible open={pageInfoOpen} onOpenChange={setPageInfoOpen}>
               <Card>
                 <CardHeader className="p-0">
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-t-xl">
-                    <CardTitle>Page Info</CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
+                  <SectionTrigger title="Page Info" standalone />
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="space-y-3 text-sm pt-4">
@@ -1152,10 +1106,7 @@ export function ReportDetail() {
             <Collapsible open={environmentOpen} onOpenChange={setEnvironmentOpen}>
               <Card>
                 <CardHeader className="p-0">
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-t-xl">
-                    <CardTitle>Environment</CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
+                  <SectionTrigger title="Environment" standalone />
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="space-y-3 text-sm pt-4">
@@ -1208,7 +1159,7 @@ export function ReportDetail() {
             <Collapsible open={reporterMessagesOpen} onOpenChange={setReporterMessagesOpen}>
               <Card>
                 <CardHeader className="p-0">
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-t-xl">
+                  <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between rounded-t-xl p-6 text-left outline-none transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                     <CardTitle className="flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
                       Reporter Messages
@@ -1360,7 +1311,7 @@ export function ReportDetail() {
                 {report.githubSyncStatus === 'synced' && report.githubIssueUrl && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success" />
                       <span className="text-sm">Issue #{report.githubIssueNumber}</span>
                     </div>
                     <a
@@ -1375,7 +1326,7 @@ export function ReportDetail() {
                   </div>
                 )}
                 {report.githubSyncStatus === 'pending' && (
-                  <div className="flex items-center gap-2 text-amber-600">
+                  <div className="flex items-center gap-2 text-warning">
                     <Spinner size="sm" />
                     <span className="text-sm">Sync pending...</span>
                   </div>
@@ -1471,7 +1422,7 @@ function SourceBadge({ source }: { source?: ReportSource }) {
   const resolvedSource = source ?? 'widget';
 
   return (
-    <Badge variant="secondary" className="uppercase text-[10px] tracking-wide">
+    <Badge variant="secondary" className="text-2xs uppercase tracking-wide">
       {resolvedSource}
     </Badge>
   );
@@ -1507,10 +1458,10 @@ function AssigneeDisplay({
   const gapClass = size === 'sm' ? 'gap-2' : 'gap-3';
 
   return (
-    <div className={`flex items-center ${gapClass}`}>
+    <div className={cn('flex items-center', gapClass)}>
       <Avatar className={avatarSizeClass}>
         {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.name} /> : null}
-        <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-xs">
+        <AvatarFallback className="bg-brand-subtle text-brand-subtle-foreground text-xs">
           {fallback}
         </AvatarFallback>
       </Avatar>

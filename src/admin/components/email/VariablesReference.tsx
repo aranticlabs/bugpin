@@ -72,7 +72,7 @@ export function VariablesReference({ variables, defaultOpen = false }: Variables
           {variables.map((variable) => (
             <div
               key={variable}
-              className="flex items-start justify-between gap-2 p-2 hover:bg-muted/50 transition-colors"
+              className="flex items-start justify-between gap-2 p-2 hover:bg-primary-tint transition-colors"
             >
               <div className="flex-1 min-w-0">
                 <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
@@ -91,7 +91,7 @@ export function VariablesReference({ variables, defaultOpen = false }: Variables
                 onClick={() => copyToClipboard(variable)}
               >
                 {copiedVariable === variable ? (
-                  <Check className="h-3 w-3 text-green-500" />
+                  <Check className="h-3 w-3 text-success" />
                 ) : (
                   <Copy className="h-3 w-3" />
                 )}

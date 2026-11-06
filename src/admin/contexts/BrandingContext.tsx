@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ThemeColors } from '@shared/types';
 import { brandingApi, type BrandingConfig } from '../api/branding';
 
 interface BrandingContextType {
@@ -10,68 +11,45 @@ interface BrandingContextType {
 
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
-/**
- * Convert hex color to HSL string for CSS variables
- */
-function hexToHsl(hex: string): string {
-  // Remove # if present
-  if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex)) hex = '#02658D';
-  hex = hex.replace(/^#/, '');
+export const ADMIN_THEME_STYLE_ID = 'bugpin-admin-theme';
 
-  // Parse hex values
-  const r = parseInt(hex.substring(0, 2), 16) / 255;
-  const g = parseInt(hex.substring(2, 4), 16) / 255;
-  const b = parseInt(hex.substring(4, 6), 16) / 255;
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-
-    switch (max) {
-      case r:
-        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-        break;
-      case g:
-        h = ((b - r) / d + 2) / 6;
-        break;
-      case b:
-        h = ((r - g) / d + 4) / 6;
-        break;
-    }
-  }
-
-  // Return HSL values formatted for CSS (with hsl() wrapper)
-  return `hsl(${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%)`;
+function declarations(colors: Record<string, string>): string {
+  return Object.entries(colors)
+    .filter(([, value]) => HEX_COLOR.test(value))
+    .map(([name, value]) => `${name}: ${value};`)
+    .join(' ');
 }
 
 /**
- * Apply admin button/primary colors to CSS custom properties
+ * Builds light and dark overrides for the primary tokens. The doubled selectors outrank the
+ * defaults in globals.css regardless of stylesheet order, and the cascade handles theme switches.
  */
-function applyAdminThemeColors(config: BrandingConfig, isDark: boolean) {
-  const root = document.documentElement;
-  const themeColors = config.adminThemeColors;
+export function buildAdminThemeCss(themeColors: ThemeColors): string {
+  const light = declarations({
+    '--primary': themeColors.lightButtonColor,
+    '--primary-foreground': themeColors.lightTextColor,
+    '--primary-hover': themeColors.lightButtonHoverColor,
+    '--primary-hover-foreground': themeColors.lightTextHoverColor,
+  });
+  const dark = declarations({
+    '--primary': themeColors.darkButtonColor,
+    '--primary-foreground': themeColors.darkTextColor,
+    '--primary-hover': themeColors.darkButtonHoverColor,
+    '--primary-hover-foreground': themeColors.darkTextHoverColor,
+  });
+  return `:root:root { ${light} } :root.dark { ${dark} }`;
+}
 
-  if (!themeColors) return;
-
-  if (isDark) {
-    // Dark mode: use dark colors for primary buttons
-    root.style.setProperty('--primary', hexToHsl(themeColors.darkButtonColor));
-    root.style.setProperty('--primary-foreground', hexToHsl(themeColors.darkTextColor));
-    root.style.setProperty('--primary-hover', hexToHsl(themeColors.darkButtonHoverColor));
-    root.style.setProperty('--primary-hover-foreground', hexToHsl(themeColors.darkTextHoverColor));
-  } else {
-    // Light mode: use light colors for primary buttons
-    root.style.setProperty('--primary', hexToHsl(themeColors.lightButtonColor));
-    root.style.setProperty('--primary-foreground', hexToHsl(themeColors.lightTextColor));
-    root.style.setProperty('--primary-hover', hexToHsl(themeColors.lightButtonHoverColor));
-    root.style.setProperty('--primary-hover-foreground', hexToHsl(themeColors.lightTextHoverColor));
+function applyAdminThemeColors(themeColors: ThemeColors): void {
+  let style = document.getElementById(ADMIN_THEME_STYLE_ID);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = ADMIN_THEME_STYLE_ID;
+    document.head.append(style);
   }
+  style.textContent = buildAdminThemeCss(themeColors);
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
@@ -88,7 +66,6 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!config) return;
 
-    document.documentElement.style.setProperty('--color-primary-brand', config.primaryColor);
     for (const link of document.querySelectorAll<HTMLLinkElement>(
       'link[rel="icon"], link[rel="apple-touch-icon"], link[rel="manifest"]'
     )) {
@@ -101,29 +78,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       if (link.href !== url.href) link.href = url.href;
     }
 
-    // Check current theme
-    const isDark = document.documentElement.classList.contains('dark');
-
-    // Apply theme colors (buttons)
     if (config.adminThemeColors) {
-      applyAdminThemeColors(config, isDark);
+      applyAdminThemeColors(config.adminThemeColors);
     }
-
-    // Watch for theme changes
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.attributeName === 'class') {
-          const isDarkNow = document.documentElement.classList.contains('dark');
-          if (config.adminThemeColors) {
-            applyAdminThemeColors(config, isDarkNow);
-          }
-        }
-      }
-    });
-
-    observer.observe(document.documentElement, { attributes: true });
-
-    return () => observer.disconnect();
   }, [config]);
 
   const refetch = () => {

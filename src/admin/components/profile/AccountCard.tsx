@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { ImageUploadTile } from '../ImageUploadTile';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,7 +23,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '../ui/dialog';
-import { Upload, Trash2, Camera } from 'lucide-react';
+import { Upload, Trash2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { getCroppedImg } from '../../lib/imageUtils';
 import { UnsavedChangesGuard } from '../UnsavedChangesGuard';
@@ -189,21 +190,21 @@ function ProfileSection({ user }: { user: User | null }) {
   return (
     <>
       <div className="flex items-center gap-4">
-        <div className="relative group cursor-pointer" onClick={() => setIsDialogOpen(true)}>
+        <ImageUploadTile
+          label="Change profile picture"
+          onActivate={() => setIsDialogOpen(true)}
+          shape="circle"
+        >
           <Avatar className="h-16 w-16" key={user?.avatarUrl || 'no-avatar'}>
             {user?.avatarUrl && user.avatarUrl.trim() !== '' ? (
               <AvatarImage src={user.avatarUrl} alt={user?.name || 'User'} />
             ) : (
-              <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-2xl">
+              <AvatarFallback className="bg-brand-subtle text-brand-subtle-foreground text-2xl">
                 {user?.name?.charAt(0).toUpperCase() || 'U'}
               </AvatarFallback>
             )}
           </Avatar>
-          {/* Hover overlay */}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-            <Camera className="h-6 w-6 text-white" />
-          </div>
-        </div>
+        </ImageUploadTile>
         <div>
           <p className="text-lg font-medium">{user?.name}</p>
           <p className="text-muted-foreground">{user?.email}</p>
@@ -228,7 +229,7 @@ function ProfileSection({ user }: { user: User | null }) {
                 {user?.avatarUrl && user.avatarUrl.trim() !== '' ? (
                   <AvatarImage src={user.avatarUrl} alt={user?.name || 'User'} />
                 ) : (
-                  <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-5xl">
+                  <AvatarFallback className="bg-brand-subtle text-brand-subtle-foreground text-5xl">
                     {user?.name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 )}
