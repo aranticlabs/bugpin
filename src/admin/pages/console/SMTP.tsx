@@ -93,11 +93,6 @@ function SMTPSettingsSection() {
   // Saving always enables SMTP.
   const save = () => mutation.mutateAsync({ ...formData, smtpEnabled: true });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutation.mutate({ ...formData, smtpEnabled: true });
-  };
-
   const handleTestEmail = () => {
     if (!formData.smtpConfig.host || !formData.smtpConfig.from) {
       toast.error('Please fill in SMTP host and from address first');
@@ -137,118 +132,116 @@ function SMTPSettingsSection() {
           if (settings) setFormData(toSmtpForm(settings));
         }}
       />
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="smtp-host">SMTP Host</Label>
-            <Input
-              id="smtp-host"
-              value={formData.smtpConfig.host}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  smtpConfig: { ...formData.smtpConfig, host: e.target.value },
-                })
-              }
-              placeholder="smtp.example.com"
-            />
-          </div>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="smtp-host">SMTP Host</Label>
+          <Input
+            id="smtp-host"
+            value={formData.smtpConfig.host}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                smtpConfig: { ...formData.smtpConfig, host: e.target.value },
+              })
+            }
+            placeholder="smtp.example.com"
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="smtp-port">SMTP Port</Label>
-            <Input
-              id="smtp-port"
-              type="number"
-              min={1}
-              max={65535}
-              value={formData.smtpConfig.port}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  smtpConfig: { ...formData.smtpConfig, port: parseInt(e.target.value) || 587 },
-                })
-              }
-              placeholder="587"
-            />
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="smtp-port">SMTP Port</Label>
+          <Input
+            id="smtp-port"
+            type="number"
+            min={1}
+            max={65535}
+            value={formData.smtpConfig.port}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                smtpConfig: { ...formData.smtpConfig, port: parseInt(e.target.value) || 587 },
+              })
+            }
+            placeholder="587"
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="smtp-user">SMTP Username</Label>
-            <Input
-              id="smtp-user"
-              value={formData.smtpConfig.user}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  smtpConfig: { ...formData.smtpConfig, user: e.target.value },
-                })
-              }
-              placeholder="user@example.com"
-            />
-            <p className="text-xs text-muted-foreground">Leave blank if not required</p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="smtp-user">SMTP Username</Label>
+          <Input
+            id="smtp-user"
+            value={formData.smtpConfig.user}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                smtpConfig: { ...formData.smtpConfig, user: e.target.value },
+              })
+            }
+            placeholder="user@example.com"
+          />
+          <p className="text-xs text-muted-foreground">Leave blank if not required</p>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="smtp-password">SMTP Password</Label>
-            <Input
-              id="smtp-password"
-              type="password"
-              value={formData.smtpConfig.password}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  smtpConfig: { ...formData.smtpConfig, password: e.target.value },
-                })
-              }
-              placeholder="Enter password"
-            />
-            <p className="text-xs text-muted-foreground">Leave blank if not required</p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="smtp-password">SMTP Password</Label>
+          <Input
+            id="smtp-password"
+            type="password"
+            value={formData.smtpConfig.password}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                smtpConfig: { ...formData.smtpConfig, password: e.target.value },
+              })
+            }
+            placeholder="Enter password"
+          />
+          <p className="text-xs text-muted-foreground">Leave blank if not required</p>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="smtp-from">From Email Address</Label>
-            <Input
-              id="smtp-from"
-              type="email"
-              value={formData.smtpConfig.from}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  smtpConfig: { ...formData.smtpConfig, from: e.target.value },
-                })
-              }
-              placeholder="bugs@example.com"
-            />
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="smtp-from">From Email Address</Label>
+          <Input
+            id="smtp-from"
+            type="email"
+            value={formData.smtpConfig.from}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                smtpConfig: { ...formData.smtpConfig, from: e.target.value },
+              })
+            }
+            placeholder="bugs@example.com"
+          />
+        </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTestEmail}
-              disabled={!canTestEmail || testEmailMutation.isPending}
-            >
-              {testEmailMutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Test Email
-                </>
-              )}
-            </Button>
-          </div>
+        <div className="flex gap-3 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleTestEmail}
+            disabled={!canTestEmail || testEmailMutation.isPending}
+          >
+            {testEmailMutation.isPending ? (
+              <>
+                <Spinner size="sm" className="mr-2" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Send Test Email
+              </>
+            )}
+          </Button>
+        </div>
 
-          {user?.email && (
-            <p className="text-xs text-muted-foreground pt-2">
-              Test email will be sent to: <strong>{user.email}</strong>
-            </p>
-          )}
-        </CardContent>
-      </form>
+        {user?.email && (
+          <p className="text-xs text-muted-foreground pt-2">
+            Test email will be sent to: <strong>{user.email}</strong>
+          </p>
+        )}
+      </CardContent>
     </Card>
   );
 }

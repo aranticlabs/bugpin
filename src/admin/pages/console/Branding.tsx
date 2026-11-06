@@ -110,11 +110,6 @@ function BrandColorSection() {
     setLocalEdits({ ...current, ...newColors });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutation.mutate(displayColors);
-  };
-
   const handleReset = () => {
     setLocalEdits(DEFAULT_ADMIN_COLORS);
     mutation.mutate(DEFAULT_ADMIN_COLORS);
@@ -147,27 +142,25 @@ function BrandColorSection() {
         onSave={() => mutation.mutateAsync(displayColors)}
         onDiscard={() => setLocalEdits(null)}
       />
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <ThemeColorPicker
-            value={displayColors}
-            onChange={handleChange}
-            disabled={mutation.isPending}
-          />
+      <CardContent className="space-y-4">
+        <ThemeColorPicker
+          value={displayColors}
+          onChange={handleChange}
+          disabled={mutation.isPending}
+        />
 
-          <div className="flex gap-2 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              disabled={mutation.isPending}
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset to Default
-            </Button>
-          </div>
-        </CardContent>
-      </form>
+        <div className="flex gap-2 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleReset}
+            disabled={mutation.isPending}
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset to Default
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }

@@ -77,12 +77,7 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
     onError: showError,
   });
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        save.mutate(form);
-      }}
-    >
+    <>
       <UnsavedChangesGuard
         isDirty={isDirty}
         onSave={() => save.mutateAsync(form)}
@@ -115,7 +110,7 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
           />
         </div>
       </CardContent>
-    </form>
+    </>
   );
 }
 

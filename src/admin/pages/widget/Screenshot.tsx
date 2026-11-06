@@ -60,12 +60,6 @@ export function Screenshot() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!settings) return;
-    mutation.mutate(buildPayload(settings));
-  };
-
   if (isLoading) {
     return (
       <SectionCard section="screenshot">
@@ -85,13 +79,13 @@ export function Screenshot() {
           if (settings) setFormData(fromSettings(settings.screenshot));
         }}
       />
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-6">
         <ScreenshotSettingsForm
           value={formData}
           onChange={setFormData}
           disabled={mutation.isPending}
         />
-      </form>
+      </div>
     </SectionCard>
   );
 }

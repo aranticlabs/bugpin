@@ -170,10 +170,6 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
     }
   };
 
-  const onValid = (data: ButtonSettingsFormValues) => {
-    mutation.mutate(data);
-  };
-
   const handleReset = () => {
     handleFormChange(DEFAULT_BUTTON_SETTINGS);
   };
@@ -192,7 +188,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
           onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(data))}
           onDiscard={() => reset()}
         />
-        <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-6">
+        <div className="space-y-6">
           <WidgetLauncherButtonSettingsForm
             value={watched}
             onChange={handleFormChange}
@@ -200,7 +196,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
             onPreviewLocaleChange={setPreviewLocale}
           />
           <ResetToDefaultButton onReset={handleReset} disabled={mutation.isPending} />
-        </form>
+        </div>
       </SectionCard>
     </SettingsWithPreview>
   );

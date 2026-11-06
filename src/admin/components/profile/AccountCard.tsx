@@ -431,21 +431,10 @@ function UpdateProfileSection({ user }: { user: User | null }) {
     return updates;
   };
 
-  const onSubmit = (data: UpdateProfileFormData) => {
-    const updates = toUpdates(data);
-
-    if (Object.keys(updates).length === 0) {
-      toast.info('No changes to save');
-      return;
-    }
-
-    mutation.mutate(updates);
-  };
-
   const hasChanges = watchedName !== originalValues.name || watchedEmail !== originalValues.email;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <UnsavedChangesGuard
         isDirty={hasChanges}
         onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toUpdates(data)))}
@@ -474,6 +463,6 @@ function UpdateProfileSection({ user }: { user: User | null }) {
           <p className="text-sm text-muted-foreground">Used for login and notifications</p>
         </div>
       </div>
-    </form>
+    </div>
   );
 }

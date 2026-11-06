@@ -138,11 +138,6 @@ export function MyNotificationsCard() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveFormData(formData);
-  };
-
   const saveBeforeLeaving = () => {
     if (!perProject) return bulkMutation.mutateAsync(formData);
     if (!selectedProjectId) return Promise.resolve(false);
@@ -169,7 +164,7 @@ export function MyNotificationsCard() {
             <Spinner className="text-primary" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-6">
             <UnsavedChangesGuard
               isDirty={isDirty}
               onSave={saveBeforeLeaving}
@@ -241,7 +236,7 @@ export function MyNotificationsCard() {
                 }}
               />
             )}
-          </form>
+          </div>
         )}
       </CardContent>
     </Card>

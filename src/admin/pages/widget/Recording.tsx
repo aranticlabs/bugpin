@@ -87,12 +87,6 @@ export function Recording() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!settings) return;
-    mutation.mutate(buildPayload(settings));
-  };
-
   if (isLoading) {
     return (
       <SectionCard section="recording">
@@ -112,13 +106,13 @@ export function Recording() {
           if (settings) setFormData(fromSettings(settings.screenshot));
         }}
       />
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-6">
         <RecordingSettingsForm
           value={formData}
           onChange={handleChange}
           disabled={mutation.isPending}
         />
-      </form>
+      </div>
     </SectionCard>
   );
 }

@@ -115,9 +115,6 @@ export function Settings() {
     reset(data);
   };
 
-  // The mutation's error handler already reports a failed save.
-  const onSubmit = (data: SettingsFormData) => saveForm(data).catch(() => undefined);
-
   if (isLoading) return <LoadingCard />;
 
   return (
@@ -127,57 +124,55 @@ export function Settings() {
         onSave={() => submitForm(handleSubmit, saveForm)}
         onDiscard={() => reset()}
       />
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <CardContent className="space-y-4 pt-6">
-          <div className="space-y-2">
-            <Label htmlFor="app-name">
-              Application Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="app-name"
-              placeholder="BugPin"
-              {...register('appName')}
-              aria-invalid={!!errors.appName}
-            />
-            {errors.appName && <p className="text-xs text-destructive">{errors.appName.message}</p>}
+      <CardContent className="space-y-4 pt-6">
+        <div className="space-y-2">
+          <Label htmlFor="app-name">
+            Application Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="app-name"
+            placeholder="BugPin"
+            {...register('appName')}
+            aria-invalid={!!errors.appName}
+          />
+          {errors.appName && <p className="text-xs text-destructive">{errors.appName.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            Used as the sender name in email notifications
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="app-url">Application URL</Label>
+          <Input
+            id="app-url"
+            type="url"
+            placeholder="https://bugpin.example.com"
+            {...register('appUrl')}
+            aria-invalid={!!errors.appUrl}
+          />
+          {errors.appUrl && <p className="text-xs text-destructive">{errors.appUrl.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            Used for generating links in email notifications and GitHub issues
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="update-check">Check for updates</Label>
             <p className="text-xs text-muted-foreground">
-              Used as the sender name in email notifications
+              When enabled, BugPin checks once a day for new releases and shows a banner to
+              administrators when an update is available.
             </p>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="app-url">Application URL</Label>
-            <Input
-              id="app-url"
-              type="url"
-              placeholder="https://bugpin.example.com"
-              {...register('appUrl')}
-              aria-invalid={!!errors.appUrl}
-            />
-            {errors.appUrl && <p className="text-xs text-destructive">{errors.appUrl.message}</p>}
-            <p className="text-xs text-muted-foreground">
-              Used for generating links in email notifications and GitHub issues
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="update-check">Check for updates</Label>
-              <p className="text-xs text-muted-foreground">
-                When enabled, BugPin checks once a day for new releases and shows a banner to
-                administrators when an update is available.
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="updateCheckEnabled"
-              render={({ field }) => (
-                <Switch id="update-check" checked={field.value} onCheckedChange={field.onChange} />
-              )}
-            />
-          </div>
-        </CardContent>
-      </form>
+          <Controller
+            control={control}
+            name="updateCheckEnabled"
+            render={({ field }) => (
+              <Switch id="update-check" checked={field.value} onCheckedChange={field.onChange} />
+            )}
+          />
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -219,33 +214,28 @@ export function DataRetention() {
         onSave={() => submitForm(handleSubmit, saveRetention)}
         onDiscard={() => reset()}
       />
-      <form
-        onSubmit={handleSubmit((data) => saveRetention(data).catch(() => undefined))}
-        noValidate
-      >
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="retention-days">
-              Data Retention (days) <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="retention-days"
-              type="number"
-              min={0}
-              max={3650}
-              {...register('retentionDays', { valueAsNumber: true })}
-              aria-invalid={!!errors.retentionDays}
-            />
-            {errors.retentionDays && (
-              <p className="text-xs text-destructive">{errors.retentionDays.message}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Time to keep bug reports before automatic deletion. (1-3650 days) Set to 0 to never
-              delete.
-            </p>
-          </div>
-        </CardContent>
-      </form>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="retention-days">
+            Data Retention (days) <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="retention-days"
+            type="number"
+            min={0}
+            max={3650}
+            {...register('retentionDays', { valueAsNumber: true })}
+            aria-invalid={!!errors.retentionDays}
+          />
+          {errors.retentionDays && (
+            <p className="text-xs text-destructive">{errors.retentionDays.message}</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Time to keep bug reports before automatic deletion. (1-3650 days) Set to 0 to never
+            delete.
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }

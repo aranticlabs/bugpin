@@ -93,19 +93,13 @@ function LanguageForm({ savedLanguage }: { savedLanguage: ProjectLanguageSetting
         onSave={() => mutation.mutateAsync({ language })}
         onDiscard={() => setLanguage(savedLanguage)}
       />
-      <form
-        className="space-y-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate({ language });
-        }}
-      >
+      <div className="space-y-6">
         <LanguageSettingsForm
           value={language}
           onChange={setLanguage}
           disabled={mutation.isPending}
         />
-      </form>
+      </div>
     </SectionCard>
   );
 }

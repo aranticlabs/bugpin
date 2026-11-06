@@ -60,20 +60,14 @@ function DiagnosticsDefaultsForm({ settings }: { settings: AppSettings }) {
         onSave={() => mutation.mutateAsync(value)}
         onDiscard={() => setValue(resolveDiagnosticSettings(settings.diagnostics ?? {}))}
       />
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate(value);
-        }}
-      >
+      <div className="space-y-4">
         <DiagnosticsSettingsForm
           value={value}
           onChange={(next) => setValue(resolveDiagnosticSettings(next))}
           euPrivacyMode={settings.privacy?.euPrivacyMode}
           disabled={mutation.isPending}
         />
-      </form>
+      </div>
     </SectionCard>
   );
 }

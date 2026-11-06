@@ -66,11 +66,6 @@ export function Dialog() {
     setLocalEdits(newColors);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutation.mutate(displayColors as ThemeColors);
-  };
-
   const handleReset = () => {
     setLocalEdits(DEFAULT_WIDGET_COLORS);
   };
@@ -99,14 +94,14 @@ export function Dialog() {
           onSave={() => mutation.mutateAsync(displayColors as ThemeColors)}
           onDiscard={() => setLocalEdits(null)}
         />
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
           <WidgetDialogSettingsForm
             value={displayColors}
             onChange={handleChange}
             disabled={mutation.isPending}
           />
           <ResetToDefaultButton onReset={handleReset} disabled={mutation.isPending} />
-        </form>
+        </div>
       </SectionCard>
     </SettingsWithPreview>
   );

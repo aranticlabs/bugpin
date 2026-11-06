@@ -153,26 +153,19 @@ function AccountSection({ user }: { user: User }) {
         onSave={async () => name.trim().length >= 2 && save.mutateAsync(undefined)}
         onDiscard={() => setName(user.name)}
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          save.mutate(undefined);
-        }}
-      >
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="user-name">Name</Label>
-            <Input id="user-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="user-email">Email Address</Label>
-            <Input id="user-email" value={user.email} disabled />
-            <p className="text-xs text-muted-foreground">
-              Users change their own email address in their profile.
-            </p>
-          </div>
-        </CardContent>
-      </form>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="user-name">Name</Label>
+          <Input id="user-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="user-email">Email Address</Label>
+          <Input id="user-email" value={user.email} disabled />
+          <p className="text-xs text-muted-foreground">
+            Users change their own email address in their profile.
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }

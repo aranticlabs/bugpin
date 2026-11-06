@@ -85,13 +85,7 @@ export function NotificationDefaults() {
         onSave={() => mutation.mutateAsync(formData)}
         onDiscard={() => setFormData(toForm(settings))}
       />
-      <form
-        className="space-y-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate(formData);
-        }}
-      >
+      <div className="space-y-6">
         <NotificationTabs
           team={formData.notifications}
           onTeamChange={(notifications) => applyChange({ ...formData, notifications }, 'team')}
@@ -100,7 +94,7 @@ export function NotificationDefaults() {
             applyChange({ ...formData, reporterNotifications }, 'reporter')
           }
         />
-      </form>
+      </div>
     </SectionCard>
   );
 }

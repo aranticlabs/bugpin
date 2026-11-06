@@ -92,30 +92,23 @@ export function SessionSettingsCard() {
         onSave={() => mutation.mutateAsync({ sessionMaxAgeDays })}
         onDiscard={() => setSessionMaxAgeDays(settings?.sessionMaxAgeDays || 7)}
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate({ sessionMaxAgeDays });
-        }}
-      >
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="session-max-age">Session Duration (Days)</Label>
-            <Input
-              id="session-max-age"
-              type="number"
-              min={1}
-              max={365}
-              value={sessionMaxAgeDays}
-              onChange={(e) => setSessionMaxAgeDays(parseInt(e.target.value) || 7)}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Number of days before a user session expires and requires re-login (1-365)
-            </p>
-          </div>
-        </CardContent>
-      </form>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="session-max-age">Session Duration (Days)</Label>
+          <Input
+            id="session-max-age"
+            type="number"
+            min={1}
+            max={365}
+            value={sessionMaxAgeDays}
+            onChange={(e) => setSessionMaxAgeDays(parseInt(e.target.value) || 7)}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Number of days before a user session expires and requires re-login (1-365)
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -144,30 +137,23 @@ export function InvitationSettingsCard() {
         onSave={() => mutation.mutateAsync({ invitationExpirationDays })}
         onDiscard={() => setInvitationExpirationDays(settings?.invitationExpirationDays || 7)}
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate({ invitationExpirationDays });
-        }}
-      >
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="invitation-expiration">Invitation Expiration (Days)</Label>
-            <Input
-              id="invitation-expiration"
-              type="number"
-              min={1}
-              max={30}
-              value={invitationExpirationDays}
-              onChange={(e) => setInvitationExpirationDays(parseInt(e.target.value) || 7)}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Number of days before an invitation link expires (1-30)
-            </p>
-          </div>
-        </CardContent>
-      </form>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="invitation-expiration">Invitation Expiration (Days)</Label>
+          <Input
+            id="invitation-expiration"
+            type="number"
+            min={1}
+            max={30}
+            value={invitationExpirationDays}
+            onChange={(e) => setInvitationExpirationDays(parseInt(e.target.value) || 7)}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Number of days before an invitation link expires (1-30)
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -204,70 +190,63 @@ export function NetworkSettingsCard() {
           })
         }
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate(formData);
-        }}
-      >
-        <CardContent className="space-y-6 pt-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="enforce-https">Enforce HTTPS</Label>
-                <p className="text-xs text-muted-foreground">
-                  Redirect HTTP requests to HTTPS and enable HSTS header
-                </p>
-              </div>
-              <Switch
-                id="enforce-https"
-                checked={formData.enforceHttps}
-                onCheckedChange={(checked) => setFormData({ ...formData, enforceHttps: checked })}
-              />
+      <CardContent className="space-y-6 pt-6">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="enforce-https">Enforce HTTPS</Label>
+              <p className="text-xs text-muted-foreground">
+                Redirect HTTP requests to HTTPS and enable HSTS header
+              </p>
             </div>
-
-            {formData.enforceHttps && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Requires a TLS-terminating reverse proxy.</strong> Your proxy must set the{' '}
-                  <code className="bg-muted px-1 rounded">x-forwarded-proto</code> header. Without
-                  proper proxy configuration, this setting will not provide HTTPS protection.
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <hr className="border-border" />
-
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Rate limiting helps prevent abuse by limiting the number of widget submissions from a
-              single IP address. Each project is counted separately.
-            </AlertDescription>
-          </Alert>
-
-          <div className="space-y-2">
-            <Label htmlFor="rate-limit">Requests per Minute per IP</Label>
-            <Input
-              id="rate-limit"
-              type="number"
-              min={1}
-              max={1000}
-              value={formData.rateLimitPerMinute}
-              onChange={(e) =>
-                setFormData({ ...formData, rateLimitPerMinute: parseInt(e.target.value) || 60 })
-              }
-              required
+            <Switch
+              id="enforce-https"
+              checked={formData.enforceHttps}
+              onCheckedChange={(checked) => setFormData({ ...formData, enforceHttps: checked })}
             />
-            <p className="text-xs text-muted-foreground">
-              Maximum number of widget submissions allowed per minute from a single IP address for
-              each project (1-1000)
-            </p>
           </div>
-        </CardContent>
-      </form>
+
+          {formData.enforceHttps && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Requires a TLS-terminating reverse proxy.</strong> Your proxy must set the{' '}
+                <code className="bg-muted px-1 rounded">x-forwarded-proto</code> header. Without
+                proper proxy configuration, this setting will not provide HTTPS protection.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <hr className="border-border" />
+
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Rate limiting helps prevent abuse by limiting the number of widget submissions from a
+            single IP address. Each project is counted separately.
+          </AlertDescription>
+        </Alert>
+
+        <div className="space-y-2">
+          <Label htmlFor="rate-limit">Requests per Minute per IP</Label>
+          <Input
+            id="rate-limit"
+            type="number"
+            min={1}
+            max={1000}
+            value={formData.rateLimitPerMinute}
+            onChange={(e) =>
+              setFormData({ ...formData, rateLimitPerMinute: parseInt(e.target.value) || 60 })
+            }
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Maximum number of widget submissions allowed per minute from a single IP address for
+            each project (1-1000)
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -300,34 +279,27 @@ export function TwoFactorPolicyCard() {
         onSave={() => mutation.mutateAsync({ twoFactorPolicy: policy })}
         onDiscard={() => setPolicy(settings?.twoFactorPolicy ?? 'off')}
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate({ twoFactorPolicy: policy });
-        }}
-      >
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="two-factor-policy">Require for</Label>
-            <Select value={policy} onValueChange={(value) => setPolicy(value as TwoFactorPolicy)}>
-              <SelectTrigger id="two-factor-policy" className="w-64">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(TWO_FACTOR_POLICY_LABELS) as TwoFactorPolicy[]).map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {TWO_FACTOR_POLICY_LABELS[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Users the policy covers who have no second factor yet must set one up at their next
-              sign-in. Users can always add one themselves in their profile.
-            </p>
-          </div>
-        </CardContent>
-      </form>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="two-factor-policy">Require for</Label>
+          <Select value={policy} onValueChange={(value) => setPolicy(value as TwoFactorPolicy)}>
+            <SelectTrigger id="two-factor-policy" className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(TWO_FACTOR_POLICY_LABELS) as TwoFactorPolicy[]).map((value) => (
+                <SelectItem key={value} value={value}>
+                  {TWO_FACTOR_POLICY_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Users the policy covers who have no second factor yet must set one up at their next
+            sign-in. Users can always add one themselves in their profile.
+          </p>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -368,56 +340,49 @@ export function PasswordPolicyCard() {
         onSave={() => mutation.mutateAsync({ passwordPolicy: policy })}
         onDiscard={() => setPolicy(settings?.passwordPolicy ?? DEFAULT_PASSWORD_POLICY)}
       />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate({ passwordPolicy: policy });
-        }}
-      >
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="password-min-length">Minimum length</Label>
-            <Input
-              id="password-min-length"
-              type="number"
-              min={PASSWORD_MIN_LENGTH_FLOOR}
-              max={PASSWORD_MIN_LENGTH_CEILING}
-              className="w-32"
-              value={policy.minLength}
-              onChange={(event) =>
-                setPolicy({
-                  ...policy,
-                  minLength: parseInt(event.target.value) || PASSWORD_MIN_LENGTH_FLOOR,
-                })
-              }
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Number of characters ({PASSWORD_MIN_LENGTH_FLOOR}-{PASSWORD_MIN_LENGTH_CEILING})
-            </p>
-          </div>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="password-min-length">Minimum length</Label>
+          <Input
+            id="password-min-length"
+            type="number"
+            min={PASSWORD_MIN_LENGTH_FLOOR}
+            max={PASSWORD_MIN_LENGTH_CEILING}
+            className="w-32"
+            value={policy.minLength}
+            onChange={(event) =>
+              setPolicy({
+                ...policy,
+                minLength: parseInt(event.target.value) || PASSWORD_MIN_LENGTH_FLOOR,
+              })
+            }
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Number of characters ({PASSWORD_MIN_LENGTH_FLOOR}-{PASSWORD_MIN_LENGTH_CEILING})
+          </p>
+        </div>
 
-          <div className="space-y-3">
-            <Label>Must contain</Label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {PASSWORD_RULE_OPTIONS.map((option) => (
-                <div key={option.key} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`password-${option.key}`}
-                    checked={policy[option.key]}
-                    onCheckedChange={(checked) =>
-                      setPolicy({ ...policy, [option.key]: checked === true })
-                    }
-                  />
-                  <Label htmlFor={`password-${option.key}`} className="font-normal">
-                    {option.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
+        <div className="space-y-3">
+          <Label>Must contain</Label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PASSWORD_RULE_OPTIONS.map((option) => (
+              <div key={option.key} className="flex items-center gap-2">
+                <Checkbox
+                  id={`password-${option.key}`}
+                  checked={policy[option.key]}
+                  onCheckedChange={(checked) =>
+                    setPolicy({ ...policy, [option.key]: checked === true })
+                  }
+                />
+                <Label htmlFor={`password-${option.key}`} className="font-normal">
+                  {option.label}
+                </Label>
+              </div>
+            ))}
           </div>
-        </CardContent>
-      </form>
+        </div>
+      </CardContent>
     </Card>
   );
 }
