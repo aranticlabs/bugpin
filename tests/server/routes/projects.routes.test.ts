@@ -44,6 +44,7 @@ let updateResult: Result<Project> = Result.ok(baseProject);
 let deleteResult: Result<void> = Result.ok(undefined);
 let regenerateResult: Result<string> = Result.ok('proj_new');
 let lastUpdateBody: unknown;
+let lastSummaryOptions: { includeApiKeyPrefix?: boolean } | undefined;
 
 beforeEach(() => {
   listResult = [baseProject];
@@ -53,6 +54,7 @@ beforeEach(() => {
   deleteResult = Result.ok(undefined);
   regenerateResult = Result.ok('proj_new');
   lastUpdateBody = undefined;
+  lastSummaryOptions = undefined;
 
   authService.validateSession = async () =>
     Result.ok({
@@ -61,8 +63,10 @@ beforeEach(() => {
     });
 
   projectsService.list = async () => Result.ok(listResult);
-  projectsService.listSummaries = async () =>
-    Result.ok(listResult.map(({ id, name, isActive }) => ({ id, name, isActive })));
+  projectsService.listSummaries = async (options) => {
+    lastSummaryOptions = options;
+    return Result.ok(listResult.map(({ id, name, isActive }) => ({ id, name, isActive })));
+  };
   projectsService.getById = async () => {
     if (!projectResult) {
       return Result.fail('Not found', 'NOT_FOUND');
@@ -111,6 +115,16 @@ describe('projects routes', () => {
     const body = (await res.json()) as { projects: Record<string, unknown>[] };
     expect(body.projects).toEqual([{ id: 'prj_1', name: 'Project' }]);
     expect(body.projects[0]).not.toHaveProperty('apiKey');
+    expect(lastSummaryOptions).toEqual({ includeApiKeyPrefix: false });
+  });
+
+  it('asks for the API key prefix only for admins', async () => {
+    const app = createApp();
+    const res = await app.request('http://localhost/projects/summaries', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(200);
+    expect(lastSummaryOptions).toEqual({ includeApiKeyPrefix: true });
   });
 
   it('lists projects', async () => {

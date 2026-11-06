@@ -7,9 +7,12 @@ import {
   EXPORT_FORMATS,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
+  REPORT_SORT_KEYS,
   SUPPORTED_LOCALES,
+  TABLE_PAGE_SIZES,
   THEME_PREFERENCES,
   type LocaleCode,
+  type TablePageSize,
 } from '@shared/types';
 
 const webhookEventSchema = z.enum([
@@ -65,6 +68,10 @@ const webAuthnCredentialSchema = z.looseObject({
   clientExtensionResults: z.record(z.string(), z.unknown()),
 });
 
+const tablePageSizeSchema = z.custom<TablePageSize>(
+  (value) => TABLE_PAGE_SIZES.some((size) => size === value),
+  { message: `Page size must be one of ${TABLE_PAGE_SIZES.join(', ')}` }
+);
 const positionEnum = z.enum(['bottom-right', 'bottom-left', 'top-right', 'top-left']);
 const buttonShapeEnum = z.enum(['rectangle', 'round']);
 const themeEnum = z.enum(['auto', 'light', 'dark']);
@@ -371,7 +378,7 @@ export const schemas = {
     search: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
-    sortBy: z.enum(['createdAt', 'updatedAt', 'title', 'status', 'priority']).default('createdAt'),
+    sortBy: z.enum(REPORT_SORT_KEYS).default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
   }),
 
@@ -518,6 +525,8 @@ export const schemas = {
       reportEnvironmentOpen: z.boolean().optional(),
       reportMessagesOpen: z.boolean().optional(),
       dialogPreviewOpen: z.boolean().optional(),
+      projectsPageSize: tablePageSizeSchema.optional(),
+      reportsPageSize: tablePageSizeSchema.optional(),
       lastExport: z
         .object({ format: z.enum(EXPORT_FORMATS), action: z.enum(EXPORT_ACTIONS) })
         .strict()

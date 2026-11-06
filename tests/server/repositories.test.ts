@@ -18,7 +18,11 @@ import { integrationsRepo } from '../../src/server/database/repositories/integra
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
-import { UNASSIGNED_FILTER, type NotificationDefaultSettings } from '../../src/shared/types';
+import {
+  UNASSIGNED_FILTER,
+  type NotificationDefaultSettings,
+  type ReportSortKey,
+} from '../../src/shared/types';
 import { webhooksRepo } from '../../src/server/database/repositories/webhooks.repo';
 import {
   notificationPreferencesRepo,
@@ -581,6 +585,49 @@ describe('reportsRepo', () => {
 
     expect(result.total).toBe(1);
     expect(result.data[0].title).toBe('Crash on login');
+  });
+
+  it('sorts by workflow status, priority rank, title, and assignee', async () => {
+    const project = await createProject('Sorting');
+    const zoe = await usersRepo.create({
+      email: 'zoe@example.com',
+      name: 'Zoe',
+      passwordHash: 'hash',
+      role: 'admin',
+    });
+    const adam = await usersRepo.create({
+      email: 'adam@example.com',
+      name: 'adam',
+      passwordHash: 'hash',
+      role: 'admin',
+    });
+    const reports = [
+      { title: 'beta', priority: 'medium', status: 'closed', assignedTo: zoe.id },
+      { title: 'Alpha', priority: 'highest', status: 'open', assignedTo: undefined },
+      { title: 'gamma', priority: 'low', status: 'in_progress', assignedTo: adam.id },
+      { title: 'Delta', priority: 'high', status: 'resolved', assignedTo: undefined },
+    ] as const;
+    for (const report of reports) {
+      const created = await reportsRepo.create({
+        projectId: project.id,
+        title: report.title,
+        priority: report.priority,
+        metadata: baseMetadata,
+        assignedTo: report.assignedTo,
+      });
+      await reportsRepo.update(created.id, { status: report.status });
+    }
+
+    const titles = async (sortBy: ReportSortKey, sortOrder: 'asc' | 'desc') =>
+      (await reportsRepo.find({ projectId: project.id, sortBy, sortOrder })).data.map(
+        (report) => report.title
+      );
+
+    expect(await titles('status', 'asc')).toEqual(['Alpha', 'gamma', 'Delta', 'beta']);
+    expect(await titles('priority', 'desc')).toEqual(['Alpha', 'Delta', 'beta', 'gamma']);
+    expect(await titles('title', 'asc')).toEqual(['Alpha', 'beta', 'Delta', 'gamma']);
+    expect((await titles('assignee', 'asc')).slice(0, 2)).toEqual(['gamma', 'beta']);
+    expect((await titles('assignee', 'desc')).slice(0, 2)).toEqual(['beta', 'gamma']);
   });
 
   it('filters unassigned reports', async () => {

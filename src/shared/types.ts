@@ -39,6 +39,17 @@ export const ASSIGNED_TO_ME_FILTER = '__me__';
 /** Statuses of reports that still need work */
 export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
 
+export const REPORT_SORT_KEYS = [
+  'createdAt',
+  'updatedAt',
+  'title',
+  'project',
+  'status',
+  'priority',
+  'assignee',
+] as const;
+export type ReportSortKey = (typeof REPORT_SORT_KEYS)[number];
+
 /** Width limits of the resizable navigation sidebar, in pixels */
 export const SIDEBAR_WIDTH_DEFAULT = 256;
 export const SIDEBAR_WIDTH_MIN = 208;
@@ -53,6 +64,9 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 export const EXPORT_ACTIONS = ['copy', 'download'] as const;
 export type ExportAction = (typeof EXPORT_ACTIONS)[number];
 
+export const TABLE_PAGE_SIZES = [10, 25, 50] as const;
+export type TablePageSize = (typeof TABLE_PAGE_SIZES)[number];
+
 /** Per-user Admin Console preferences that follow the user across browsers and devices */
 export interface UserPreferences {
   theme?: ThemePreference;
@@ -64,6 +78,8 @@ export interface UserPreferences {
   reportEnvironmentOpen?: boolean;
   reportMessagesOpen?: boolean;
   dialogPreviewOpen?: boolean;
+  projectsPageSize?: TablePageSize;
+  reportsPageSize?: TablePageSize;
   lastExport?: { format: ExportFormat; action: ExportAction };
   editorLocale?: LocaleCode;
   dismissedUpdateVersion?: string | null;
@@ -368,6 +384,10 @@ export interface Project {
 export type ProjectSummary = Pick<Project, 'id' | 'name' | 'isActive' | 'licenseLocked'> & {
   activeReportsCount?: number;
   reportsCount?: number;
+  createdAt?: string;
+  lastReportAt?: string | null;
+  integrationTypes?: IntegrationType[];
+  apiKeyPrefix?: string;
 };
 
 export type PinnedProject = ProjectSummary & { activeReportsCount: number };
@@ -510,7 +530,7 @@ export interface ReportFilter {
   createdBefore?: string;
   page?: number;
   limit?: number;
-  sortBy?: string;
+  sortBy?: ReportSortKey;
   sortOrder?: 'asc' | 'desc';
 }
 

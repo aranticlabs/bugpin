@@ -12,7 +12,28 @@ import type {
   LocaleCode,
 } from '@shared/types';
 import { normalizeLocale } from '../../utils/locale.js';
-import { UNASSIGNED_FILTER } from '@shared/types';
+import { UNASSIGNED_FILTER, type ReportSortKey } from '@shared/types';
+
+// Status follows the workflow, and priority ranks lowest to highest, so descending puts
+// the most urgent first. Missing projects and unassigned reports always sort last.
+function reportOrderBy(key: ReportSortKey, direction: 'ASC' | 'DESC'): string {
+  switch (key) {
+    case 'createdAt':
+      return `reports.created_at ${direction}`;
+    case 'updatedAt':
+      return `reports.updated_at ${direction}`;
+    case 'title':
+      return `reports.title COLLATE NOCASE ${direction}`;
+    case 'project':
+      return `projects.name IS NULL, projects.name COLLATE NOCASE ${direction}`;
+    case 'status':
+      return `CASE reports.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END ${direction}`;
+    case 'priority':
+      return `CASE reports.priority WHEN 'lowest' THEN 0 WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 ELSE 4 END ${direction}`;
+    case 'assignee':
+      return `users.name IS NULL, users.name COLLATE NOCASE ${direction}`;
+  }
+}
 
 // Database Row Type
 
@@ -235,11 +256,8 @@ export const reportsRepo = {
     const countResult = db.query(countQuery).get(...params) as { count: number };
     const total = countResult.count;
 
-    // Sorting
-    const sortBy = filter.sortBy || 'created_at';
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const validSortColumns = ['created_at', 'updated_at', 'title', 'status', 'priority'];
-    const orderBy = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+    const orderBy = `${reportOrderBy(filter.sortBy ?? 'createdAt', sortOrder)}, reports.created_at DESC, reports.id`;
 
     // Pagination
     const page = Math.max(1, filter.page ?? 1);
@@ -259,7 +277,7 @@ export const reportsRepo = {
       LEFT JOIN users ON users.id = reports.assigned_to
       ${searchJoin}
       ${whereClause}
-      ORDER BY ${orderBy} ${sortOrder}
+      ORDER BY ${orderBy}
       LIMIT ? OFFSET ?
     `;
     const rows = db.query(dataQuery).all(...params, limit, offset) as (ReportRow & {
@@ -384,6 +402,13 @@ export const reportsRepo = {
       )
       .all(...statuses) as { project_id: string; count: number }[];
     return Object.fromEntries(rows.map((row) => [row.project_id, row.count]));
+  },
+
+  async latestCreatedAtPerProject(): Promise<Record<string, string>> {
+    const rows = getDb()
+      .query('SELECT project_id, MAX(created_at) as latest FROM reports GROUP BY project_id')
+      .all() as { project_id: string; latest: string }[];
+    return Object.fromEntries(rows.map((row) => [row.project_id, row.latest]));
   },
 
   /**

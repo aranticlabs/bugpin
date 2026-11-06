@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyboardSensor, PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom';
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react';
 import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import {
@@ -20,6 +19,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { api } from '../../api/client';
+import { sortableSensors } from '../../lib/sortable-sensors';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import {
   SidebarGroup,
@@ -84,21 +84,6 @@ function usePinnedProjectsOpen(): [boolean, (open: boolean) => void] {
     parseLegacy: parseLegacyBoolean,
   });
 }
-
-const defaultPointerActivationConstraints = PointerSensor.defaults.activationConstraints;
-const pinnedSensors = [
-  PointerSensor.configure({
-    activationConstraints: (event, source) => {
-      if (event.pointerType === 'mouse') {
-        return [new PointerActivationConstraints.Distance({ value: 4 })];
-      }
-      return typeof defaultPointerActivationConstraints === 'function'
-        ? defaultPointerActivationConstraints(event, source)
-        : defaultPointerActivationConstraints;
-    },
-  }),
-  KeyboardSensor,
-];
 
 function reportsUrl(params: Record<string, string>): string {
   return `/reports?${new URLSearchParams(params).toString()}`;
@@ -313,7 +298,7 @@ export function NavMain() {
                     </SidebarMenuAction>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <DragDropProvider sensors={pinnedSensors} onDragEnd={handlePinnedDragEnd}>
+                    <DragDropProvider sensors={sortableSensors} onDragEnd={handlePinnedDragEnd}>
                       <SidebarMenuSub aria-label="Pinned projects">
                         {pinnedProjects.map((project, index) => (
                           <SortablePinnedProject

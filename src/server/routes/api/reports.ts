@@ -4,7 +4,12 @@ import { workspaceViewsService } from '../../services/workspace-views.service.js
 import { syncQueueService } from '../../services/integrations/sync-queue.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
-import { ASSIGNED_TO_ME_FILTER, type ReportStatus, type ReportPriority } from '@shared/types';
+import {
+  ASSIGNED_TO_ME_FILTER,
+  type ReportPriority,
+  type ReportSortKey,
+  type ReportStatus,
+} from '@shared/types';
 import { normalizeMimeType } from '@shared/mime';
 import { createFileResponse } from '../../utils/range.js';
 
@@ -27,7 +32,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     search: query.search,
     page: parseInt(query.page || '1'),
     limit: parseInt(query.limit || '20'),
-    sortBy: query.sortBy || 'createdAt',
+    sortBy: (query.sortBy || 'createdAt') as ReportSortKey,
     sortOrder: (query.sortOrder || 'desc') as 'asc' | 'desc',
   };
 

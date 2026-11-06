@@ -184,4 +184,17 @@ export const integrationsRepo = {
       .get(projectId) as { count: number };
     return result.count;
   },
+
+  async activeTypesPerProject(): Promise<Record<string, IntegrationType[]>> {
+    const rows = getDb()
+      .query(
+        'SELECT DISTINCT project_id, type FROM integrations WHERE is_active = 1 ORDER BY project_id, type'
+      )
+      .all() as { project_id: string; type: IntegrationType }[];
+    const types: Record<string, IntegrationType[]> = {};
+    for (const row of rows) {
+      (types[row.project_id] ??= []).push(row.type);
+    }
+    return types;
+  },
 };

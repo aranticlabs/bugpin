@@ -79,6 +79,8 @@ describe('user preferences routes', () => {
       theme: 'dark',
       sidebarOpen: false,
       pinnedProjectsOpen: false,
+      projectsPageSize: 50,
+      reportsPageSize: 10,
       reportDetailsOpen: true,
       reportPageInfoOpen: false,
       reportEnvironmentOpen: true,
@@ -100,6 +102,8 @@ describe('user preferences routes', () => {
       { lastExport: { format: 'pdf', action: 'copy' } },
       { lastExport: { format: 'json', action: 'print' } },
       { editorLocale: 'xx' },
+      { projectsPageSize: 20 },
+      { reportsPageSize: '25' },
       { dismissedUpdateVersion: 'x'.repeat(101) },
     ]) {
       expect((await request('PATCH', body)).status).toBe(400);

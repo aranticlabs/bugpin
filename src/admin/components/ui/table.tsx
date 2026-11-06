@@ -3,13 +3,32 @@ import * as React from 'react';
 import { cn } from '../../lib/utils';
 import { ScrollArea } from './scroll-area';
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
+// A scroll container would capture position: sticky, so a sticky header only scrolls
+// sideways below xl and pins its header cells to the page at xl and up.
+const STICKY_HEADER_CLASSES =
+  'xl:[&_thead_th]:sticky xl:[&_thead_th]:top-[var(--table-sticky-top,0px)] xl:[&_thead_th]:z-10 [&_thead_th]:bg-card xl:[&_thead_th]:shadow-[inset_0_-1px_0_var(--color-border)] [&_thead_th:first-child]:rounded-tl-xl [&_thead_th:last-child]:rounded-tr-xl';
+
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement> & { stickyHeader?: boolean }
+>(({ className, stickyHeader = false, ...props }, ref) => {
+  if (stickyHeader) {
+    return (
+      <div className="w-full overflow-x-auto xl:overflow-visible">
+        <table
+          ref={ref}
+          className={cn('w-full caption-bottom text-sm', STICKY_HEADER_CLASSES, className)}
+          {...props}
+        />
+      </div>
+    );
+  }
+  return (
     <ScrollArea className="w-full" aria-label="Table">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </ScrollArea>
-  )
-);
+  );
+});
 Table.displayName = 'Table';
 
 const TableHeader = React.forwardRef<

@@ -260,11 +260,15 @@ const TWO_FACTOR_POLICY_LABELS: Record<TwoFactorPolicy, string> = {
 export function TwoFactorPolicyCard() {
   const { data: settings } = useSettings();
   const [policy, setPolicy] = useState<TwoFactorPolicy>('off');
+  const [syncedSettings, setSyncedSettings] = useState<AppSettings>();
   const mutation = useSaveSettings('Two-factor policy saved');
 
-  useEffect(() => {
-    if (settings) setPolicy(settings.twoFactorPolicy ?? 'off');
-  }, [settings]);
+  // Syncing during render rather than in an effect means no commit pairs freshly loaded settings
+  // with the initial policy, which would briefly register the form as dirty.
+  if (settings && settings !== syncedSettings) {
+    setSyncedSettings(settings);
+    setPolicy(settings.twoFactorPolicy ?? 'off');
+  }
 
   return (
     <Card>

@@ -55,6 +55,7 @@ export interface IReportsRepository {
   bulkUpdate(ids: string[], updates: Partial<Report>): Promise<number>;
   countByProject(projectId: string): Promise<number>;
   countPerProject(statuses: ReportStatus[]): Promise<Record<string, number>>;
+  latestCreatedAtPerProject(): Promise<Record<string, string>>;
   getStats(projectId?: string): Promise<{
     total: number;
     byStatus: Record<ReportStatus, number>;
@@ -255,6 +256,7 @@ export interface IIntegrationsRepository {
   update(id: string, updates: Partial<Integration>): Promise<Integration | null>;
   updateLastUsed(id: string): Promise<boolean>;
   delete(id: string): Promise<boolean>;
+  activeTypesPerProject(): Promise<Record<string, IntegrationType[]>>;
 }
 
 // Settings Repository Interface

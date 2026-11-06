@@ -27,7 +27,9 @@ projects.get('/', authorize(['admin']), async (c) => {
 // List project names for every role, without API keys or settings
 
 projects.get('/summaries', authorize(['admin', 'editor', 'viewer']), async (c) => {
-  const result = await projectsService.listSummaries();
+  const result = await projectsService.listSummaries({
+    includeApiKeyPrefix: c.get('user').role === 'admin',
+  });
 
   if (!result.success) {
     return c.json({ success: false, error: result.code, message: result.error }, 400);

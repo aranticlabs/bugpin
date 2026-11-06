@@ -15,7 +15,17 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.f
 import { toast } from 'sonner';
 
 const PROJECTS: ProjectSummary[] = [
-  { id: 'p-beta', name: 'Beta', isActive: true, activeReportsCount: 2, reportsCount: 9 },
+  {
+    id: 'p-beta',
+    name: 'Beta',
+    isActive: true,
+    activeReportsCount: 2,
+    reportsCount: 9,
+    createdAt: '2026-01-15T09:00:00.000Z',
+    lastReportAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    integrationTypes: ['github', 'jira'],
+    apiKeyPrefix: 'proj_betakey',
+  },
   { id: 'p-alpha', name: 'alpha', isActive: false, activeReportsCount: 7, reportsCount: 7 },
   { id: 'p-gamma', name: 'Gamma', isActive: true, activeReportsCount: 0, reportsCount: 1 },
 ];
@@ -119,7 +129,7 @@ afterEach(() => {
 });
 
 describe('ProjectsPage', () => {
-  it('lists every project with status and report counts, sorted by name', async () => {
+  it('lists every project with status and report counts in the custom order', async () => {
     useProjects();
     renderPage();
 
@@ -127,7 +137,7 @@ describe('ProjectsPage', () => {
       'href',
       '/projects/p-beta'
     );
-    expect(projectNames()).toEqual(['alpha', 'Beta', 'Gamma']);
+    expect(projectNames()).toEqual(['Beta', 'alpha', 'Gamma']);
     const beta = rowOf('Beta');
     expect(within(beta).getByText('Active')).toBeInTheDocument();
     expect(within(beta).getByRole('link', { name: '2' })).toHaveAttribute(
@@ -139,6 +149,65 @@ describe('ProjectsPage', () => {
       '/projects/p-beta'
     );
     expect(within(rowOf('alpha')).getByText('Paused')).toBeInTheDocument();
+    expect(within(rowOf('Gamma')).queryByRole('link', { name: '0' })).not.toBeInTheDocument();
+    expect(screen.getByText('3 projects')).toBeInTheDocument();
+  });
+
+  it('pages through projects with the chosen page size', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 30 }, (_, index) => ({
+      id: `p-${index + 1}`,
+      name: `Project ${String(index + 1).padStart(2, '0')}`,
+      isActive: true,
+      activeReportsCount: 0,
+      reportsCount: 0,
+    }));
+    useProjects(many);
+    renderPage();
+
+    await screen.findByRole('link', { name: 'Project 01' });
+    expect(projectNames()).toHaveLength(10);
+    expect(screen.getByText('30 projects')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(projectNames()[0]).toBe('Project 11');
+    expect(projectNames()).toHaveLength(10);
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('page=2');
+
+    await user.click(screen.getByRole('combobox', { name: 'Rows per page' }));
+    await user.click(await screen.findByRole('option', { name: '25' }));
+    expect(projectNames()).toHaveLength(25);
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Search projects'), '1');
+    expect(screen.getByLabelText('Current path')).not.toHaveTextContent('page=');
+  });
+
+  it('puts Create Project in the toolbar next to the table', async () => {
+    useProjects();
+    renderPage();
+
+    const create = await screen.findByRole('button', { name: 'Create Project' });
+    expect(create.closest('div.ml-auto')?.parentElement).toContainElement(
+      screen.getByLabelText('Search projects')
+    );
+  });
+
+  it('shows the last report, integrations, creation date, and key prefix', async () => {
+    useProjects();
+    renderPage();
+
+    const beta = rowOf(
+      await screen.findByRole('link', { name: 'Beta' }).then((l) => l.textContent ?? '')
+    );
+    expect(within(beta).getByText('3h ago')).toBeInTheDocument();
+    expect(within(beta).getByText('GitHub, Jira')).toBeInTheDocument();
+    expect(within(beta).getByText('Jan 15, 2026')).toBeInTheDocument();
+    expect(within(beta).getByText('proj_betakey…')).toBeInTheDocument();
+    const gamma = rowOf('Gamma');
+    expect(within(gamma).getByText('Never')).toBeInTheDocument();
+    expect(within(gamma).getByText('None')).toBeInTheDocument();
   });
 
   it('sorts by a column and flips the direction on a second click', async () => {
@@ -147,6 +216,10 @@ describe('ProjectsPage', () => {
     renderPage();
 
     await screen.findByRole('link', { name: 'Beta' });
+    await user.click(screen.getByRole('button', { name: /^project/i }));
+    expect(projectNames()).toEqual(['alpha', 'Beta', 'Gamma']);
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('/projects?sort=name&dir=asc');
+
     const openHeader = screen.getByRole('button', { name: /open reports/i });
     await user.click(openHeader);
     expect(projectNames()).toEqual(['alpha', 'Beta', 'Gamma']);
@@ -160,6 +233,39 @@ describe('ProjectsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /^status/i }));
     expect(projectNames()).toEqual(['Beta', 'Gamma', 'alpha']);
+
+    await user.click(screen.getByRole('button', { name: 'Custom order' }));
+    expect(projectNames()).toEqual(['Beta', 'alpha', 'Gamma']);
+    expect(screen.getByLabelText('Current path')).toHaveTextContent(/^\/projects$/);
+  });
+
+  it('offers drag handles in the custom order only while unfiltered', async () => {
+    const user = userEvent.setup();
+    useProjects();
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Reorder Beta' })).toBeEnabled();
+    expect(rowOf('Beta')).not.toHaveAttribute('role');
+    await user.type(screen.getByLabelText('Search projects'), 'b');
+    expect(screen.getByRole('button', { name: 'Reorder Beta' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /^project/i }));
+    expect(screen.queryByRole('button', { name: 'Reorder Beta' })).not.toBeInTheDocument();
+    expect(rowOf('Beta')).not.toHaveAttribute('role');
+  });
+
+  it('filters to pinned projects', async () => {
+    const user = userEvent.setup();
+    useProjects(PROJECTS, [
+      { id: 'p-gamma', name: 'Gamma', isActive: true, activeReportsCount: 0 },
+    ]);
+    renderPage();
+
+    await screen.findByRole('link', { name: 'Beta' });
+    await user.click(screen.getByRole('button', { name: 'Pinned' }));
+    expect(projectNames()).toEqual(['Gamma']);
+    expect(screen.getByText('1 project')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('pinned=1');
   });
 
   it('opens a project when its row is clicked', async () => {
@@ -190,18 +296,19 @@ describe('ProjectsPage', () => {
     renderPage();
 
     const pin = await screen.findByRole('button', { name: 'Pin Beta' });
-    expect(within(rowOf('Beta')).getAllByRole('cell')[1]).toContainElement(pin);
-    expect(pin.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100');
-    expect(screen.getByRole('button', { name: 'Unpin Gamma' }).parentElement).not.toHaveClass(
-      'opacity-0'
-    );
+    expect(within(rowOf('Beta')).getAllByRole('cell')[2]).toContainElement(pin);
+    expect(pin).toHaveClass('opacity-0', 'group-hover:opacity-100');
+    const unpin = screen.getByRole('button', { name: 'Unpin Gamma' });
+    expect(unpin).not.toHaveClass('opacity-0');
+    expect(unpin).toHaveAttribute('aria-pressed', 'true');
+    expect(unpin.querySelector('.lucide-pin')).toHaveClass('fill-current', 'text-primary');
   });
 
   it.each([
-    ['Pause Beta', 'Pause project'],
-    ['Activate alpha', 'Activate project'],
+    ['Pause Beta', 'Stop accepting reports'],
+    ['Activate alpha', 'Resume accepting reports'],
     ['Pause Locked', 'Read-only at the license limit'],
-    ['Delete Beta', 'Delete project'],
+    ['Settings of Beta', 'Project settings'],
   ])('explains "%s" in a tooltip, also when disabled', async (button, text) => {
     const user = userEvent.setup();
     useProjects([
@@ -217,23 +324,24 @@ describe('ProjectsPage', () => {
     ]);
     renderPage();
 
-    const trigger = (await screen.findByRole('button', { name: button })).parentElement;
+    await screen.findByRole('link', { name: 'Beta' });
+    const control =
+      screen.queryByRole('link', { name: button }) ?? screen.getByRole('button', { name: button });
+    const trigger = control.parentElement;
     if (!trigger) throw new Error('Missing tooltip trigger');
     await user.hover(trigger);
     expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
   });
 
-  it('shows the current state and the action as a hover icon', async () => {
+  it('links Settings straight to the project settings tab', async () => {
     useProjects();
     renderPage();
 
-    const active = await screen.findByRole('button', { name: 'Pause Beta' });
-    expect(active.querySelector('.lucide-power')).not.toHaveClass('hidden');
-    expect(active.querySelector('.lucide-pause')).toHaveClass('hidden', 'group-hover/toggle:block');
-
-    const paused = screen.getByRole('button', { name: 'Activate alpha' });
-    expect(paused.querySelector('.lucide-pause')).not.toHaveClass('hidden');
-    expect(paused.querySelector('.lucide-power')).toHaveClass('hidden', 'group-hover/toggle:block');
+    expect(await screen.findByRole('link', { name: 'Settings of Beta' })).toHaveAttribute(
+      'href',
+      '/projects/p-beta?tab=general'
+    );
+    expect(screen.queryByRole('link', { name: 'Integrations of Beta' })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -303,13 +411,15 @@ describe('ProjectsPage', () => {
 
   it('gives viewers the list without management actions', async () => {
     signInAs(mockUsers.viewer);
-    useProjects();
+    useProjects(PROJECTS.map(({ apiKeyPrefix: _prefix, ...project }) => project));
     renderPage();
 
     expect(await screen.findByRole('button', { name: 'Pin Beta' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create Project' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Pause Beta' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Delete Beta' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More actions for Beta' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reorder Beta' })).not.toBeInTheDocument();
+    expect(screen.queryByText('proj_betakey…')).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
   });
 
@@ -345,9 +455,7 @@ describe('ProjectsPage', () => {
     useProjects();
     renderPage();
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Show API key and snippet of Beta' })
-    );
+    await user.click(await screen.findByRole('button', { name: 'API key of Beta' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('proj_beta_key')).toBeInTheDocument();
     expect(within(dialog).getByText(/data-api-key="proj_beta_key"/)).toBeInTheDocument();
@@ -373,7 +481,8 @@ describe('ProjectsPage', () => {
     useProjects();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Regenerate the API key of Beta' }));
+    await user.click(await screen.findByRole('button', { name: 'More actions for Beta' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Regenerate API key' }));
     const confirm = await screen.findByRole('alertdialog');
     await user.click(within(confirm).getByRole('button', { name: 'Regenerate' }));
 
@@ -386,7 +495,8 @@ describe('ProjectsPage', () => {
     useProjects();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Delete Beta' }));
+    await user.click(await screen.findByRole('button', { name: 'More actions for Beta' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete project' }));
     const dialog = await screen.findByRole('alertdialog');
     const confirm = within(dialog).getByRole('button', { name: 'Delete' });
     expect(confirm).toBeDisabled();
@@ -403,6 +513,7 @@ describe('ProjectsPage', () => {
   });
 
   it('blocks creation at the license limit and marks excess projects read-only', async () => {
+    const user = userEvent.setup();
     vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
       eeAvailable: true,
       licensed: true,
@@ -424,11 +535,24 @@ describe('ProjectsPage', () => {
     renderPage();
 
     expect(await screen.findByText('Read-only · License limit')).toBeInTheDocument();
-    expect(await screen.findByText(/1 of 1 licensed projects used/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create Project' })).toBeDisabled();
+    expect(await screen.findByText('1 of 1 used')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Licensed projects used' })).toBeInTheDocument();
+    const create = screen.getByRole('button', { name: 'Create Project' });
+    expect(create).toBeDisabled();
+    await user.hover(create.parentElement as HTMLElement);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'All 1 licensed projects are in use'
+    );
     expect(screen.getByRole('button', { name: 'Pause Locked' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Regenerate the API key of Locked' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Delete Locked' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'More actions for Locked' }));
+    expect(await screen.findByRole('menuitem', { name: 'Regenerate API key' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    expect(screen.getByRole('menuitem', { name: 'Delete project' })).not.toHaveAttribute(
+      'aria-disabled'
+    );
   });
 
   describe('bulk actions', () => {

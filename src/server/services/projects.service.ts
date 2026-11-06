@@ -1,5 +1,6 @@
 import { projectsRepo, type CreateProjectData } from '../database/repositories/projects.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
+import { integrationsRepo } from '../database/repositories/integrations.repo.js';
 import { webhooksRepo } from '../database/repositories/webhooks.repo.js';
 import { usersService } from './users.service.js';
 import { Result } from '../utils/result.js';
@@ -11,6 +12,9 @@ import {
   type ProjectSettings,
   type ProjectSummary,
 } from '@shared/types';
+
+// Matches the api_key_prefix length stored by the projects repository.
+const API_KEY_PREFIX_LENGTH = 12;
 
 // Types
 
@@ -97,9 +101,13 @@ export const projectsService = {
     );
   },
 
-  async listSummaries(): Promise<Result<ProjectSummary[]>> {
+  async listSummaries(
+    options: { includeApiKeyPrefix?: boolean } = {}
+  ): Promise<Result<ProjectSummary[]>> {
     const projects = await projectsRepo.findAll();
     const activeCounts = await reportsRepo.countPerProject(ACTIVE_REPORT_STATUSES);
+    const latestReports = await reportsRepo.latestCreatedAtPerProject();
+    const integrationTypes = await integrationsRepo.activeTypesPerProject();
     return Result.ok(
       projects.map((project) => ({
         id: project.id,
@@ -108,6 +116,12 @@ export const projectsService = {
         licenseLocked: !checkProjectLicense(project.id).success,
         activeReportsCount: activeCounts[project.id] ?? 0,
         reportsCount: project.reportsCount,
+        createdAt: project.createdAt,
+        lastReportAt: latestReports[project.id] ?? null,
+        integrationTypes: integrationTypes[project.id] ?? [],
+        ...(options.includeApiKeyPrefix && {
+          apiKeyPrefix: project.apiKey.substring(0, API_KEY_PREFIX_LENGTH),
+        }),
       }))
     );
   },

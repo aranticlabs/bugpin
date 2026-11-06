@@ -109,10 +109,10 @@ describe('Reports Page', () => {
               metadata: { timestamp: '2024-01-15T10:30:00Z' },
             },
           ],
-          total: 21,
+          total: 60,
           page: Number(page),
-          limit: 20,
-          totalPages: 2,
+          limit: 10,
+          totalPages: 6,
         });
       })
     );
@@ -125,7 +125,9 @@ describe('Reports Page', () => {
       expect(screen.getAllByText('First page issue')[0]).toBeInTheDocument();
     });
 
-    const nextButtons = screen.getAllByRole('button', { name: 'Next' });
+    expect(screen.getAllByText('60 reports')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Page 1 of 6')[0]).toBeInTheDocument();
+    const nextButtons = screen.getAllByRole('button', { name: 'Next page' });
     await user.click(nextButtons[nextButtons.length - 1]);
 
     await waitFor(() => {
@@ -133,6 +135,38 @@ describe('Reports Page', () => {
     });
 
     expect(requestedPages).toContain('2');
+  });
+
+  it('requests the chosen page size and starts again on the first page', async () => {
+    const requests: { page: string; limit: string }[] = [];
+    const user = userEvent.setup();
+
+    server.use(
+      http.get('/api/reports', ({ request }) => {
+        const url = new URL(request.url);
+        requests.push({
+          page: url.searchParams.get('page') ?? '',
+          limit: url.searchParams.get('limit') ?? '',
+        });
+        return HttpResponse.json({
+          success: true,
+          data: [],
+          total: 60,
+          page: Number(url.searchParams.get('page')),
+          limit: Number(url.searchParams.get('limit')),
+          totalPages: 3,
+        });
+      })
+    );
+
+    renderWithProviders(<Reports />, { initialEntries: ['/reports?page=2'] });
+
+    await waitFor(() => expect(requests).toContainEqual({ page: '2', limit: '10' }));
+    const pageSizeTriggers = await screen.findAllByRole('combobox', { name: 'Rows per page' });
+    await user.click(pageSizeTriggers[pageSizeTriggers.length - 1]);
+    await user.click(await screen.findByRole('option', { name: '25' }));
+
+    await waitFor(() => expect(requests).toContainEqual({ page: '1', limit: '25' }));
   });
 });
 
@@ -262,7 +296,7 @@ describe('Reports Page - Bulk Actions', () => {
     // Action buttons should be visible
     expect(screen.getByRole('button', { name: /Set Status/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Set Priority/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Assign/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Assign' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Share/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
   });
@@ -499,5 +533,58 @@ describe('Reports back link', () => {
     await openFirstReport();
 
     expect(await screen.findByRole('button', { name: 'Back to Reports' })).toBeInTheDocument();
+  });
+});
+
+describe('Reports Page - Sorting', () => {
+  it('sorts by a column on the server and flips the direction on a second click', async () => {
+    const requests: { sortBy: string; sortOrder: string; page: string }[] = [];
+    const user = userEvent.setup();
+
+    server.use(
+      http.get('/api/reports', ({ request }) => {
+        const url = new URL(request.url);
+        requests.push({
+          sortBy: url.searchParams.get('sortBy') ?? '',
+          sortOrder: url.searchParams.get('sortOrder') ?? '',
+          page: url.searchParams.get('page') ?? '',
+        });
+        return HttpResponse.json({
+          success: true,
+          data: [],
+          total: 0,
+          page: 1,
+          limit: 10,
+          totalPages: 0,
+        });
+      })
+    );
+
+    renderWithProviders(<Reports />, { initialEntries: ['/reports?page=3'] });
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({ sortBy: 'createdAt', sortOrder: 'desc', page: '3' })
+    );
+    const created = screen.getByRole('button', { name: /^created/i });
+    expect(created.closest('th')).toHaveAttribute('aria-sort', 'descending');
+
+    await user.click(screen.getByRole('button', { name: /^priority/i }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({ sortBy: 'priority', sortOrder: 'desc', page: '1' })
+    );
+
+    await user.click(screen.getByRole('button', { name: /^priority/i }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({ sortBy: 'priority', sortOrder: 'asc', page: '1' })
+    );
+
+    await user.click(screen.getByRole('button', { name: /^report/i }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({ sortBy: 'title', sortOrder: 'asc', page: '1' })
+    );
+    expect(screen.getByRole('button', { name: /^report/i }).closest('th')).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
   });
 });

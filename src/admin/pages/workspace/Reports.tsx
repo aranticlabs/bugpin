@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { reportOriginState } from '../../lib/reportOrigin';
@@ -40,6 +40,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogBody,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -64,7 +65,19 @@ import {
 } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { downloadReportsShare, type ReportShareFormat } from '../../lib/reportsShareExport';
-import { ACTIVE_REPORT_STATUSES, ASSIGNED_TO_ME_FILTER, UNASSIGNED_FILTER } from '@shared/types';
+import {
+  ACTIVE_REPORT_STATUSES,
+  ASSIGNED_TO_ME_FILTER,
+  UNASSIGNED_FILTER,
+  REPORT_SORT_KEYS,
+  type ReportSortKey,
+  type TablePageSize,
+} from '@shared/types';
+import { usePreference } from '../../hooks/useUserPreferences';
+import { useElementHeight } from '../../hooks/useElementHeight';
+import { DEFAULT_TABLE_PAGE_SIZE, TablePagination } from '../../components/TablePagination';
+import { SortableTableHead, type SortDirection } from '../../components/SortableTableHead';
+import { FileDropzone } from '../../components/FileDropzone';
 import {
   Tooltip,
   TooltipContent,
@@ -124,6 +137,25 @@ function normalizeManualReportUrl(value: string): string {
   return `https://${trimmed}`;
 }
 
+const REPORT_LABEL = { singular: 'report', plural: 'reports' };
+
+const DEFAULT_REPORT_SORT: { key: ReportSortKey; direction: SortDirection } = {
+  key: 'createdAt',
+  direction: 'desc',
+};
+
+// Text columns start A to Z; dates and priority start with the newest or most urgent.
+const ASCENDING_FIRST: ReportSortKey[] = ['title', 'project', 'status', 'assignee'];
+
+function parseReportSort(params: URLSearchParams): {
+  key: ReportSortKey;
+  direction: SortDirection;
+} {
+  const key = REPORT_SORT_KEYS.find((candidate) => candidate === params.get('sort'));
+  if (!key) return DEFAULT_REPORT_SORT;
+  return { key, direction: params.get('dir') === 'asc' ? 'asc' : 'desc' };
+}
+
 export function Reports({
   projectId: fixedProjectId,
   headerStart,
@@ -133,6 +165,7 @@ export function Reports({
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBarRef, bulkBarHeight] = useElementHeight<HTMLDivElement>();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createForm, setCreateForm] = useState<CreateReportFormState>(() =>
@@ -143,11 +176,13 @@ export function Reports({
   const queryClient = useQueryClient();
 
   const page = parseInt(searchParams.get('page') || '1');
+  const [pageSize, setPageSize] = usePreference('reportsPageSize', DEFAULT_TABLE_PAGE_SIZE);
   const status = searchParams.get('status') || '';
   const priority = searchParams.get('priority') || '';
   const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
   const assignedTo = searchParams.get('assignedTo') || '';
   const source = searchParams.get('source') || '';
+  const sort = parseReportSort(searchParams);
 
   // Fetch projects for filter
   const { data: projectsData } = useQuery({
@@ -181,15 +216,27 @@ export function Reports({
   const { data, isLoading } = useQuery({
     queryKey: [
       'reports',
-      { page, status, priority, projectId, assignedTo, source, search: searchParams.get('search') },
+      {
+        page,
+        pageSize,
+        status,
+        priority,
+        projectId,
+        assignedTo,
+        source,
+        sort,
+        search: searchParams.get('search'),
+      },
     ],
     queryFn: async () => {
-      const params: Record<string, string> = { page: String(page), limit: '20' };
+      const params: Record<string, string> = { page: String(page), limit: String(pageSize) };
       if (status) params.status = status;
       if (priority) params.priority = priority;
       if (projectId) params.projectId = projectId;
       if (assignedTo) params.assignedTo = assignedTo;
       if (source) params.source = source;
+      params.sortBy = sort.key;
+      params.sortOrder = sort.direction;
       if (searchParams.get('search')) params.search = searchParams.get('search')!;
 
       const response = await api.get('/reports', { params });
@@ -420,6 +467,32 @@ export function Reports({
     setSearchParams(params);
   };
 
+  const handleSort = (key: ReportSortKey) => {
+    const direction: SortDirection =
+      sort.key === key
+        ? sort.direction === 'asc'
+          ? 'desc'
+          : 'asc'
+        : ASCENDING_FIRST.includes(key)
+          ? 'asc'
+          : 'desc';
+    const params = new URLSearchParams(searchParams);
+    if (key === DEFAULT_REPORT_SORT.key && direction === DEFAULT_REPORT_SORT.direction) {
+      params.delete('sort');
+      params.delete('dir');
+    } else {
+      params.set('sort', key);
+      params.set('dir', direction);
+    }
+    params.set('page', '1');
+    setSearchParams(params);
+  };
+
+  const handlePageSizeChange = (nextPageSize: TablePageSize) => {
+    setPageSize(nextPageSize);
+    handlePageChange(1);
+  };
+
   const handleCreateReport = (e: React.FormEvent) => {
     e.preventDefault();
     createReportMutation.mutate(createForm);
@@ -427,209 +500,147 @@ export function Reports({
 
   return (
     <div className="space-y-6">
-      {(!fixedProjectId || headerStart || canManageReports) && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {(!fixedProjectId || headerStart) && (
+        <div>
           {fixedProjectId ? (
-            (headerStart ?? <span />)
+            headerStart
           ) : (
-            <div>
+            <div className="space-y-1">
               <h1 className="text-2xl font-bold">Reports</h1>
-              <p className="text-muted-foreground">Manage bug reports</p>
+              <p className="text-muted-foreground">
+                Track and triage bug reports from all projects. Open a report to see its
+                screenshots, logs, and activity.
+              </p>
             </div>
-          )}
-          {canManageReports && (
-            <Button onClick={openCreateDialog} className="sm:shrink-0">
-              Create Report
-            </Button>
           )}
         </div>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
-            {/* Search */}
-            <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search reports..."
-                  className="pl-10"
-                />
-              </div>
-            </form>
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSearch} className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            aria-label="Search reports"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search reports..."
+            className="pl-10"
+          />
+        </form>
 
-            {/* Status filter */}
-            <Select
-              value={status || 'all'}
-              onValueChange={(value) => handleFilterChange('status', value)}
-            >
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
+        <Select
+          value={status || 'all'}
+          onValueChange={(value) => handleFilterChange('status', value)}
+        >
+          <SelectTrigger className="w-[170px]" aria-label="Filter by status">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
+            <SelectItem value="open">Open</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="resolved">Resolved</SelectItem>
+            <SelectItem value="closed">Closed</SelectItem>
+          </SelectContent>
+        </Select>
 
-            {/* Priority filter */}
-            <Select
-              value={priority || 'all'}
-              onValueChange={(value) => handleFilterChange('priority', value)}
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priority</SelectItem>
-                <SelectItem value="highest">Highest</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="lowest">Lowest</SelectItem>
-              </SelectContent>
-            </Select>
+        <Select
+          value={priority || 'all'}
+          onValueChange={(value) => handleFilterChange('priority', value)}
+        >
+          <SelectTrigger className="w-[150px]" aria-label="Filter by priority">
+            <SelectValue placeholder="All priorities" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All priorities</SelectItem>
+            <SelectItem value="highest">Highest</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="lowest">Lowest</SelectItem>
+          </SelectContent>
+        </Select>
 
-            {/* Project filter */}
-            {!fixedProjectId && (
-              <Select
-                value={projectId || 'all'}
-                onValueChange={(value) => handleFilterChange('projectId', value)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projectsData?.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+        {!fixedProjectId && (
+          <Select
+            value={projectId || 'all'}
+            onValueChange={(value) => handleFilterChange('projectId', value)}
+          >
+            <SelectTrigger className="w-[180px]" aria-label="Filter by project">
+              <SelectValue placeholder="All projects" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All projects</SelectItem>
+              {projectsData?.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-            {canManageReports && (
-              <Select
-                value={assignedTo || 'all'}
-                onValueChange={(value) => handleFilterChange('assignedTo', value)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Assignees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Assignees</SelectItem>
-                  <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
-                  <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
-                  {assignableUsers.map((assignee) => (
-                    <SelectItem key={assignee.id} value={assignee.id}>
-                      <AssigneeDisplay user={assignee} compact />
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+        {canManageReports && (
+          <Select
+            value={assignedTo || 'all'}
+            onValueChange={(value) => handleFilterChange('assignedTo', value)}
+          >
+            <SelectTrigger className="w-[180px]" aria-label="Filter by assignee">
+              <SelectValue placeholder="All assignees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All assignees</SelectItem>
+              <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
+              <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
+              {assignableUsers.map((assignee) => (
+                <SelectItem key={assignee.id} value={assignee.id}>
+                  <AssigneeDisplay user={assignee} compact />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-            <Select
-              value={source || 'all'}
-              onValueChange={(value) => handleFilterChange('source', value)}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Sources" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="widget">Widget</SelectItem>
-                <SelectItem value="manual">Manual</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+        <Select
+          value={source || 'all'}
+          onValueChange={(value) => handleFilterChange('source', value)}
+        >
+          <SelectTrigger className="w-[150px]" aria-label="Filter by source">
+            <SelectValue placeholder="All sources" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sources</SelectItem>
+            <SelectItem value="widget">Widget</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {canManageReports && (
+          <Button onClick={openCreateDialog} className="ml-auto">
+            Create Report
+          </Button>
+        )}
+      </div>
 
       {/* Bulk actions toolbar */}
       {selectedIds.size > 0 && (
-        <Card className="bg-muted/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium">
-                  {selectedIds.size} {selectedIds.size === 1 ? 'report' : 'reports'} selected
-                </span>
-                <Button variant="ghost" size="sm" onClick={clearSelection}>
-                  <X className="h-4 w-4 mr-1" />
-                  Clear
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Status dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={bulkUpdateMutation.isPending || selectedReadOnly}
-                    >
-                      Set Status
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleBulkStatusUpdate('open')}>
-                      Open
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkStatusUpdate('in_progress')}>
-                      In Progress
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkStatusUpdate('resolved')}>
-                      Resolved
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkStatusUpdate('closed')}>
-                      Closed
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {/* Priority dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={bulkUpdateMutation.isPending || selectedReadOnly}
-                    >
-                      Set Priority
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('highest')}>
-                      Highest
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('high')}>
-                      High
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('medium')}>
-                      Medium
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('low')}>
-                      Low
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('lowest')}>
-                      Lowest
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {canManageReports && (
+        <div ref={bulkBarRef} className="sticky top-0 z-20 -mt-2 bg-background pt-2">
+          <Card className="bg-muted/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium">
+                    {selectedIds.size} {selectedIds.size === 1 ? 'report' : 'reports'} selected
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={clearSelection}>
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Status dropdown */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -637,61 +648,119 @@ export function Reports({
                         size="sm"
                         disabled={bulkUpdateMutation.isPending || selectedReadOnly}
                       >
-                        Assign
+                        Set Status
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => handleBulkAssigneeUpdate(null)}>
-                        Unassign
+                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('open')}>
+                        Open
                       </DropdownMenuItem>
-                      {assignableUsers.map((assignee) => (
-                        <DropdownMenuItem
-                          key={assignee.id}
-                          onClick={() => handleBulkAssigneeUpdate(assignee.id)}
-                        >
-                          <AssigneeDisplay user={assignee} />
-                        </DropdownMenuItem>
-                      ))}
+                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('in_progress')}>
+                        In Progress
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('resolved')}>
+                        Resolved
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('closed')}>
+                        Closed
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Share2 className="h-4 w-4 mr-1" />
-                      Share
-                      <ChevronDown className="h-4 w-4 ml-1 opacity-60" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleBulkShare('excel')}>
-                      Download Excel (.xlsx)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkShare('csv')}>
-                      Download CSV (.csv)
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  {/* Priority dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={bulkUpdateMutation.isPending || selectedReadOnly}
+                      >
+                        Set Priority
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('highest')}>
+                        Highest
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('high')}>
+                        High
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('medium')}>
+                        Medium
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('low')}>
+                        Low
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('lowest')}>
+                        Lowest
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
-                {/* Delete button */}
-                <Button
-                  variant="outline-destructive"
-                  size="sm"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={bulkDeleteMutation.isPending || selectedReadOnly}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete
-                </Button>
+                  {canManageReports && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={bulkUpdateMutation.isPending || selectedReadOnly}
+                        >
+                          Assign
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleBulkAssigneeUpdate(null)}>
+                          Unassign
+                        </DropdownMenuItem>
+                        {assignableUsers.map((assignee) => (
+                          <DropdownMenuItem
+                            key={assignee.id}
+                            onClick={() => handleBulkAssigneeUpdate(assignee.id)}
+                          >
+                            <AssigneeDisplay user={assignee} />
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Share2 className="h-4 w-4 mr-1" />
+                        Share
+                        <ChevronDown className="h-4 w-4 ml-1 opacity-60" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleBulkShare('excel')}>
+                        Download Excel (.xlsx)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkShare('csv')}>
+                        Download CSV (.csv)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Delete button */}
+                  <Button
+                    variant="outline-destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={bulkDeleteMutation.isPending || selectedReadOnly}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create Report</DialogTitle>
             <DialogDescription>
@@ -699,168 +768,166 @@ export function Reports({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleCreateReport} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-report-project">Project</Label>
-                <Select
-                  value={createForm.projectId}
-                  onValueChange={(value) => updateCreateForm('projectId', value)}
-                >
-                  <SelectTrigger id="create-report-project">
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectsData?.map((project) => (
-                      <SelectItem
-                        key={project.id}
-                        value={project.id}
-                        disabled={project.licenseLocked || project.isActive === false}
-                      >
-                        {project.name}
-                        {project.licenseLocked ? ' (read-only)' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <form onSubmit={handleCreateReport} className="flex min-h-0 flex-1 flex-col gap-4">
+            <DialogBody className="flex-1" contentClassName="space-y-4 py-1">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-project">Project</Label>
+                  <Select
+                    value={createForm.projectId}
+                    onValueChange={(value) => updateCreateForm('projectId', value)}
+                  >
+                    <SelectTrigger id="create-report-project">
+                      <SelectValue placeholder="Select project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectsData?.map((project) => (
+                        <SelectItem
+                          key={project.id}
+                          value={project.id}
+                          disabled={project.licenseLocked || project.isActive === false}
+                        >
+                          {project.name}
+                          {project.licenseLocked ? ' (read-only)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-priority">Priority</Label>
+                  <Select
+                    value={createForm.priority}
+                    onValueChange={(value) => updateCreateForm('priority', value)}
+                  >
+                    <SelectTrigger id="create-report-priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lowest">Lowest</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="highest">Highest</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-report-priority">Priority</Label>
-                <Select
-                  value={createForm.priority}
-                  onValueChange={(value) => updateCreateForm('priority', value)}
-                >
-                  <SelectTrigger id="create-report-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lowest">Lowest</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="highest">Highest</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="create-report-title">Title</Label>
-              <Input
-                id="create-report-title"
-                value={createForm.title}
-                onChange={(e) => updateCreateForm('title', e.target.value)}
-                placeholder="What needs attention?"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="create-report-description">Description</Label>
-              <Textarea
-                id="create-report-description"
-                value={createForm.description}
-                onChange={(e) => updateCreateForm('description', e.target.value)}
-                placeholder="Add context, reproduction notes, or customer details"
-                rows={4}
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-report-assignee">Assignee</Label>
-                <Select
-                  value={createForm.assignedTo}
-                  onValueChange={(value) => updateCreateForm('assignedTo', value)}
-                >
-                  <SelectTrigger id="create-report-assignee">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PROJECT_DEFAULT_ASSIGNEE}>Use project default</SelectItem>
-                    <SelectItem value={UNASSIGNED_ASSIGNEE}>Unassigned</SelectItem>
-                    {assignableUsers.map((assignee) => (
-                      <SelectItem key={assignee.id} value={assignee.id}>
-                        {assignee.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="create-report-channel">Channel</Label>
-                <Select
-                  value={createForm.channel}
-                  onValueChange={(value) => updateCreateForm('channel', value)}
-                >
-                  <SelectTrigger id="create-report-channel">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_CHANNEL}>No channel</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="chat">Chat</SelectItem>
-                    <SelectItem value="phone">Phone</SelectItem>
-                    <SelectItem value="qa">QA</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-report-reporter-name">Reporter Name</Label>
+                <Label htmlFor="create-report-title">Title</Label>
                 <Input
-                  id="create-report-reporter-name"
-                  value={createForm.reporterName}
-                  onChange={(e) => updateCreateForm('reporterName', e.target.value)}
-                  placeholder="Optional"
+                  id="create-report-title"
+                  value={createForm.title}
+                  onChange={(e) => updateCreateForm('title', e.target.value)}
+                  placeholder="What needs attention?"
+                  required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-report-reporter-email">Reporter Email</Label>
-                <Input
-                  id="create-report-reporter-email"
-                  type="email"
-                  value={createForm.reporterEmail}
-                  onChange={(e) => updateCreateForm('reporterEmail', e.target.value)}
-                  placeholder="Optional"
+                <Label htmlFor="create-report-description">Description</Label>
+                <Textarea
+                  id="create-report-description"
+                  value={createForm.description}
+                  onChange={(e) => updateCreateForm('description', e.target.value)}
+                  placeholder="Add context, reproduction notes, or customer details"
+                  rows={4}
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="create-report-url">URL</Label>
-              <Input
-                id="create-report-url"
-                type="text"
-                inputMode="url"
-                value={createForm.url}
-                onChange={(e) => updateCreateForm('url', e.target.value)}
-                onBlur={(e) => updateCreateForm('url', normalizeManualReportUrl(e.target.value))}
-                placeholder="https://example.com/page"
-              />
-            </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-assignee">Assignee</Label>
+                  <Select
+                    value={createForm.assignedTo}
+                    onValueChange={(value) => updateCreateForm('assignedTo', value)}
+                  >
+                    <SelectTrigger id="create-report-assignee">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={PROJECT_DEFAULT_ASSIGNEE}>Use project default</SelectItem>
+                      <SelectItem value={UNASSIGNED_ASSIGNEE}>Unassigned</SelectItem>
+                      {assignableUsers.map((assignee) => (
+                        <SelectItem key={assignee.id} value={assignee.id}>
+                          {assignee.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="create-report-files">Files</Label>
-              <Input
-                id="create-report-files"
-                type="file"
-                multiple
-                accept="image/*,video/*,application/pdf,text/plain,application/json,.json,.txt,.pdf"
-                onChange={(e) => updateCreateForm('files', Array.from(e.target.files ?? []))}
-              />
-              {createForm.files.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  {createForm.files.length} file{createForm.files.length === 1 ? '' : 's'} selected
-                </p>
-              )}
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-channel">Channel</Label>
+                  <Select
+                    value={createForm.channel}
+                    onValueChange={(value) => updateCreateForm('channel', value)}
+                  >
+                    <SelectTrigger id="create-report-channel">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CHANNEL}>No channel</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="chat">Chat</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="qa">QA</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-reporter-name">Reporter Name</Label>
+                  <Input
+                    id="create-report-reporter-name"
+                    value={createForm.reporterName}
+                    onChange={(e) => updateCreateForm('reporterName', e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="create-report-reporter-email">Reporter Email</Label>
+                  <Input
+                    id="create-report-reporter-email"
+                    type="email"
+                    value={createForm.reporterEmail}
+                    onChange={(e) => updateCreateForm('reporterEmail', e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-report-url">URL</Label>
+                <Input
+                  id="create-report-url"
+                  type="text"
+                  inputMode="url"
+                  value={createForm.url}
+                  onChange={(e) => updateCreateForm('url', e.target.value)}
+                  onBlur={(e) => updateCreateForm('url', normalizeManualReportUrl(e.target.value))}
+                  placeholder="https://example.com/page"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-report-files">Files</Label>
+                <FileDropzone
+                  id="create-report-files"
+                  files={createForm.files}
+                  onChange={(files) => updateCreateForm('files', files)}
+                  accept="image/*,video/*,application/pdf,text/plain,application/json,.json,.txt,.pdf"
+                  helperText="Supported: images, videos, PDF, text, and JSON files"
+                  disabled={createReportMutation.isPending}
+                />
+              </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button
@@ -989,36 +1056,24 @@ export function Reports({
             </Card>
           ))
         )}
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Page {data.page} of {data.totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= data.totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+        {data && data.total > 0 && (
+          <TablePagination
+            total={data.total}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            itemLabel={REPORT_LABEL}
+          />
         )}
       </div>
 
       {/* Reports table */}
-      <Card className="hidden md:block">
-        <Table>
+      <Card
+        className="hidden md:block"
+        style={{ '--table-sticky-top': `${bulkBarHeight}px` } as CSSProperties}
+      >
+        <Table stickyHeader>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[50px]">
@@ -1030,15 +1085,51 @@ export function Reports({
                   aria-label="Select all"
                 />
               </TableHead>
-              <TableHead>Report</TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Assignee</TableHead>
+              <SortableTableHead
+                label="Report"
+                sortKey="title"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
+              <SortableTableHead
+                label="Project"
+                sortKey="project"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
+              <SortableTableHead
+                label="Status"
+                sortKey="status"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
+              <SortableTableHead
+                label="Priority"
+                sortKey="priority"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
+              <SortableTableHead
+                label="Assignee"
+                sortKey="assignee"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
               <TableHead className="w-[50px]">
                 <RefreshCw className="h-4 w-4" />
               </TableHead>
-              <TableHead>Created</TableHead>
+              <SortableTableHead
+                label="Created"
+                sortKey="createdAt"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onSort={handleSort}
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1108,31 +1199,16 @@ export function Reports({
           </TableBody>
         </Table>
 
-        {/* Pagination */}
-        {data && data.totalPages > 1 && (
-          <div className="px-6 py-4 border-t flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Page {data.page} of {data.totalPages} ({data.total} total)
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= data.totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+        {data && (
+          <TablePagination
+            className="border-t px-4 py-3"
+            total={data.total}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            itemLabel={REPORT_LABEL}
+          />
         )}
       </Card>
     </div>

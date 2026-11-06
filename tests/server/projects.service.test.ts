@@ -3,6 +3,7 @@ import { projectsService } from '../../src/server/services/projects.service';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { webhooksRepo } from '../../src/server/database/repositories/webhooks.repo';
+import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
 import { usersService } from '../../src/server/services/users.service';
 import { Result } from '../../src/server/utils/result';
 import type { Project } from '../../src/shared/types';
@@ -26,6 +27,7 @@ const baseProject: Project = {
 const originalProjectsRepo = { ...projectsRepo };
 const originalReportsRepo = { ...reportsRepo };
 const originalWebhooksRepo = { ...webhooksRepo };
+const originalIntegrationsRepo = { ...integrationsRepo };
 const originalUsersService = { ...usersService };
 
 let projectById: Project | null = baseProject;
@@ -50,6 +52,10 @@ beforeEach(() => {
   projectsRepo.findByApiKey = async () => projectByApiKey;
   projectsRepo.findAll = async () => [baseProject];
   reportsRepo.countPerProject = async () => ({ [baseProject.id]: 3 });
+  reportsRepo.latestCreatedAtPerProject = async () => ({
+    [baseProject.id]: '2026-11-01T10:00:00.000Z',
+  });
+  integrationsRepo.activeTypesPerProject = async () => ({ [baseProject.id]: ['github'] });
   projectsRepo.update = async (id, updates) => {
     lastProjectUpdates = updates;
     return updateReturnsProject ? { ...updateReturnsProject, ...updates, id } : null;
@@ -79,6 +85,7 @@ afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(webhooksRepo, originalWebhooksRepo);
+  Object.assign(integrationsRepo, originalIntegrationsRepo);
   Object.assign(usersService, originalUsersService);
 });
 
@@ -126,14 +133,38 @@ describe('projectsService.getById/getByApiKey/list', () => {
     for (const summary of result.value) {
       expect(Object.keys(summary).sort()).toEqual([
         'activeReportsCount',
+        'createdAt',
         'id',
+        'integrationTypes',
         'isActive',
+        'lastReportAt',
         'licenseLocked',
         'name',
         'reportsCount',
       ]);
       expect(summary.activeReportsCount).toBe(3);
+      expect(summary.lastReportAt).toBe('2026-11-01T10:00:00.000Z');
+      expect(summary.integrationTypes).toEqual(['github']);
     }
+  });
+
+  it('includes only the API key prefix when requested', async () => {
+    projectsRepo.findAll = async () => [{ ...baseProject, apiKey: 'proj_abcdefghijklmnop' }];
+    const result = await projectsService.listSummaries({ includeApiKeyPrefix: true });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.value[0]?.apiKeyPrefix).toBe('proj_abcdefg');
+    expect(result.value[0]).not.toHaveProperty('apiKey');
+  });
+
+  it('reports no last report and no integrations for an empty project', async () => {
+    reportsRepo.latestCreatedAtPerProject = async () => ({});
+    integrationsRepo.activeTypesPerProject = async () => ({});
+    const result = await projectsService.listSummaries();
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.value[0]?.lastReportAt).toBeNull();
+    expect(result.value[0]?.integrationTypes).toEqual([]);
   });
 });
 
