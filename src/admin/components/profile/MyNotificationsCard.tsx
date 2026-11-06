@@ -15,6 +15,19 @@ import type {
   NotificationPreferences,
   ProjectSummary,
 } from '@shared/types';
+import { UnsavedChangesGuard } from '../UnsavedChangesGuard';
+import { useConfirmUnsavedChanges } from '../../hooks/useConfirmUnsavedChanges';
+
+function toForm(source: NotificationDefaultSettings): Partial<NotificationDefaultSettings> {
+  return {
+    emailEnabled: source.emailEnabled,
+    notifyOnNewReport: source.notifyOnNewReport,
+    notifyOnStatusChange: source.notifyOnStatusChange,
+    notifyOnPriorityChange: source.notifyOnPriorityChange,
+    notifyOnAssignment: source.notifyOnAssignment,
+    notifyOnDeletion: source.notifyOnDeletion,
+  };
+}
 
 export function MyNotificationsCard() {
   const queryClient = useQueryClient();
@@ -66,41 +79,21 @@ export function MyNotificationsCard() {
     enabled: perProject && !!selectedProjectId,
   });
 
-  // Initialize form data from preferences or global defaults
+  // The stored values the form starts from: the project's preferences, the user's first stored
+  // preference, or the global defaults.
+  const savedSource = perProject
+    ? projectPreferences
+    : allPreferences && allPreferences.length > 0
+      ? allPreferences[0]
+      : settings?.notifications;
+  const savedForm = savedSource ? toForm(savedSource) : null;
+  const savedFormKey = savedForm ? JSON.stringify(savedForm) : null;
+
   useEffect(() => {
-    if (perProject && projectPreferences) {
-      setFormData({
-        emailEnabled: projectPreferences.emailEnabled,
-        notifyOnNewReport: projectPreferences.notifyOnNewReport,
-        notifyOnStatusChange: projectPreferences.notifyOnStatusChange,
-        notifyOnPriorityChange: projectPreferences.notifyOnPriorityChange,
-        notifyOnAssignment: projectPreferences.notifyOnAssignment,
-        notifyOnDeletion: projectPreferences.notifyOnDeletion,
-      });
-    } else if (!perProject) {
-      // Use first existing preference or global defaults
-      if (allPreferences && allPreferences.length > 0) {
-        const first = allPreferences[0];
-        setFormData({
-          emailEnabled: first.emailEnabled,
-          notifyOnNewReport: first.notifyOnNewReport,
-          notifyOnStatusChange: first.notifyOnStatusChange,
-          notifyOnPriorityChange: first.notifyOnPriorityChange,
-          notifyOnAssignment: first.notifyOnAssignment,
-          notifyOnDeletion: first.notifyOnDeletion,
-        });
-      } else if (settings) {
-        setFormData({
-          emailEnabled: settings.notifications.emailEnabled,
-          notifyOnNewReport: settings.notifications.notifyOnNewReport,
-          notifyOnStatusChange: settings.notifications.notifyOnStatusChange,
-          notifyOnPriorityChange: settings.notifications.notifyOnPriorityChange,
-          notifyOnAssignment: settings.notifications.notifyOnAssignment,
-          notifyOnDeletion: settings.notifications.notifyOnDeletion,
-        });
-      }
-    }
-  }, [perProject, projectPreferences, allPreferences, settings]);
+    if (savedFormKey) setFormData(JSON.parse(savedFormKey) as Partial<NotificationDefaultSettings>);
+  }, [savedFormKey]);
+
+  const isDirty = savedFormKey !== null && JSON.stringify(formData) !== savedFormKey;
 
   // Bulk update mutation (all projects)
   const bulkMutation = useMutation({
@@ -151,6 +144,15 @@ export function MyNotificationsCard() {
     saveFormData(formData);
   };
 
+  const saveBeforeLeaving = () => {
+    if (!perProject) return bulkMutation.mutateAsync(formData);
+    if (!selectedProjectId) return Promise.resolve(false);
+    return projectMutation.mutateAsync({ projectId: selectedProjectId, data: formData });
+  };
+
+  // Switching the mode or the project loads other stored values into the form.
+  const formSwitch = useConfirmUnsavedChanges({ isDirty, onSave: saveBeforeLeaving });
+
   const isSaving = bulkMutation.isPending || projectMutation.isPending;
   const isLoading = isLoadingPrefs || (perProject && isLoadingProjectPrefs);
 
@@ -170,6 +172,8 @@ export function MyNotificationsCard() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
+            <UnsavedChangesGuard isDirty={isDirty} onSave={saveBeforeLeaving} />
+            {formSwitch.dialog}
             {/* Per-project toggle */}
             <div className="flex items-center justify-between pb-3 border-b">
               <div className="space-y-0.5">
@@ -183,12 +187,14 @@ export function MyNotificationsCard() {
               <Switch
                 id="per-project-toggle"
                 checked={perProject}
-                onCheckedChange={(checked) => {
-                  setPerProject(checked);
-                  if (!checked) {
-                    setSelectedProjectId('');
-                  }
-                }}
+                onCheckedChange={(checked) =>
+                  formSwitch.confirm(() => {
+                    setPerProject(checked);
+                    if (!checked) {
+                      setSelectedProjectId('');
+                    }
+                  })
+                }
               />
             </div>
 
@@ -198,7 +204,12 @@ export function MyNotificationsCard() {
                 <Label htmlFor="project-select" className="text-sm font-medium">
                   Project
                 </Label>
-                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={(projectId) =>
+                    formSwitch.confirm(() => setSelectedProjectId(projectId))
+                  }
+                >
                   <SelectTrigger id="project-select">
                     <SelectValue placeholder="Select a project" />
                   </SelectTrigger>

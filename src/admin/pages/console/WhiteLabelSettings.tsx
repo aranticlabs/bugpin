@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import { Input } from '../../components/ui/input';
 import { Spinner } from '../../components/ui/spinner';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 function showError(error: Error) {
   toast.error(
@@ -24,8 +26,13 @@ function showError(error: Error) {
   );
 }
 
+interface WhiteLabelConfig {
+  hideFooterBranding: boolean;
+  hideEmailBranding: boolean;
+  customCopyright: string;
+}
+
 function WhiteLabelSettings() {
-  const client = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ['white-label'],
     queryFn: async () =>
@@ -34,20 +41,6 @@ function WhiteLabelSettings() {
         hideEmailBranding: boolean;
         customCopyright?: string;
       },
-  });
-  const save = useMutation({
-    mutationFn: (form: FormData) =>
-      api.put('/white-label/config', {
-        hideFooterBranding: form.has('footer'),
-        hideEmailBranding: form.has('email'),
-        customCopyright: String(form.get('copyright') || ''),
-      }),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ['white-label'] });
-      await client.invalidateQueries({ queryKey: ['branding-config'] });
-      toast.success('White-label settings saved');
-    },
-    onError: showError,
   });
   return (
     <Card>
@@ -62,55 +55,76 @@ function WhiteLabelSettings() {
           </p>
         </CardContent>
       ) : (
-        <form
+        <WhiteLabelForm
           key={JSON.stringify(data)}
-          onSubmit={(event) => {
-            event.preventDefault();
-            save.mutate(new FormData(event.currentTarget));
-          }}
-        >
-          <CardContent className="space-y-4 pt-6">
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="hide-footer-branding">Hide admin footer branding</Label>
-              <Switch
-                id="hide-footer-branding"
-                name="footer"
-                defaultChecked={data.hideFooterBranding}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="hide-email-branding">Hide email footer branding</Label>
-              <Switch
-                id="hide-email-branding"
-                name="email"
-                defaultChecked={data.hideEmailBranding}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="white-label-copyright">Copyright text</Label>
-              <Input
-                id="white-label-copyright"
-                name="copyright"
-                maxLength={500}
-                defaultValue={data.customCopyright || ''}
-              />
-            </div>
-            <div className="flex gap-2 pt-4 border-t">
-              <Button type="submit" disabled={save.isPending}>
-                {save.isPending ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save white-label settings'
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </form>
+          saved={{ ...data, customCopyright: data.customCopyright || '' }}
+        />
       )}
     </Card>
+  );
+}
+
+function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
+  const client = useQueryClient();
+  const [form, setForm] = useState(saved);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const save = useMutation({
+    mutationFn: (config: WhiteLabelConfig) => api.put('/white-label/config', config),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ['white-label'] });
+      await client.invalidateQueries({ queryKey: ['branding-config'] });
+      toast.success('White-label settings saved');
+    },
+    onError: showError,
+  });
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate(form);
+      }}
+    >
+      <UnsavedChangesGuard isDirty={isDirty} onSave={() => save.mutateAsync(form)} />
+      <CardContent className="space-y-4 pt-6">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="hide-footer-branding">Hide admin footer branding</Label>
+          <Switch
+            id="hide-footer-branding"
+            checked={form.hideFooterBranding}
+            onCheckedChange={(checked) => setForm({ ...form, hideFooterBranding: checked })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="hide-email-branding">Hide email footer branding</Label>
+          <Switch
+            id="hide-email-branding"
+            checked={form.hideEmailBranding}
+            onCheckedChange={(checked) => setForm({ ...form, hideEmailBranding: checked })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="white-label-copyright">Copyright text</Label>
+          <Input
+            id="white-label-copyright"
+            maxLength={500}
+            value={form.customCopyright}
+            onChange={(event) => setForm({ ...form, customCopyright: event.target.value })}
+          />
+        </div>
+        <div className="flex gap-2 pt-4 border-t">
+          <Button type="submit" disabled={save.isPending}>
+            {save.isPending ? (
+              <>
+                <Spinner size="sm" className="mr-2" />
+                Saving...
+              </>
+            ) : (
+              'Save white-label settings'
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </form>
   );
 }
 

@@ -13,6 +13,7 @@ import type {
   NotificationDefaultSettings,
   ReporterNotificationSettings,
 } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 interface NotificationForm {
   notifications: Partial<NotificationDefaultSettings>;
@@ -84,6 +85,7 @@ export function NotificationDefaults() {
 
   return (
     <SectionCard section="notifications" showHeader={false}>
+      <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync(formData)} />
       <form
         className="space-y-6"
         onSubmit={(event) => {

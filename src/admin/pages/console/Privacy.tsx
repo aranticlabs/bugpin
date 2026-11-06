@@ -16,6 +16,7 @@ import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
 import { Switch } from '../../components/ui/switch';
 import type { AppSettings, PrivacySettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   euPrivacyMode: false,
@@ -44,6 +45,10 @@ export function Privacy() {
       setFormData(settings.privacy ?? DEFAULT_PRIVACY_SETTINGS);
     }
   }, [settings]);
+
+  const isDirty =
+    !!settings &&
+    JSON.stringify(formData) !== JSON.stringify(settings.privacy ?? DEFAULT_PRIVACY_SETTINGS);
 
   const mutation = useMutation({
     mutationFn: async (privacy: PrivacySettings) => {
@@ -144,6 +149,7 @@ export function Privacy() {
             </Alert>
           )}
 
+          <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync(formData)} />
           <div className="flex flex-wrap items-center gap-4">
             <Button onClick={() => mutation.mutate(formData)} disabled={mutation.isPending}>
               {mutation.isPending ? (

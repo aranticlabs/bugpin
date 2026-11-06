@@ -182,12 +182,8 @@ export function ThemeColorPicker({
       {/* The button shares the tab row so switching modes does not move the color fields. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TabsList>
-          <TabsTrigger value="light">
-            {lightModeTitle}
-          </TabsTrigger>
-          <TabsTrigger value="dark">
-            {darkModeTitle}
-          </TabsTrigger>
+          <TabsTrigger value="light">{lightModeTitle}</TabsTrigger>
+          <TabsTrigger value="dark">{darkModeTitle}</TabsTrigger>
         </TabsList>
         {showGenerateButton && activeMode === 'dark' && (
           <Button

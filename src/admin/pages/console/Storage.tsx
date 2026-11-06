@@ -21,6 +21,7 @@ import { Spinner } from '../../components/ui/spinner';
 import { Badge } from '../../components/ui/badge';
 import { cn } from '../../lib/utils';
 import type { AppSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 interface StorageStats {
   totalFiles: number;
@@ -217,6 +218,10 @@ function StorageSettingsSection() {
             ))}
         </div>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={isDirty && formData.s3Enabled}
+        onSave={() => mutation.mutateAsync(formData)}
+      />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-lg border p-4">

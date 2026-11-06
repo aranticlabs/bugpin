@@ -9,6 +9,7 @@ import {
 } from '../../components/settings/SectionCard';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
   maxScreenshotSize: stored.maxScreenshotSize || 10,
@@ -53,18 +54,20 @@ export function Screenshot() {
     },
   });
 
+  const buildPayload = (current: AppSettings): Partial<AppSettings> => ({
+    // Screenshot and recording settings share one stored object that is replaced on save.
+    screenshot: {
+      ...current.screenshot,
+      maxScreenshotSize: formData.maxScreenshotSize || 10,
+      maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
+      useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings) return;
-    mutation.mutate({
-      // Screenshot and recording settings share one stored object that is replaced on save.
-      screenshot: {
-        ...settings.screenshot,
-        maxScreenshotSize: formData.maxScreenshotSize || 10,
-        maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
-        useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
-      },
-    });
+    mutation.mutate(buildPayload(settings));
   };
 
   if (isLoading) {
@@ -77,6 +80,12 @@ export function Screenshot() {
 
   return (
     <SectionCard section="screenshot">
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() =>
+          settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
+        }
+      />
       <form onSubmit={handleSubmit} className="space-y-6">
         <ScreenshotSettingsForm
           value={formData}

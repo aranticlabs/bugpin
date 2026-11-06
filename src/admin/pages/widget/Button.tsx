@@ -21,6 +21,8 @@ import type {
   GlobalWidgetLauncherButtonSettings,
   WidgetLauncherButtonSettings,
 } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { submitForm } from '../../lib/submitForm';
 
 const localizedStringWithEnSchema = z.object({
   en: z.string().trim().min(1, 'English value is required'),
@@ -185,6 +187,10 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
       preview={<LauncherPreviewCard launcher={watched} locale={previewLocale} />}
     >
       <SectionCard section="launcher" showHeader={false}>
+        <UnsavedChangesGuard
+          isDirty={isDirty}
+          onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(data))}
+        />
         <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-6">
           <WidgetLauncherButtonSettingsForm
             value={watched}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQueryAndRouter, screen, userEvent, waitFor } from '../../utils';
 import { Storage } from '../../../pages/console/Storage';
 import { server } from '../../mocks/server';
 import { http, HttpResponse } from 'msw';
@@ -114,7 +114,7 @@ describe('Storage', () => {
     const user = userEvent.setup();
     const postSpy = vi.spyOn(api, 'post');
 
-    renderWithQuery(<Storage />);
+    renderWithQueryAndRouter(<Storage />);
 
     expect(await screen.findByText('Storage Settings')).toBeInTheDocument();
 
@@ -137,7 +137,7 @@ describe('Storage', () => {
 
   it('starts migration, tracks progress, and allows cancel', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Storage />);
+    renderWithQueryAndRouter(<Storage />);
 
     await screen.findByText('Storage Migration');
 
@@ -190,7 +190,7 @@ describe('Storage', () => {
         })
       )
     );
-    renderWithQuery(<Storage />);
+    renderWithQueryAndRouter(<Storage />);
     await screen.findByRole('button', { name: 'Start Migration (5 files)' });
     localFiles = remaining;
     MockEventSource.instances[0].emit('progress', {

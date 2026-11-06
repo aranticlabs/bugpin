@@ -31,6 +31,7 @@ import {
   AlertDialogTrigger,
 } from '../../components/ui/alert-dialog';
 import { ScrollArea } from '../../components/ui/scroll-area';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 export function License() {
   const queryClient = useQueryClient();
@@ -379,6 +380,10 @@ export function License() {
                         selectedIds={selectedIds ?? status.licensedProjectIds ?? []}
                         onChange={setSelectedIds}
                         disabled={selectionMutation.isPending || syncMutation.isPending}
+                      />
+                      <UnsavedChangesGuard
+                        isDirty={selectedIds !== null}
+                        onSave={() => selectionMutation.mutateAsync(selectedIds ?? [])}
                       />
                       <Button
                         onClick={() =>

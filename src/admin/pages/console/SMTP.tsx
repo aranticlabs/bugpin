@@ -16,10 +16,23 @@ import { Label } from '../../components/ui/label';
 import { Send } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import type { AppSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 export function SMTP() {
   return <SMTPSettingsSection />;
 }
+function toSmtpForm(settings: AppSettings) {
+  return {
+    smtpConfig: {
+      host: settings.smtpConfig?.host || '',
+      port: settings.smtpConfig?.port || 587,
+      user: settings.smtpConfig?.user || '',
+      password: settings.smtpConfig?.password || '',
+      from: settings.smtpConfig?.from || '',
+    },
+  };
+}
+
 function SMTPSettingsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -41,18 +54,10 @@ function SMTPSettingsSection() {
   });
 
   useEffect(() => {
-    if (settings) {
-      setFormData({
-        smtpConfig: {
-          host: settings.smtpConfig?.host || '',
-          port: settings.smtpConfig?.port || 587,
-          user: settings.smtpConfig?.user || '',
-          password: settings.smtpConfig?.password || '',
-          from: settings.smtpConfig?.from || '',
-        },
-      });
-    }
+    if (settings) setFormData(toSmtpForm(settings));
   }, [settings]);
+
+  const isDirty = !!settings && JSON.stringify(formData) !== JSON.stringify(toSmtpForm(settings));
 
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
@@ -85,9 +90,11 @@ function SMTPSettingsSection() {
     },
   });
 
+  // Saving always enables SMTP.
+  const save = () => mutation.mutateAsync({ ...formData, smtpEnabled: true });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Always enable SMTP when saving settings
     mutation.mutate({ ...formData, smtpEnabled: true });
   };
 
@@ -123,6 +130,7 @@ function SMTPSettingsSection() {
           Configure SMTP server settings for sending email notifications
         </CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard isDirty={isDirty} onSave={save} />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <div className="space-y-2">

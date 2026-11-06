@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom';
 import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { UnsavedChangesProvider } from '../../../components/UnsavedChangesGuard';
 import {
   ProjectSettingsPanel,
   type ProjectSettingsSection,
@@ -188,18 +189,42 @@ const SECTIONS: ProjectSettingsSection[] = [
   'notifications',
 ];
 
-function Harness({ initial = 'general' }: { initial?: ProjectSettingsSection }) {
+function PanelPage({ initial }: { initial: ProjectSettingsSection }) {
   const [section, setSection] = useState<ProjectSettingsSection>(initial);
   return (
-    <MemoryRouter>
+    <>
       {SECTIONS.map((item) => (
         <button key={item} type="button" onClick={() => setSection(item)}>
           {`Show ${item}`}
         </button>
       ))}
+      <Link to="/elsewhere">Leave page</Link>
+      <Link to="/?tab=reports">Switch tab</Link>
       <ProjectSettingsPanel projectId="project-1" section={section} />
-    </MemoryRouter>
+    </>
   );
+}
+
+function Harness({ initial = 'general' }: { initial?: ProjectSettingsSection }) {
+  const [router] = useState(() =>
+    createMemoryRouter([
+      {
+        path: '/',
+        element: (
+          <UnsavedChangesProvider>
+            <PanelPage initial={initial} />
+          </UnsavedChangesProvider>
+        ),
+      },
+      { path: '/elsewhere', element: <p>Elsewhere page</p> },
+    ])
+  );
+  return <RouterProvider router={router} />;
+}
+
+async function makeUnsavedChange(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('switch', { name: /use custom diagnostics settings/i }));
+  await user.click(screen.getByRole('switch', { name: 'Network failures' }));
 }
 
 describe('ProjectSettingsPanel', () => {
@@ -563,6 +588,85 @@ describe('ProjectSettingsPanel', () => {
           storageKeysCapture: undefined,
         }),
       });
+    });
+  });
+  it('leaves without asking when nothing changed', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    await screen.findByRole('switch', { name: /use custom diagnostics settings/i });
+    await user.click(screen.getByRole('link', { name: 'Leave page' }));
+
+    expect(await screen.findByText('Elsewhere page')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps unsaved changes without asking when only the tab changes', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    await makeUnsavedChange(user);
+    await user.click(screen.getByRole('link', { name: 'Switch tab' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Network failures' })).toHaveAttribute(
+      'data-state',
+      'checked'
+    );
+  });
+
+  it('stays on the page when leaving with unsaved changes is canceled', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    await makeUnsavedChange(user);
+    await user.click(screen.getByRole('link', { name: 'Leave page' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Unsaved changes');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('Elsewhere page')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Network failures' })).toHaveAttribute(
+      'data-state',
+      'checked'
+    );
+  });
+
+  it('discards unsaved changes when leaving', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    await makeUnsavedChange(user);
+    await user.click(screen.getByRole('link', { name: 'Leave page' }));
+    await user.click(await screen.findByRole('button', { name: 'Discard changes' }));
+
+    expect(await screen.findByText('Elsewhere page')).toBeInTheDocument();
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  it('saves unsaved changes before leaving', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    await makeUnsavedChange(user);
+    await user.click(screen.getByRole('link', { name: 'Leave page' }));
+    await user.click(await screen.findByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Elsewhere page')).toBeInTheDocument();
+    expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+      settings: expect.objectContaining({ networkCapture: true }),
     });
   });
 });

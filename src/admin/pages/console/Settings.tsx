@@ -18,6 +18,8 @@ import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
 import { Switch } from '../../components/ui/switch';
 import type { AppSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { submitForm } from '../../lib/submitForm';
 
 const settingsSchema = z.object({
   appName: z.string().min(1, 'Application name is required'),
@@ -92,7 +94,7 @@ export function Settings() {
     handleSubmit,
     reset,
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<SettingsFormData>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
@@ -116,18 +118,24 @@ export function Settings() {
 
   const mutation = useSaveSettings('Settings saved successfully');
 
+  const toPayload = (data: SettingsFormData): Partial<AppSettings> => ({
+    appName: data.appName,
+    appUrl: data.appUrl,
+    updateCheckEnabled: data.updateCheckEnabled,
+  });
+
   const onSubmit = (data: SettingsFormData) => {
-    mutation.mutate({
-      appName: data.appName,
-      appUrl: data.appUrl,
-      updateCheckEnabled: data.updateCheckEnabled,
-    });
+    mutation.mutate(toPayload(data));
   };
 
   if (isLoading) return <LoadingCard />;
 
   return (
     <Card>
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toPayload(data)))}
+      />
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <CardContent className="space-y-4 pt-6">
           <div className="space-y-2">
@@ -190,7 +198,7 @@ export function DataRetention() {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<RetentionFormData>({
     resolver: zodResolver(retentionSchema),
     defaultValues: { retentionDays: 90 },
@@ -212,6 +220,14 @@ export function DataRetention() {
         <CardTitle>Data Retention</CardTitle>
         <CardDescription>How long reports and their files are kept</CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() =>
+          submitForm(handleSubmit, (data) =>
+            mutation.mutateAsync({ retentionDays: data.retentionDays })
+          )
+        }
+      />
       <form
         onSubmit={handleSubmit((data) => mutation.mutate({ retentionDays: data.retentionDays }))}
         noValidate

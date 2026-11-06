@@ -31,6 +31,7 @@ import {
   PASSWORD_MIN_LENGTH_FLOOR,
   type PasswordPolicy,
 } from '@shared/password-policy';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 function useSettings() {
   return useQuery({
@@ -102,6 +103,10 @@ export function SessionSettingsCard() {
         <CardTitle>Sessions</CardTitle>
         <CardDescription>How long users stay signed in</CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={!!settings && sessionMaxAgeDays !== (settings.sessionMaxAgeDays || 7)}
+        onSave={() => mutation.mutateAsync({ sessionMaxAgeDays })}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -148,6 +153,12 @@ export function InvitationSettingsCard() {
         <CardTitle>Invitations</CardTitle>
         <CardDescription>How long invitation links stay valid</CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={
+          !!settings && invitationExpirationDays !== (settings.invitationExpirationDays || 7)
+        }
+        onSave={() => mutation.mutateAsync({ invitationExpirationDays })}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -195,6 +206,14 @@ export function NetworkSettingsCard() {
 
   return (
     <Card>
+      <UnsavedChangesGuard
+        isDirty={
+          !!settings &&
+          (formData.enforceHttps !== (settings.enforceHttps || false) ||
+            formData.rateLimitPerMinute !== (settings.rateLimitPerMinute || 60))
+        }
+        onSave={() => mutation.mutateAsync(formData)}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -288,6 +307,10 @@ export function TwoFactorPolicyCard() {
           Require an authenticator app or a passkey in addition to the password
         </CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={!!settings && policy !== (settings.twoFactorPolicy ?? 'off')}
+        onSave={() => mutation.mutateAsync({ twoFactorPolicy: policy })}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -348,6 +371,14 @@ export function PasswordPolicyCard() {
           Strength rules for new passwords. Existing passwords keep working until they are changed.
         </CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={
+          !!settings &&
+          JSON.stringify(policy) !==
+            JSON.stringify(settings.passwordPolicy ?? DEFAULT_PASSWORD_POLICY)
+        }
+        onSave={() => mutation.mutateAsync({ passwordPolicy: policy })}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();

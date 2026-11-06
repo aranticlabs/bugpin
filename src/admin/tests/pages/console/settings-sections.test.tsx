@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   renderWithProviders,
-  renderWithQuery,
+  renderWithQueryAndRouter,
   screen,
   userEvent,
   waitFor,
@@ -62,7 +62,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<DataRetention />);
+    renderWithQueryAndRouter(<DataRetention />);
 
     const retentionInput = await screen.findByLabelText(/data retention/i);
     fireEvent.change(retentionInput, { target: { value: '120' } });
@@ -113,7 +113,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Screenshot />);
+    renderWithQueryAndRouter(<Screenshot />);
 
     await screen.findByLabelText(/max\.? screenshot size/i);
     expect(screen.queryByLabelText(/max\.? video upload size/i)).not.toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Recording />);
+    renderWithQueryAndRouter(<Recording />);
 
     const uploadSizeInput = await screen.findByLabelText(/max\.? video upload size/i);
     expect(uploadSizeInput).toHaveAttribute('max', '100');
@@ -176,7 +176,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<NetworkSettingsCard />);
+    renderWithQueryAndRouter(<NetworkSettingsCard />);
 
     const rateLimitInput = await screen.findByLabelText(/requests per minute/i);
     fireEvent.change(rateLimitInput, { target: { value: '120' } });
@@ -194,7 +194,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<SessionSettingsCard />);
+    renderWithQueryAndRouter(<SessionSettingsCard />);
 
     const sessionInput = await screen.findByLabelText(/session duration/i);
     fireEvent.change(sessionInput, { target: { value: '14' } });
@@ -209,7 +209,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<InvitationSettingsCard />);
+    renderWithQueryAndRouter(<InvitationSettingsCard />);
 
     const invitationInput = await screen.findByLabelText(/invitation expiration/i);
     fireEvent.change(invitationInput, { target: { value: '14' } });
@@ -224,7 +224,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<PasswordPolicyCard />);
+    renderWithQueryAndRouter(<PasswordPolicyCard />);
 
     const minLength = await screen.findByLabelText(/minimum length/i);
     await waitFor(() => expect(minLength).toHaveValue(12));
@@ -249,7 +249,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<TwoFactorPolicyCard />);
+    renderWithQueryAndRouter(<TwoFactorPolicyCard />);
 
     await screen.findAllByText('Admins only');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
@@ -263,7 +263,7 @@ describe('Settings sections', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Privacy />);
+    renderWithQueryAndRouter(<Privacy />);
 
     expect(await screen.findByText(/activity trails are available/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /learn how EU Privacy Mode works/i })).toHaveAttribute(
@@ -294,7 +294,7 @@ describe('Settings sections', () => {
       } as unknown);
     const putSpy = vi.spyOn(api, 'put');
 
-    renderWithQuery(<Privacy />);
+    renderWithQueryAndRouter(<Privacy />);
 
     expect(await screen.findByText(/privacy settings could not be loaded/i)).toBeInTheDocument();
     expect(

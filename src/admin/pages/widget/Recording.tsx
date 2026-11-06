@@ -10,6 +10,7 @@ import {
 } from '../../components/settings/SectionCard';
 import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
   maxVideoUploadSizeMb: stored.maxVideoUploadSizeMb || 50,
@@ -77,21 +78,23 @@ export function Recording() {
     }
   };
 
+  const buildPayload = (current: AppSettings): Partial<AppSettings> => ({
+    // Recording and screenshot settings share one stored object that is replaced on save.
+    screenshot: {
+      ...current.screenshot,
+      maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
+      maxVideoUploadMbPerDay: formData.maxVideoUploadMbPerDay ?? 2048,
+      enableScreenRecording: formData.enableScreenRecording ?? false,
+      allowRecordingMicrophone: formData.allowRecordingMicrophone ?? false,
+      maxRecordingDurationSeconds: formData.maxRecordingDurationSeconds ?? 180,
+      recordingQuality: formData.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings) return;
-    mutation.mutate({
-      // Recording and screenshot settings share one stored object that is replaced on save.
-      screenshot: {
-        ...settings.screenshot,
-        maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
-        maxVideoUploadMbPerDay: formData.maxVideoUploadMbPerDay ?? 2048,
-        enableScreenRecording: formData.enableScreenRecording ?? false,
-        allowRecordingMicrophone: formData.allowRecordingMicrophone ?? false,
-        maxRecordingDurationSeconds: formData.maxRecordingDurationSeconds ?? 180,
-        recordingQuality: formData.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
-      },
-    });
+    mutation.mutate(buildPayload(settings));
   };
 
   if (isLoading) {
@@ -104,6 +107,12 @@ export function Recording() {
 
   return (
     <SectionCard section="recording">
+      <UnsavedChangesGuard
+        isDirty={isDirty && !!formData.enableScreenRecording}
+        onSave={() =>
+          settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
+        }
+      />
       <form onSubmit={handleSubmit} className="space-y-6">
         <RecordingSettingsForm
           value={formData}

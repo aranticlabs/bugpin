@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQueryAndRouter, screen, userEvent, waitFor } from '../../utils';
 import { Diagnostics } from '../../../pages/widget/Diagnostics';
 import { api } from '../../../api/client';
 
@@ -18,7 +18,7 @@ describe('Diagnostics defaults page', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as never);
 
-    renderWithQuery(<Diagnostics />);
+    renderWithQueryAndRouter(<Diagnostics />);
 
     const networkSwitch = await screen.findByRole('switch', { name: 'Network failures' });
     expect(networkSwitch).toHaveAttribute('data-state', 'checked');
@@ -61,7 +61,7 @@ describe('Diagnostics defaults page', () => {
       )
     );
 
-    renderWithQuery(<Diagnostics />);
+    renderWithQueryAndRouter(<Diagnostics />);
 
     const activitySwitch = await screen.findByRole('switch', { name: 'User activity trail' });
     expect(activitySwitch).toBeDisabled();

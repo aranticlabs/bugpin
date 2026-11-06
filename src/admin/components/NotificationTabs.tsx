@@ -31,12 +31,8 @@ export function NotificationTabs({
       onValueChange={(tab) => onTabChange?.(tab === 'reporter' ? 'reporter' : 'team')}
     >
       <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="team">
-          Team
-        </TabsTrigger>
-        <TabsTrigger value="reporter">
-          Reporter
-        </TabsTrigger>
+        <TabsTrigger value="team">Team</TabsTrigger>
+        <TabsTrigger value="reporter">Reporter</TabsTrigger>
       </TabsList>
       <TabsContent value="team" className="mt-4">
         <NotificationSettingsForm

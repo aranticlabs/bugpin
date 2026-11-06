@@ -28,6 +28,7 @@ import { Spinner } from '../../components/ui/spinner';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
 import { getCroppedImg } from '../../lib/imageUtils';
 import type { ThemeColors } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 // Neutral gray theme - matching globals.css --primary colors
 const DEFAULT_ADMIN_COLORS: ThemeColors = {
@@ -138,6 +139,13 @@ function BrandColorSection() {
           Configure the primary colors for buttons and interactive elements in the Admin Console.
         </CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={
+          localEdits !== null &&
+          JSON.stringify(localEdits) !== JSON.stringify(config.adminThemeColors)
+        }
+        onSave={() => mutation.mutateAsync(displayColors)}
+      />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <ThemeColorPicker

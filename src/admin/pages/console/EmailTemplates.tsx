@@ -27,6 +27,8 @@ import {
   type EmailTemplateType,
   type LocaleCode,
 } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useConfirmUnsavedChanges } from '../../hooks/useConfirmUnsavedChanges';
 
 const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: string }[] = [
   {
@@ -380,6 +382,11 @@ export function EmailTemplates() {
     },
   });
 
+  const typeSwitch = useConfirmUnsavedChanges({
+    isDirty: hasChanges,
+    onSave: () => saveMutation.mutateAsync(),
+  });
+
   const handleResetLocale = () => {
     const template = defaults?.[activeLocale] ?? defaults?.en;
     if (!template) return;
@@ -460,7 +467,11 @@ export function EmailTemplates() {
               key={template.value}
               variant={selectedType === template.value ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSelectedType(template.value)}
+              onClick={() => {
+                if (template.value !== selectedType) {
+                  typeSwitch.confirm(() => setSelectedType(template.value));
+                }
+              }}
             >
               {template.label}
             </Button>
@@ -600,6 +611,8 @@ export function EmailTemplates() {
             Reset {LOCALE_LABELS[activeLocale]} to Default
           </Button>
 
+          <UnsavedChangesGuard isDirty={hasChanges} onSave={() => saveMutation.mutateAsync()} />
+          {typeSwitch.dialog}
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending || !hasChanges}

@@ -16,6 +16,7 @@ import {
   SettingsWithPreview,
 } from '../../components/widget/WidgetSettingsLayout';
 import type { ThemeColors } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 const DEFAULT_WIDGET_COLORS: ThemeColors = {
   lightButtonColor: '#02658D',
@@ -93,6 +94,10 @@ export function Dialog() {
       preview={<DialogPreviewCard colors={resolveDialogColors(displayColors)} />}
     >
       <SectionCard section="dialog" showHeader={false}>
+        <UnsavedChangesGuard
+          isDirty={isDirty}
+          onSave={() => mutation.mutateAsync(displayColors as ThemeColors)}
+        />
         <form onSubmit={handleSubmit} className="space-y-6">
           <WidgetDialogSettingsForm
             value={displayColors}

@@ -13,6 +13,7 @@ import {
   SettingsFormActions,
 } from '../../components/settings/SectionCard';
 import type { AppSettings, ProjectLanguageSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 export function Language() {
   const {
@@ -91,6 +92,7 @@ function LanguageForm({ savedLanguage }: { savedLanguage: ProjectLanguageSetting
 
   return (
     <SectionCard section="language" showHeader={false}>
+      <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync({ language })} />
       <form
         className="space-y-6"
         onSubmit={(event) => {

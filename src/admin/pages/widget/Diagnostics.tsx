@@ -12,6 +12,7 @@ import {
   resolveDiagnosticSettings,
 } from '../../components/DiagnosticsSettingsForm';
 import type { AppSettings, DiagnosticSettings } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 export function Diagnostics() {
   const { data: settings, isLoading } = useQuery({
@@ -58,6 +59,7 @@ function DiagnosticsDefaultsForm({ settings }: { settings: AppSettings }) {
 
   return (
     <SectionCard section="diagnostics">
+      <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync(value)} />
       <form
         className="space-y-4"
         onSubmit={(event) => {

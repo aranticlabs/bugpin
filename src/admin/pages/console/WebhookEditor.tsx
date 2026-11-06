@@ -23,6 +23,7 @@ import {
 } from '../../components/ui/select';
 import { WEBHOOK_EVENTS } from './webhook-events';
 import type { Project, Webhook, WebhookEvent } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 interface WebhookEditorProps {
   projects: Project[];
@@ -41,13 +42,15 @@ export function WebhookEditor({
 }: WebhookEditorProps) {
   const formId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
-  const [fields, setFields] = useState({
+  const [savedFields] = useState(() => ({
     projectId: webhook?.projectId ?? initialProjectId,
     name: webhook?.name ?? '',
     url: webhook?.url ?? '',
     secret: webhook?.secret ?? '',
     events: webhook?.events ?? (['report.created'] as WebhookEvent[]),
-  });
+  }));
+  const [fields, setFields] = useState(savedFields);
+  const isDirty = JSON.stringify(fields) !== JSON.stringify(savedFields);
   const [validationError, setValidationError] = useState('');
   useEffect(() => {
     nameRef.current?.focus();
@@ -67,33 +70,33 @@ export function WebhookEditor({
     },
     onSuccess: onSaved,
   });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (save.isPending) return;
-    if (!fields.events.length) {
-      setValidationError('Select at least one event.');
-      return;
-    }
-    if (fields.name.trim().length < 2) {
-      setValidationError('Enter a webhook name with at least two characters.');
-      return;
-    }
+  const validate = (): string => {
+    if (!fields.events.length) return 'Select at least one event.';
+    if (fields.name.trim().length < 2) return 'Enter a webhook name with at least two characters.';
     try {
       const url = new URL(fields.url.trim());
       if (!['http:', 'https:'].includes(url.protocol)) {
-        setValidationError('Use an http:// or https:// receiver URL.');
-        return;
+        return 'Use an http:// or https:// receiver URL.';
       }
     } catch {
-      setValidationError('Enter a valid receiver URL.');
-      return;
+      return 'Enter a valid receiver URL.';
     }
-    if (!fields.projectId) {
-      setValidationError('Select a project.');
-      return;
-    }
-    setValidationError('');
-    save.mutate();
+    if (!fields.projectId) return 'Select a project.';
+    return '';
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (save.isPending) return;
+    const error = validate();
+    setValidationError(error);
+    if (!error) save.mutate();
+  };
+
+  const saveBeforeLeaving = async () => {
+    const error = validate();
+    setValidationError(error);
+    return !error && save.mutateAsync();
   };
   const message =
     validationError ||
@@ -112,6 +115,7 @@ export function WebhookEditor({
             : 'Send report events from a project to an external service.'}
         </CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard isDirty={isDirty} onSave={saveBeforeLeaving} />
       <form onSubmit={submit}>
         <CardContent className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">

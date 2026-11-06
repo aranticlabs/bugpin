@@ -25,6 +25,8 @@ import {
 import { Upload, Trash2, Camera } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { getCroppedImg } from '../../lib/imageUtils';
+import { UnsavedChangesGuard } from '../UnsavedChangesGuard';
+import { submitForm } from '../../lib/submitForm';
 
 export function AccountCard() {
   const { user } = useAuth();
@@ -415,7 +417,7 @@ function UpdateProfileSection({ user }: { user: User | null }) {
     },
   });
 
-  const onSubmit = (data: UpdateProfileFormData) => {
+  const toUpdates = (data: UpdateProfileFormData) => {
     const updates: { name?: string; email?: string } = {};
 
     if (data.name !== originalValues.name) {
@@ -425,6 +427,12 @@ function UpdateProfileSection({ user }: { user: User | null }) {
     if (data.email !== originalValues.email) {
       updates.email = data.email;
     }
+
+    return updates;
+  };
+
+  const onSubmit = (data: UpdateProfileFormData) => {
+    const updates = toUpdates(data);
 
     if (Object.keys(updates).length === 0) {
       toast.info('No changes to save');
@@ -438,6 +446,10 @@ function UpdateProfileSection({ user }: { user: User | null }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-1 flex-col">
+      <UnsavedChangesGuard
+        isDirty={hasChanges}
+        onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toUpdates(data)))}
+      />
       <div className="flex flex-1 flex-col gap-4">
         <div className="space-y-2">
           <Label htmlFor="profile-name">

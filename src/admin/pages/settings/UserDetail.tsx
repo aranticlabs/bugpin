@@ -59,6 +59,7 @@ import {
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 import type { ApiToken, ApiTokenScope, Project, User, UserRole } from '@shared/types';
+import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 type ApiError = Error & { response?: { data?: { message?: string } } };
 
@@ -147,6 +148,10 @@ function AccountSection({ user }: { user: User }) {
         <CardTitle>Account</CardTitle>
         <CardDescription>Name shown to the team and in notifications</CardDescription>
       </CardHeader>
+      <UnsavedChangesGuard
+        isDirty={name.trim() !== user.name}
+        onSave={async () => name.trim().length >= 2 && save.mutateAsync(undefined)}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();

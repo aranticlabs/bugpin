@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor, within } from '../../utils';
+import { renderWithQueryAndRouter, screen, userEvent, waitFor, within } from '../../utils';
 import { Dialog } from '../../../pages/widget/Dialog';
 import { Button } from '../../../pages/widget/Button';
 import { api } from '../../../api/client';
@@ -84,7 +84,7 @@ describe('Widget settings pages', () => {
   it('saves widget dialog colors and resets to defaults', async () => {
     const user = userEvent.setup();
 
-    renderWithQuery(<Dialog />);
+    renderWithQueryAndRouter(<Dialog />);
 
     expect(
       await screen.findByRole('button', { name: /change widget colors/i })
@@ -113,7 +113,7 @@ describe('Widget settings pages', () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
 
-    renderWithQuery(<Button />);
+    renderWithQueryAndRouter(<Button />);
 
     await user.click(await screen.findByRole('button', { name: /change widget button/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
@@ -143,7 +143,7 @@ describe('Widget settings pages', () => {
   it('previews unsaved dialog colors next to the dialog settings', async () => {
     const user = userEvent.setup();
 
-    renderWithQuery(<Dialog />);
+    renderWithQueryAndRouter(<Dialog />);
 
     await screen.findByRole('button', { name: /change widget colors/i });
     expect(screen.getByText('Live Preview')).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe('Widget settings pages', () => {
   });
 
   it('previews the launcher button next to its settings', async () => {
-    renderWithQuery(<Button />);
+    renderWithQueryAndRouter(<Button />);
 
     await screen.findByRole('button', { name: /change widget button/i });
     expect(screen.getByText('Live Preview')).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('Widget settings pages', () => {
     const user = userEvent.setup();
     localStorage.setItem('bugpin-theme', 'dark');
 
-    renderWithQuery(<Dialog />);
+    renderWithQueryAndRouter(<Dialog />);
 
     await screen.findByRole('button', { name: /change widget colors/i });
     expect(screen.getByRole('tab', { name: 'Dark' })).toHaveAttribute('data-state', 'active');
@@ -185,7 +185,7 @@ describe('Widget settings pages', () => {
 
   it('shows the dialog colors first and lets the preview below collapse', async () => {
     const user = userEvent.setup();
-    const { unmount, queryClient } = renderWithQuery(<Dialog />);
+    const { unmount, queryClient } = renderWithQueryAndRouter(<Dialog />);
 
     const colors = await screen.findByRole('button', { name: /change widget colors/i });
     const previewToggle = screen.getByRole('button', { name: /live preview/i });
@@ -199,7 +199,7 @@ describe('Widget settings pages', () => {
     expect(screen.queryByRole('tab', { name: 'Dark' })).not.toBeInTheDocument();
 
     unmount();
-    renderWithQuery(<Dialog />, { queryClient });
+    renderWithQueryAndRouter(<Dialog />, { queryClient });
     await screen.findByRole('button', { name: /change widget colors/i });
     expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
   });

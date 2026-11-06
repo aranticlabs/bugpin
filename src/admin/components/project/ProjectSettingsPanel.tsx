@@ -24,6 +24,7 @@ import { NotificationTabs } from '../NotificationTabs';
 import { SectionCard } from '../settings/SectionCard';
 import { DEFAULT_LANGUAGE_SETTINGS, LanguageSettingsForm } from '../LanguageSettingsForm';
 import { Spinner } from '../ui/spinner';
+import { UnsavedChangesGuard } from '../UnsavedChangesGuard';
 import { WidgetDialogSettingsForm, resolveDialogColors } from '../WidgetDialogSettingsForm';
 import type { ThemeColors } from '@shared/types';
 import { WidgetLauncherButtonSettingsForm } from '../WidgetLauncherButtonSettingsForm';
@@ -386,7 +387,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
     },
   });
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     try {
       // Build settings with new nested structure
       const newSettings: Partial<ProjectSettings> = {
@@ -469,9 +470,11 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
 
       setSavedSnapshot(formSnapshot);
       toast.success('Settings saved successfully');
+      return true;
     } catch (err: unknown) {
       const error = err as Error & { response?: { data?: { message?: string } } };
       toast.error(error.response?.data?.message || 'Failed to save settings');
+      return false;
     }
   };
 
@@ -515,6 +518,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
 
   return (
     <AutoSaveContext.Provider value={() => setSaveRequested(true)}>
+      <UnsavedChangesGuard isDirty={isDirty} onSave={handleSave} />
       <div className={hasPreview ? 'space-y-6' : 'max-w-4xl space-y-6'}>
         {section === 'general' && (
           <>
