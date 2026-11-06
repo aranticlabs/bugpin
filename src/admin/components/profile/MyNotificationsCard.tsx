@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
-import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
@@ -153,7 +152,6 @@ export function MyNotificationsCard() {
   // Switching the mode or the project loads other stored values into the form.
   const formSwitch = useConfirmUnsavedChanges({ isDirty, onSave: saveBeforeLeaving });
 
-  const isSaving = bulkMutation.isPending || projectMutation.isPending;
   const isLoading = isLoadingPrefs || (perProject && isLoadingProjectPrefs);
 
   return (
@@ -172,7 +170,15 @@ export function MyNotificationsCard() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
-            <UnsavedChangesGuard isDirty={isDirty} onSave={saveBeforeLeaving} />
+            <UnsavedChangesGuard
+              isDirty={isDirty}
+              onSave={saveBeforeLeaving}
+              onDiscard={() => {
+                if (savedFormKey) {
+                  setFormData(JSON.parse(savedFormKey) as Partial<NotificationDefaultSettings>);
+                }
+              }}
+            />
             {formSwitch.dialog}
             {/* Per-project toggle */}
             <div className="flex items-center justify-between pb-3 border-b">
@@ -235,26 +241,6 @@ export function MyNotificationsCard() {
                 }}
               />
             )}
-
-            <div>
-              <Button
-                type="submit"
-                disabled={
-                  isSaving ||
-                  (perProject && !selectedProjectId) ||
-                  (formData.emailEnabled ?? true) === false
-                }
-              >
-                {isSaving ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </Button>
-            </div>
           </form>
         )}
       </CardContent>

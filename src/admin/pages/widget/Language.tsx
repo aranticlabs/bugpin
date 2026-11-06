@@ -7,11 +7,7 @@ import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
 import { LanguageSettingsForm } from '../../components/LanguageSettingsForm';
-import {
-  SectionCard,
-  SectionLoading,
-  SettingsFormActions,
-} from '../../components/settings/SectionCard';
+import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import type { AppSettings, ProjectLanguageSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
@@ -92,7 +88,11 @@ function LanguageForm({ savedLanguage }: { savedLanguage: ProjectLanguageSetting
 
   return (
     <SectionCard section="language" showHeader={false}>
-      <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync({ language })} />
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() => mutation.mutateAsync({ language })}
+        onDiscard={() => setLanguage(savedLanguage)}
+      />
       <form
         className="space-y-6"
         onSubmit={(event) => {
@@ -105,7 +105,6 @@ function LanguageForm({ savedLanguage }: { savedLanguage: ProjectLanguageSetting
           onChange={setLanguage}
           disabled={mutation.isPending}
         />
-        <SettingsFormActions isPending={mutation.isPending} isDirty={isDirty} />
       </form>
     </SectionCard>
   );

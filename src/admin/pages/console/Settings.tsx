@@ -12,7 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
@@ -73,21 +72,6 @@ function LoadingCard() {
   );
 }
 
-function SaveButton({ isPending }: { isPending: boolean }) {
-  return (
-    <Button type="submit" disabled={isPending}>
-      {isPending ? (
-        <>
-          <Spinner size="sm" className="mr-2" />
-          Saving...
-        </>
-      ) : (
-        'Save Changes'
-      )}
-    </Button>
-  );
-}
-
 export function Settings() {
   const {
     register,
@@ -124,9 +108,15 @@ export function Settings() {
     updateCheckEnabled: data.updateCheckEnabled,
   });
 
-  const onSubmit = (data: SettingsFormData) => {
-    mutation.mutate(toPayload(data));
+  // Saved values become the new baseline at once, so the save bar closes without waiting for the
+  // settings to reload.
+  const saveForm = async (data: SettingsFormData) => {
+    await mutation.mutateAsync(toPayload(data));
+    reset(data);
   };
+
+  // The mutation's error handler already reports a failed save.
+  const onSubmit = (data: SettingsFormData) => saveForm(data).catch(() => undefined);
 
   if (isLoading) return <LoadingCard />;
 
@@ -134,7 +124,8 @@ export function Settings() {
     <Card>
       <UnsavedChangesGuard
         isDirty={isDirty}
-        onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toPayload(data)))}
+        onSave={() => submitForm(handleSubmit, saveForm)}
+        onDiscard={() => reset()}
       />
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <CardContent className="space-y-4 pt-6">
@@ -185,8 +176,6 @@ export function Settings() {
               )}
             />
           </div>
-
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>
@@ -212,6 +201,11 @@ export function DataRetention() {
 
   const mutation = useSaveSettings('Data retention saved');
 
+  const saveRetention = async (data: RetentionFormData) => {
+    await mutation.mutateAsync({ retentionDays: data.retentionDays });
+    reset(data);
+  };
+
   if (isLoading) return <LoadingCard />;
 
   return (
@@ -222,14 +216,11 @@ export function DataRetention() {
       </CardHeader>
       <UnsavedChangesGuard
         isDirty={isDirty}
-        onSave={() =>
-          submitForm(handleSubmit, (data) =>
-            mutation.mutateAsync({ retentionDays: data.retentionDays })
-          )
-        }
+        onSave={() => submitForm(handleSubmit, saveRetention)}
+        onDiscard={() => reset()}
       />
       <form
-        onSubmit={handleSubmit((data) => mutation.mutate({ retentionDays: data.retentionDays }))}
+        onSubmit={handleSubmit((data) => saveRetention(data).catch(() => undefined))}
         noValidate
       >
         <CardContent className="space-y-4">
@@ -253,8 +244,6 @@ export function DataRetention() {
               delete.
             </p>
           </div>
-
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>

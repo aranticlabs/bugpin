@@ -145,6 +145,7 @@ function BrandColorSection() {
           JSON.stringify(localEdits) !== JSON.stringify(config.adminThemeColors)
         }
         onSave={() => mutation.mutateAsync(displayColors)}
+        onDiscard={() => setLocalEdits(null)}
       />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -155,10 +156,6 @@ function BrandColorSection() {
           />
 
           <div className="flex gap-2 pt-4 border-t">
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending && <Spinner size="sm" className="mr-2" />}
-              Save Colors
-            </Button>
             <Button
               type="button"
               variant="outline"

@@ -8,7 +8,7 @@ import { api } from '../../api/client';
 import {
   SectionCard,
   SectionLoading,
-  SettingsFormActions,
+  ResetToDefaultButton,
 } from '../../components/settings/SectionCard';
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
 import {
@@ -190,6 +190,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
         <UnsavedChangesGuard
           isDirty={isDirty}
           onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(data))}
+          onDiscard={() => reset()}
         />
         <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-6">
           <WidgetLauncherButtonSettingsForm
@@ -198,11 +199,7 @@ function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFo
             buttonTextError={buttonTextError}
             onPreviewLocaleChange={setPreviewLocale}
           />
-          <SettingsFormActions
-            isPending={mutation.isPending}
-            isDirty={isDirty}
-            onReset={handleReset}
-          />
+          <ResetToDefaultButton onReset={handleReset} disabled={mutation.isPending} />
         </form>
       </SectionCard>
     </SettingsWithPreview>

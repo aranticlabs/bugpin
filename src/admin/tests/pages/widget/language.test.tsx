@@ -43,7 +43,7 @@ describe('Widget Language page', () => {
 
     const trigger = await screen.findByRole('combobox', { name: /default language/i });
     await waitFor(() => expect(trigger).toHaveTextContent('Deutsch'));
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Auto-detect' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -84,7 +84,7 @@ describe('Widget Language page', () => {
 
     const trigger = await screen.findByRole('combobox', { name: /default language/i });
     await waitFor(() => expect(trigger).toHaveTextContent('Deutsch'));
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Auto-detect' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 

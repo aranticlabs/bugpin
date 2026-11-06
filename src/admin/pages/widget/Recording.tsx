@@ -3,11 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { api } from '../../api/client';
-import {
-  SectionCard,
-  SectionLoading,
-  SettingsFormActions,
-} from '../../components/settings/SectionCard';
+import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
@@ -112,17 +108,15 @@ export function Recording() {
         onSave={() =>
           settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
         }
+        onDiscard={() => {
+          if (settings) setFormData(fromSettings(settings.screenshot));
+        }}
       />
       <form onSubmit={handleSubmit} className="space-y-6">
         <RecordingSettingsForm
           value={formData}
           onChange={handleChange}
           disabled={mutation.isPending}
-        />
-        <SettingsFormActions
-          isPending={mutation.isPending}
-          isDirty={isDirty}
-          locked={!formData.enableScreenRecording}
         />
       </form>
     </SectionCard>

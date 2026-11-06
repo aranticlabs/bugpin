@@ -384,20 +384,8 @@ export function License() {
                       <UnsavedChangesGuard
                         isDirty={selectedIds !== null}
                         onSave={() => selectionMutation.mutateAsync(selectedIds ?? [])}
+                        onDiscard={() => setSelectedIds(null)}
                       />
-                      <Button
-                        onClick={() =>
-                          selectionMutation.mutate(selectedIds ?? status.licensedProjectIds ?? [])
-                        }
-                        disabled={
-                          selectedIds === null ||
-                          selectionMutation.isPending ||
-                          syncMutation.isPending
-                        }
-                      >
-                        {selectionMutation.isPending && <Spinner size="sm" />}
-                        Save project selection
-                      </Button>
                     </>
                   )}
                 </div>

@@ -85,7 +85,7 @@ describe('Settings sections', () => {
     await user.click(updateSwitch);
     expect(updateSwitch).toHaveAttribute('aria-checked', 'false');
 
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(await screen.findByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith(
@@ -94,12 +94,15 @@ describe('Settings sections', () => {
       );
     });
 
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument()
+    );
     putSpy.mockClear();
 
     await user.click(updateSwitch);
     expect(updateSwitch).toHaveAttribute('aria-checked', 'true');
 
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(await screen.findByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith(
@@ -252,10 +255,13 @@ describe('Settings sections', () => {
     renderWithQueryAndRouter(<TwoFactorPolicyCard />);
 
     await screen.findAllByText('Admins only');
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'All users' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'admins' });
+      expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'everyone' });
     });
   });
 

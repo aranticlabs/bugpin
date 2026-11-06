@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../contexts/AuthContext';
 import { BrandingProvider } from '../contexts/BrandingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
-import { UnsavedChangesProvider } from '../components/UnsavedChangesGuard';
+import { UnsavedChangesBar, UnsavedChangesProvider } from '../components/UnsavedChangesGuard';
 
 // Create a new QueryClient for each test
 export function createTestQueryClient() {
@@ -36,7 +36,12 @@ interface WrapperProps {
 const TestRouteContent = createContext<React.ReactNode>(null);
 
 function TestRouteSlot() {
-  return <UnsavedChangesProvider>{useContext(TestRouteContent)}</UnsavedChangesProvider>;
+  return (
+    <UnsavedChangesProvider>
+      {useContext(TestRouteContent)}
+      <UnsavedChangesBar />
+    </UnsavedChangesProvider>
+  );
 }
 
 // A data router like the app's, which features such as navigation blocking require.

@@ -19,7 +19,6 @@ import type {
 } from '@shared/types';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
 import { NotificationTabs } from '../NotificationTabs';
 import { SectionCard } from '../settings/SectionCard';
 import { DEFAULT_LANGUAGE_SETTINGS, LanguageSettingsForm } from '../LanguageSettingsForm';
@@ -227,7 +226,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
   const [loadVersion, setLoadVersion] = useState(0);
   const [saveRequested, setSaveRequested] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState('');
-  const formSnapshot = JSON.stringify({
+  const formState = {
     useCustomWidgetDialog,
     widgetDialogSettings,
     useCustomButton,
@@ -245,19 +244,32 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
     whitelistSettings,
     useCustomLanguage,
     languageSettings,
-  });
+  };
+  const formSnapshot = JSON.stringify(formState);
   const isDirty = formSnapshot !== savedSnapshot;
 
-  const sectionActive: Record<ProjectSettingsSection, boolean> = {
-    general: true,
-    launcher: useCustomButton,
-    dialog: useCustomWidgetDialog,
-    language: useCustomLanguage,
-    capture: useCustomScreenshot || useCustomRecording || useCustomDiagnostics,
-    notifications: useCustomNotifications,
+  // Restores every tab from the snapshot of the last loaded or saved values.
+  const discardChanges = () => {
+    if (!savedSnapshot) return;
+    const saved = JSON.parse(savedSnapshot) as typeof formState;
+    setUseCustomWidgetDialog(saved.useCustomWidgetDialog);
+    setWidgetDialogSettings(saved.widgetDialogSettings);
+    setUseCustomButton(saved.useCustomButton);
+    setButtonSettings(saved.buttonSettings);
+    setUseCustomScreenshot(saved.useCustomScreenshot);
+    setScreenshotSettings(saved.screenshotSettings);
+    setUseCustomRecording(saved.useCustomRecording);
+    setRecordingSettings(saved.recordingSettings);
+    setUseCustomDiagnostics(saved.useCustomDiagnostics);
+    setDiagnosticSettings(saved.diagnosticSettings);
+    setUseCustomNotifications(saved.useCustomNotifications);
+    setNotificationSettings(saved.notificationSettings);
+    setReporterSettings(saved.reporterSettings);
+    setDefaultAssigneeUserId(saved.defaultAssigneeUserId);
+    setWhitelistSettings(saved.whitelistSettings);
+    setUseCustomLanguage(saved.useCustomLanguage);
+    setLanguageSettings(saved.languageSettings);
   };
-  // A deactivated card is locked, including Save. Switching a card off saves by itself.
-  const saveBlocked = !isDirty || !sectionActive[section];
 
   // Runs in the render after the server data landed in the form state above.
   useEffect(() => {
@@ -484,10 +496,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
     isLoadingNotifications ||
     isLoadingBranding ||
     isLoadingAssignableUsers;
-  const isSaving =
-    projectMutation.isPending ||
-    notificationMutation.isPending ||
-    deleteNotificationMutation.isPending;
 
   const assignableUserIds = new Set(assignableUsers?.map((user) => user.id) ?? []);
   const isMissingAssignedUser =
@@ -518,7 +526,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
 
   return (
     <AutoSaveContext.Provider value={() => setSaveRequested(true)}>
-      <UnsavedChangesGuard isDirty={isDirty} onSave={handleSave} />
+      <UnsavedChangesGuard isDirty={isDirty} onSave={handleSave} onDiscard={discardChanges} />
       <div className={hasPreview ? 'space-y-6' : 'max-w-4xl space-y-6'}>
         {section === 'general' && (
           <>
@@ -856,22 +864,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
             </InheritedFields>
           </SectionCard>
         )}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={handleSave} disabled={isSaving || saveBlocked}>
-            {isSaving ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Settings'
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Saves all settings tabs of this project together.
-          </p>
-        </div>
       </div>
     </AutoSaveContext.Provider>
   );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom';
 import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
-import { UnsavedChangesProvider } from '../../../components/UnsavedChangesGuard';
+import { UnsavedChangesBar, UnsavedChangesProvider } from '../../../components/UnsavedChangesGuard';
 import {
   ProjectSettingsPanel,
   type ProjectSettingsSection,
@@ -213,6 +213,7 @@ function Harness({ initial = 'general' }: { initial?: ProjectSettingsSection }) 
         element: (
           <UnsavedChangesProvider>
             <PanelPage initial={initial} />
+            <UnsavedChangesBar />
           </UnsavedChangesProvider>
         ),
       },
@@ -238,15 +239,14 @@ describe('ProjectSettingsPanel', () => {
 
     renderWithQuery(<Harness />);
 
-    const saveButton = await screen.findByRole('button', { name: /save settings/i });
-    await waitFor(() => expect(saveButton).toBeDisabled());
+    await screen.findByRole('combobox', { name: /default assignee/i });
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show capture' }));
     await user.click(
       await screen.findByRole('switch', { name: /use custom diagnostics settings/i })
     );
-    expect(saveButton).toBeEnabled();
-    await user.click(saveButton);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -290,7 +290,7 @@ describe('ProjectSettingsPanel', () => {
     expect(networkSwitch).toBeEnabled();
     await user.click(networkSwitch);
     await user.click(storageSwitch);
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -315,7 +315,7 @@ describe('ProjectSettingsPanel', () => {
     );
     await user.click(screen.getByRole('switch', { name: 'Network failures' }));
     await user.click(screen.getByRole('button', { name: 'Show general' }));
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -356,7 +356,7 @@ describe('ProjectSettingsPanel', () => {
 
     renderWithQuery(<Harness />);
 
-    await screen.findByRole('button', { name: /save settings/i });
+    await screen.findByRole('combobox', { name: /default assignee/i });
 
     await user.click(screen.getByRole('button', { name: 'Show dialog' }));
     await user.click(screen.getByRole('switch', { name: /use custom dialog colors/i }));
@@ -388,10 +388,8 @@ describe('ProjectSettingsPanel', () => {
       screen.getByRole('switch', { name: /use custom notification settings/i })
     ).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByText('Team notification fields')).toHaveAttribute('data-disabled', 'true');
-    expect(screen.getByRole('button', { name: /save settings/i })).toBeDisabled();
-
-    await user.click(screen.getByRole('button', { name: 'Show general' }));
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    // Each Custom switch saved by itself when it was turned off, so nothing is left unsaved.
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -415,12 +413,12 @@ describe('ProjectSettingsPanel', () => {
 
     renderWithQuery(<Harness />);
 
-    await screen.findByRole('button', { name: /save settings/i });
+    await screen.findByRole('combobox', { name: /default assignee/i });
 
     await user.click(screen.getByRole('button', { name: 'Show general' }));
     await user.click(screen.getByRole('combobox', { name: /default assignee/i }));
     await user.click(await screen.findByText('Admin User'));
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -445,13 +443,11 @@ describe('ProjectSettingsPanel', () => {
     expect(languageSelect).toBeDisabled();
     expect(languageSelect).toHaveTextContent('Deutsch');
     expect(screen.getByRole('radio', { name: 'Manual (locked)' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /save settings/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
 
+    // Turning Custom back off saves by itself, without a language override.
     await user.click(customSwitch);
     await user.click(customSwitch);
-    await user.click(screen.getByRole('button', { name: 'Show capture' }));
-    await user.click(await screen.findByRole('switch', { name: 'Storage key names' }));
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -477,8 +473,8 @@ describe('ProjectSettingsPanel', () => {
       'Français'
     );
 
+    // Turning Custom off saves by itself.
     await user.click(customSwitch);
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -498,7 +494,7 @@ describe('ProjectSettingsPanel', () => {
       'Deutsch'
     );
 
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -521,7 +517,7 @@ describe('ProjectSettingsPanel', () => {
     expect(await screen.findAllByRole('link', { name: 'Edit project defaults' })).toHaveLength(3);
     await user.click(screen.getByRole('switch', { name: /use custom screenshot settings/i }));
     expect(screen.getByText('Screenshot fields')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -577,7 +573,6 @@ describe('ProjectSettingsPanel', () => {
     const networkSwitch = screen.getByRole('switch', { name: 'Network failures' });
     expect(networkSwitch).toBeDisabled();
     expect(networkSwitch).toHaveAttribute('data-state', 'unchecked');
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {

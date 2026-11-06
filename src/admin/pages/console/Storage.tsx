@@ -221,6 +221,7 @@ function StorageSettingsSection() {
       <UnsavedChangesGuard
         isDirty={isDirty && formData.s3Enabled}
         onSave={() => mutation.mutateAsync(formData)}
+        onDiscard={() => setFormData(savedS3)}
       />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -343,17 +344,6 @@ function StorageSettingsSection() {
           </div>
 
           <div className="flex gap-2">
-            <Button type="submit" disabled={mutation.isPending || !isDirty || !formData.s3Enabled}>
-              {mutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-
             <Button
               type="button"
               variant="outline"

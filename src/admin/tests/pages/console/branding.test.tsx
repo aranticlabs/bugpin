@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQueryAndRouter, screen, userEvent, waitFor } from '../../utils';
 import { Branding } from '../../../pages/console/Branding';
 import { toast } from 'sonner';
 import { http, HttpResponse } from 'msw';
@@ -153,12 +153,12 @@ describe('Branding', () => {
 
   it('saves and resets brand colors', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Branding />);
+    renderWithQueryAndRouter(<Branding />);
 
     expect(await screen.findByText('Brand Colors')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /change colors/i }));
-    await user.click(screen.getByRole('button', { name: /save colors/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       const [colors] = brandingApiMocks.updateAdminThemeColors.mock.calls[0] ?? [];
@@ -177,7 +177,7 @@ describe('Branding', () => {
 
   it('validates icon uploads and supports cropping', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Branding />);
+    renderWithQueryAndRouter(<Branding />);
 
     const lightIcon = await screen.findByAltText('Light mode icon');
     await user.click(lightIcon);
@@ -225,7 +225,7 @@ describe('Branding', () => {
 
   it('uploads logos and favicons with validation', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Branding />);
+    renderWithQueryAndRouter(<Branding />);
 
     const darkLogo = await screen.findByAltText('Dark mode logo');
     await user.click(darkLogo);
@@ -266,7 +266,7 @@ describe('Branding', () => {
 
   it('leaves white-label settings to their own page', async () => {
     const get = vi.spyOn(api, 'get');
-    renderWithQuery(<Branding />);
+    renderWithQueryAndRouter(<Branding />);
 
     expect(await screen.findByText('Brand Colors')).toBeInTheDocument();
     expect(

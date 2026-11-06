@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { act, renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { act, renderWithQueryAndRouter, screen, userEvent, waitFor } from '../../utils';
 import { License } from '../../../pages/console/License';
 import { licenseApi, type LicenseStatus } from '../../../api/license';
 import { ENTERPRISE_AGREEMENT_VERSION, ENTERPRISE_AGREEMENT_URL } from '@shared/enterprise-license';
@@ -12,7 +12,7 @@ it('shows a retryable error instead of an activation form when license status ca
     .mockResolvedValueOnce({ eeAvailable: true, installed: true, licensed: true });
   const activate = vi.spyOn(licenseApi, 'activate');
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load license status');
   expect(screen.queryByRole('textbox', { name: 'License Key' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -45,7 +45,7 @@ it('recovers the activated card after a failed status refresh without requiring 
     });
   const activate = vi.spyOn(licenseApi, 'activate').mockResolvedValue(undefined);
   const user = userEvent.setup();
-  const view = renderWithQuery(<License />);
+  const view = renderWithQueryAndRouter(<License />);
   await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
   await user.click(screen.getByRole('checkbox'));
@@ -57,8 +57,7 @@ it('recovers the activated card after a failed status refresh without requiring 
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   available = true;
   await user.click(screen.getByRole('button', { name: 'Retry' }));
-  expect(await screen.findByRole('button', { name: 'Save project selection' })).toBeInTheDocument();
-  expect(screen.getByRole('checkbox', { name: 'Project One' })).toBeChecked();
+  expect(await screen.findByRole('checkbox', { name: 'Project One' })).toBeChecked();
   expect(screen.getByRole('button', { name: 'Remove License' })).toBeInTheDocument();
   expect(screen.getByText('webhooks')).toBeInTheDocument();
   expect(status.mock.calls.length).toBeGreaterThanOrEqual(3);
@@ -77,7 +76,7 @@ it('waits for the updated status after activation instead of displaying an empty
     );
   vi.spyOn(licenseApi, 'activate').mockResolvedValue(undefined);
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
   await user.click(screen.getByRole('checkbox'));
@@ -110,7 +109,7 @@ it('shows a synced inactive license with its details and allows sync to restore 
     return status;
   });
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   await user.click(await screen.findByRole('button', { name: 'Sync license' }));
   expect(await screen.findByText('Inactive')).toBeInTheDocument();
   expect(screen.getByText('Customer', { selector: 'p.font-medium' })).toBeInTheDocument();
@@ -141,7 +140,7 @@ it.each([
   vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
   const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   expect(await screen.findByText(badge, { exact: true })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Sync license' }));
   await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
@@ -156,7 +155,7 @@ it('warns on an active license that is also running on another server', async ()
     licensed: true,
     warning,
   });
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   expect(await screen.findByText('Licensed')).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent(warning);
 });
@@ -174,7 +173,7 @@ it('preserves the activation form and open agreement dialog during a background 
         })
     );
   const user = userEvent.setup();
-  const { queryClient } = renderWithQuery(<License />);
+  const { queryClient } = renderWithQueryAndRouter(<License />);
   const input = await screen.findByRole('textbox', { name: 'License Key' });
   await user.type(input, 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
@@ -203,7 +202,7 @@ it('does not offer installed-license sync when no license is installed', async (
     installed: false,
     message: 'License expired',
   });
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   await screen.findByRole('button', { name: 'Activate License' });
   expect(screen.queryByRole('button', { name: 'Sync license' })).not.toBeInTheDocument();
 });
@@ -225,7 +224,7 @@ it('requires exact confirmation for removal, resets on dismissal, and prevents r
       })
   );
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   const openDialog = await screen.findByRole('button', { name: 'Remove License' });
   await user.click(openDialog);
   const input = screen.getByRole('textbox', { name: 'Type license to confirm' });
@@ -291,7 +290,7 @@ it('keeps project selection and agreement acceptance in the dialog through an ac
       licensed = true;
     });
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
   await user.click(
@@ -350,14 +349,14 @@ it('syncs an increased allowance without reactivation and lets the admin allocat
     ids = next;
   });
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   expect(await screen.findByRole('checkbox', { name: 'Project Two' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: 'Sync license' }));
   expect(await screen.findByText('1 of 2 projects used')).toBeInTheDocument();
   expect(sync).toHaveBeenCalledTimes(1);
   expect(activate).not.toHaveBeenCalled();
   await user.click(screen.getByRole('checkbox', { name: 'Project Two' }));
-  await user.click(screen.getByRole('button', { name: 'Save project selection' }));
+  await user.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() => expect(select.mock.calls[0]?.[0]).toEqual(['proj_one', 'proj_two']));
   expect(await screen.findByText('2 of 2 projects used')).toBeInTheDocument();
 });
@@ -379,7 +378,7 @@ it('requires agreement acceptance before activation, resets on dismissal, and pr
       })
   );
   const user = userEvent.setup();
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
   const open = screen.getByRole('button', { name: 'Activate License' });
   await user.click(open);
@@ -417,7 +416,7 @@ it('keeps the loaded license visible after a background refresh fails', async ()
   vi.spyOn(licenseApi, 'getStatus')
     .mockResolvedValueOnce({ eeAvailable: true, installed: true, licensed: true })
     .mockRejectedValue(new Error('Offline'));
-  const { queryClient } = renderWithQuery(<License />);
+  const { queryClient } = renderWithQueryAndRouter(<License />);
   const card = await screen.findByText('Licensed');
   await act(async () => {
     await queryClient.refetchQueries({ queryKey: ['license-status'] });
@@ -432,7 +431,7 @@ it('keeps the agreement dialog and input mounted after a background refresh fail
     .mockResolvedValueOnce({ eeAvailable: true, installed: false, licensed: false })
     .mockRejectedValue(new Error('Offline'));
   const user = userEvent.setup();
-  const { queryClient } = renderWithQuery(<License />);
+  const { queryClient } = renderWithQueryAndRouter(<License />);
   const input = await screen.findByRole('textbox', { name: 'License Key' });
   await user.type(input, 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
@@ -460,7 +459,7 @@ it.each([
     licensed: false,
     message,
   });
-  renderWithQuery(<License />);
+  renderWithQueryAndRouter(<License />);
   expect(
     await screen.findByText(`${expected} Enterprise features are disabled.`)
   ).toBeInTheDocument();

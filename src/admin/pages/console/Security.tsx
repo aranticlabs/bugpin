@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Alert, AlertDescription } from '../../components/ui/alert';
@@ -61,21 +60,6 @@ function useSaveSettings(successMessage: string) {
   });
 }
 
-function SaveButton({ isPending }: { isPending: boolean }) {
-  return (
-    <Button type="submit" disabled={isPending}>
-      {isPending ? (
-        <>
-          <Spinner size="sm" className="mr-2" />
-          Saving...
-        </>
-      ) : (
-        'Save Changes'
-      )}
-    </Button>
-  );
-}
-
 function LoadingCard() {
   return (
     <Card>
@@ -106,6 +90,7 @@ export function SessionSettingsCard() {
       <UnsavedChangesGuard
         isDirty={!!settings && sessionMaxAgeDays !== (settings.sessionMaxAgeDays || 7)}
         onSave={() => mutation.mutateAsync({ sessionMaxAgeDays })}
+        onDiscard={() => setSessionMaxAgeDays(settings?.sessionMaxAgeDays || 7)}
       />
       <form
         onSubmit={(event) => {
@@ -129,7 +114,6 @@ export function SessionSettingsCard() {
               Number of days before a user session expires and requires re-login (1-365)
             </p>
           </div>
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>
@@ -158,6 +142,7 @@ export function InvitationSettingsCard() {
           !!settings && invitationExpirationDays !== (settings.invitationExpirationDays || 7)
         }
         onSave={() => mutation.mutateAsync({ invitationExpirationDays })}
+        onDiscard={() => setInvitationExpirationDays(settings?.invitationExpirationDays || 7)}
       />
       <form
         onSubmit={(event) => {
@@ -181,7 +166,6 @@ export function InvitationSettingsCard() {
               Number of days before an invitation link expires (1-30)
             </p>
           </div>
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>
@@ -213,6 +197,12 @@ export function NetworkSettingsCard() {
             formData.rateLimitPerMinute !== (settings.rateLimitPerMinute || 60))
         }
         onSave={() => mutation.mutateAsync(formData)}
+        onDiscard={() =>
+          setFormData({
+            enforceHttps: settings?.enforceHttps || false,
+            rateLimitPerMinute: settings?.rateLimitPerMinute || 60,
+          })
+        }
       />
       <form
         onSubmit={(event) => {
@@ -276,8 +266,6 @@ export function NetworkSettingsCard() {
               each project (1-1000)
             </p>
           </div>
-
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>
@@ -310,6 +298,7 @@ export function TwoFactorPolicyCard() {
       <UnsavedChangesGuard
         isDirty={!!settings && policy !== (settings.twoFactorPolicy ?? 'off')}
         onSave={() => mutation.mutateAsync({ twoFactorPolicy: policy })}
+        onDiscard={() => setPolicy(settings?.twoFactorPolicy ?? 'off')}
       />
       <form
         onSubmit={(event) => {
@@ -337,7 +326,6 @@ export function TwoFactorPolicyCard() {
               sign-in. Users can always add one themselves in their profile.
             </p>
           </div>
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>
@@ -378,6 +366,7 @@ export function PasswordPolicyCard() {
             JSON.stringify(settings.passwordPolicy ?? DEFAULT_PASSWORD_POLICY)
         }
         onSave={() => mutation.mutateAsync({ passwordPolicy: policy })}
+        onDiscard={() => setPolicy(settings?.passwordPolicy ?? DEFAULT_PASSWORD_POLICY)}
       />
       <form
         onSubmit={(event) => {
@@ -427,8 +416,6 @@ export function PasswordPolicyCard() {
               ))}
             </div>
           </div>
-
-          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>

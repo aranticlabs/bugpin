@@ -13,7 +13,6 @@ interface NotificationTabsProps {
     reporterNotifications?: ReporterNotificationSettings;
   };
   disabled?: boolean;
-  onTabChange?: (tab: 'team' | 'reporter') => void;
 }
 
 export function NotificationTabs({
@@ -23,13 +22,9 @@ export function NotificationTabs({
   onReporterChange,
   globalSettings,
   disabled = false,
-  onTabChange,
 }: NotificationTabsProps) {
   return (
-    <Tabs
-      defaultValue="team"
-      onValueChange={(tab) => onTabChange?.(tab === 'reporter' ? 'reporter' : 'team')}
-    >
+    <Tabs defaultValue="team">
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="team">Team</TabsTrigger>
         <TabsTrigger value="reporter">Reporter</TabsTrigger>

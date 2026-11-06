@@ -130,7 +130,13 @@ function SMTPSettingsSection() {
           Configure SMTP server settings for sending email notifications
         </CardDescription>
       </CardHeader>
-      <UnsavedChangesGuard isDirty={isDirty} onSave={save} />
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={save}
+        onDiscard={() => {
+          if (settings) setFormData(toSmtpForm(settings));
+        }}
+      />
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -216,17 +222,6 @@ function SMTPSettingsSection() {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-
             <Button
               type="button"
               variant="outline"

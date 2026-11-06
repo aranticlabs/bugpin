@@ -5,7 +5,7 @@ import { brandingApi } from '../../api/branding';
 import {
   SectionCard,
   SectionLoading,
-  SettingsFormActions,
+  ResetToDefaultButton,
 } from '../../components/settings/SectionCard';
 import {
   WidgetDialogSettingsForm,
@@ -97,6 +97,7 @@ export function Dialog() {
         <UnsavedChangesGuard
           isDirty={isDirty}
           onSave={() => mutation.mutateAsync(displayColors as ThemeColors)}
+          onDiscard={() => setLocalEdits(null)}
         />
         <form onSubmit={handleSubmit} className="space-y-6">
           <WidgetDialogSettingsForm
@@ -104,11 +105,7 @@ export function Dialog() {
             onChange={handleChange}
             disabled={mutation.isPending}
           />
-          <SettingsFormActions
-            isPending={mutation.isPending}
-            isDirty={isDirty}
-            onReset={handleReset}
-          />
+          <ResetToDefaultButton onReset={handleReset} disabled={mutation.isPending} />
         </form>
       </SectionCard>
     </SettingsWithPreview>

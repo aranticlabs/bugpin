@@ -449,6 +449,7 @@ function UpdateProfileSection({ user }: { user: User | null }) {
       <UnsavedChangesGuard
         isDirty={hasChanges}
         onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toUpdates(data)))}
+        onDiscard={() => reset()}
       />
       <div className="flex flex-1 flex-col gap-4">
         <div className="space-y-2">
@@ -471,19 +472,6 @@ function UpdateProfileSection({ user }: { user: User | null }) {
           />
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           <p className="text-sm text-muted-foreground">Used for login and notifications</p>
-        </div>
-
-        <div className="flex flex-1 items-end">
-          <Button type="submit" disabled={mutation.isPending || !hasChanges}>
-            {mutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </Button>
         </div>
       </div>
     </form>

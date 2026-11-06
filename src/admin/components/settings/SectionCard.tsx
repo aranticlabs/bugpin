@@ -79,37 +79,19 @@ export function SectionLoading() {
   );
 }
 
-interface SettingsFormActionsProps {
-  isPending: boolean;
-  isDirty: boolean;
-  onReset?: () => void;
-  locked?: boolean;
-}
-
-export function SettingsFormActions({
-  isPending,
-  isDirty,
+export function ResetToDefaultButton({
   onReset,
-  locked = false,
-}: SettingsFormActionsProps) {
+  disabled = false,
+}: {
+  onReset: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button type="submit" disabled={isPending || !isDirty || locked}>
-        {isPending ? (
-          <>
-            <Spinner size="sm" className="mr-2" />
-            Saving...
-          </>
-        ) : (
-          'Save Changes'
-        )}
+    <div>
+      <Button type="button" variant="outline" onClick={onReset} disabled={disabled}>
+        <RotateCcw className="mr-2 h-4 w-4" />
+        Reset to Default
       </Button>
-      {onReset && (
-        <Button type="button" variant="outline" onClick={onReset} disabled={isPending || locked}>
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Reset to Default
-        </Button>
-      )}
     </div>
   );
 }

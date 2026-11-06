@@ -2,11 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
-import {
-  SectionCard,
-  SectionLoading,
-  SettingsFormActions,
-} from '../../components/settings/SectionCard';
+import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
@@ -85,6 +81,9 @@ export function Screenshot() {
         onSave={() =>
           settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
         }
+        onDiscard={() => {
+          if (settings) setFormData(fromSettings(settings.screenshot));
+        }}
       />
       <form onSubmit={handleSubmit} className="space-y-6">
         <ScreenshotSettingsForm
@@ -92,7 +91,6 @@ export function Screenshot() {
           onChange={setFormData}
           disabled={mutation.isPending}
         />
-        <SettingsFormActions isPending={mutation.isPending} isDirty={isDirty} />
       </form>
     </SectionCard>
   );

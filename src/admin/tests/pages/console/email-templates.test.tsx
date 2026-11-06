@@ -174,7 +174,7 @@ describe('EmailTemplates', () => {
     await user.clear(frBody);
     await user.type(frBody, '<p>fr body</p>');
 
-    await user.click(screen.getByRole('button', { name: /Save Template/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Template saved successfully');

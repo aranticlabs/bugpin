@@ -43,17 +43,15 @@ describe('NotificationDefaults', () => {
     const user = userEvent.setup();
     renderWithProviders(<NotificationDefaults />);
 
-    const saveButton = await screen.findByRole('button', { name: /save changes/i });
-    expect(saveButton).toBeDisabled();
+    await screen.findByRole('tab', { name: 'Reporter' });
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Reporter' }));
     const assignmentSwitch = await screen.findByRole('switch', { name: /assignment changes/i });
     expect(assignmentSwitch).toHaveAttribute('aria-checked', 'true');
     await user.click(assignmentSwitch);
     expect(assignmentSwitch).toHaveAttribute('aria-checked', 'false');
-    expect(saveButton).toBeEnabled();
-
-    await user.click(saveButton);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(savedBody).toEqual({

@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/ta
 import { TemplateEditor } from '../../components/email/TemplateEditor';
 import { TemplatePreview } from '../../components/email/TemplatePreview';
 import { VariablesReference } from '../../components/email/VariablesReference';
-import { Eye, RotateCcw, Save, Send } from 'lucide-react';
+import { Eye, RotateCcw, Send } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import {
   SUPPORTED_LOCALES,
@@ -611,24 +611,16 @@ export function EmailTemplates() {
             Reset {LOCALE_LABELS[activeLocale]} to Default
           </Button>
 
-          <UnsavedChangesGuard isDirty={hasChanges} onSave={() => saveMutation.mutateAsync()} />
+          <UnsavedChangesGuard
+            isDirty={hasChanges}
+            onSave={() => saveMutation.mutateAsync()}
+            onDiscard={() => {
+              setDraft(baseline.current);
+              setResetLocales(new Set());
+              setHasChanges(false);
+            }}
+          />
           {typeSwitch.dialog}
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || !hasChanges}
-          >
-            {saveMutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Template
-              </>
-            )}
-          </Button>
         </div>
 
         {user?.email && (

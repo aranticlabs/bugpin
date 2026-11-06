@@ -13,7 +13,6 @@ import {
   CardDescription,
   CardContent,
 } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Spinner } from '../../components/ui/spinner';
 import { Label } from '../../components/ui/label';
@@ -84,7 +83,11 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
         save.mutate(form);
       }}
     >
-      <UnsavedChangesGuard isDirty={isDirty} onSave={() => save.mutateAsync(form)} />
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() => save.mutateAsync(form)}
+        onDiscard={() => setForm(saved)}
+      />
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="hide-footer-branding">Hide admin footer branding</Label>
@@ -110,18 +113,6 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
             value={form.customCopyright}
             onChange={(event) => setForm({ ...form, customCopyright: event.target.value })}
           />
-        </div>
-        <div className="flex gap-2 pt-4 border-t">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save white-label settings'
-            )}
-          </Button>
         </div>
       </CardContent>
     </form>

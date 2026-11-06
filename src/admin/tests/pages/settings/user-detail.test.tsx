@@ -96,7 +96,7 @@ describe('UserDetail', () => {
     const name = await screen.findByLabelText('Name');
     await user.clear(name);
     await user.type(name, 'Renamed User');
-    await user.click(screen.getAllByRole('button', { name: 'Save Changes' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
     await waitFor(() =>
       expect(requests).toContainEqual({

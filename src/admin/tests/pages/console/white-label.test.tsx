@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQueryAndRouter, screen, userEvent, waitFor } from '../../utils';
 import { WhiteLabel } from '../../../pages/console/WhiteLabelSettings';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
@@ -37,7 +37,7 @@ it('shows an upgrade card without the white-label feature', async () => {
     eeAvailable: true,
     features: { 'white-label': false },
   });
-  renderWithQuery(<WhiteLabel />);
+  renderWithQueryAndRouter(<WhiteLabel />);
 
   expect(
     await screen.findByText('This feature requires an Enterprise license.')
@@ -48,7 +48,7 @@ it('shows an upgrade card without the white-label feature', async () => {
 it('loads and saves white-label controls', async () => {
   const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
   const user = userEvent.setup();
-  renderWithQuery(<WhiteLabel />);
+  renderWithQueryAndRouter(<WhiteLabel />);
 
   const footerBranding = await screen.findByRole('switch', { name: 'Hide admin footer branding' });
   const emailBranding = screen.getByRole('switch', { name: 'Hide email footer branding' });
@@ -57,7 +57,7 @@ it('loads and saves white-label controls', async () => {
   await user.click(footerBranding);
   await user.click(emailBranding);
   await user.type(screen.getByLabelText('Copyright text'), 'Example Ltd');
-  await user.click(screen.getByRole('button', { name: 'Save white-label settings' }));
+  await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
   await waitFor(() =>
     expect(put).toHaveBeenCalledWith('/white-label/config', {
@@ -74,7 +74,7 @@ it('shows widget branding by default and persists both toggle choices', async ()
     return { data: { success: true } };
   });
   const user = userEvent.setup();
-  const first = renderWithQuery(<WhiteLabel />);
+  const first = renderWithQueryAndRouter(<WhiteLabel />);
   const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
   expect(toggle).toBeChecked();
   await user.click(toggle);
@@ -82,7 +82,7 @@ it('shows widget branding by default and persists both toggle choices', async ()
   expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: true });
   first.unmount();
 
-  renderWithQuery(<WhiteLabel />);
+  renderWithQueryAndRouter(<WhiteLabel />);
   const restored = await screen.findByRole('switch', { name: 'Show BugPin branding' });
   expect(restored).not.toBeChecked();
   await user.click(restored);
@@ -93,7 +93,7 @@ it('shows widget branding by default and persists both toggle choices', async ()
 it('keeps the saved widget branding choice when updating it fails', async () => {
   vi.spyOn(api, 'put').mockRejectedValue(new Error('License unavailable'));
   const user = userEvent.setup();
-  renderWithQuery(<WhiteLabel />);
+  renderWithQueryAndRouter(<WhiteLabel />);
 
   const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
   await user.click(toggle);

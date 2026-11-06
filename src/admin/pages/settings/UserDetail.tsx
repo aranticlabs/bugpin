@@ -151,6 +151,7 @@ function AccountSection({ user }: { user: User }) {
       <UnsavedChangesGuard
         isDirty={name.trim() !== user.name}
         onSave={async () => name.trim().length >= 2 && save.mutateAsync(undefined)}
+        onDiscard={() => setName(user.name)}
       />
       <form
         onSubmit={(event) => {
@@ -170,13 +171,6 @@ function AccountSection({ user }: { user: User }) {
               Users change their own email address in their profile.
             </p>
           </div>
-          <Button
-            type="submit"
-            disabled={save.isPending || name.trim().length < 2 || name.trim() === user.name}
-          >
-            {save.isPending && <Spinner size="sm" className="mr-2" />}
-            Save Changes
-          </Button>
         </CardContent>
       </form>
     </Card>

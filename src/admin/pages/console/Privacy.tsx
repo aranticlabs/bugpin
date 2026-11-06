@@ -149,18 +149,12 @@ export function Privacy() {
             </Alert>
           )}
 
-          <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync(formData)} />
+          <UnsavedChangesGuard
+            isDirty={isDirty}
+            onSave={() => mutation.mutateAsync(formData)}
+            onDiscard={() => setFormData(settings?.privacy ?? DEFAULT_PRIVACY_SETTINGS)}
+          />
           <div className="flex flex-wrap items-center gap-4">
-            <Button onClick={() => mutation.mutate(formData)} disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
             <a
               href="https://docs.bugpin.io/privacy/eu-privacy-mode"
               target="_blank"

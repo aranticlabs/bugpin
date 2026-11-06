@@ -2,11 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
-import {
-  SectionCard,
-  SectionLoading,
-  SettingsFormActions,
-} from '../../components/settings/SectionCard';
+import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import {
   DiagnosticsSettingsForm,
   resolveDiagnosticSettings,
@@ -59,7 +55,11 @@ function DiagnosticsDefaultsForm({ settings }: { settings: AppSettings }) {
 
   return (
     <SectionCard section="diagnostics">
-      <UnsavedChangesGuard isDirty={isDirty} onSave={() => mutation.mutateAsync(value)} />
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        onSave={() => mutation.mutateAsync(value)}
+        onDiscard={() => setValue(resolveDiagnosticSettings(settings.diagnostics ?? {}))}
+      />
       <form
         className="space-y-4"
         onSubmit={(event) => {
@@ -73,7 +73,6 @@ function DiagnosticsDefaultsForm({ settings }: { settings: AppSettings }) {
           euPrivacyMode={settings.privacy?.euPrivacyMode}
           disabled={mutation.isPending}
         />
-        <SettingsFormActions isPending={mutation.isPending} isDirty={isDirty} />
       </form>
     </SectionCard>
   );
