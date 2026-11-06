@@ -9,7 +9,7 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { LocalizedTextEditor } from './i18n/LocalizedTextEditor';
 import { Bug, MessageSquare, AlertCircle } from 'lucide-react';
 import { SUPPORTED_LOCALES } from '@shared/types';
-import { computeTooltipShift } from '@shared/tooltip-position';
+import { computeTooltipShift, LAUNCHER_TOOLTIP_DELAY_MS } from '@shared/tooltip-position';
 import type {
   GlobalWidgetLauncherButtonSettings,
   LocaleCode,
@@ -107,6 +107,7 @@ const WIDGET_TOOLTIP_STYLE = {
   lineHeight: '16px',
   padding: '6px 12px',
   borderRadius: '4px',
+  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
 } as const;
 
 const EDGE_LABELS: Record<string, string> = {
@@ -182,6 +183,7 @@ function LauncherPreview({
   tooltipText,
 }: LauncherPreviewProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipShift, setTooltipShift] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -203,10 +205,19 @@ function LauncherPreview({
     }
   }, [offsetX, offsetY]);
 
+  useEffect(() => {
+    if (!isHovered) {
+      setTooltipVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setTooltipVisible(true), LAUNCHER_TOOLTIP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isHovered]);
+
   // Same clamping as the real widget, with the preview box standing in for the browser window.
   useLayoutEffect(() => {
     const bounds = wrapperRef.current?.parentElement;
-    if (!isHovered || !bounds || !buttonRef.current || !tooltipRef.current) return;
+    if (!tooltipVisible || !bounds || !buttonRef.current || !tooltipRef.current) return;
     const boundsRect = bounds.getBoundingClientRect();
     const buttonRect = buttonRef.current.getBoundingClientRect();
     setTooltipShift(
@@ -217,7 +228,7 @@ function LauncherPreview({
         boundsRect.right
       )
     );
-  }, [isHovered, tooltipText, position, buttonOffsetX, buttonSizeUnit]);
+  }, [tooltipVisible, tooltipText, position, buttonOffsetX, buttonSizeUnit]);
 
   // For preview, we'll use light mode by default (you can add theme detection if needed)
   const isDarkMode = theme === 'dark';
@@ -338,7 +349,7 @@ function LauncherPreview({
         </button>
 
         {/* Tooltip */}
-        {tooltipEnabled && tooltipText && isHovered && (
+        {tooltipEnabled && tooltipText && tooltipVisible && (
           <div
             ref={tooltipRef}
             data-testid="launcher-preview-tooltip"
@@ -349,7 +360,8 @@ function LauncherPreview({
               ...WIDGET_TOOLTIP_STYLE,
               backgroundColor: tooltipBgColor,
               color: tooltipTextColor,
-              animation: 'fadeIn 0.2s ease-in-out',
+              opacity: 0,
+              animation: 'bugpin-tooltip-fade-in 0.2s ease-in-out forwards',
               transform: `translateX(-50%) translateX(${tooltipShift}px)`,
             }}
           >
@@ -501,11 +513,7 @@ export function WidgetLauncherButtonSettingsForm({
     <div className="space-y-4">
       <SettingRows>
         <SettingRowPair>
-          <SettingRow
-            label="Button Position"
-            htmlFor="widget-position"
-            controlClassName="@sm:w-56"
-          >
+          <SettingRow label="Button Position" htmlFor="widget-position" controlClassName="@sm:w-56">
             <Select
               value={effective.position}
               onValueChange={(val) =>

@@ -370,7 +370,8 @@ describe('WidgetLauncherButtonSettingsForm', () => {
     );
 
     await user.hover(screen.getByRole('button'));
-    const tooltip = screen.getByTestId('launcher-preview-tooltip');
+    expect(screen.queryByTestId('launcher-preview-tooltip')).not.toBeInTheDocument();
+    const tooltip = await screen.findByTestId('launcher-preview-tooltip', {}, { timeout: 1000 });
     expect(tooltip).toHaveTextContent('Found a bug?');
     expect(tooltip).toHaveStyle({ borderRadius: '4px', fontSize: '12px', padding: '6px 12px' });
   });

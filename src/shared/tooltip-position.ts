@@ -1,3 +1,6 @@
+// Hover time before the launcher tooltip starts to fade in, shared by the widget and its preview.
+export const LAUNCHER_TOOLTIP_DELAY_MS = 200;
+
 const TOOLTIP_EDGE_MARGIN = 4;
 
 // Horizontal shift (px) that keeps a tooltip centered on its anchor inside

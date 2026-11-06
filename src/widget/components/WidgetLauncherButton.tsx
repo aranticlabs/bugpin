@@ -7,7 +7,7 @@ import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 import { resolveLauncherText } from '../i18n/resolve-launcher-text.js';
 import type { LauncherTextBundle } from '../config.js';
-import { computeTooltipShift } from '@shared/tooltip-position.js';
+import { computeTooltipShift, LAUNCHER_TOOLTIP_DELAY_MS } from '@shared/tooltip-position.js';
 
 interface WidgetLauncherButtonProps {
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -77,6 +77,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
 }) => {
   useLocale();
   const [isHovered, setIsHovered] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipShift, setTooltipShift] = useState(0);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -98,9 +99,18 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
       tooltipBuiltinForActive
     ) ?? t('tooltip.launcher');
 
+  useEffect(() => {
+    if (!isHovered) {
+      setTooltipVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setTooltipVisible(true), LAUNCHER_TOOLTIP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isHovered]);
+
   // Shift the tooltip sideways so it stays inside the window.
   useEffect(() => {
-    if (isHovered && tooltipRef.current && buttonRef.current) {
+    if (tooltipVisible && tooltipRef.current && buttonRef.current) {
       const tooltip = tooltipRef.current;
       const button = buttonRef.current;
 
@@ -117,7 +127,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         );
       });
     }
-  }, [isHovered, resolvedTooltipText]);
+  }, [tooltipVisible, resolvedTooltipText]);
 
   // Select colors based on theme and hover state
   const buttonColor = isDarkMode
@@ -186,7 +196,7 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         )}
       </button>
 
-      {tooltipEnabled && resolvedTooltipText && isHovered && (
+      {tooltipEnabled && resolvedTooltipText && tooltipVisible && (
         <div
           ref={tooltipRef}
           class={cn(

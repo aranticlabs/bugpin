@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { render } from 'preact';
 import { WidgetLauncherButton } from '../../components/WidgetLauncherButton';
 import { installDom } from '../helpers/dom';
+import { LAUNCHER_TOOLTIP_DELAY_MS } from '@shared/tooltip-position.js';
+
+const waitForTooltipDelay = () =>
+  new Promise((resolve) => setTimeout(resolve, LAUNCHER_TOOLTIP_DELAY_MS + 20));
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 
@@ -81,8 +85,12 @@ describe('WidgetLauncherButton', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(container.textContent).toContain('Need help?');
+    // Hover colors apply at once; the tooltip waits for the hover delay.
     expect((button as HTMLButtonElement).style.backgroundColor).toBe('rgb(51, 51, 51)');
+    expect(container.textContent).not.toContain('Need help?');
+
+    await waitForTooltipDelay();
+    expect(container.textContent).toContain('Need help?');
 
     render(null, container);
     container.remove();
@@ -165,7 +173,7 @@ describe('WidgetLauncherButton', () => {
 
     const button = container.querySelector('button');
     button?.dispatchEvent(new window.MouseEvent('mouseenter', { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForTooltipDelay();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const tooltip = container.querySelector('div.whitespace-nowrap') as HTMLDivElement;
