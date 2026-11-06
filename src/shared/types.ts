@@ -37,7 +37,16 @@ export const UNASSIGNED_FILTER = '__unassigned__';
 export const ASSIGNED_TO_ME_FILTER = '__me__';
 
 /** Statuses of reports that still need work */
+export const REPORT_STATUSES = [
+  'open',
+  'in_progress',
+  'resolved',
+  'closed',
+] as const satisfies readonly ReportStatus[];
 export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
+
+export const REPORT_VIEWS = ['list', 'board'] as const;
+export type ReportView = (typeof REPORT_VIEWS)[number];
 
 export const REPORT_SORT_KEYS = [
   'createdAt',
@@ -47,6 +56,7 @@ export const REPORT_SORT_KEYS = [
   'status',
   'priority',
   'assignee',
+  'position',
 ] as const;
 export type ReportSortKey = (typeof REPORT_SORT_KEYS)[number];
 
@@ -80,6 +90,8 @@ export interface UserPreferences {
   dialogPreviewOpen?: boolean;
   projectsPageSize?: TablePageSize;
   reportsPageSize?: TablePageSize;
+  reportsView?: ReportView;
+  reportsBoardCollapsed?: ReportStatus[];
   lastExport?: { format: ExportFormat; action: ExportAction };
   editorLocale?: LocaleCode;
   dismissedUpdateVersion?: string | null;

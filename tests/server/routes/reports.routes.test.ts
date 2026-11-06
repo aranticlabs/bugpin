@@ -52,6 +52,7 @@ let reportResult: Report | null = baseReport;
 let reportUpdatePayload: unknown;
 let createManualPayload: unknown;
 let userRole: User['role'] = 'admin';
+let boardMove: unknown;
 
 beforeEach(() => {
   listFilter = undefined;
@@ -96,6 +97,14 @@ beforeEach(() => {
     return Result.ok(undefined);
   };
   reportsService.bulkUpdate = async () => Result.ok(2);
+  boardMove = undefined;
+  reportsService.moveOnBoard = async (id, target) => {
+    boardMove = { id, ...target };
+    if (!reportResult) {
+      return Result.fail('Not found', 'NOT_FOUND');
+    }
+    return Result.ok({ ...reportResult, status: target.status });
+  };
   reportsService.createManual = async (body) => {
     createManualPayload = body;
     return Result.ok({ ...baseReport, ...body, id: 'rpt_new', source: 'manual' });
@@ -229,6 +238,57 @@ describe('reports routes', () => {
     });
     expect(res.status).toBe(200);
     expect(reportUpdatePayload).toMatchObject({ title: 'New title' });
+  });
+
+  it('moves a report on the board for admin/editor', async () => {
+    userRole = 'editor';
+    const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
+      method: 'PATCH',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        status: 'resolved',
+        previousId: 'rpt_2',
+        nextId: null,
+        adoptSort: { sortBy: 'priority', sortOrder: 'desc' },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(boardMove).toEqual({
+      id: 'rpt_1',
+      status: 'resolved',
+      previousId: 'rpt_2',
+      nextId: null,
+      adoptSort: { sortBy: 'priority', sortOrder: 'desc' },
+    });
+    expect((await res.json()).report.status).toBe('resolved');
+  });
+
+  it('rejects board moves from viewers and with invalid bodies', async () => {
+    const request = (body: unknown) =>
+      createApp().request('http://localhost/reports/rpt_1/board-position', {
+        method: 'PATCH',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    expect((await request({ status: 'done' })).status).toBe(400);
+    expect((await request({ status: 'open', position: 3 })).status).toBe(400);
+    expect(
+      (await request({ status: 'open', adoptSort: { sortBy: 'random', sortOrder: 'asc' } })).status
+    ).toBe(400);
+    userRole = 'viewer';
+    expect((await request({ status: 'open' })).status).toBe(403);
+    expect(boardMove).toBeUndefined();
+  });
+
+  it('returns 404 when moving a missing report on the board', async () => {
+    reportResult = null;
+    const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
+      method: 'PATCH',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'open' }),
+    });
+    expect(res.status).toBe(404);
   });
 
   it('ignores forwardedTo on report update mass-assignment', async () => {

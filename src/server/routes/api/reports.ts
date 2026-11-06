@@ -256,6 +256,31 @@ reports.patch(
   }
 );
 
+// Move Report on the Board (Admin and Editor)
+
+reports.patch(
+  '/:id/board-position',
+  authorize(['admin', 'editor']),
+  validate({ params: schemas.id, body: schemas.moveReportOnBoard }),
+  async (c) => {
+    const body = c.get('validatedBody' as never) as {
+      status: ReportStatus;
+      previousId?: string | null;
+      nextId?: string | null;
+      adoptSort?: { sortBy: ReportSortKey; sortOrder: 'asc' | 'desc' };
+    };
+
+    const result = await reportsService.moveOnBoard(c.req.param('id'), body, c.get('user').id);
+
+    if (!result.success) {
+      const status = result.code === 'NOT_FOUND' ? 404 : 400;
+      return c.json({ success: false, error: result.code, message: result.error }, status);
+    }
+
+    return c.json({ success: true, report: result.value });
+  }
+);
+
 // Delete Report (Admin only)
 
 reports.delete('/:id', authorize(['admin']), validate({ params: schemas.id }), async (c) => {

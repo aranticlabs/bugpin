@@ -32,8 +32,13 @@ function reportOrderBy(key: ReportSortKey, direction: 'ASC' | 'DESC'): string {
       return `CASE reports.priority WHEN 'lowest' THEN 0 WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 ELSE 4 END ${direction}`;
     case 'assignee':
       return `users.name IS NULL, users.name COLLATE NOCASE ${direction}`;
+    case 'position':
+      return `reports.board_position ${direction}`;
   }
 }
+
+// Reports that were not placed by hand go to the top of their board column.
+const TOP_OF_COLUMN = `(SELECT COALESCE(MIN(board_position), 0) - 1 FROM reports WHERE status = ?)`;
 
 // Database Row Type
 
@@ -136,8 +141,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        submission_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        submission_id, created_at, updated_at, board_position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
       [
         id,
         data.projectId,
@@ -155,6 +160,7 @@ export const reportsRepo = {
         data.submissionId ?? null,
         now,
         now,
+        'open',
       ]
     );
 
@@ -310,6 +316,11 @@ export const reportsRepo = {
     }
 
     if (updates.status !== undefined) {
+      // SET expressions read the row as it was, so `status` here is the previous status.
+      sets.push(
+        `board_position = CASE WHEN status = ? THEN board_position ELSE ${TOP_OF_COLUMN} END`
+      );
+      params.push(updates.status, updates.status);
       sets.push('status = ?');
       params.push(updates.status);
 
@@ -355,6 +366,83 @@ export const reportsRepo = {
     db.run(`UPDATE reports SET ${sets.join(', ')} WHERE id = ?`, params);
 
     return this.findById(id);
+  },
+
+  /** Board column and position of each given report that exists */
+  boardPlacements(ids: string[]): Map<string, { status: ReportStatus; position: number }> {
+    if (ids.length === 0) return new Map();
+    const rows = getDb()
+      .query(
+        `SELECT id, status, board_position FROM reports WHERE id IN (${ids.map(() => '?').join(', ')})`
+      )
+      .all(...ids) as { id: string; status: ReportStatus; board_position: number }[];
+    return new Map(
+      rows.map((row) => [row.id, { status: row.status, position: row.board_position }])
+    );
+  },
+
+  /**
+   * Position of the nearest other report in a column after or before a position, or of the
+   * column's first report when no bound is given
+   */
+  adjacentBoardPosition(
+    status: ReportStatus,
+    excludeId: string,
+    bound: { after?: number; before?: number }
+  ): number | undefined {
+    const [condition, order, params] =
+      bound.after !== undefined
+        ? ['AND board_position > ?', 'ASC', [bound.after]]
+        : bound.before !== undefined
+          ? ['AND board_position < ?', 'DESC', [bound.before]]
+          : ['', 'ASC', []];
+    const row = getDb()
+      .query(
+        `SELECT board_position FROM reports WHERE status = ? AND id != ? ${condition}
+         ORDER BY board_position ${order} LIMIT 1`
+      )
+      .get(status, excludeId, ...params) as { board_position: number } | null;
+    return row?.board_position;
+  },
+
+  setBoardPosition(id: string, position: number): void {
+    getDb().run('UPDATE reports SET board_position = ? WHERE id = ?', [position, id]);
+  },
+
+  /** Rewrites a column's positions as 0, 1, 2, ... in their current order */
+  renumberBoardColumn(status: ReportStatus): void {
+    getDb().run(
+      `UPDATE reports
+       SET board_position = ranked.position
+       FROM (
+         SELECT id, ROW_NUMBER() OVER (ORDER BY board_position, created_at DESC, id) - 1 AS position
+         FROM reports
+         WHERE status = ?
+       ) AS ranked
+       WHERE reports.id = ranked.id`,
+      [status]
+    );
+  },
+
+  /** Makes the given sort the board's hand-made order in every column */
+  adoptBoardOrder(sortBy: ReportSortKey, sortOrder: 'asc' | 'desc'): void {
+    if (sortBy === 'position') return;
+    const orderBy = reportOrderBy(sortBy, sortOrder === 'asc' ? 'ASC' : 'DESC');
+    getDb().run(
+      `UPDATE reports
+       SET board_position = ranked.position
+       FROM (
+         SELECT reports.id AS id,
+                ROW_NUMBER() OVER (
+                  PARTITION BY reports.status
+                  ORDER BY ${orderBy}, reports.created_at DESC, reports.id
+                ) - 1 AS position
+         FROM reports
+         LEFT JOIN projects ON reports.project_id = projects.id
+         LEFT JOIN users ON users.id = reports.assigned_to
+       ) AS ranked
+       WHERE reports.id = ranked.id`
+    );
   },
 
   /**

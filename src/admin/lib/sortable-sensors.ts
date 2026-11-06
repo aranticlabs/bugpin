@@ -4,7 +4,7 @@ const defaultPointerActivationConstraints = PointerSensor.defaults.activationCon
 
 // A short mouse distance keeps plain clicks on draggable items working as clicks,
 // while touch keeps the library's default long-press behavior.
-export const sortableSensors = [
+export const pointerSensors = [
   PointerSensor.configure({
     activationConstraints: (event, source) => {
       if (event.pointerType === 'mouse') {
@@ -15,5 +15,6 @@ export const sortableSensors = [
         : defaultPointerActivationConstraints;
     },
   }),
-  KeyboardSensor,
 ];
+
+export const sortableSensors = [...pointerSensors, KeyboardSensor];

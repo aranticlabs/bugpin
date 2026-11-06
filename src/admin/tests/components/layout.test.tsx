@@ -157,4 +157,77 @@ describe('Layout', () => {
       '/settings/users'
     );
   });
+
+  it('names the open project in the breadcrumb', async () => {
+    server.use(
+      http.get('/api/projects/summaries', () =>
+        HttpResponse.json({ success: true, projects: [{ id: 'p-shop', name: 'Nordvale Shop' }] })
+      )
+    );
+    renderWithProviders(
+      <BrandingProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route path="*" element={<div>Project Content</div>} />
+          </Route>
+        </Routes>
+      </BrandingProvider>,
+      { initialEntries: ['/projects/p-shop'] }
+    );
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(breadcrumb).getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/projects'
+    );
+    expect(
+      await within(breadcrumb).findByRole('heading', { name: 'Nordvale Shop' })
+    ).toBeInTheDocument();
+  });
+
+  it('names the open report in the breadcrumb', async () => {
+    server.use(
+      http.get('/api/reports/r-1', () =>
+        HttpResponse.json({
+          success: true,
+          report: { id: 'r-1', title: 'Checkout button does nothing', projectId: 'p-shop' },
+        })
+      )
+    );
+    renderWithProviders(
+      <BrandingProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route path="*" element={<div>Report Content</div>} />
+          </Route>
+        </Routes>
+      </BrandingProvider>,
+      { initialEntries: ['/reports/r-1'] }
+    );
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(breadcrumb).getByRole('link', { name: 'Reports' })).toHaveAttribute(
+      'href',
+      '/reports'
+    );
+    expect(
+      await within(breadcrumb).findByRole('heading', { name: 'Checkout button does nothing' })
+    ).toBeInTheDocument();
+  });
+
+  it('shows only the section title on list pages', async () => {
+    renderWithProviders(
+      <BrandingProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route path="*" element={<div>List Content</div>} />
+          </Route>
+        </Routes>
+      </BrandingProvider>,
+      { initialEntries: ['/reports'] }
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).not.toBeInTheDocument();
+  });
 });

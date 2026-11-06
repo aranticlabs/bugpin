@@ -81,6 +81,8 @@ describe('user preferences routes', () => {
       pinnedProjectsOpen: false,
       projectsPageSize: 50,
       reportsPageSize: 10,
+      reportsView: 'board',
+      reportsBoardCollapsed: ['resolved', 'closed'],
       reportDetailsOpen: true,
       reportPageInfoOpen: false,
       reportEnvironmentOpen: true,
@@ -104,6 +106,9 @@ describe('user preferences routes', () => {
       { editorLocale: 'xx' },
       { projectsPageSize: 20 },
       { reportsPageSize: '25' },
+      { reportsView: 'grid' },
+      { reportsBoardCollapsed: ['done'] },
+      { reportsBoardCollapsed: 'closed' },
       { dismissedUpdateVersion: 'x'.repeat(101) },
     ]) {
       expect((await request('PATCH', body)).status).toBe(400);

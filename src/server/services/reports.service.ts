@@ -26,6 +26,7 @@ import type {
   ReportFilter,
   ReportStatus,
   ReportPriority,
+  ReportSortKey,
   ReportMetadata,
   ReportSource,
   ManualReportChannel,
@@ -486,6 +487,17 @@ async function createForProject(
 
 // Service
 
+const MIN_BOARD_GAP = 1e-6;
+
+/** A position between two neighbors, or null when they are too close to fit another one */
+export function positionBetween(previous?: number, next?: number): number | null {
+  if (previous === undefined && next === undefined) return 0;
+  if (previous === undefined) return (next as number) - 1;
+  if (next === undefined) return previous + 1;
+  if (next - previous < MIN_BOARD_GAP) return null;
+  return (previous + next) / 2;
+}
+
 export const reportsService = {
   /** The report an earlier widget submission with this id created, if any */
   findIdByWidgetSubmission(projectId: string, submissionId: string): string | null {
@@ -822,6 +834,98 @@ export const reportsService = {
         });
     }
 
+    return Result.ok(report);
+  },
+
+  /**
+   * Places a report in a board column between two neighbors, changing its status when the
+   * column differs. A missing neighbor means the report goes to that end of the column.
+   * With `adoptSort`, the board's hand-made order first becomes that sort, so a drop on a
+   * sorted board keeps every other card where the user saw it.
+   */
+  async moveOnBoard(
+    id: string,
+    target: {
+      status: ReportStatus;
+      previousId?: string | null;
+      nextId?: string | null;
+      adoptSort?: { sortBy: ReportSortKey; sortOrder: 'asc' | 'desc' };
+    },
+    userId?: string
+  ): Promise<Result<Report>> {
+    const existing = await reportsRepo.findById(id);
+    if (!existing) {
+      return Result.fail('Report not found', 'NOT_FOUND');
+    }
+
+    const access = checkProjectLicense(existing.projectId);
+    if (!access.success) return access;
+
+    const neighborIds = [target.previousId, target.nextId].filter(
+      (neighborId): neighborId is string => Boolean(neighborId)
+    );
+    if (neighborIds.includes(id)) {
+      return Result.fail('A report cannot be its own neighbor', 'INVALID_BOARD_POSITION');
+    }
+    const findNeighbors = () => {
+      const placements = reportsRepo.boardPlacements(neighborIds);
+      const previous = target.previousId ? placements.get(target.previousId) : undefined;
+      const next = target.nextId ? placements.get(target.nextId) : undefined;
+      return { previous, next };
+    };
+    const { previous, next } = findNeighbors();
+    if (
+      (target.previousId && previous?.status !== target.status) ||
+      (target.nextId && next?.status !== target.status)
+    ) {
+      return Result.fail('Neighbors must be in the target column', 'INVALID_BOARD_POSITION');
+    }
+
+    if (target.adoptSort) {
+      reportsRepo.adoptBoardOrder(target.adoptSort.sortBy, target.adoptSort.sortOrder);
+    }
+
+    if (existing.status !== target.status) {
+      const updated = await this.update(id, { status: target.status }, userId);
+      if (!updated.success) return updated;
+    }
+
+    // The card above anchors the drop and the card below it is looked up again, so a client
+    // with an outdated view of the column still places the report directly under that card.
+    const bounds = () => {
+      const current = findNeighbors();
+      if (current.previous) {
+        return {
+          above: current.previous.position,
+          below: reportsRepo.adjacentBoardPosition(target.status, id, {
+            after: current.previous.position,
+          }),
+        };
+      }
+      if (current.next) {
+        return {
+          above: reportsRepo.adjacentBoardPosition(target.status, id, {
+            before: current.next.position,
+          }),
+          below: current.next.position,
+        };
+      }
+      return { above: undefined, below: reportsRepo.adjacentBoardPosition(target.status, id, {}) };
+    };
+
+    let { above, below } = bounds();
+    let position = positionBetween(above, below);
+    if (position === null) {
+      reportsRepo.renumberBoardColumn(target.status);
+      ({ above, below } = bounds());
+      position = positionBetween(above, below);
+    }
+    reportsRepo.setBoardPosition(id, position ?? 0);
+
+    const report = await reportsRepo.findById(id);
+    if (!report) {
+      return Result.fail('Failed to move report', 'UPDATE_FAILED');
+    }
     return Result.ok(report);
   },
 

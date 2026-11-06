@@ -8,6 +8,8 @@ import {
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   REPORT_SORT_KEYS,
+  REPORT_STATUSES,
+  REPORT_VIEWS,
   SUPPORTED_LOCALES,
   TABLE_PAGE_SIZES,
   THEME_PREFERENCES,
@@ -438,6 +440,18 @@ export const schemas = {
     assignedTo: z.string().nullable().optional(),
   }),
 
+  moveReportOnBoard: z
+    .object({
+      status: z.enum(REPORT_STATUSES),
+      previousId: z.string().min(1).nullable().optional(),
+      nextId: z.string().min(1).nullable().optional(),
+      adoptSort: z
+        .object({ sortBy: z.enum(REPORT_SORT_KEYS), sortOrder: z.enum(['asc', 'desc']) })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+
   // Bulk update reports request
   bulkUpdateReports: z.object({
     ids: z.array(z.string()).min(1).max(100),
@@ -527,6 +541,11 @@ export const schemas = {
       dialogPreviewOpen: z.boolean().optional(),
       projectsPageSize: tablePageSizeSchema.optional(),
       reportsPageSize: tablePageSizeSchema.optional(),
+      reportsView: z.enum(REPORT_VIEWS).optional(),
+      reportsBoardCollapsed: z
+        .array(z.enum(REPORT_STATUSES))
+        .max(REPORT_STATUSES.length)
+        .optional(),
       lastExport: z
         .object({ format: z.enum(EXPORT_FORMATS), action: z.enum(EXPORT_ACTIONS) })
         .strict()

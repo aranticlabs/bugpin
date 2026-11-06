@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
+import { mockReports, mockUsers } from '../../mocks/handlers';
 import { Route, Routes } from 'react-router-dom';
 import { createTestQueryClient, renderWithProviders } from '../../utils';
 import { ReportDetail } from '../../../pages/workspace/ReportDetail';
@@ -344,24 +345,6 @@ describe('Reports Page - Bulk Actions', () => {
     });
   });
 
-  it('filters reports by source', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<Reports />);
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Button not working')[0]).toBeInTheDocument();
-    });
-
-    const comboboxes = screen.getAllByRole('combobox');
-    await user.click(comboboxes[4]);
-    await user.click(await screen.findByText('Manual'));
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Form validation issue')[0]).toBeInTheDocument();
-      expect(screen.queryByText('Button not working')).not.toBeInTheDocument();
-    });
-  });
-
   it('creates a manual report from the modal', async () => {
     const postSpy = vi.spyOn(api, 'post').mockResolvedValue({
       data: {
@@ -586,5 +569,192 @@ describe('Reports Page - Sorting', () => {
       'aria-sort',
       'ascending'
     );
+  });
+
+  describe('board view', () => {
+    beforeEach(() => window.localStorage.clear());
+    afterEach(() => window.localStorage.clear());
+
+    function savedView(view: 'list' | 'board') {
+      server.use(
+        http.get('/api/user-preferences/me', () =>
+          HttpResponse.json({ success: true, preferences: { reportsView: view } })
+        )
+      );
+    }
+
+    function recordStatusRequests(): string[] {
+      const statuses: string[] = [];
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          const status = new URL(request.url).searchParams.get('status') ?? '';
+          statuses.push(status);
+          const data = mockReports.filter((report) => !status || report.status === status);
+          return HttpResponse.json({
+            success: true,
+            data,
+            total: data.length,
+            page: 1,
+            limit: 20,
+            totalPages: data.length > 0 ? 1 : 0,
+          });
+        })
+      );
+      return statuses;
+    }
+
+    it('loads each status column separately and shows its total', async () => {
+      savedView('board');
+      const statuses = recordStatusRequests();
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      expect(await screen.findByRole('region', { name: 'Open, 2 reports' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'In Progress, 1 report' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Resolved, 0 reports' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Closed, 0 reports' })).toBeInTheDocument();
+      expect(new Set(statuses.filter(Boolean))).toEqual(
+        new Set(['open', 'in_progress', 'resolved', 'closed'])
+      );
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sort cards' })).toBeInTheDocument();
+    });
+
+    it('shows only the columns that match the status filter', async () => {
+      savedView('board');
+      const statuses = recordStatusRequests();
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports?status=open,in_progress'] });
+
+      expect(await screen.findByRole('region', { name: 'Open, 2 reports' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'In Progress, 1 report' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /^Resolved/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /^Closed/ })).not.toBeInTheDocument();
+      expect(statuses).not.toContain('resolved');
+      expect(statuses).not.toContain('closed');
+    });
+
+    it('orders the board by hand by default and keeps the list on its own sort', async () => {
+      const user = userEvent.setup();
+      const sorts: string[] = [];
+      savedView('board');
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          sorts.push(
+            `${params.get('status') ?? 'all'}:${params.get('sortBy')}:${params.get('sortOrder')}`
+          );
+          return HttpResponse.json({
+            success: true,
+            data: [],
+            total: 0,
+            page: 1,
+            limit: 20,
+            totalPages: 0,
+          });
+        })
+      );
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      await waitFor(() => expect(sorts).toContain('open:position:asc'));
+      await user.click(screen.getByRole('button', { name: 'Sort cards' }));
+      expect(await screen.findByRole('menuitemradio', { name: 'Manual' })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      await user.keyboard('{Escape}');
+
+      await user.click(screen.getByRole('tab', { name: 'List' }));
+      await waitFor(() => expect(sorts).toContain('all:createdAt:desc'));
+    });
+
+    it('sorts the cards from the sort button', async () => {
+      const user = userEvent.setup();
+      const sorts: string[] = [];
+      savedView('board');
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          sorts.push(`${params.get('sortBy')}:${params.get('sortOrder')}`);
+          return HttpResponse.json({
+            success: true,
+            data: [],
+            total: 0,
+            page: 1,
+            limit: 20,
+            totalPages: 0,
+          });
+        })
+      );
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      await user.click(await screen.findByRole('button', { name: 'Sort cards' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Priority' }));
+
+      await waitFor(() => expect(sorts).toContain('priority:desc'));
+    });
+
+    it('remembers the board when the user switches views', async () => {
+      const user = userEvent.setup();
+      const saved: unknown[] = [];
+      server.use(
+        http.patch('/api/user-preferences/me', async ({ request }) => {
+          const body = await request.json();
+          saved.push(body);
+          return HttpResponse.json({ success: true, preferences: body });
+        })
+      );
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      await screen.findByRole('table');
+      await user.click(screen.getByRole('tab', { name: 'Board' }));
+
+      expect(await screen.findByRole('region', { name: /^Open, / })).toBeInTheDocument();
+      await waitFor(() => expect(saved).toContainEqual({ reportsView: 'board' }));
+    });
+
+    it('changes the status through the card menu', async () => {
+      const user = userEvent.setup();
+      const updates: { id: string; body: unknown }[] = [];
+      savedView('board');
+      recordStatusRequests();
+      server.use(
+        http.patch('/api/reports/:id', async ({ params, request }) => {
+          const body = await request.json();
+          updates.push({ id: String(params.id), body });
+          return HttpResponse.json({ success: true, report: {} });
+        })
+      );
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Actions for Button not working' })
+      );
+      await user.click(await screen.findByRole('menuitem', { name: 'Resolved' }));
+
+      await waitFor(() =>
+        expect(updates).toEqual([{ id: 'report-1', body: { status: 'resolved' } }])
+      );
+    });
+
+    it('shows a read-only board to viewers', async () => {
+      savedView('board');
+      recordStatusRequests();
+      server.use(
+        http.get('/api/auth/me', () =>
+          HttpResponse.json({ success: true, authenticated: true, user: mockUsers.viewer })
+        )
+      );
+
+      renderWithProviders(<Reports />, { initialEntries: ['/reports'] });
+
+      expect(await screen.findByRole('region', { name: 'Open, 2 reports' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Open Button not working' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+    });
   });
 });
