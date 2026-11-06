@@ -331,4 +331,5 @@ export interface IReporterMessagesRepository {
 export interface IUserPreferencesRepository {
   get(userId: string): Promise<UserPreferences>;
   save(userId: string, preferences: UserPreferences): Promise<void>;
+  listGamificationOptOuts(): Promise<Set<string>>;
 }

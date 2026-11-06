@@ -251,6 +251,9 @@ export async function initSchema(): Promise<void> {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_source ON reports(source)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at DESC)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_assigned_to ON reports(assigned_to)`);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_reports_resolved_by ON reports(resolved_by, resolved_at)`
+  );
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project_status ON reports(project_id, status)`);
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_reports_project_created ON reports(project_id, created_at DESC)`
@@ -277,6 +280,12 @@ export async function initSchema(): Promise<void> {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_report_history_report_id ON report_history(report_id)`);
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_report_history_created_at ON report_history(report_id, created_at DESC)`
+  );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_report_history_recent ON report_history(created_at DESC)`
+  );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_report_history_user_action ON report_history(user_id, action)`
   );
 
   // Files table

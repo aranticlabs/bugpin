@@ -20,6 +20,7 @@ interface UserRow {
   is_active: number;
   must_change_password: number;
   api_access_enabled: number;
+  gamification_enabled: number;
   password_changed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -42,6 +43,7 @@ function mapRowToUser(row: UserRow): User {
     isActive: row.is_active === 1,
     mustChangePassword: row.must_change_password === 1,
     apiAccessEnabled: row.api_access_enabled === 1,
+    gamificationEnabled: row.gamification_enabled !== 0,
     passwordChangedAt: row.password_changed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -246,6 +248,18 @@ export const usersRepo = {
       new Date().toISOString(),
       id,
     ]);
+  },
+
+  setGamification(ids: string[], enabled: boolean): void {
+    if (ids.length === 0) return;
+    const db = getDb();
+    const now = new Date().toISOString();
+    const statement = db.prepare(
+      'UPDATE users SET gamification_enabled = ?, updated_at = ? WHERE id = ?'
+    );
+    db.transaction(() => {
+      for (const id of ids) statement.run(enabled ? 1 : 0, now, id);
+    })();
   },
 
   /**

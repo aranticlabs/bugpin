@@ -287,4 +287,50 @@ describe('UserDetail', () => {
       '/settings/users'
     );
   });
+
+  it('turns gamification on or off for this person', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put('/api/gamification', ({ request }) => record(request)),
+      http.get('/api/users', () =>
+        HttpResponse.json({
+          success: true,
+          users: [
+            {
+              id: 'user-2',
+              email: 'editor@example.com',
+              name: 'Editor User',
+              role: 'editor',
+              isActive: true,
+              createdAt: '2026-01-01T00:00:00Z',
+              updatedAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+        })
+      )
+    );
+    renderUser('user-2');
+    const toggle = await screen.findByRole('switch', { name: 'Enable gamification' });
+    expect(toggle).toBeChecked();
+    expect(
+      screen.getByText('Gamification is turned off for the whole workspace.')
+    ).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'PUT',
+        path: '/api/gamification',
+        body: { users: { 'user-2': false } },
+      })
+    );
+  });
+
+  it('never offers gamification to viewers', async () => {
+    renderUser('user-3');
+    const toggle = await screen.findByRole('switch', { name: 'Enable gamification' });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+  });
 });

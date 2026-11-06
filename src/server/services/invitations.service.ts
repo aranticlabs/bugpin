@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type { User, UserRole, Session } from '@shared/types';
 import { passwordPolicyService } from './password-policy.service.js';
+import { gamificationService } from './gamification.service.js';
 
 // Types
 
@@ -84,6 +85,7 @@ export const invitationsService = {
       invitationToken: token,
       invitationTokenExpiresAt: expiresAt,
     });
+    await gamificationService.applyNewUserDefault(user.id);
 
     // Send invitation email
     const appUrl = settings.appUrl || '';

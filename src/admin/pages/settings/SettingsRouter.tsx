@@ -34,6 +34,9 @@ const Storage = lazyWithRetry(() =>
 const EmailSettings = lazyWithRetry(() =>
   import('../console/EmailSettings').then((m) => ({ default: m.EmailSettings }))
 );
+const Gamification = lazyWithRetry(() =>
+  import('../console/Gamification').then((m) => ({ default: m.Gamification }))
+);
 const License = lazyWithRetry(() =>
   import('../console/License').then((m) => ({ default: m.License }))
 );
@@ -178,6 +181,14 @@ export function SettingsRouter() {
         element={
           <SettingsPage adminOnly>
             <DataPrivacy />
+          </SettingsPage>
+        }
+      />
+      <Route
+        path="gamification"
+        element={
+          <SettingsPage adminOnly>
+            <Gamification />
           </SettingsPage>
         }
       />

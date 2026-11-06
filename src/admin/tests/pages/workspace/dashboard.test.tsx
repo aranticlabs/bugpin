@@ -1,101 +1,203 @@
-import { describe, it, expect, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { delay, http, HttpResponse } from 'msw';
 import { renderWithProviders } from '../../utils';
 import { Dashboard } from '../../../pages/workspace/Dashboard';
 import { server } from '../../mocks/server';
-import { http, HttpResponse } from 'msw';
+import { mockDashboardPersonal, mockUsers } from '../../mocks/handlers';
+import type { DashboardPersonal } from '@shared/types';
+
+const withGamification: DashboardPersonal = {
+  ...mockDashboardPersonal,
+  gamification: {
+    xp: 300,
+    level: 3,
+    levelStartXp: 250,
+    nextLevelXp: 500,
+    achievements: [
+      { id: 'hatchling', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
+      { id: 'cocoon', current: 12, target: 100 },
+    ],
+  },
+};
+
+function signInAs(user: (typeof mockUsers)[keyof typeof mockUsers]) {
+  server.use(
+    http.get('/api/auth/me', () => HttpResponse.json({ success: true, authenticated: true, user }))
+  );
+}
 
 describe('Dashboard Page', () => {
-  it('renders dashboard heading', async () => {
+  it('greets the user by first name for the time of day', async () => {
     renderWithProviders(<Dashboard />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText(/overview/i)).toBeInTheDocument();
-  });
-
-  it('renders without crashing', () => {
-    renderWithProviders(<Dashboard />);
-    expect(document.body).toBeInTheDocument();
-  });
-
-  it('displays loading state initially', () => {
-    renderWithProviders(<Dashboard />);
-    // Should show loading spinner initially
-    const spinner = document.querySelector('.animate-spin');
-    expect(spinner || document.body).toBeInTheDocument();
-  });
-
-  it('displays stat cards after loading', async () => {
-    renderWithProviders(<Dashboard />);
-
-    await waitFor(
-      () => {
-        // Check for stat card titles
-        expect(screen.getByText('Total Reports')).toBeInTheDocument();
-      },
-      { timeout: 5000 }
+    const heading = await screen.findByRole('heading', { level: 1 });
+    expect(heading.textContent).toMatch(
+      /^(Good morning|Good afternoon|Good evening|Working late), Admin$/
     );
-
-    // Verify all stat cards are present - these texts can appear multiple times
-    // (stat cards and report badges), so we use getAllByText
-    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Resolved').length).toBeGreaterThan(0);
   });
 
-  it('displays recent reports section', async () => {
+  it('shows the KPIs, the active reports and the reports that need attention', async () => {
     renderWithProviders(<Dashboard />);
-
-    await waitFor(
-      () => {
-        expect(screen.getByText('Recent Reports')).toBeInTheDocument();
-      },
-      { timeout: 5000 }
+    expect(await screen.findByText('Active reports')).toBeInTheDocument();
+    expect(screen.getByText('Median time to resolve')).toBeInTheDocument();
+    expect(screen.getByText('Active reports by priority')).toBeInTheDocument();
+    expect(screen.getByText('Checkout fails on submit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /assign/i })).toBeInTheDocument();
+    expect(screen.getByText('Login button broken').closest('a')).toHaveAttribute(
+      'href',
+      '/reports/report-1'
     );
-
-    // Check for "View all" link
-    expect(screen.getByText('View all')).toBeInTheDocument();
   });
 
-  it('shows empty state when no reports exist', async () => {
-    // Override the handler to return empty reports
+  it('shows personal time to resolve to admins and editors', async () => {
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('Your time to resolve')).toBeInTheDocument();
+    expect(screen.getByText('26 h to resolve')).toBeInTheDocument();
+    expect(screen.queryByText(/^Level /)).not.toBeInTheDocument();
+  });
+
+  it('shows the real totals and links each list to the Reports page', async () => {
+    const user = userEvent.setup();
+    const { mockDashboardOverview } = await import('../../mocks/handlers');
     server.use(
-      http.get('/api/reports', () => {
+      http.get('/api/dashboard/overview', () =>
+        HttpResponse.json({
+          success: true,
+          overview: { ...mockDashboardOverview, needsAttentionTotal: 23 },
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+
+    const attentionTab = await screen.findByRole('tab', { name: /Needs attention/ });
+    expect(attentionTab).toHaveTextContent('23');
+    expect(screen.getByText('Showing 1 of 23')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View open reports/ })).toHaveAttribute(
+      'href',
+      '/reports?status=open%2Cin_progress&sort=priority&dir=desc'
+    );
+
+    await user.click(screen.getByRole('tab', { name: /Assigned to you/ }));
+    expect(await screen.findByRole('link', { name: /View all assigned to you/ })).toHaveAttribute(
+      'href',
+      '/reports?assignedTo=__me__&status=open%2Cin_progress'
+    );
+  });
+
+  it('keeps viewers to the shared overview', async () => {
+    signInAs(mockUsers.viewer);
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('Checkout fails on submit')).toBeInTheDocument();
+    expect(screen.queryByText('Your time to resolve')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /assigned to you/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /assign/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the level and announces achievements the user has not seen yet', async () => {
+    server.use(
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({ success: true, personal: withGamification })
+      ),
+      http.get('/api/user-preferences/me', () =>
+        HttpResponse.json({ success: true, preferences: { seenAchievements: [] } })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('Level 3 · Tracker')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Achievement unlocked: Hatchling')).toBeInTheDocument();
+  });
+
+  it('explains how XP is earned on the Levels tab', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({ success: true, personal: withGamification })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    await user.click(await screen.findByRole('button', { name: 'Show levels' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: "Hunter's log" })).toBeInTheDocument();
+    expect(within(dialog).getByText('Resolved within 60 min')).toBeInTheDocument();
+    const messageRow = within(dialog).getByText('Message to a reporter').closest('div');
+    expect(messageRow).toHaveTextContent('+5');
+  });
+
+  it('ranks teammates on the Team tab by the chosen period', async () => {
+    const user = userEvent.setup();
+    const achievements = withGamification.gamification?.achievements ?? [];
+    const periods: string[] = [];
+    server.use(
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({ success: true, personal: withGamification })
+      ),
+      http.get('/api/dashboard/team', ({ request }) => {
+        const period = new URL(request.url).searchParams.get('period') ?? '';
+        periods.push(period);
         return HttpResponse.json({
           success: true,
-          data: [],
-          total: 0,
-          page: 1,
-          limit: 5,
+          team: {
+            ranking: true,
+            period,
+            members: [
+              {
+                id: 'user-2',
+                name: 'Editor User',
+                level: 5,
+                xp: 1200,
+                periodXp: period === 'all' ? 1200 : 240,
+                achievements,
+              },
+              { id: 'user-1', name: 'Admin User', level: 3, xp: 300, periodXp: 80, achievements },
+            ],
+          },
         });
       })
     );
-
     renderWithProviders(<Dashboard />);
+    await user.click(await screen.findByRole('button', { name: 'Show levels' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('tab', { name: 'Team' }));
 
-    await waitFor(
-      () => {
-        expect(screen.getByText('No reports yet')).toBeInTheDocument();
-      },
-      { timeout: 5000 }
-    );
+    const rows = await within(dialog).findAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Editor User');
+    expect(rows[0]).toHaveTextContent('240 XP');
+    expect(rows[0]).toHaveTextContent('last 30 days');
+    expect(rows[1]).toHaveTextContent('You');
+    expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('combobox', { name: 'Ranking period' }));
+    await user.click(await screen.findByRole('option', { name: 'All time' }));
+    await waitFor(() => expect(periods).toContain('all'));
+    expect(await within(dialog).findByText('1,200 XP')).toBeInTheDocument();
+    expect(periods[0]).toBe('30d');
   });
 
-  it('displays report items with their status and priority', async () => {
-    // Override with specific report data
+  it('does not announce achievements unlocked before the user first saw the dashboard', async () => {
     server.use(
-      http.get('/api/reports', () => {
-        return HttpResponse.json({
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({ success: true, personal: withGamification })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('Level 3 · Tracker')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('lists recent reports in the Recent tab', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/reports', () =>
+        HttpResponse.json({
           success: true,
           data: [
             {
-              id: 'rpt_test1',
-              title: 'Test Bug Report',
+              id: 'rpt_recent',
+              projectId: 'project-1',
+              projectName: 'Test Project',
+              title: 'Recent Report',
               status: 'open',
               priority: 'high',
               metadata: { url: 'https://example.com/page' },
@@ -104,94 +206,38 @@ describe('Dashboard Page', () => {
           ],
           total: 1,
           page: 1,
-          limit: 5,
-        });
-      })
+          limit: 6,
+        })
+      )
     );
-
     renderWithProviders(<Dashboard />);
-
-    await waitFor(
-      () => {
-        expect(screen.getByText('Test Bug Report')).toBeInTheDocument();
-      },
-      { timeout: 5000 }
-    );
-
-    // "Open" appears in both a stat card and the report's status
-    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
-    expect(screen.getByText('High')).toBeInTheDocument();
-    // Check for URL display
-    expect(screen.getByText('https://example.com/page')).toBeInTheDocument();
+    await user.click(await screen.findByRole('tab', { name: 'Recent' }));
+    const link = (await screen.findByText('Recent Report')).closest('a');
+    expect(link).toHaveAttribute('href', '/reports/rpt_recent');
   });
 
-  it('navigates to report detail when clicking a report', async () => {
-    // Initialize user event for potential interactions
-    userEvent.setup();
-
+  it('shows a spinner while the overview loads', async () => {
     server.use(
-      http.get('/api/reports', () => {
-        return HttpResponse.json({
-          success: true,
-          data: [
-            {
-              id: 'rpt_clickable',
-              title: 'Clickable Report',
-              status: 'open',
-              priority: 'medium',
-              metadata: { url: 'https://test.com' },
-              createdAt: new Date().toISOString(),
-            },
-          ],
-          total: 1,
-          page: 1,
-          limit: 5,
-        });
+      http.get('/api/dashboard/overview', async () => {
+        await delay('infinite');
+        return HttpResponse.json({});
       })
     );
-
     renderWithProviders(<Dashboard />);
-
-    await waitFor(
-      () => {
-        expect(screen.getByText('Clickable Report')).toBeInTheDocument();
-      },
-      { timeout: 5000 }
-    );
-
-    // The report should be a link
-    const reportLink = screen.getByText('Clickable Report').closest('a');
-    expect(reportLink).toHaveAttribute('href', '/reports/rpt_clickable');
+    await screen.findByRole('heading', { level: 1 });
+    expect(document.querySelector('.animate-spin')).toBeInTheDocument();
   });
 
-  it('handles API errors gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
+  it('asks the server for the selected range', async () => {
+    const ranges: string[] = [];
     server.use(
-      http.get('/api/reports/stats/overview', () => {
-        return HttpResponse.json(
-          { success: false, error: 'SERVER_ERROR', message: 'Internal server error' },
-          { status: 500 }
-        );
+      http.get('/api/dashboard/overview', async ({ request }) => {
+        ranges.push(new URL(request.url).searchParams.get('range') ?? '');
+        const { mockDashboardOverview } = await import('../../mocks/handlers');
+        return HttpResponse.json({ success: true, overview: mockDashboardOverview });
       })
     );
-
     renderWithProviders(<Dashboard />);
-
-    // When API fails, dashboard shows loading spinner (while retrying)
-    // This verifies the component doesn't crash on error
-    await waitFor(
-      () => {
-        // Component should render either loading spinner or content
-        const spinner = document.querySelector('.animate-spin');
-        const body = document.body;
-        expect(spinner || body).toBeInTheDocument();
-      },
-      { timeout: 5000 }
-    );
-
-    consoleSpy.mockRestore();
-    consoleLogSpy.mockRestore();
+    await waitFor(() => expect(ranges).toContain('30'));
   });
 });

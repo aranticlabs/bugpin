@@ -8,6 +8,7 @@ import { isValidEmail } from '../utils/validators.js';
 import type { DefaultProjectReference, User, UserRole } from '@shared/types';
 import { passwordPolicyService } from './password-policy.service.js';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
+import { gamificationService } from './gamification.service.js';
 
 // Types
 
@@ -121,6 +122,7 @@ export const usersService = {
     };
 
     const user = await usersRepo.create(userData);
+    await gamificationService.applyNewUserDefault(user.id);
 
     logger.info('User created', { userId: user.id, email: user.email, role: user.role });
     return Result.ok(user);

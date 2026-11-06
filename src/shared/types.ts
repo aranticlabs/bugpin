@@ -45,6 +45,15 @@ export const REPORT_STATUSES = [
 ] as const satisfies readonly ReportStatus[];
 export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
 
+/** Report priorities from most to least urgent */
+export const REPORT_PRIORITIES = [
+  'highest',
+  'high',
+  'medium',
+  'low',
+  'lowest',
+] as const satisfies readonly ReportPriority[];
+
 export const REPORT_VIEWS = ['list', 'board'] as const;
 export type ReportView = (typeof REPORT_VIEWS)[number];
 
@@ -96,6 +105,10 @@ export interface UserPreferences {
   editorLocale?: LocaleCode;
   dismissedUpdateVersion?: string | null;
   dismissedWidgetWarningId?: string | null;
+  /** Achievements the user has already been told about, so each unlock is announced once */
+  seenAchievements?: AchievementId[];
+  /** Written only through the gamification endpoint; counts only while the workspace lets users opt out */
+  gamificationOptedOut?: boolean;
 }
 
 export type ReportHistoryAction =
@@ -435,6 +448,8 @@ export interface User {
   mustChangePassword?: boolean;
   /** Non-admins can create and use API tokens only while this is true */
   apiAccessEnabled?: boolean;
+  /** Levels and achievements show on the dashboard only while this and the workspace switch are on */
+  gamificationEnabled?: boolean;
   passwordChangedAt?: string;
   /** True when the user has a confirmed authenticator app or at least one passkey */
   twoFactorEnabled?: boolean;
@@ -871,4 +886,185 @@ export interface ReportHistoryEntry {
   oldDisplay?: string;
   newDisplay?: string;
   createdAt: string;
+}
+
+// Dashboard
+
+export const DASHBOARD_RANGES = [7, 30, 90] as const;
+export type DashboardRange = (typeof DASHBOARD_RANGES)[number];
+
+export interface DashboardKpi {
+  value: number | null;
+  /** The same measure for the period before, for the trend badge */
+  previous: number | null;
+  /** One value per day for the last 14 days, oldest first */
+  series: (number | null)[];
+}
+
+export interface DashboardDayCount {
+  /** Calendar day in the requested time zone, YYYY-MM-DD */
+  date: string;
+  created: number;
+  resolved: number;
+}
+
+export type AttentionReason = 'reopened' | 'unassigned' | 'stale';
+
+export interface DashboardAttentionItem {
+  id: string;
+  title: string;
+  projectName: string;
+  status: ReportStatus;
+  priority: ReportPriority;
+  assignee?: ReportAssignee;
+  reason: AttentionReason;
+  /** When the reason started: the reopen, the creation, or the last update */
+  since: string;
+}
+
+export interface DashboardActivityItem extends ReportHistoryEntry {
+  reportTitle: string;
+}
+
+export interface DashboardOverview {
+  kpis: {
+    backlog: DashboardKpi;
+    created: DashboardKpi;
+    resolved: DashboardKpi;
+    resolveHours: DashboardKpi;
+  };
+  intake: DashboardDayCount[];
+  backlogByPriority: Record<ReportPriority, number>;
+  needsAttention: DashboardAttentionItem[];
+  /** All reports needing attention; the list above shows only the most urgent */
+  needsAttentionTotal: number;
+  activity: DashboardActivityItem[];
+}
+
+export interface ResolveTimeWeek {
+  weekStart: string;
+  mine: number | null;
+  team: number | null;
+}
+
+export interface ResolveTimeByPriority {
+  priority: ReportPriority;
+  mine: number | null;
+  team: number | null;
+}
+
+/** Hours from a report being assigned to someone until that person resolves it */
+export interface ResolveTimeSummary {
+  medianHours: number | null;
+  previousMedianHours: number | null;
+  teamMedianHours: number | null;
+  bestHours: number | null;
+  resolvedLast30Days: number;
+  weekly: ResolveTimeWeek[];
+  byPriority: ResolveTimeByPriority[];
+}
+
+export const ACHIEVEMENT_IDS = [
+  'hatchling',
+  'cocoon',
+  'butterfly',
+  'firefly',
+  'dragonfly',
+  'ladybug',
+  'web_weaver',
+  'amber',
+] as const;
+export type AchievementId = (typeof ACHIEVEMENT_IDS)[number];
+
+/** XP needed to reach each level; level 1 starts at index 0 */
+export const LEVEL_XP = [0, 100, 250, 500, 1000, 1500, 2500, 4000, 6000, 10000] as const;
+
+/** Experience points for resolving a report, by its priority */
+export const XP_BY_PRIORITY: Record<ReportPriority, number> = {
+  highest: 50,
+  high: 30,
+  medium: 20,
+  low: 10,
+  lowest: 5,
+};
+
+/** Experience points for each message sent to a reporter */
+export const XP_PER_REPORTER_MESSAGE = 5;
+
+/** A report resolved this soon after it was assigned (or arrived, if never assigned) earns its XP twice */
+export const EARLY_RESOLVE_MINUTES = 60;
+
+export interface AchievementProgress {
+  id: AchievementId;
+  current: number;
+  target: number;
+  unlockedAt?: string;
+}
+
+export interface GamificationProgress {
+  xp: number;
+  level: number;
+  levelStartXp: number;
+  /** Null at the top level */
+  nextLevelXp: number | null;
+  achievements: AchievementProgress[];
+}
+
+export interface DashboardPersonal {
+  assignedOpen: number;
+  oldestAssignedAt: string | null;
+  resolvedThisMonth: number;
+  resolvedLastMonth: number;
+  resolveTime: ResolveTimeSummary;
+  /** Null when gamification is off for this user */
+  gamification: GamificationProgress | null;
+}
+
+export interface GamificationUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  role: UserRole;
+  enabled: boolean;
+  optedOut: boolean;
+}
+
+export interface GamificationSettings {
+  enabled: boolean;
+  /** Whether users created from now on start with gamification on */
+  newUsersDefault: boolean;
+  /** Whether users may turn gamification off for themselves */
+  allowOptOut: boolean;
+  /** Whether the Team tab ranks people by XP; when off it lists them alphabetically */
+  showRanking: boolean;
+  users: GamificationUser[];
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  level: number;
+  xp: number;
+  /** XP earned within the requested period; equals `xp` for all time */
+  periodXp: number;
+  achievements: AchievementProgress[];
+}
+
+export const TEAM_PERIODS = ['30d', '90d', 'all'] as const;
+export type TeamPeriod = (typeof TEAM_PERIODS)[number];
+
+export interface GamificationTeam {
+  ranking: boolean;
+  period: TeamPeriod;
+  members: TeamMember[];
+}
+
+/** What the signed-in user may do with their own gamification switch */
+export interface GamificationSelf {
+  /** The workspace and an admin have it on for this user */
+  available: boolean;
+  canOptOut: boolean;
+  optedOut: boolean;
 }

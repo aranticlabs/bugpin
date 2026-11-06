@@ -3,6 +3,7 @@ const projectLicenseService = getEEProjectLicenseService()!;
 import { Result } from '../../src/server/utils/result';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { usersService } from '../../src/server/services/users.service';
+import { gamificationService } from '../../src/server/services/gamification.service';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
@@ -25,6 +26,7 @@ const baseUser: User = {
 };
 
 const originalUsersRepo = { ...usersRepo };
+const originalGamificationService = { ...gamificationService };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalHash = Bun.password.hash;
@@ -41,6 +43,7 @@ let usersByRole: User[] = [baseUser];
 let projects: Project[] = [];
 
 beforeEach(() => {
+  gamificationService.applyNewUserDefault = async () => {};
   passwordPolicyService.getPolicy = async () => DEFAULT_PASSWORD_POLICY;
   twoFactorRepo.listUserIdsWithTwoFactor = async () => new Set(['usr_1']);
   projectLicenseService.checkAccess = () => Result.ok(undefined);
@@ -91,6 +94,7 @@ afterEach(() => {
   Object.assign(passwordPolicyService, originalPasswordPolicyService);
   Object.assign(twoFactorRepo, originalTwoFactorRepo);
   Object.assign(usersRepo, originalUsersRepo);
+  Object.assign(gamificationService, originalGamificationService);
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Bun.password.hash = originalHash;

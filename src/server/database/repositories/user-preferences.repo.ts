@@ -25,4 +25,14 @@ export const userPreferencesRepo: IUserPreferencesRepository = {
       [userId, JSON.stringify(preferences), new Date().toISOString()]
     );
   },
+
+  async listGamificationOptOuts() {
+    const rows = getDb()
+      .query(
+        `SELECT user_id FROM user_preferences
+         WHERE json_valid(preferences) AND json_extract(preferences, '$.gamificationOptedOut') = 1`
+      )
+      .all() as { user_id: string }[];
+    return new Set(rows.map((row) => row.user_id));
+  },
 };

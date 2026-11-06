@@ -1,170 +1,198 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { useAuth } from '../../contexts/AuthContext';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import {
-  ReportPriorityLabel,
-  ReportStatusIcon,
-  ReportStatusLabel,
-} from '../../components/report/ReportStatusPriority';
+  useDashboardOverview,
+  useDashboardPersonal,
+  useDashboardReports,
+} from '../../hooks/useDashboard';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import { Spinner } from '../../components/ui/spinner';
-import { reportOriginState } from '../../lib/reportOrigin';
-import { ClipboardList } from 'lucide-react';
+import { TooltipProvider } from '../../components/ui/tooltip';
+import {
+  ActivityCard,
+  BacklogPriorityCard,
+  IntakeChartCard,
+  KpiRow,
+} from '../../components/dashboard/OverviewCards';
+import { ReportListsCard } from '../../components/dashboard/ReportListsCard';
+import { ImpactStrip, ResolveTimeCard } from '../../components/dashboard/PersonalCards';
+import { UnlockDialog, unlockedAchievements } from '../../components/dashboard/achievements';
+import { GREETINGS, dayPartFor } from '../../lib/dashboard';
+import { formatClockTime } from '../../lib/clock';
+import { useCurrentMinute } from '../../hooks/useCurrentMinute';
+import {
+  ACHIEVEMENT_IDS,
+  DASHBOARD_RANGES,
+  type AchievementId,
+  type DashboardRange,
+  type GamificationProgress,
+  type ProjectSummary,
+} from '@shared/types';
 
-interface DashboardStats {
-  total: number;
-  byStatus: Record<string, number>;
-  byPriority: Record<string, number>;
+const ALL_PROJECTS = 'all';
+
+/**
+ * Announces each achievement once. The first time preferences are seen, everything already
+ * unlocked is recorded silently so existing users are not shown a backlog of dialogs.
+ */
+function useAchievementAnnouncement(game: GamificationProgress | null | undefined) {
+  const { preferences, isLoaded, updatePreferences } = useUserPreferences();
+  const [announcing, setAnnouncing] = useState<AchievementId | null>(null);
+  const stored = preferences?.seenAchievements;
+  // Ids of achievements that no longer exist are dropped, or saving the list would be rejected
+  const seen = useMemo(
+    () => stored?.filter((id) => (ACHIEVEMENT_IDS as readonly string[]).includes(id)),
+    [stored]
+  );
+  const save = useRef(updatePreferences);
+  save.current = updatePreferences;
+
+  useEffect(() => {
+    if (!game || !isLoaded) return;
+    const unlocked = unlockedAchievements(game.achievements).map((item) => item.id);
+    if (seen === undefined) {
+      save.current({ seenAchievements: unlocked });
+      return;
+    }
+    const fresh = unlocked.filter((id) => !seen.includes(id));
+    if (fresh.length === 0) return;
+    setAnnouncing(fresh[0]);
+    save.current({ seenAchievements: [...seen, ...fresh] });
+  }, [game, isLoaded, seen]);
+
+  return { announcing, dismiss: () => setAnnouncing(null) };
 }
 
 export function Dashboard() {
-  const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
+  const { user } = useAuth();
+  const now = useCurrentMinute();
+  const [projectId, setProjectId] = useState<string>(ALL_PROJECTS);
+  const [range, setRange] = useState<DashboardRange>(30);
+  const canEdit = user?.role === 'admin' || user?.role === 'editor';
+  const selectedProject = projectId === ALL_PROJECTS ? undefined : projectId;
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['project-summaries'],
     queryFn: async () => {
-      const response = await api.get('/reports/stats/overview');
-      return response.data.stats as DashboardStats;
+      const response = await api.get('/projects/summaries');
+      return response.data.projects as ProjectSummary[];
     },
-    refetchInterval: 10000,
-    refetchIntervalInBackground: false,
+  });
+  const overview = useDashboardOverview(selectedProject, range);
+  const personal = useDashboardPersonal(canEdit);
+  const assigned = useDashboardReports({
+    projectId: selectedProject,
+    assignedToMe: true,
+    enabled: canEdit,
+  });
+  const recent = useDashboardReports({ projectId: selectedProject });
+  const game = personal.data?.gamification;
+  const { announcing, dismiss } = useAchievementAnnouncement(game);
+
+  if (!user) return null;
+
+  const firstName = user.name.split(' ')[0] || user.name;
+  const today = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
   });
 
-  const { data: recentReports, isLoading: reportsLoading } = useQuery({
-    queryKey: ['recent-reports'],
-    queryFn: async () => {
-      const response = await api.get('/reports', { params: { limit: 5 } });
-      return response.data.data;
-    },
-    refetchInterval: 10000,
-    refetchIntervalInBackground: false,
-  });
-
-  if (statsLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner size="lg" className="text-primary" />
-      </div>
-    );
-  }
-
-  const stats = statsData || {
-    total: 0,
-    byStatus: { open: 0, in_progress: 0, resolved: 0, closed: 0 },
-    byPriority: { lowest: 0, low: 0, medium: 0, high: 0, highest: 0 },
-  };
-
-  const openReports = (stats.byStatus.open || 0) + (stats.byStatus.in_progress || 0);
-  const resolvedReports = (stats.byStatus.resolved || 0) + (stats.byStatus.closed || 0);
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your bug reports</p>
-      </div>
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Reports"
-          value={stats.total}
-          icon={<ClipboardList className="size-5" />}
-          iconClassName="bg-primary/10 text-primary"
-        />
-        <StatCard
-          title="Open"
-          value={openReports}
-          icon={<ReportStatusIcon status="open" className="size-5" />}
-          iconClassName="bg-sky-500/10"
-        />
-        <StatCard
-          title="In Progress"
-          value={stats.byStatus.in_progress || 0}
-          icon={<ReportStatusIcon status="in_progress" className="size-5" />}
-          iconClassName="bg-indigo-500/10"
-        />
-        <StatCard
-          title="Resolved"
-          value={resolvedReports}
-          icon={<ReportStatusIcon status="resolved" className="size-5" />}
-          iconClassName="bg-emerald-500/10"
-        />
-      </div>
-
-      {/* Recent reports */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b py-4">
-          <CardTitle className="text-lg font-medium">Recent Reports</CardTitle>
-          <Link to="/reports" className="text-sm text-primary hover:underline">
-            View all
-          </Link>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y">
-            {reportsLoading ? (
-              <div className="p-6 text-center text-muted-foreground">Loading...</div>
-            ) : recentReports?.length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground">No reports yet</div>
-            ) : (
-              recentReports?.map((report: ReportItem) => (
-                <Link
-                  key={report.id}
-                  to={`/reports/${report.id}`}
-                  state={reportOriginState({ path: '/', label: 'Dashboard' })}
-                  className="block px-6 py-4 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{report.title}</p>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {report.metadata?.url}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4 sm:ml-4 sm:shrink-0">
-                      <ReportStatusLabel status={report.status} />
-                      <ReportPriorityLabel priority={report.priority} />
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-interface ReportItem {
-  id: string;
-  title: string;
-  status: string;
-  priority: string;
-  metadata?: { url?: string };
-}
-
-// Stat Card Component
-function StatCard({
-  title,
-  value,
-  icon,
-  iconClassName,
-}: {
-  title: string;
-  value: number | string;
-  icon: React.ReactNode;
-  iconClassName: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-lg ${iconClassName}`}>{icon}</div>
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {GREETINGS[dayPartFor(now.getHours())]}, {firstName}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {today} ·{' '}
+              <time dateTime={now.toISOString()} className="tabular-nums">
+                {formatClockTime(now)}
+              </time>
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={projectId} onValueChange={setProjectId}>
+              <SelectTrigger className="w-44" aria-label="Filter by project">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(range)}
+              onValueChange={(value) => setRange(Number(value) as DashboardRange)}
+            >
+              <SelectTrigger className="w-36" aria-label="Time range">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DASHBOARD_RANGES.map((days) => (
+                  <SelectItem key={days} value={String(days)}>
+                    Last {days} days
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      </CardContent>
-    </Card>
+
+        {!overview.data ? (
+          <div className="flex h-64 items-center justify-center">
+            <Spinner size="lg" className="text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {canEdit && personal.data && <ImpactStrip personal={personal.data} />}
+            <KpiRow kpis={overview.data.kpis} />
+            <div className="grid gap-4 xl:grid-cols-3">
+              <IntakeChartCard
+                intake={overview.data.intake}
+                range={range}
+                className="xl:col-span-2"
+              />
+              <BacklogPriorityCard backlog={overview.data.backlogByPriority} />
+            </div>
+            {canEdit && personal.data ? (
+              <div className="grid gap-4 xl:grid-cols-3">
+                <ResolveTimeCard summary={personal.data.resolveTime} className="xl:col-span-2" />
+                <ActivityCard activity={overview.data.activity} fillHeight />
+              </div>
+            ) : (
+              <ActivityCard activity={overview.data.activity} />
+            )}
+            <ReportListsCard
+              needsAttention={overview.data.needsAttention}
+              needsAttentionTotal={overview.data.needsAttentionTotal}
+              assigned={assigned.data}
+              recent={recent.data}
+              projectId={selectedProject}
+              canEdit={canEdit}
+              showXp={!!game}
+              currentUserId={user.id}
+            />
+          </div>
+        )}
+
+        <UnlockDialog achievementId={announcing} onClose={dismiss} />
+      </div>
+    </TooltipProvider>
   );
 }

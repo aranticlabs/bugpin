@@ -3,6 +3,8 @@ import { z, ZodSchema } from 'zod';
 import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
 import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import {
+  ACHIEVEMENT_IDS,
+  DASHBOARD_RANGES,
   EXPORT_ACTIONS,
   EXPORT_FORMATS,
   SIDEBAR_WIDTH_MAX,
@@ -11,6 +13,7 @@ import {
   REPORT_STATUSES,
   REPORT_VIEWS,
   SUPPORTED_LOCALES,
+  TEAM_PERIODS,
   TABLE_PAGE_SIZES,
   THEME_PREFERENCES,
   type LocaleCode,
@@ -553,6 +556,7 @@ export const schemas = {
       editorLocale: z.enum(localeEnumValues).optional(),
       dismissedUpdateVersion: z.string().max(100).nullable().optional(),
       dismissedWidgetWarningId: z.string().max(200).nullable().optional(),
+      seenAchievements: z.array(z.enum(ACHIEVEMENT_IDS)).max(ACHIEVEMENT_IDS.length).optional(),
     })
     .strict(),
 
@@ -791,6 +795,36 @@ export const schemas = {
   }),
 
   apiAccess: z.object({ enabled: z.boolean() }),
+
+  dashboardOverview: z.object({
+    projectId: z.string().min(1).max(100).optional(),
+    range: z
+      .enum(DASHBOARD_RANGES.map(String) as [string, ...string[]])
+      .optional()
+      .default('30')
+      .transform(Number),
+    timeZone: z.string().max(100).optional(),
+  }),
+
+  dashboardTeam: z.object({
+    period: z.enum(TEAM_PERIODS).optional().default('30d'),
+  }),
+
+  dashboardPersonal: z.object({
+    timeZone: z.string().max(100).optional(),
+  }),
+
+  updateGamification: z
+    .object({
+      enabled: z.boolean().optional(),
+      newUsersDefault: z.boolean().optional(),
+      allowOptOut: z.boolean().optional(),
+      showRanking: z.boolean().optional(),
+      users: z.record(z.string().min(1).max(100), z.boolean()).optional(),
+    })
+    .strict(),
+
+  gamificationOptOut: z.object({ optedOut: z.boolean() }).strict(),
 
   // Strength rules come from the password policy service
   temporaryPassword: z.object({ password: z.string().min(1, 'Password is required').max(200) }),

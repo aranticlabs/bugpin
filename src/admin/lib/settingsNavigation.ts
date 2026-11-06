@@ -15,6 +15,7 @@ import {
   Palette,
   ShieldCheck,
   SlidersHorizontal,
+  Trophy,
   User,
   UsersRound,
 } from 'lucide-react';
@@ -85,6 +86,12 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         description: 'Configure outgoing email and notification templates',
         path: '/settings/email',
         icon: Mail,
+      },
+      {
+        title: 'Gamification',
+        description: 'Levels and achievements on the dashboard',
+        path: '/settings/gamification',
+        icon: Trophy,
       },
       {
         title: 'Storage',

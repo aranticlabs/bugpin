@@ -1,18 +1,27 @@
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AccountCard } from './AccountCard';
+import { HuntersLogTab } from './HuntersLogTab';
 import { SecurityTab } from './SecurityTab';
+import { useGamificationSelf } from '../../hooks/useDashboard';
 
 const TAB_PARAM = 'tab';
-const SECURITY_TAB = 'security';
 const ACCOUNT_TAB = 'account';
+const SECURITY_TAB = 'security';
+const HUNTERS_LOG_TAB = 'hunters-log';
 
 export function ProfileTabs() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get(TAB_PARAM) === SECURITY_TAB ? SECURITY_TAB : ACCOUNT_TAB;
+  const { data: gamification } = useGamificationSelf();
+  const showHuntersLog = gamification?.available === true;
+  const requested = searchParams.get(TAB_PARAM);
+  const tab =
+    requested === SECURITY_TAB || (requested === HUNTERS_LOG_TAB && showHuntersLog)
+      ? requested
+      : ACCOUNT_TAB;
 
   const changeTab = (next: string) => {
-    setSearchParams(next === SECURITY_TAB ? { [TAB_PARAM]: SECURITY_TAB } : {}, { replace: true });
+    setSearchParams(next === ACCOUNT_TAB ? {} : { [TAB_PARAM]: next }, { replace: true });
   };
 
   return (
@@ -20,6 +29,7 @@ export function ProfileTabs() {
       <TabsList>
         <TabsTrigger value={ACCOUNT_TAB}>Account</TabsTrigger>
         <TabsTrigger value={SECURITY_TAB}>Security</TabsTrigger>
+        {showHuntersLog && <TabsTrigger value={HUNTERS_LOG_TAB}>Hunter&apos;s log</TabsTrigger>}
       </TabsList>
       <TabsContent value={ACCOUNT_TAB} className="mt-0 space-y-6">
         <AccountCard />
@@ -27,6 +37,11 @@ export function ProfileTabs() {
       <TabsContent value={SECURITY_TAB} className="mt-0 space-y-6">
         <SecurityTab />
       </TabsContent>
+      {showHuntersLog && (
+        <TabsContent value={HUNTERS_LOG_TAB} className="mt-0">
+          <HuntersLogTab />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

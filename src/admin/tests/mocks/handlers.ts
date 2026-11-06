@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { UNASSIGNED_FILTER } from '@shared/types';
+import type { DashboardOverview, DashboardPersonal, GamificationSettings } from '@shared/types';
 
 // Mock data
 export const mockUsers = {
@@ -183,6 +184,104 @@ export const mockBrandingConfig = {
     darkButtonHoverColor: '#10b981',
     darkTextHoverColor: '#0f172a',
   },
+};
+
+const mockKpi = (value: number, previous: number) => ({
+  value,
+  previous,
+  series: Array.from({ length: 14 }, (_, index) => value - 13 + index),
+});
+
+export const mockDashboardOverview: DashboardOverview = {
+  kpis: {
+    backlog: mockKpi(12, 15),
+    created: mockKpi(9, 6),
+    resolved: mockKpi(7, 5),
+    resolveHours: mockKpi(30, 40),
+  },
+  intake: Array.from({ length: 30 }, (_, index) => ({
+    date: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    created: index % 4,
+    resolved: index % 3,
+  })),
+  backlogByPriority: { highest: 2, high: 3, medium: 4, low: 2, lowest: 1 },
+  needsAttention: [
+    {
+      id: 'report-attention',
+      title: 'Checkout fails on submit',
+      projectName: 'Test Project',
+      status: 'open',
+      priority: 'highest',
+      reason: 'unassigned',
+      since: new Date().toISOString(),
+    },
+  ],
+  needsAttentionTotal: 1,
+  activity: [
+    {
+      id: 'history-1',
+      reportId: 'report-1',
+      reportTitle: 'Login button broken',
+      userId: 'user-2',
+      userName: 'Editor User',
+      action: 'status_changed',
+      oldValue: 'open',
+      newValue: 'resolved',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+};
+
+export const mockDashboardPersonal: DashboardPersonal = {
+  assignedOpen: 3,
+  oldestAssignedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+  resolvedThisMonth: 8,
+  resolvedLastMonth: 5,
+  resolveTime: {
+    medianHours: 26,
+    previousMedianHours: 31,
+    teamMedianHours: 30,
+    bestHours: 4,
+    resolvedLast30Days: 8,
+    weekly: Array.from({ length: 12 }, (_, index) => ({
+      weekStart: new Date(Date.now() - (12 - index) * 7 * 86_400_000).toISOString(),
+      mine: 40 - index,
+      team: 35,
+    })),
+    byPriority: [
+      { priority: 'highest', mine: 4, team: 6 },
+      { priority: 'high', mine: 11, team: 14 },
+      { priority: 'medium', mine: 26, team: 30 },
+      { priority: 'low', mine: null, team: 45 },
+      { priority: 'lowest', mine: null, team: null },
+    ],
+  },
+  gamification: null,
+};
+
+const mockGamificationSettings: GamificationSettings = {
+  enabled: false,
+  newUsersDefault: true,
+  allowOptOut: true,
+  showRanking: true,
+  users: [
+    {
+      id: 'user-1',
+      name: 'Admin User',
+      email: 'admin@example.com',
+      role: 'admin',
+      enabled: true,
+      optedOut: false,
+    },
+    {
+      id: 'user-3',
+      name: 'Viewer User',
+      email: 'viewer@example.com',
+      role: 'viewer',
+      enabled: true,
+      optedOut: false,
+    },
+  ],
 };
 
 export const mockStats = {
@@ -563,6 +662,29 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       stats: mockStats,
+    });
+  }),
+
+  http.get('/api/dashboard/overview', () =>
+    HttpResponse.json({ success: true, overview: mockDashboardOverview })
+  ),
+  http.get('/api/dashboard/me', () =>
+    HttpResponse.json({ success: true, personal: mockDashboardPersonal })
+  ),
+  http.get('/api/gamification/me', () =>
+    HttpResponse.json({
+      success: true,
+      gamification: { available: false, canOptOut: false, optedOut: false },
+    })
+  ),
+  http.get('/api/gamification', () =>
+    HttpResponse.json({ success: true, gamification: mockGamificationSettings })
+  ),
+  http.put('/api/gamification', async ({ request }) => {
+    const body = (await request.json()) as { enabled?: boolean };
+    return HttpResponse.json({
+      success: true,
+      gamification: { ...mockGamificationSettings, enabled: body.enabled ?? false },
     });
   }),
 
