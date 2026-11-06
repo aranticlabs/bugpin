@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/geist';
 
 /* Dark mode custom variant for Tailwind v4 */
 @custom-variant dark (&:is(.dark *));
@@ -133,6 +134,10 @@
 
 /* Map CSS variables to Tailwind theme */
 @theme inline {
+  --font-sans:
+    'Geist Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+
   /* BugPin primary color palette */
   --color-bugpin-primary-50: var(--bugpin-primary-50);
   --color-bugpin-primary-100: var(--bugpin-primary-100);
