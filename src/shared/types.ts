@@ -36,13 +36,15 @@ export const UNASSIGNED_FILTER = '__unassigned__';
 /** URL/query value for filtering reports assigned to the signed-in user */
 export const ASSIGNED_TO_ME_FILTER = '__me__';
 
-/** Statuses of reports that still need work */
+/** Report statuses in workflow order */
 export const REPORT_STATUSES = [
   'open',
   'in_progress',
   'resolved',
   'closed',
 ] as const satisfies readonly ReportStatus[];
+
+/** Statuses of reports that still need work */
 export const ACTIVE_REPORT_STATUSES: ReportStatus[] = ['open', 'in_progress'];
 
 /** Report priorities from most to least urgent */
@@ -559,6 +561,27 @@ export interface ReportFilter {
   limit?: number;
   sortBy?: ReportSortKey;
   sortOrder?: 'asc' | 'desc';
+  /** Cursor from a previous page's `nextCursor`; takes the place of `page` */
+  after?: string;
+}
+
+/** The reports a board shows, which limits the cards a drop on a sorted board reorders */
+export type ReportBoardScope = Pick<
+  ReportFilter,
+  'projectId' | 'status' | 'priority' | 'assignedTo' | 'search'
+>;
+
+/** Where a report is dropped on the board */
+export interface ReportBoardMove {
+  status: ReportStatus;
+  previousId?: string | null;
+  nextId?: string | null;
+  /** Saves this sort as the hand-made order of the scoped reports before placing the report */
+  adoptSort?: {
+    sortBy: ReportSortKey;
+    sortOrder: 'asc' | 'desc';
+    scope?: ReportBoardScope;
+  };
 }
 
 export interface PaginatedResponse<T> {
@@ -567,6 +590,8 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   totalPages: number;
+  /** Cursor for the page after this one, when the endpoint supports cursor paging */
+  nextCursor?: string | null;
 }
 
 // Notification default settings

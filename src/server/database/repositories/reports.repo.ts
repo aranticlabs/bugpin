@@ -1,9 +1,10 @@
-import { getDb } from '../database.js';
+import { getDb, transaction } from '../database.js';
 import { generateReportId } from '../../utils/id.js';
 import type { CreateReportData } from './interfaces.js';
 import type {
   Report,
   ReportAssignee,
+  ReportBoardScope,
   ReportFilter,
   ReportStatus,
   ReportPriority,
@@ -14,27 +15,201 @@ import type {
 import { normalizeLocale } from '../../utils/locale.js';
 import { UNASSIGNED_FILTER, type ReportSortKey } from '@shared/types';
 
+interface SortTerm {
+  expression: string;
+  direction: 'ASC' | 'DESC';
+  caseInsensitive?: boolean;
+}
+
+// Parentheses keep comparisons such as `(name IS NULL) > ?` from parsing as `name IS (NULL > ?)`.
+function sortExpression(term: SortTerm): string {
+  return term.caseInsensitive ? `(${term.expression}) COLLATE NOCASE` : `(${term.expression})`;
+}
+
 // Status follows the workflow, and priority ranks lowest to highest, so descending puts
-// the most urgent first. Missing projects and unassigned reports always sort last.
-function reportOrderBy(key: ReportSortKey, direction: 'ASC' | 'DESC'): string {
-  switch (key) {
-    case 'createdAt':
-      return `reports.created_at ${direction}`;
-    case 'updatedAt':
-      return `reports.updated_at ${direction}`;
-    case 'title':
-      return `reports.title COLLATE NOCASE ${direction}`;
-    case 'project':
-      return `projects.name IS NULL, projects.name COLLATE NOCASE ${direction}`;
-    case 'status':
-      return `CASE reports.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END ${direction}`;
-    case 'priority':
-      return `CASE reports.priority WHEN 'lowest' THEN 0 WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 ELSE 4 END ${direction}`;
-    case 'assignee':
-      return `users.name IS NULL, users.name COLLATE NOCASE ${direction}`;
-    case 'position':
-      return `reports.board_position ${direction}`;
+// the most urgent first. Missing projects and unassigned reports always sort last. Every sort
+// ends with the same tie-breakers, so the order is total and cursors can resume it.
+function reportSortTerms(key: ReportSortKey, direction: 'ASC' | 'DESC'): SortTerm[] {
+  const primary: SortTerm[] = (() => {
+    switch (key) {
+      case 'createdAt':
+        return [{ expression: 'reports.created_at', direction }];
+      case 'updatedAt':
+        return [{ expression: 'reports.updated_at', direction }];
+      case 'title':
+        return [{ expression: 'reports.title', direction, caseInsensitive: true }];
+      case 'project':
+        return [
+          { expression: 'projects.name IS NULL', direction: 'ASC' },
+          { expression: "COALESCE(projects.name, '')", direction, caseInsensitive: true },
+        ];
+      case 'status':
+        return [
+          {
+            expression: `CASE reports.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END`,
+            direction,
+          },
+        ];
+      case 'priority':
+        return [
+          {
+            expression: `CASE reports.priority WHEN 'lowest' THEN 0 WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 ELSE 4 END`,
+            direction,
+          },
+        ];
+      case 'assignee':
+        return [
+          { expression: 'users.name IS NULL', direction: 'ASC' },
+          { expression: "COALESCE(users.name, '')", direction, caseInsensitive: true },
+        ];
+      case 'position':
+        return [{ expression: 'reports.board_position', direction }];
+    }
+  })();
+  return [
+    ...primary,
+    { expression: 'reports.created_at', direction: 'DESC' },
+    { expression: 'reports.id', direction: 'ASC' },
+  ];
+}
+
+function orderByClause(terms: SortTerm[]): string {
+  return terms.map((term) => `${sortExpression(term)} ${term.direction}`).join(', ');
+}
+
+type SortValue = string | number;
+
+// Rows after a cursor: the first term that differs decides, as in a lexicographic comparison.
+function afterCursorCondition(
+  terms: SortTerm[],
+  values: SortValue[]
+): { sql: string; params: SortValue[] } {
+  const clauses: string[] = [];
+  const params: SortValue[] = [];
+  terms.forEach((term, index) => {
+    const parts = terms.slice(0, index).map((earlier) => `${sortExpression(earlier)} = ?`);
+    parts.push(`${sortExpression(term)} ${term.direction === 'ASC' ? '>' : '<'} ?`);
+    clauses.push(`(${parts.join(' AND ')})`);
+    params.push(...values.slice(0, index + 1));
+  });
+  return { sql: `(${clauses.join(' OR ')})`, params };
+}
+
+interface ReportCursor {
+  sortBy: ReportSortKey;
+  sortOrder: 'asc' | 'desc';
+  values: SortValue[];
+}
+
+/** Thrown when a list cursor is malformed or belongs to a different sort */
+export class InvalidReportCursorError extends Error {
+  constructor() {
+    super('Invalid cursor');
+    this.name = 'InvalidReportCursorError';
   }
+}
+
+function encodeCursor(cursor: ReportCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+function decodeCursor(
+  value: string,
+  sortBy: ReportSortKey,
+  sortOrder: 'asc' | 'desc',
+  termCount: number
+): SortValue[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+  } catch {
+    throw new InvalidReportCursorError();
+  }
+  if (typeof parsed !== 'object' || parsed === null) throw new InvalidReportCursorError();
+  const cursor = parsed as Partial<ReportCursor>;
+  const values = cursor.values;
+  if (
+    cursor.sortBy !== sortBy ||
+    cursor.sortOrder !== sortOrder ||
+    !Array.isArray(values) ||
+    values.length !== termCount ||
+    !values.every((item) => typeof item === 'string' || typeof item === 'number')
+  ) {
+    throw new InvalidReportCursorError();
+  }
+  return values;
+}
+
+type ReportConditionFilter = Pick<
+  ReportFilter,
+  | 'projectId'
+  | 'source'
+  | 'status'
+  | 'priority'
+  | 'assignedTo'
+  | 'search'
+  | 'createdAfter'
+  | 'createdBefore'
+>;
+
+/** WHERE conditions and the full-text join for a report filter */
+function reportConditions(filter: ReportConditionFilter): {
+  join: string;
+  conditions: string[];
+  params: SortValue[];
+} {
+  const conditions: string[] = [];
+  const params: SortValue[] = [];
+
+  if (filter.projectId) {
+    conditions.push('reports.project_id = ?');
+    params.push(filter.projectId);
+  }
+
+  if (filter.source) {
+    conditions.push('reports.source = ?');
+    params.push(filter.source);
+  }
+
+  if (filter.status && filter.status.length > 0) {
+    conditions.push(`reports.status IN (${filter.status.map(() => '?').join(', ')})`);
+    params.push(...filter.status);
+  }
+
+  if (filter.priority && filter.priority.length > 0) {
+    conditions.push(`reports.priority IN (${filter.priority.map(() => '?').join(', ')})`);
+    params.push(...filter.priority);
+  }
+
+  if (filter.assignedTo === UNASSIGNED_FILTER) {
+    conditions.push('reports.assigned_to IS NULL');
+  } else if (filter.assignedTo) {
+    conditions.push('reports.assigned_to = ?');
+    params.push(filter.assignedTo);
+  }
+
+  if (filter.createdAfter) {
+    conditions.push('reports.created_at >= ?');
+    params.push(filter.createdAfter);
+  }
+
+  if (filter.createdBefore) {
+    conditions.push('reports.created_at <= ?');
+    params.push(filter.createdBefore);
+  }
+
+  let join = '';
+  if (filter.search) {
+    join = 'INNER JOIN reports_fts ON reports.rowid = reports_fts.rowid';
+    conditions.push('reports_fts MATCH ?');
+    params.push(filter.search);
+  }
+
+  return { join, conditions, params };
+}
+
+function whereClause(conditions: string[]): string {
+  return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 }
 
 // Reports that were not placed by hand go to the top of their board column.
@@ -136,6 +311,7 @@ export const reportsRepo = {
     const db = getDb();
     const id = generateReportId();
     const now = new Date().toISOString();
+    const status: ReportStatus = 'open';
 
     db.run(
       `INSERT INTO reports (
@@ -149,7 +325,7 @@ export const reportsRepo = {
         data.source ?? 'widget',
         data.title,
         data.description ?? null,
-        'open',
+        status,
         data.priority ?? 'medium',
         data.annotations ? JSON.stringify(data.annotations) : null,
         JSON.stringify(data.metadata),
@@ -160,7 +336,7 @@ export const reportsRepo = {
         data.submissionId ?? null,
         now,
         now,
-        'open',
+        status,
       ]
     );
 
@@ -200,99 +376,77 @@ export const reportsRepo = {
   },
 
   /**
-   * Find reports with filtering and pagination
+   * Find reports with filtering and pagination. A cursor (`after`) resumes after the last report
+   * of an earlier page, so pages stay consistent while reports move between requests.
    */
-  async find(filter: ReportFilter): Promise<{ data: Report[]; total: number }> {
+  async find(
+    filter: ReportFilter
+  ): Promise<{ data: Report[]; total: number; nextCursor: string | null }> {
     const db = getDb();
-    const params: (string | number)[] = [];
-    const conditions: string[] = [];
+    const { join, conditions, params } = reportConditions(filter);
 
-    // Build WHERE clause
-    if (filter.projectId) {
-      conditions.push('project_id = ?');
-      params.push(filter.projectId);
-    }
-
-    if (filter.source) {
-      conditions.push('source = ?');
-      params.push(filter.source);
-    }
-
-    if (filter.status && filter.status.length > 0) {
-      const placeholders = filter.status.map(() => '?').join(', ');
-      conditions.push(`status IN (${placeholders})`);
-      params.push(...filter.status);
-    }
-
-    if (filter.priority && filter.priority.length > 0) {
-      const placeholders = filter.priority.map(() => '?').join(', ');
-      conditions.push(`priority IN (${placeholders})`);
-      params.push(...filter.priority);
-    }
-
-    if (filter.assignedTo === UNASSIGNED_FILTER) {
-      conditions.push('assigned_to IS NULL');
-    } else if (filter.assignedTo) {
-      conditions.push('assigned_to = ?');
-      params.push(filter.assignedTo);
-    }
-
-    if (filter.createdAfter) {
-      conditions.push('created_at >= ?');
-      params.push(filter.createdAfter);
-    }
-
-    if (filter.createdBefore) {
-      conditions.push('created_at <= ?');
-      params.push(filter.createdBefore);
-    }
-
-    // Full-text search
-    let searchJoin = '';
-    if (filter.search) {
-      searchJoin = 'INNER JOIN reports_fts ON reports.rowid = reports_fts.rowid';
-      conditions.push('reports_fts MATCH ?');
-      params.push(filter.search);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // Get total count
-    const countQuery = `SELECT COUNT(*) as count FROM reports ${searchJoin} ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as count FROM reports ${join} ${whereClause(conditions)}`;
     const countResult = db.query(countQuery).get(...params) as { count: number };
     const total = countResult.count;
 
-    const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const orderBy = `${reportOrderBy(filter.sortBy ?? 'createdAt', sortOrder)}, reports.created_at DESC, reports.id`;
+    const sortBy = filter.sortBy ?? 'createdAt';
+    const sortOrder = filter.sortOrder === 'asc' ? 'asc' : 'desc';
+    const terms = reportSortTerms(sortBy, sortOrder === 'asc' ? 'ASC' : 'DESC');
 
-    // Pagination
-    const page = Math.max(1, filter.page ?? 1);
+    const pageConditions = [...conditions];
+    const pageParams = [...params];
+    if (filter.after) {
+      const after = afterCursorCondition(
+        terms,
+        decodeCursor(filter.after, sortBy, sortOrder, terms.length)
+      );
+      pageConditions.push(after.sql);
+      pageParams.push(...after.params);
+    }
+
     const limit = Math.min(100, Math.max(1, filter.limit ?? 20));
-    const offset = (page - 1) * limit;
+    const offset = filter.after ? 0 : (Math.max(1, filter.page ?? 1) - 1) * limit;
+    const sortKeyColumns = terms
+      .map((term, index) => `${term.expression} AS sort_key_${index}`)
+      .join(', ');
 
-    // Get data
+    // One extra row tells whether another page follows.
     const dataQuery = `
       SELECT reports.*,
              projects.name as project_name,
              users.id as assignee_id,
              users.name as assignee_name,
              users.email as assignee_email,
-             users.avatar_url as assignee_avatar_url
+             users.avatar_url as assignee_avatar_url,
+             ${sortKeyColumns}
       FROM reports
       LEFT JOIN projects ON reports.project_id = projects.id
       LEFT JOIN users ON users.id = reports.assigned_to
-      ${searchJoin}
-      ${whereClause}
-      ORDER BY ${orderBy}
+      ${join}
+      ${whereClause(pageConditions)}
+      ORDER BY ${orderByClause(terms)}
       LIMIT ? OFFSET ?
     `;
-    const rows = db.query(dataQuery).all(...params, limit, offset) as (ReportRow & {
+    const rows = db.query(dataQuery).all(...pageParams, limit + 1, offset) as (ReportRow & {
       project_name: string;
+      [sortKey: `sort_key_${number}`]: SortValue;
     })[];
 
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    const nextCursor =
+      rows.length > limit && last
+        ? encodeCursor({
+            sortBy,
+            sortOrder,
+            values: terms.map((_, index) => last[`sort_key_${index}`]),
+          })
+        : null;
+
     return {
-      data: rows.map(mapRowToReport),
+      data: pageRows.map(mapRowToReport),
       total,
+      nextCursor,
     };
   },
 
@@ -300,6 +454,12 @@ export const reportsRepo = {
    * Update a report
    */
   async update(id: string, updates: Partial<Report>): Promise<Report | null> {
+    this.applyUpdate(id, updates);
+    return this.findById(id);
+  },
+
+  /** Writes report changes without reading the report back, so it can run inside a transaction */
+  applyUpdate(id: string, updates: Partial<Report>): void {
     const db = getDb();
     const now = new Date().toISOString();
     const sets: string[] = ['updated_at = ?'];
@@ -364,8 +524,6 @@ export const reportsRepo = {
     params.push(id);
 
     db.run(`UPDATE reports SET ${sets.join(', ')} WHERE id = ?`, params);
-
-    return this.findById(id);
   },
 
   /** Board column and position of each given report that exists */
@@ -383,19 +541,21 @@ export const reportsRepo = {
 
   /**
    * Position of the nearest other report in a column after or before a position, or of the
-   * column's first report when no bound is given
+   * column's first or last report
    */
   adjacentBoardPosition(
     status: ReportStatus,
     excludeId: string,
-    bound: { after?: number; before?: number }
+    bound: { after: number } | { before: number } | 'first' | 'last'
   ): number | undefined {
-    const [condition, order, params] =
-      bound.after !== undefined
-        ? ['AND board_position > ?', 'ASC', [bound.after]]
-        : bound.before !== undefined
-          ? ['AND board_position < ?', 'DESC', [bound.before]]
-          : ['', 'ASC', []];
+    const [condition, order, params]: [string, 'ASC' | 'DESC', number[]] =
+      bound === 'first'
+        ? ['', 'ASC', []]
+        : bound === 'last'
+          ? ['', 'DESC', []]
+          : 'after' in bound
+            ? ['AND board_position > ?', 'ASC', [bound.after]]
+            : ['AND board_position < ?', 'DESC', [bound.before]];
     const row = getDb()
       .query(
         `SELECT board_position FROM reports WHERE status = ? AND id != ? ${condition}
@@ -419,30 +579,51 @@ export const reportsRepo = {
          FROM reports
          WHERE status = ?
        ) AS ranked
-       WHERE reports.id = ranked.id`,
+       WHERE reports.id = ranked.id AND reports.board_position <> ranked.position`,
       [status]
     );
   },
 
-  /** Makes the given sort the board's hand-made order in every column */
-  adoptBoardOrder(sortBy: ReportSortKey, sortOrder: 'asc' | 'desc'): void {
-    if (sortBy === 'position') return;
-    const orderBy = reportOrderBy(sortBy, sortOrder === 'asc' ? 'ASC' : 'DESC');
+  /**
+   * Makes the given sort the hand-made order of the reports in a scope. The scoped reports of
+   * each column trade places among the positions they already hold, so reports outside the
+   * scope keep their positions and their order relative to each other.
+   */
+  adoptBoardOrder(sortBy: ReportSortKey, sortOrder: 'asc' | 'desc', scope: ReportBoardScope): void {
+    const { join, conditions, params } = reportConditions(scope);
+    const orderBy = orderByClause(reportSortTerms(sortBy, sortOrder === 'asc' ? 'ASC' : 'DESC'));
     getDb().run(
-      `UPDATE reports
-       SET board_position = ranked.position
-       FROM (
+      `WITH scoped AS (
          SELECT reports.id AS id,
+                reports.status AS status,
+                reports.board_position AS board_position,
+                ROW_NUMBER() OVER (PARTITION BY reports.status ORDER BY ${orderBy}) AS sorted_rank,
                 ROW_NUMBER() OVER (
                   PARTITION BY reports.status
-                  ORDER BY ${orderBy}, reports.created_at DESC, reports.id
-                ) - 1 AS position
+                  ORDER BY reports.board_position, reports.created_at DESC, reports.id
+                ) AS slot_rank
          FROM reports
          LEFT JOIN projects ON reports.project_id = projects.id
          LEFT JOIN users ON users.id = reports.assigned_to
-       ) AS ranked
-       WHERE reports.id = ranked.id`
+         ${join}
+         ${whereClause(conditions)}
+       ),
+       placed AS (
+         SELECT sorted.id AS id, slot.board_position AS position
+         FROM scoped AS sorted
+         JOIN scoped AS slot ON slot.status = sorted.status AND slot.slot_rank = sorted.sorted_rank
+       )
+       UPDATE reports
+       SET board_position = placed.position
+       FROM placed
+       WHERE reports.id = placed.id AND reports.board_position <> placed.position`,
+      params
     );
+  },
+
+  /** Runs synchronous repository writes as one transaction that rolls back when `work` throws */
+  transaction<T>(work: () => T): T {
+    return transaction(work);
   },
 
   /**

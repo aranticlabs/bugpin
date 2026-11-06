@@ -12,6 +12,7 @@ import { useBlocker } from 'react-router-dom';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 import { Button } from './ui/button';
 import { Spinner } from './ui/spinner';
+import { FloatingBar } from './FloatingBar';
 
 /** Rejects or resolves to false when saving failed, which keeps the user on the page. */
 type SaveHandler = () => Promise<unknown>;
@@ -140,30 +141,24 @@ export function UnsavedChangesBar() {
   const saveBar = useContext(SaveBarContext);
   if (!saveBar?.hasChanges) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4">
-      <div
-        role="region"
-        aria-label="Unsaved changes"
-        className="pointer-events-auto flex items-center gap-4 rounded-full border bg-popover py-2 pl-5 pr-2 shadow-lg"
-      >
-        <p className="text-sm font-medium">Unsaved changes</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={saveBar.isSaving} onClick={saveBar.discard}>
-            Discard
-          </Button>
-          <Button size="sm" disabled={saveBar.isSaving} onClick={saveBar.save}>
-            {saveBar.isSaving ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save changes'
-            )}
-          </Button>
-        </div>
+    <FloatingBar label="Unsaved changes">
+      <p className="text-sm font-medium">Unsaved changes</p>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={saveBar.isSaving} onClick={saveBar.discard}>
+          Discard
+        </Button>
+        <Button size="sm" disabled={saveBar.isSaving} onClick={saveBar.save}>
+          {saveBar.isSaving ? (
+            <>
+              <Spinner size="sm" className="mr-2" />
+              Saving...
+            </>
+          ) : (
+            'Save changes'
+          )}
+        </Button>
       </div>
-    </div>
+    </FloatingBar>
   );
 }
 

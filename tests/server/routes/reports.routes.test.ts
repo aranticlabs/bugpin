@@ -98,6 +98,10 @@ beforeEach(() => {
   };
   reportsService.bulkUpdate = async () => Result.ok(2);
   boardMove = undefined;
+  reportsService.moveManyOnBoard = async (ids, target) => {
+    boardMove = { ids, ...target };
+    return Result.ok(ids.map((id) => ({ ...baseReport, id, status: target.status })));
+  };
   reportsService.moveOnBoard = async (id, target) => {
     boardMove = { id, ...target };
     if (!reportResult) {
@@ -144,6 +148,21 @@ describe('reports routes', () => {
       source: 'manual',
       limit: 10,
     });
+  });
+
+  it('passes a list cursor through and returns 400 for one the service rejects', async () => {
+    const res = await createApp().request('http://localhost/reports?sortBy=position&after=abc', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(200);
+    expect(listFilter).toMatchObject({ sortBy: 'position', after: 'abc' });
+
+    reportsService.list = async () => Result.fail('The cursor does not match', 'INVALID_CURSOR');
+    const rejected = await createApp().request('http://localhost/reports?after=abc', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()).error).toBe('INVALID_CURSOR');
   });
 
   it('creates a manual report for admin/editor', async () => {
@@ -278,6 +297,101 @@ describe('reports routes', () => {
     ).toBe(400);
     userRole = 'viewer';
     expect((await request({ status: 'open' })).status).toBe(403);
+    expect(boardMove).toBeUndefined();
+  });
+
+  it('scopes a saved sort to the board filters and resolves the signed-in assignee', async () => {
+    const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
+      method: 'PATCH',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        status: 'open',
+        nextId: 'rpt_2',
+        adoptSort: {
+          sortBy: 'priority',
+          sortOrder: 'desc',
+          scope: {
+            projectId: 'prj_1',
+            status: ['open', 'in_progress'],
+            priority: ['high'],
+            assignedTo: '__me__',
+            search: 'crash',
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(boardMove).toMatchObject({
+      adoptSort: {
+        scope: {
+          projectId: 'prj_1',
+          status: ['open', 'in_progress'],
+          priority: ['high'],
+          assignedTo: 'usr_1',
+          search: 'crash',
+        },
+      },
+    });
+  });
+
+  it('rejects unknown or invalid board scope fields', async () => {
+    const request = (scope: unknown) =>
+      createApp().request('http://localhost/reports/rpt_1/board-position', {
+        method: 'PATCH',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          status: 'open',
+          adoptSort: { sortBy: 'title', sortOrder: 'asc', scope },
+        }),
+      });
+
+    expect((await request({ createdAfter: '2024-01-01' })).status).toBe(400);
+    expect((await request({ status: ['done'] })).status).toBe(400);
+    expect((await request({ priority: ['urgent'] })).status).toBe(400);
+    expect(boardMove).toBeUndefined();
+  });
+
+  it('returns 500 when the board move cannot be saved', async () => {
+    reportsService.moveOnBoard = async () => Result.fail('Failed to move report', 'UPDATE_FAILED');
+    const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
+      method: 'PATCH',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'open' }),
+    });
+    expect(res.status).toBe(500);
+  });
+
+  it('moves several reports on the board in one request', async () => {
+    userRole = 'editor';
+    const res = await createApp().request('http://localhost/reports/bulk-board-position', {
+      method: 'POST',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ ids: ['rpt_1', 'rpt_2'], status: 'closed', previousId: 'rpt_3' }),
+    });
+    expect(res.status).toBe(200);
+    expect(boardMove).toEqual({
+      ids: ['rpt_1', 'rpt_2'],
+      status: 'closed',
+      previousId: 'rpt_3',
+    });
+    expect((await res.json()).reports).toHaveLength(2);
+  });
+
+  it('rejects group board moves from viewers and with too many or no reports', async () => {
+    const request = (body: unknown) =>
+      createApp().request('http://localhost/reports/bulk-board-position', {
+        method: 'POST',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    expect((await request({ ids: [], status: 'open' })).status).toBe(400);
+    expect(
+      (await request({ ids: Array.from({ length: 101 }, (_, i) => `rpt_${i}`), status: 'open' }))
+        .status
+    ).toBe(400);
+    userRole = 'viewer';
+    expect((await request({ ids: ['rpt_1'], status: 'open' })).status).toBe(403);
     expect(boardMove).toBeUndefined();
   });
 

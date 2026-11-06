@@ -4,8 +4,11 @@ import { workspaceViewsService } from '../../services/workspace-views.service.js
 import { syncQueueService } from '../../services/integrations/sync-queue.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
+import { rateLimiter, userKeyGenerator } from '../../middleware/rate-limit.js';
+import type { z } from 'zod';
 import {
   ASSIGNED_TO_ME_FILTER,
+  type ReportBoardMove,
   type ReportPriority,
   type ReportSortKey,
   type ReportStatus,
@@ -30,6 +33,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     priority: query.priority?.split(',') as ReportPriority[],
     assignedTo: query.assignedTo === ASSIGNED_TO_ME_FILTER ? c.get('user').id : query.assignedTo,
     search: query.search,
+    after: query.after,
     page: parseInt(query.page || '1'),
     limit: parseInt(query.limit || '20'),
     sortBy: (query.sortBy || 'createdAt') as ReportSortKey,
@@ -256,25 +260,85 @@ reports.patch(
   }
 );
 
-// Move Report on the Board (Admin and Editor)
+// Move Reports on the Board (Admin and Editor)
+
+const boardMoveRateLimit = rateLimiter({
+  name: 'report-board-move',
+  max: 120,
+  window: 60,
+  keyGenerator: userKeyGenerator,
+});
+
+function boardMoveFor(
+  body: z.infer<typeof schemas.moveReportOnBoard>,
+  userId: string
+): ReportBoardMove {
+  const { status, previousId, nextId, adoptSort } = body;
+  const scope = adoptSort?.scope;
+  return {
+    status,
+    previousId,
+    nextId,
+    adoptSort: adoptSort && {
+      ...adoptSort,
+      scope: scope && {
+        ...scope,
+        assignedTo: scope.assignedTo === ASSIGNED_TO_ME_FILTER ? userId : scope.assignedTo,
+      },
+    },
+  };
+}
+
+function boardMoveErrorStatus(code: string | undefined): 404 | 500 | 400 {
+  return code === 'NOT_FOUND' ? 404 : code === 'UPDATE_FAILED' ? 500 : 400;
+}
+
+reports.post(
+  '/bulk-board-position',
+  authorize(['admin', 'editor']),
+  boardMoveRateLimit,
+  validate({ body: schemas.moveReportsOnBoard }),
+  async (c) => {
+    const body = c.get('validatedBody' as never) as z.infer<typeof schemas.moveReportsOnBoard>;
+    const user = c.get('user');
+
+    const result = await reportsService.moveManyOnBoard(
+      body.ids,
+      boardMoveFor(body, user.id),
+      user.id
+    );
+
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        boardMoveErrorStatus(result.code)
+      );
+    }
+
+    return c.json({ success: true, reports: result.value });
+  }
+);
 
 reports.patch(
   '/:id/board-position',
   authorize(['admin', 'editor']),
+  boardMoveRateLimit,
   validate({ params: schemas.id, body: schemas.moveReportOnBoard }),
   async (c) => {
-    const body = c.get('validatedBody' as never) as {
-      status: ReportStatus;
-      previousId?: string | null;
-      nextId?: string | null;
-      adoptSort?: { sortBy: ReportSortKey; sortOrder: 'asc' | 'desc' };
-    };
+    const body = c.get('validatedBody' as never) as z.infer<typeof schemas.moveReportOnBoard>;
+    const user = c.get('user');
 
-    const result = await reportsService.moveOnBoard(c.req.param('id'), body, c.get('user').id);
+    const result = await reportsService.moveOnBoard(
+      c.req.param('id'),
+      boardMoveFor(body, user.id),
+      user.id
+    );
 
     if (!result.success) {
-      const status = result.code === 'NOT_FOUND' ? 404 : 400;
-      return c.json({ success: false, error: result.code, message: result.error }, status);
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        boardMoveErrorStatus(result.code)
+      );
     }
 
     return c.json({ success: true, report: result.value });

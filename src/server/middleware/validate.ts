@@ -10,6 +10,7 @@ import {
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   REPORT_SORT_KEYS,
+  REPORT_PRIORITIES,
   REPORT_STATUSES,
   REPORT_VIEWS,
   SUPPORTED_LOCALES,
@@ -356,6 +357,29 @@ export function validate(options: ValidationOptions): MiddlewareHandler {
 
 // Common Schemas
 
+const boardMoveShape = {
+  status: z.enum(REPORT_STATUSES),
+  previousId: z.string().min(1).max(64).nullable().optional(),
+  nextId: z.string().min(1).max(64).nullable().optional(),
+  adoptSort: z
+    .object({
+      sortBy: z.enum(REPORT_SORT_KEYS),
+      sortOrder: z.enum(['asc', 'desc']),
+      scope: z
+        .object({
+          projectId: z.string().min(1).max(64).optional(),
+          status: z.array(z.enum(REPORT_STATUSES)).max(REPORT_STATUSES.length).optional(),
+          priority: z.array(z.enum(REPORT_PRIORITIES)).max(REPORT_PRIORITIES.length).optional(),
+          assignedTo: z.string().min(1).max(64).optional(),
+          search: z.string().min(1).max(200).optional(),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict()
+    .optional(),
+};
+
 export const schemas = {
   // ID parameter
   id: z.object({
@@ -385,6 +409,7 @@ export const schemas = {
     limit: z.coerce.number().int().min(1).max(100).default(20),
     sortBy: z.enum(REPORT_SORT_KEYS).default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
+    after: z.string().min(1).max(2048).optional(),
   }),
 
   // Login request
@@ -443,15 +468,12 @@ export const schemas = {
     assignedTo: z.string().nullable().optional(),
   }),
 
-  moveReportOnBoard: z
+  moveReportOnBoard: z.object(boardMoveShape).strict(),
+
+  moveReportsOnBoard: z
     .object({
-      status: z.enum(REPORT_STATUSES),
-      previousId: z.string().min(1).nullable().optional(),
-      nextId: z.string().min(1).nullable().optional(),
-      adoptSort: z
-        .object({ sortBy: z.enum(REPORT_SORT_KEYS), sortOrder: z.enum(['asc', 'desc']) })
-        .strict()
-        .optional(),
+      ...boardMoveShape,
+      ids: z.array(z.string().min(1).max(64)).min(1).max(100),
     })
     .strict(),
 

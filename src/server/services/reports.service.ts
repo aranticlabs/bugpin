@@ -1,4 +1,8 @@
-import { reportsRepo, type CreateReportData } from '../database/repositories/reports.repo.js';
+import {
+  InvalidReportCursorError,
+  reportsRepo,
+  type CreateReportData,
+} from '../database/repositories/reports.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import {
@@ -19,6 +23,7 @@ import { githubSyncService } from './integrations/github-sync.service.js';
 import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
+import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
 import { normalizeUrl } from '../utils/validators.js';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
@@ -26,7 +31,7 @@ import type {
   ReportFilter,
   ReportStatus,
   ReportPriority,
-  ReportSortKey,
+  ReportBoardMove,
   ReportMetadata,
   ReportSource,
   ManualReportChannel,
@@ -487,15 +492,176 @@ async function createForProject(
 
 // Service
 
+type ReportChanges = Record<string, { old: unknown; new: unknown }>;
+
+/** Webhooks, notifications, and GitHub sync for committed report changes; none of them block */
+function announceReportChanges(report: Report, changes: ReportChanges): void {
+  // Trigger webhooks via EE hooks if there are changes (async, don't block)
+  if (Object.keys(changes).length > 0) {
+    getEEHooks()
+      .onReportUpdated(report, changes)
+      .catch((error) => {
+        logger.error('Failed to trigger webhooks for report update', error, {
+          reportId: report.id,
+        });
+      });
+  }
+
+  // Send email notifications for changes (async, don't block)
+  if (changes.status) {
+    notificationsService
+      .notifyStatusChange(report, changes.status.old as string, changes.status.new as string)
+      .catch((error) => {
+        logger.error('Failed to send status change notification', error, { reportId: report.id });
+      });
+
+    // Notify reporter of status change (async, don't block)
+    notificationsService
+      .notifyReporterStatusChange(
+        report,
+        changes.status.old as ReportStatus,
+        changes.status.new as ReportStatus
+      )
+      .catch((error) => {
+        logger.error('Failed to send reporter status change notification', error, {
+          reportId: report.id,
+        });
+      });
+  }
+
+  if (changes.priority) {
+    notificationsService
+      .notifyPriorityChange(report, changes.priority.old as string, changes.priority.new as string)
+      .catch((error) => {
+        logger.error('Failed to send priority change notification', error, { reportId: report.id });
+      });
+
+    // Notify reporter of priority change (async, don't block)
+    notificationsService
+      .notifyReporterPriorityChange(
+        report,
+        changes.priority.old as ReportPriority,
+        changes.priority.new as ReportPriority
+      )
+      .catch((error) => {
+        logger.error('Failed to send reporter priority change notification', error, {
+          reportId: report.id,
+        });
+      });
+  }
+
+  if (changes.assignedTo && changes.assignedTo.new) {
+    notificationsService
+      .notifyAssignment(report, changes.assignedTo.new as string)
+      .catch((error) => {
+        logger.error('Failed to send assignment notification', error, { reportId: report.id });
+      });
+
+    notificationsService
+      .notifyReporterAssignment(
+        report,
+        (changes.assignedTo.old as string | undefined) ?? undefined,
+        changes.assignedTo.new as string
+      )
+      .catch((error) => {
+        logger.error('Failed to send reporter assignment notification', error, {
+          reportId: report.id,
+        });
+      });
+  }
+
+  // If report has GitHub issue and there are changes, queue update sync (async, don't block)
+  if (report.githubIssueNumber && Object.keys(changes).length > 0) {
+    githubSyncService
+      .getAutoSyncIntegration(report.projectId)
+      .then((integration) => {
+        if (integration) {
+          syncQueueService.enqueue(report.id, integration.id).catch((error) => {
+            logger.error('Failed to queue report update for sync', error, { reportId: report.id });
+          });
+        }
+      })
+      .catch((error) => {
+        logger.error('Failed to check for auto-sync integration', error, {
+          projectId: report.projectId,
+        });
+      });
+  }
+}
+
 const MIN_BOARD_GAP = 1e-6;
 
 /** A position between two neighbors, or null when they are too close to fit another one */
 export function positionBetween(previous?: number, next?: number): number | null {
-  if (previous === undefined && next === undefined) return 0;
-  if (previous === undefined) return (next as number) - 1;
+  if (previous === undefined) return next === undefined ? 0 : next - 1;
   if (next === undefined) return previous + 1;
   if (next - previous < MIN_BOARD_GAP) return null;
   return (previous + next) / 2;
+}
+
+/** The positions a dropped report goes between, from the neighbors that are still in the column */
+function boardBounds(
+  id: string,
+  target: ReportBoardMove
+): { above: number | undefined; below: number | undefined } {
+  const placements = reportsRepo.boardPlacements(
+    [target.previousId, target.nextId].filter((neighborId): neighborId is string =>
+      Boolean(neighborId)
+    )
+  );
+  const inColumn = (neighborId: string | null | undefined) => {
+    const placement = neighborId ? placements.get(neighborId) : undefined;
+    return placement?.status === target.status ? placement : undefined;
+  };
+  const previous = inColumn(target.previousId);
+  const next = inColumn(target.nextId);
+
+  // The card above anchors the drop and the card below it is looked up again, so a client with
+  // an outdated view of the column still places the report directly under that card.
+  if (previous) {
+    return {
+      above: previous.position,
+      below: reportsRepo.adjacentBoardPosition(target.status, id, { after: previous.position }),
+    };
+  }
+  if (next) {
+    return {
+      above: reportsRepo.adjacentBoardPosition(target.status, id, { before: next.position }),
+      below: next.position,
+    };
+  }
+  // Neighbors that left the column since the client loaded it: a drop below a card goes to the
+  // end of the column, anything else to the top.
+  if (target.previousId) {
+    return {
+      above: reportsRepo.adjacentBoardPosition(target.status, id, 'last'),
+      below: undefined,
+    };
+  }
+  return { above: undefined, below: reportsRepo.adjacentBoardPosition(target.status, id, 'first') };
+}
+
+function statusUpdates(status: ReportStatus, userId: string | undefined): Partial<Report> {
+  return status === 'resolved' && userId ? { status, resolvedBy: userId } : { status };
+}
+
+class BoardPlacementError extends Error {}
+
+const MAX_BOARD_MOVE = 100;
+
+/** Writes a report's position between its neighbors, renumbering the column when they touch */
+function placeOnBoard(id: string, target: ReportBoardMove): void {
+  let { above, below } = boardBounds(id, target);
+  let position = positionBetween(above, below);
+  if (position === null) {
+    reportsRepo.renumberBoardColumn(target.status);
+    ({ above, below } = boardBounds(id, target));
+    position = positionBetween(above, below);
+  }
+  if (position === null) {
+    throw new BoardPlacementError('No room between the neighbors after renumbering');
+  }
+  reportsRepo.setBoardPosition(id, position);
 }
 
 export const reportsService = {
@@ -616,7 +782,15 @@ export const reportsService = {
    * List reports with filtering and pagination
    */
   async list(filter: ReportFilter): Promise<Result<PaginatedResponse<Report>>> {
-    const result = await reportsRepo.find(filter);
+    let result: Awaited<ReturnType<typeof reportsRepo.find>>;
+    try {
+      result = await reportsRepo.find(filter);
+    } catch (error) {
+      if (error instanceof InvalidReportCursorError) {
+        return Result.fail('The cursor does not match this list', 'INVALID_CURSOR');
+      }
+      throw error;
+    }
 
     const page = filter.page ?? 1;
     const limit = filter.limit ?? 20;
@@ -630,6 +804,7 @@ export const reportsService = {
       page,
       limit,
       totalPages: Math.ceil(result.total / limit),
+      nextCursor: result.nextCursor,
     });
   },
 
@@ -668,10 +843,7 @@ export const reportsService = {
     }
 
     if (input.status !== undefined) {
-      updates.status = input.status;
-      if (input.status === 'resolved' && userId) {
-        updates.resolvedBy = userId;
-      }
+      Object.assign(updates, statusUpdates(input.status, userId));
     }
 
     if (input.priority !== undefined) {
@@ -696,7 +868,7 @@ export const reportsService = {
     logger.info('Report updated', { reportId: id, updates: Object.keys(updates) });
 
     // Build changes object for webhooks
-    const changes: Record<string, { old: unknown; new: unknown }> = {};
+    const changes: ReportChanges = {};
     if (input.status !== undefined && input.status !== existing.status) {
       changes.status = { old: existing.status, new: input.status };
     }
@@ -740,193 +912,100 @@ export const reportsService = {
       );
     }
 
-    // Trigger webhooks via EE hooks if there are changes (async, don't block)
-    if (Object.keys(changes).length > 0) {
-      getEEHooks()
-        .onReportUpdated(report, changes)
-        .catch((error) => {
-          logger.error('Failed to trigger webhooks for report update', error, { reportId: id });
-        });
-    }
-
-    // Send email notifications for changes (async, don't block)
-    if (changes.status) {
-      notificationsService
-        .notifyStatusChange(report, changes.status.old as string, changes.status.new as string)
-        .catch((error) => {
-          logger.error('Failed to send status change notification', error, { reportId: id });
-        });
-
-      // Notify reporter of status change (async, don't block)
-      notificationsService
-        .notifyReporterStatusChange(
-          report,
-          changes.status.old as ReportStatus,
-          changes.status.new as ReportStatus
-        )
-        .catch((error) => {
-          logger.error('Failed to send reporter status change notification', error, {
-            reportId: id,
-          });
-        });
-    }
-
-    if (changes.priority) {
-      notificationsService
-        .notifyPriorityChange(
-          report,
-          changes.priority.old as string,
-          changes.priority.new as string
-        )
-        .catch((error) => {
-          logger.error('Failed to send priority change notification', error, { reportId: id });
-        });
-
-      // Notify reporter of priority change (async, don't block)
-      notificationsService
-        .notifyReporterPriorityChange(
-          report,
-          changes.priority.old as ReportPriority,
-          changes.priority.new as ReportPriority
-        )
-        .catch((error) => {
-          logger.error('Failed to send reporter priority change notification', error, {
-            reportId: id,
-          });
-        });
-    }
-
-    if (changes.assignedTo && changes.assignedTo.new) {
-      notificationsService
-        .notifyAssignment(report, changes.assignedTo.new as string)
-        .catch((error) => {
-          logger.error('Failed to send assignment notification', error, { reportId: id });
-        });
-
-      notificationsService
-        .notifyReporterAssignment(
-          report,
-          (changes.assignedTo.old as string | undefined) ?? undefined,
-          changes.assignedTo.new as string
-        )
-        .catch((error) => {
-          logger.error('Failed to send reporter assignment notification', error, {
-            reportId: id,
-          });
-        });
-    }
-
-    // If report has GitHub issue and there are changes, queue update sync (async, don't block)
-    if (report.githubIssueNumber && Object.keys(changes).length > 0) {
-      githubSyncService
-        .getAutoSyncIntegration(report.projectId)
-        .then((integration) => {
-          if (integration) {
-            syncQueueService.enqueue(report.id, integration.id).catch((error) => {
-              logger.error('Failed to queue report update for sync', error, { reportId: id });
-            });
-          }
-        })
-        .catch((error) => {
-          logger.error('Failed to check for auto-sync integration', error, {
-            projectId: report.projectId,
-          });
-        });
-    }
+    announceReportChanges(report, changes);
 
     return Result.ok(report);
   },
 
   /**
    * Places a report in a board column between two neighbors, changing its status when the
-   * column differs. A missing neighbor means the report goes to that end of the column.
-   * With `adoptSort`, the board's hand-made order first becomes that sort, so a drop on a
-   * sorted board keeps every other card where the user saw it.
+   * column differs. A missing neighbor means the report goes to that end of the column, and a
+   * neighbor that has left the column is ignored. With `adoptSort`, the scoped reports' hand-made
+   * order first becomes that sort, so a drop on a sorted board keeps every other card where the
+   * user saw it. All writes commit together; notifications follow the commit.
    */
-  async moveOnBoard(
-    id: string,
-    target: {
-      status: ReportStatus;
-      previousId?: string | null;
-      nextId?: string | null;
-      adoptSort?: { sortBy: ReportSortKey; sortOrder: 'asc' | 'desc' };
-    },
+  async moveOnBoard(id: string, target: ReportBoardMove, userId?: string): Promise<Result<Report>> {
+    const moved = await this.moveManyOnBoard([id], target, userId);
+    return moved.success ? Result.ok(moved.value[0]) : moved;
+  },
+
+  /**
+   * Places several reports, in the given order, as one block at a board position. The first goes
+   * between the neighbors and each next one directly under the one before it. Either every report
+   * moves or none does.
+   */
+  async moveManyOnBoard(
+    ids: string[],
+    target: ReportBoardMove,
     userId?: string
-  ): Promise<Result<Report>> {
-    const existing = await reportsRepo.findById(id);
-    if (!existing) {
-      return Result.fail('Report not found', 'NOT_FOUND');
+  ): Promise<Result<Report[]>> {
+    if (ids.length === 0) {
+      return Result.fail('No report IDs provided', 'INVALID_INPUT');
     }
-
-    const access = checkProjectLicense(existing.projectId);
-    if (!access.success) return access;
-
-    const neighborIds = [target.previousId, target.nextId].filter(
-      (neighborId): neighborId is string => Boolean(neighborId)
-    );
-    if (neighborIds.includes(id)) {
-      return Result.fail('A report cannot be its own neighbor', 'INVALID_BOARD_POSITION');
+    if (ids.length > MAX_BOARD_MOVE) {
+      return Result.fail(`Cannot move more than ${MAX_BOARD_MOVE} reports at once`, 'TOO_MANY_IDS');
     }
-    const findNeighbors = () => {
-      const placements = reportsRepo.boardPlacements(neighborIds);
-      const previous = target.previousId ? placements.get(target.previousId) : undefined;
-      const next = target.nextId ? placements.get(target.nextId) : undefined;
-      return { previous, next };
-    };
-    const { previous, next } = findNeighbors();
+    if (new Set(ids).size !== ids.length) {
+      return Result.fail('Each report can be moved only once', 'INVALID_INPUT');
+    }
     if (
-      (target.previousId && previous?.status !== target.status) ||
-      (target.nextId && next?.status !== target.status)
+      (target.previousId && ids.includes(target.previousId)) ||
+      (target.nextId && ids.includes(target.nextId))
     ) {
-      return Result.fail('Neighbors must be in the target column', 'INVALID_BOARD_POSITION');
+      return Result.fail('A moved report cannot be a neighbor', 'INVALID_BOARD_POSITION');
     }
 
-    if (target.adoptSort) {
-      reportsRepo.adoptBoardOrder(target.adoptSort.sortBy, target.adoptSort.sortOrder);
+    const existing: Report[] = [];
+    for (const id of ids) {
+      const report = await reportsRepo.findById(id);
+      if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+      const access = checkProjectLicense(report.projectId);
+      if (!access.success) return access;
+      existing.push(report);
     }
 
-    if (existing.status !== target.status) {
-      const updated = await this.update(id, { status: target.status }, userId);
-      if (!updated.success) return updated;
-    }
+    const adoptSort = target.adoptSort?.sortBy === 'position' ? undefined : target.adoptSort;
 
-    // The card above anchors the drop and the card below it is looked up again, so a client
-    // with an outdated view of the column still places the report directly under that card.
-    const bounds = () => {
-      const current = findNeighbors();
-      if (current.previous) {
-        return {
-          above: current.previous.position,
-          below: reportsRepo.adjacentBoardPosition(target.status, id, {
-            after: current.previous.position,
-          }),
-        };
+    try {
+      reportsRepo.transaction(() => {
+        if (adoptSort) {
+          reportsRepo.adoptBoardOrder(adoptSort.sortBy, adoptSort.sortOrder, adoptSort.scope ?? {});
+        }
+        existing.forEach((report, index) => {
+          if (report.status !== target.status) {
+            reportsRepo.applyUpdate(report.id, statusUpdates(target.status, userId));
+            reportHistoryRepo.insert({
+              reportId: report.id,
+              userId: userId ?? null,
+              action: 'status_changed',
+              oldValue: report.status,
+              newValue: target.status,
+            });
+          }
+          const slot: ReportBoardMove =
+            index === 0 ? target : { ...target, previousId: existing[index - 1].id };
+          placeOnBoard(report.id, slot);
+        });
+      });
+    } catch (error) {
+      if (error instanceof BoardPlacementError) {
+        logger.error('Failed to place reports on the board', error, { reportIds: ids });
+        return Result.fail('Failed to move report', 'UPDATE_FAILED');
       }
-      if (current.next) {
-        return {
-          above: reportsRepo.adjacentBoardPosition(target.status, id, {
-            before: current.next.position,
-          }),
-          below: current.next.position,
-        };
+      throw error;
+    }
+
+    const moved: Report[] = [];
+    for (const before of existing) {
+      const report = await reportsRepo.findById(before.id);
+      if (!report) return Result.fail('Failed to move report', 'UPDATE_FAILED');
+      moved.push(report);
+      if (before.status !== target.status) {
+        logger.info('Report updated', { reportId: report.id, updates: ['status'] });
+        announceReportChanges(report, { status: { old: before.status, new: target.status } });
       }
-      return { above: undefined, below: reportsRepo.adjacentBoardPosition(target.status, id, {}) };
-    };
-
-    let { above, below } = bounds();
-    let position = positionBetween(above, below);
-    if (position === null) {
-      reportsRepo.renumberBoardColumn(target.status);
-      ({ above, below } = bounds());
-      position = positionBetween(above, below);
     }
-    reportsRepo.setBoardPosition(id, position ?? 0);
-
-    const report = await reportsRepo.findById(id);
-    if (!report) {
-      return Result.fail('Failed to move report', 'UPDATE_FAILED');
-    }
-    return Result.ok(report);
+    return Result.ok(moved);
   },
 
   /**

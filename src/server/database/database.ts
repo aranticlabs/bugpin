@@ -497,7 +497,7 @@ export async function initSchema(): Promise<void> {
       VALUES('delete', OLD.rowid, OLD.title, OLD.description);
     END;
 
-    CREATE TRIGGER IF NOT EXISTS reports_au AFTER UPDATE ON reports BEGIN
+    CREATE TRIGGER IF NOT EXISTS reports_au AFTER UPDATE OF title, description ON reports BEGIN
       INSERT INTO reports_fts(reports_fts, rowid, title, description)
       VALUES('delete', OLD.rowid, OLD.title, OLD.description);
       INSERT INTO reports_fts(rowid, title, description)

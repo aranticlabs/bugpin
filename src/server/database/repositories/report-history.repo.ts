@@ -37,10 +37,26 @@ export interface CreateReportHistoryData {
 export const reportHistoryRepo = {
   async create(data: CreateReportHistoryData): Promise<ReportHistoryEntry> {
     const db = getDb();
+    const id = this.insert(data);
+
+    const row = db
+      .query(
+        `SELECT rh.*, u.name as user_name
+         FROM report_history rh
+         LEFT JOIN users u ON u.id = rh.user_id
+         WHERE rh.id = ?`
+      )
+      .get(id) as ReportHistoryRow;
+
+    return mapRowToEntry(row);
+  },
+
+  /** Writes an entry and returns its id, so it can run inside a transaction */
+  insert(data: CreateReportHistoryData): string {
     const id = randomUUID();
     const now = new Date().toISOString();
 
-    db.run(
+    getDb().run(
       `INSERT INTO report_history (id, report_id, user_id, action, old_value, new_value, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -54,16 +70,7 @@ export const reportHistoryRepo = {
       ]
     );
 
-    const row = db
-      .query(
-        `SELECT rh.*, u.name as user_name
-         FROM report_history rh
-         LEFT JOIN users u ON u.id = rh.user_id
-         WHERE rh.id = ?`
-      )
-      .get(id) as ReportHistoryRow;
-
-    return mapRowToEntry(row);
+    return id;
   },
 
   async findByReportId(reportId: string): Promise<ReportHistoryEntry[]> {

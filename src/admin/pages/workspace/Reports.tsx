@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { reportOriginState } from '../../lib/reportOrigin';
@@ -43,37 +43,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '../../components/ui/dropdown-menu';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../components/ui/tooltip';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowUpDown, Search, RefreshCw, Trash2, X, Share2, ChevronDown } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { downloadReportsShare, type ReportShareFormat } from '../../lib/reportsShareExport';
 import {
-  ACTIVE_REPORT_STATUSES,
-  ASSIGNED_TO_ME_FILTER,
-  UNASSIGNED_FILTER,
   REPORT_SORT_KEYS,
   REPORT_STATUSES,
+  REPORT_VIEWS,
   type ReportSortKey,
   type TablePageSize,
 } from '@shared/types';
 import { usePreference } from '../../hooks/useUserPreferences';
-import { useElementHeight } from '../../hooks/useElementHeight';
 import { DEFAULT_TABLE_PAGE_SIZE, TablePagination } from '../../components/TablePagination';
 import { SortableTableHead, type SortDirection } from '../../components/SortableTableHead';
 import { FileDropzone } from '../../components/FileDropzone';
@@ -86,7 +68,8 @@ import {
   ReportPriorityLabel,
   ReportStatusLabel,
 } from '../../components/report/ReportStatusPriority';
-import { ReportViewSwitcher } from '../../components/report-board/ReportViewSwitcher';
+import { ReportsToolbar, type ReportsFilterKey } from '../../components/report/ReportsToolbar';
+import { ReportsBulkActionBar } from '../../components/report/ReportsBulkActionBar';
 import { ReportsBoard } from './ReportsBoard';
 import type {
   ManualReportChannel,
@@ -171,16 +154,6 @@ const MANUAL_SORT: { key: ReportSortKey; direction: SortDirection } = {
   direction: 'asc',
 };
 
-const BOARD_SORT_OPTIONS: { key: ReportSortKey; label: string }[] = [
-  { key: 'position', label: 'Manual' },
-  { key: 'createdAt', label: 'Newest' },
-  { key: 'updatedAt', label: 'Last updated' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'title', label: 'Title' },
-  { key: 'project', label: 'Project' },
-  { key: 'assignee', label: 'Assignee' },
-];
-
 function parseStatusFilter(value: string): ReportStatus[] {
   const statuses = REPORT_STATUSES.filter((status) => value.split(',').includes(status));
   return statuses.length > 0 ? statuses : [...REPORT_STATUSES];
@@ -195,7 +168,6 @@ export function Reports({
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkBarRef, bulkBarHeight] = useElementHeight<HTMLDivElement>();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createForm, setCreateForm] = useState<CreateReportFormState>(() =>
@@ -207,7 +179,12 @@ export function Reports({
 
   const page = parseInt(searchParams.get('page') || '1');
   const [pageSize, setPageSize] = usePreference('reportsPageSize', DEFAULT_TABLE_PAGE_SIZE);
-  const [view, setView] = usePreference('reportsView', 'list', { cache: true });
+  const [preferredView, setPreferredView] = usePreference('reportsView', 'list', {
+    cache: true,
+  });
+  // A view in the URL wins, so shared links open the view they were copied from.
+  const view =
+    REPORT_VIEWS.find((candidate) => candidate === searchParams.get('view')) ?? preferredView;
   const status = searchParams.get('status') || '';
   const priority = searchParams.get('priority') || '';
   const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
@@ -276,9 +253,11 @@ export function Reports({
     enabled: view === 'list',
   });
 
-  const selectedReadOnly =
-    data?.data?.some((report: Report) => report.licenseLocked && selectedIds.has(report.id)) ??
-    false;
+  const [boardReports, setBoardReports] = useState<Report[]>([]);
+  const shownReports: Report[] = view === 'board' ? boardReports : (data?.data ?? []);
+  const selectedReadOnly = shownReports.some(
+    (report) => report.licenseLocked && selectedIds.has(report.id)
+  );
 
   const createReportMutation = useMutation({
     mutationFn: async (form: CreateReportFormState) => {
@@ -453,8 +432,7 @@ export function Reports({
   };
 
   const handleBulkShare = (format: ReportShareFormat) => {
-    const selectedReports =
-      data?.data?.filter((report: Report) => selectedIds.has(report.id)) ?? [];
+    const selectedReports = shownReports.filter((report) => selectedIds.has(report.id));
 
     if (selectedReports.length === 0) {
       toast.error('No reports selected to share');
@@ -482,7 +460,7 @@ export function Reports({
     setSearchParams(params);
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key: ReportsFilterKey, value: string) => {
     const params = new URLSearchParams(searchParams);
     if (value && value !== 'all') {
       params.set(key, value);
@@ -538,7 +516,13 @@ export function Reports({
 
   const handleViewChange = (nextView: ReportView) => {
     setSelectedIds(new Set());
-    setView(nextView);
+    setPreferredView(nextView);
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      params.set('view', nextView);
+      params.delete('page');
+      return params;
+    });
   };
 
   const handlePageSizeChange = (nextPageSize: TablePageSize) => {
@@ -569,303 +553,39 @@ export function Reports({
         </div>
       )}
 
-      {/* Below xl the filters wrap onto their own row under search and the create button;
-          from xl up the wrapper dissolves so everything shares one row. */}
-      <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-        <form
-          onSubmit={handleSearch}
-          className="relative min-w-40 flex-1 xl:min-w-32 xl:max-w-72 xl:flex-[2_1_0%]"
-        >
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            aria-label="Search reports"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search reports..."
-            className="pl-10"
-          />
-        </form>
+      <ReportsToolbar
+        search={search}
+        onSearchChange={setSearch}
+        onSearchSubmit={handleSearch}
+        filters={{ status, priority, projectId, assignedTo }}
+        onFilterChange={handleFilterChange}
+        projects={projectsData}
+        showProjectFilter={!fixedProjectId}
+        assignableUsers={assignableUsers}
+        showAssigneeFilter={canManageReports}
+        view={view}
+        onViewChange={handleViewChange}
+        boardSort={boardSort.key}
+        onBoardSortChange={handleBoardSort}
+        canCreate={canManageReports}
+        onCreate={openCreateDialog}
+      />
 
-        <div className="order-last flex w-full flex-wrap items-center gap-2 xl:contents">
-          <Select
-            value={status || 'all'}
-            onValueChange={(value) => handleFilterChange('status', value)}
-          >
-            <SelectTrigger
-              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[170px]"
-              aria-label="Filter by status"
-            >
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={priority || 'all'}
-            onValueChange={(value) => handleFilterChange('priority', value)}
-          >
-            <SelectTrigger
-              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[150px]"
-              aria-label="Filter by priority"
-            >
-              <SelectValue placeholder="All priorities" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All priorities</SelectItem>
-              <SelectItem value="highest">Highest</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="lowest">Lowest</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {!fixedProjectId && (
-            <Select
-              value={projectId || 'all'}
-              onValueChange={(value) => handleFilterChange('projectId', value)}
-            >
-              <SelectTrigger
-                className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
-                aria-label="Filter by project"
-              >
-                <SelectValue placeholder="All projects" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All projects</SelectItem>
-                {projectsData?.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {canManageReports && (
-            <Select
-              value={assignedTo || 'all'}
-              onValueChange={(value) => handleFilterChange('assignedTo', value)}
-            >
-              <SelectTrigger
-                className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
-                aria-label="Filter by assignee"
-              >
-                <SelectValue placeholder="All assignees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All assignees</SelectItem>
-                <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
-                <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
-                {assignableUsers.map((assignee) => (
-                  <SelectItem key={assignee.id} value={assignee.id}>
-                    <AssigneeDisplay user={assignee} compact />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {view === 'board' && (
-            <TooltipProvider>
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        aria-label="Sort cards"
-                      >
-                        <ArrowUpDown />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sort:{' '}
-                    {BOARD_SORT_OPTIONS.find((option) => option.key === boardSort.key)?.label ??
-                      'Custom'}
-                  </TooltipContent>
-                </Tooltip>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                    Sort cards by
-                  </DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={boardSort.key}
-                    onValueChange={(value) => {
-                      const option = BOARD_SORT_OPTIONS.find(
-                        (candidate) => candidate.key === value
-                      );
-                      if (option) handleBoardSort(option.key);
-                    }}
-                  >
-                    {BOARD_SORT_OPTIONS.filter(
-                      (option) => !(fixedProjectId && option.key === 'project')
-                    ).map((option) => (
-                      <DropdownMenuRadioItem key={option.key} value={option.key}>
-                        {option.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TooltipProvider>
-          )}
-        </div>
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <ReportViewSwitcher value={view} onChange={handleViewChange} />
-          {canManageReports && (
-            <Button onClick={openCreateDialog} className="shrink-0">
-              Create Report
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Bulk actions toolbar */}
-      {view === 'list' && selectedIds.size > 0 && (
-        <div ref={bulkBarRef} className="sticky top-0 z-20 -mt-2 bg-background pt-2">
-          <Card className="bg-muted/50">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium">
-                    {selectedIds.size} {selectedIds.size === 1 ? 'report' : 'reports'} selected
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={clearSelection}>
-                    <X className="h-4 w-4 mr-1" />
-                    Clear
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Status dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={bulkUpdateMutation.isPending || selectedReadOnly}
-                      >
-                        Set Status
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('open')}>
-                        Open
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('in_progress')}>
-                        In Progress
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('resolved')}>
-                        Resolved
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkStatusUpdate('closed')}>
-                        Closed
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Priority dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={bulkUpdateMutation.isPending || selectedReadOnly}
-                      >
-                        Set Priority
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('highest')}>
-                        Highest
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('high')}>
-                        High
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('medium')}>
-                        Medium
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('low')}>
-                        Low
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkPriorityUpdate('lowest')}>
-                        Lowest
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {canManageReports && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={bulkUpdateMutation.isPending || selectedReadOnly}
-                        >
-                          Assign
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onClick={() => handleBulkAssigneeUpdate(null)}>
-                          Unassign
-                        </DropdownMenuItem>
-                        {assignableUsers.map((assignee) => (
-                          <DropdownMenuItem
-                            key={assignee.id}
-                            onClick={() => handleBulkAssigneeUpdate(assignee.id)}
-                          >
-                            <AssigneeDisplay user={assignee} />
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Share2 className="h-4 w-4 mr-1" />
-                        Share
-                        <ChevronDown className="h-4 w-4 ml-1 opacity-60" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleBulkShare('excel')}>
-                        Download Excel (.xlsx)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkShare('csv')}>
-                        Download CSV (.csv)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Delete button */}
-                  <Button
-                    variant="outline-destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={bulkDeleteMutation.isPending || selectedReadOnly}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      {selectedIds.size > 0 && (
+        <ReportsBulkActionBar
+          selectedCount={selectedIds.size}
+          onClear={clearSelection}
+          updating={bulkUpdateMutation.isPending}
+          deleting={bulkDeleteMutation.isPending}
+          readOnly={selectedReadOnly}
+          canAssign={canManageReports}
+          assignableUsers={assignableUsers}
+          onStatusChange={handleBulkStatusUpdate}
+          onPriorityChange={handleBulkPriorityUpdate}
+          onAssigneeChange={handleBulkAssigneeUpdate}
+          onShare={handleBulkShare}
+          onDelete={() => setShowDeleteConfirm(true)}
+        />
       )}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -1119,10 +839,13 @@ export function Reports({
           showProject={!fixedProjectId}
           onOpenReport={openReport}
           onManualOrder={() => handleBoardSort(MANUAL_SORT.key)}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onReportsChange={setBoardReports}
         />
       ) : (
         <>
-          {/* Reports — mobile card list */}
+          {/* Reports: mobile card list */}
           <div className="md:hidden space-y-3">
             {isLoading ? (
               <div className="flex justify-center py-12">
@@ -1198,10 +921,7 @@ export function Reports({
           </div>
 
           {/* Reports table */}
-          <Card
-            className="@container hidden md:block"
-            style={{ '--table-sticky-top': `${bulkBarHeight}px` } as CSSProperties}
-          >
+          <Card className="@container hidden md:block">
             <Table stickyHeader>
               <TableHeader>
                 <TableRow>
@@ -1345,6 +1065,8 @@ export function Reports({
           </Card>
         </>
       )}
+      {/* Room at the end of the list, so the floating selection bar never hides the last rows. */}
+      {view === 'list' && selectedIds.size > 0 && <div aria-hidden="true" className="h-16" />}
     </div>
   );
 }

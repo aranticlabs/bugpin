@@ -17,6 +17,7 @@ import { usePreference } from '../hooks/useUserPreferences';
 import { ThemePreferenceSync } from './ThemePreferenceSync';
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
 import { UnsavedChangesBar, UnsavedChangesBarSpacer } from './UnsavedChangesGuard';
+import { FloatingBarArea } from './FloatingBar';
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
@@ -112,13 +113,15 @@ export function Layout() {
           )}
         </header>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <ScrollArea className="flex-1" aria-label="Page content">
-            <div className="flex flex-col gap-4 p-4 md:p-6">
-              <Outlet />
-              <UnsavedChangesBarSpacer />
-            </div>
-          </ScrollArea>
-          <UnsavedChangesBar />
+          <FloatingBarArea>
+            <ScrollArea className="flex-1" aria-label="Page content">
+              <div className="flex flex-col gap-4 p-4 md:p-6">
+                <Outlet />
+                <UnsavedChangesBarSpacer />
+              </div>
+            </ScrollArea>
+            <UnsavedChangesBar />
+          </FloatingBarArea>
         </div>
         <Footer />
       </SidebarInset>
