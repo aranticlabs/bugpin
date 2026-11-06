@@ -540,8 +540,8 @@ export function ProjectsPage() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-72">
+        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+          <div className="relative w-full sm:w-72 lg:w-auto lg:min-w-32 lg:max-w-72 lg:flex-[2_1_0%]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Search projects"
@@ -557,7 +557,10 @@ export function ProjectsPage() {
               updateParams({ status: value === 'all' ? null : parseStatusFilter(value) })
             }
           >
-            <SelectTrigger className="w-[150px]" aria-label="Filter by status">
+            <SelectTrigger
+              className="w-[150px] lg:w-auto lg:min-w-24 lg:max-w-[150px] lg:flex-1"
+              aria-label="Filter by status"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -570,6 +573,7 @@ export function ProjectsPage() {
           </Select>
           <Button
             variant={pinnedOnly ? 'secondary' : 'outline'}
+            className="shrink-0"
             aria-pressed={pinnedOnly}
             onClick={() => updateParams({ pinned: pinnedOnly ? null : '1' })}
           >
@@ -578,6 +582,7 @@ export function ProjectsPage() {
           </Button>
           <Button
             variant={sort.key === 'custom' ? 'secondary' : 'outline'}
+            className="shrink-0"
             aria-pressed={sort.key === 'custom'}
             onClick={() => updateParams({ sort: null, dir: null })}
           >
@@ -585,7 +590,7 @@ export function ProjectsPage() {
             Custom order
           </Button>
           {isAdmin && (
-            <div className="ml-auto">
+            <div className="ml-auto shrink-0">
               {capacityUsed ? (
                 <WithTooltip tooltip={createDisabledReason}>
                   <Button disabled>Create Project</Button>
@@ -830,12 +835,12 @@ export function ProjectsPage() {
                                 </WithTooltip>
                               </TableCell>
                             )}
-                            <TableCell>
-                              <div className="flex items-center gap-1">
+                            <TableCell className="w-full">
+                              <div className="flex min-w-0 items-center gap-1">
                                 <Link
                                   to={projectUrl(project.id)}
                                   onClick={stopRowClick}
-                                  className="truncate font-medium hover:underline"
+                                  className="min-w-0 break-words font-medium hover:underline"
                                 >
                                   {project.name}
                                 </Link>
@@ -868,7 +873,7 @@ export function ProjectsPage() {
                                 </WithTooltip>
                               </div>
                               {project.apiKeyPrefix && (
-                                <div className="font-mono text-xs text-muted-foreground">
+                                <div className="truncate font-mono text-xs text-muted-foreground">
                                   {project.apiKeyPrefix}…
                                 </div>
                               )}

@@ -10,6 +10,7 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { AppSidebar } from './sidebar/AppSidebar';
 import { Footer } from './Footer';
+import { PageBreadcrumb } from './PageBreadcrumb';
 import { findSettingsNavItem } from '../lib/settingsNavigation';
 import { UpdateBanner } from './UpdateBanner';
 import { usePreference } from '../hooks/useUserPreferences';
@@ -42,14 +43,6 @@ export function Layout() {
   const location = useLocation();
   const settingsMatch = findSettingsNavItem(location.pathname);
 
-  const getPageTitle = () => {
-    const path = location.pathname;
-    if (path === '/') return 'Dashboard';
-    if (path.startsWith('/reports')) return 'Reports';
-    if (path.startsWith('/projects')) return 'Projects';
-    return 'BugPin';
-  };
-
   return (
     <SidebarProvider
       open={sidebarOpen}
@@ -63,7 +56,7 @@ export function Layout() {
       <AppSidebar />
       <SidebarInset className="flex flex-col h-screen max-w-[100vw] min-w-0">
         <UpdateBanner />
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-16 min-w-0 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
 
@@ -89,7 +82,7 @@ export function Layout() {
               )}
             </nav>
           ) : (
-            <h1 className="text-sm font-medium">{getPageTitle()}</h1>
+            <PageBreadcrumb />
           )}
           {user && license?.licensed && !licenseError && (
             <div className="ml-auto shrink-0">

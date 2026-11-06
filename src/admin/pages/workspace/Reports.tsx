@@ -516,8 +516,13 @@ export function Reports({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={handleSearch} className="relative w-full sm:w-72">
+      {/* Below xl the filters wrap onto their own row under search and the create button;
+          from xl up the wrapper dissolves so everything shares one row. */}
+      <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+        <form
+          onSubmit={handleSearch}
+          className="relative min-w-0 flex-1 xl:min-w-32 xl:max-w-72 xl:flex-[2_1_0%]"
+        >
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
@@ -529,96 +534,113 @@ export function Reports({
           />
         </form>
 
-        <Select
-          value={status || 'all'}
-          onValueChange={(value) => handleFilterChange('status', value)}
-        >
-          <SelectTrigger className="w-[170px]" aria-label="Filter by status">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
-            <SelectItem value="open">Open</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="resolved">Resolved</SelectItem>
-            <SelectItem value="closed">Closed</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={priority || 'all'}
-          onValueChange={(value) => handleFilterChange('priority', value)}
-        >
-          <SelectTrigger className="w-[150px]" aria-label="Filter by priority">
-            <SelectValue placeholder="All priorities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All priorities</SelectItem>
-            <SelectItem value="highest">Highest</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="lowest">Lowest</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {!fixedProjectId && (
+        <div className="order-last flex w-full flex-wrap items-center gap-2 xl:contents">
           <Select
-            value={projectId || 'all'}
-            onValueChange={(value) => handleFilterChange('projectId', value)}
+            value={status || 'all'}
+            onValueChange={(value) => handleFilterChange('status', value)}
           >
-            <SelectTrigger className="w-[180px]" aria-label="Filter by project">
-              <SelectValue placeholder="All projects" />
+            <SelectTrigger
+              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[170px]"
+              aria-label="Filter by status"
+            >
+              <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All projects</SelectItem>
-              {projectsData?.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value={ACTIVE_REPORT_STATUSES.join(',')}>Open + In Progress</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
           </Select>
-        )}
 
-        {canManageReports && (
           <Select
-            value={assignedTo || 'all'}
-            onValueChange={(value) => handleFilterChange('assignedTo', value)}
+            value={priority || 'all'}
+            onValueChange={(value) => handleFilterChange('priority', value)}
           >
-            <SelectTrigger className="w-[180px]" aria-label="Filter by assignee">
-              <SelectValue placeholder="All assignees" />
+            <SelectTrigger
+              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[150px]"
+              aria-label="Filter by priority"
+            >
+              <SelectValue placeholder="All priorities" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All assignees</SelectItem>
-              <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
-              <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
-              {assignableUsers.map((assignee) => (
-                <SelectItem key={assignee.id} value={assignee.id}>
-                  <AssigneeDisplay user={assignee} compact />
-                </SelectItem>
-              ))}
+              <SelectItem value="all">All priorities</SelectItem>
+              <SelectItem value="highest">Highest</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="lowest">Lowest</SelectItem>
             </SelectContent>
           </Select>
-        )}
 
-        <Select
-          value={source || 'all'}
-          onValueChange={(value) => handleFilterChange('source', value)}
-        >
-          <SelectTrigger className="w-[150px]" aria-label="Filter by source">
-            <SelectValue placeholder="All sources" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All sources</SelectItem>
-            <SelectItem value="widget">Widget</SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
-          </SelectContent>
-        </Select>
+          {!fixedProjectId && (
+            <Select
+              value={projectId || 'all'}
+              onValueChange={(value) => handleFilterChange('projectId', value)}
+            >
+              <SelectTrigger
+                className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
+                aria-label="Filter by project"
+              >
+                <SelectValue placeholder="All projects" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All projects</SelectItem>
+                {projectsData?.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {canManageReports && (
+            <Select
+              value={assignedTo || 'all'}
+              onValueChange={(value) => handleFilterChange('assignedTo', value)}
+            >
+              <SelectTrigger
+                className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[180px]"
+                aria-label="Filter by assignee"
+              >
+                <SelectValue placeholder="All assignees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All assignees</SelectItem>
+                <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
+                <SelectItem value={ASSIGNED_TO_ME_FILTER}>Assigned to me</SelectItem>
+                {assignableUsers.map((assignee) => (
+                  <SelectItem key={assignee.id} value={assignee.id}>
+                    <AssigneeDisplay user={assignee} compact />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Select
+            value={source || 'all'}
+            onValueChange={(value) => handleFilterChange('source', value)}
+          >
+            <SelectTrigger
+              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[150px]"
+              aria-label="Filter by source"
+            >
+              <SelectValue placeholder="All sources" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="widget">Widget</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {canManageReports && (
-          <Button onClick={openCreateDialog} className="ml-auto">
+          <Button onClick={openCreateDialog} className="ml-auto shrink-0">
             Create Report
           </Button>
         )}
@@ -1159,12 +1181,12 @@ export function Reports({
                       aria-label={`Select ${report.title}`}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="w-full max-w-0">
                     <p className="font-medium">{report.title}</p>
                     {report.licenseLocked && (
                       <p className="text-xs text-muted-foreground">Read-only · License limit</p>
                     )}
-                    <p className="text-sm text-muted-foreground truncate max-w-xs">
+                    <p className="truncate text-sm text-muted-foreground">
                       {report.metadata?.url || 'No URL'}
                     </p>
                     {report.reporterEmail && (
