@@ -296,7 +296,7 @@
   @apply text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/50;
 }
 
-/* Fields that are inherited and cannot be edited */
+/* Fields that do not apply in the current configuration */
 .section-disabled {
   @apply select-none opacity-60 grayscale;
 }

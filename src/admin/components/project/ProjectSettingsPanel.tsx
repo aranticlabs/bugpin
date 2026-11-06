@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { Info } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
@@ -16,6 +17,8 @@ import type {
   LocaleCode,
   DiagnosticSettings,
 } from '@shared/types';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { NotificationTabs } from '../NotificationTabs';
 import { SectionCard } from '../settings/SectionCard';
@@ -79,6 +82,14 @@ function CustomSwitch({
   );
 }
 
+function InheritedBadge() {
+  return (
+    // The negative margin keeps the badge inside the title's line height, so the header does not
+    // grow when the badge appears.
+    <Badge className="-my-0.5 h-5 px-2 py-0 text-[11px] font-medium">Inherited</Badge>
+  );
+}
+
 function InheritedFields({
   custom,
   defaultsPath,
@@ -91,25 +102,22 @@ function InheritedFields({
   return (
     <div className="space-y-4">
       {!custom && (
-        <p className="text-sm text-muted-foreground">
-          Uses the project defaults. Turn on Custom to change them for this project.
-          {defaultsPath && (
-            <>
-              {' '}
-              <Link to={defaultsPath} className="text-primary hover:underline">
-                Edit project defaults
-              </Link>
-            </>
-          )}
-        </p>
+        <Alert role="note" className="border-primary/20 bg-primary/10">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Inherits the project defaults. Turn on Custom to change them for this project.
+            {defaultsPath && (
+              <>
+                {' '}
+                <Link to={defaultsPath} className="underline">
+                  Edit project defaults
+                </Link>
+              </>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
-      {custom ? (
-        <div className="space-y-4">{children}</div>
-      ) : (
-        <div aria-disabled="true" inert className="section-disabled space-y-4">
-          {children}
-        </div>
-      )}
+      <div className="space-y-4">{children}</div>
     </div>
   );
 }
@@ -160,7 +168,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
   const [defaultAssigneeUserId, setDefaultAssigneeUserId] = useState<string | null>(null);
 
   // Whitelist settings state
-  const [useCustomWhitelist, setUseCustomWhitelist] = useState(false);
   const [whitelistSettings, setWhitelistSettings] = useState<string[]>([]);
 
   // Language settings state (no override = inherit the instance-wide language)
@@ -234,7 +241,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
     notificationSettings,
     reporterSettings,
     defaultAssigneeUserId,
-    useCustomWhitelist,
     whitelistSettings,
     useCustomLanguage,
     languageSettings,
@@ -304,8 +310,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
 
       // Whitelist settings
       const security = projectDetail.settings?.security;
-      const hasCustomWhitelist = security?.allowedOrigins && security.allowedOrigins.length > 0;
-      setUseCustomWhitelist(!!hasCustomWhitelist);
       setWhitelistSettings(security?.allowedOrigins || []);
 
       // Reporter notification settings
@@ -422,7 +426,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
       newSettings.storageKeysCapture = diagnostics?.storageKeysCapture;
 
       // Security settings (whitelist)
-      if (useCustomWhitelist && whitelistSettings.length > 0) {
+      if (whitelistSettings.length > 0) {
         newSettings.security = {
           allowedOrigins: whitelistSettings,
         };
@@ -596,25 +600,8 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
             <SettingsCard
               title="Allowed Domains"
               description="Only websites from these domains can use the project's widget."
-              action={
-                <CustomSwitch
-                  id="use-custom-whitelist"
-                  label="Use custom allowed domains"
-                  checked={useCustomWhitelist}
-                  onCheckedChange={(checked) => {
-                    setUseCustomWhitelist(checked);
-                    if (!checked) setWhitelistSettings([]);
-                  }}
-                />
-              }
             >
-              <InheritedFields custom={useCustomWhitelist}>
-                <ProjectWhitelistForm
-                  value={whitelistSettings}
-                  onChange={setWhitelistSettings}
-                  disabled={!useCustomWhitelist}
-                />
-              </InheritedFields>
+              <ProjectWhitelistForm value={whitelistSettings} onChange={setWhitelistSettings} />
             </SettingsCard>
           </>
         )}
@@ -626,12 +613,12 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
                 launcher={buttonSettings}
                 launcherGlobals={globalSettings}
                 locale={previewLocale}
-                disabled={!useCustomButton}
               />
             }
           >
             <SectionCard
               section="launcher"
+              badge={!useCustomButton && <InheritedBadge />}
               action={
                 <CustomSwitch
                   id="use-custom-settings"
@@ -665,7 +652,6 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
             placement="below"
             preview={
               <DialogPreviewCard
-                disabled={!useCustomWidgetDialog}
                 colors={resolveDialogColors(
                   widgetDialogSettings,
                   brandingConfig?.widgetPrimaryColors
@@ -675,6 +661,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
           >
             <SectionCard
               section="dialog"
+              badge={!useCustomWidgetDialog && <InheritedBadge />}
               action={
                 <CustomSwitch
                   id="use-custom-widget-dialog"
@@ -705,6 +692,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
         {section === 'language' && (
           <SectionCard
             section="language"
+            badge={!useCustomLanguage && <InheritedBadge />}
             action={
               <CustomSwitch
                 id="use-custom-language"
@@ -737,6 +725,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
           <>
             <SectionCard
               section="screenshot"
+              badge={!useCustomScreenshot && <InheritedBadge />}
               action={
                 <CustomSwitch
                   id="use-custom-screenshot"
@@ -767,6 +756,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
             </SectionCard>
             <SectionCard
               section="recording"
+              badge={!useCustomRecording && <InheritedBadge />}
               action={
                 <CustomSwitch
                   id="use-custom-recording"
@@ -795,6 +785,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
             </SectionCard>
             <SectionCard
               section="diagnostics"
+              badge={!useCustomDiagnostics && <InheritedBadge />}
               action={
                 <CustomSwitch
                   id="use-custom-diagnostics"
@@ -830,6 +821,7 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
         {section === 'notifications' && (
           <SectionCard
             section="notifications"
+            badge={!useCustomNotifications && <InheritedBadge />}
             action={
               <CustomSwitch
                 id="use-custom-notifications"

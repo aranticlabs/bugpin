@@ -310,6 +310,21 @@ describe('ProjectSettingsPanel', () => {
     expect(screen.getByText(/disabled for every project by EU Privacy Mode/i)).toBeInTheDocument();
   });
 
+  it('badges and disables only inherited sections', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(<Harness initial="capture" />);
+
+    expect(await screen.findAllByText('Inherited')).toHaveLength(1);
+    expect(screen.getByText('Recording fields')).toHaveAttribute('data-disabled', 'false');
+
+    await user.click(screen.getByRole('switch', { name: /use custom recording settings/i }));
+
+    expect(screen.getAllByText('Inherited')).toHaveLength(2);
+    expect(screen.getByText('Recording fields')).toHaveAttribute('data-disabled', 'true');
+  });
+
   it('clears custom settings and deletes notification defaults when disabled', async () => {
     setupMockResponses(null);
     const user = userEvent.setup();
@@ -339,8 +354,9 @@ describe('ProjectSettingsPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show general' }));
     expect(screen.getByText('Allowed domain fields')).toHaveAttribute('data-disabled', 'false');
-    await user.click(screen.getByRole('switch', { name: /use custom allowed domains/i }));
-    expect(screen.getByText('Allowed domain fields')).toHaveAttribute('data-disabled', 'true');
+    expect(
+      screen.queryByRole('switch', { name: /use custom allowed domains/i })
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show notifications' }));
     expect(
@@ -358,7 +374,7 @@ describe('ProjectSettingsPanel', () => {
           widgetDialog: undefined,
           widgetLauncherButton: undefined,
           screenshot: undefined,
-          security: undefined,
+          security: baseProject.settings?.security,
         }),
       });
     });

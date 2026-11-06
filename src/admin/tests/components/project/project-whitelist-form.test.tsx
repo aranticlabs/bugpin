@@ -75,13 +75,4 @@ describe('ProjectWhitelistForm', () => {
 
     expect(onChange).toHaveBeenCalledWith([]);
   });
-
-  it('shows the domains but blocks edits while disabled', () => {
-    render(<ProjectWhitelistForm value={['example.com']} onChange={vi.fn()} disabled />);
-
-    expect(screen.getByText('example.com')).toBeInTheDocument();
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText('example.com')).toBeDisabled();
-    expect(screen.getByRole('button', { name: /add/i })).toBeDisabled();
-  });
 });

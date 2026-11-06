@@ -4,19 +4,14 @@ import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Alert, AlertDescription } from '../ui/alert';
-import { Plus, X, AlertCircle, Globe } from 'lucide-react';
+import { Plus, X, AlertCircle, Globe, Info } from 'lucide-react';
 
 interface ProjectWhitelistFormProps {
   value: string[];
   onChange: (origins: string[]) => void;
-  disabled?: boolean;
 }
 
-export function ProjectWhitelistForm({
-  value,
-  onChange,
-  disabled = false,
-}: ProjectWhitelistFormProps) {
+export function ProjectWhitelistForm({ value, onChange }: ProjectWhitelistFormProps) {
   const [newOrigin, setNewOrigin] = useState('');
 
   const handleAddOrigin = () => {
@@ -50,8 +45,8 @@ export function ProjectWhitelistForm({
     <div className="space-y-4">
       <>
         {/* Info Alert */}
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
+        <Alert role="note" className="border-primary/20 bg-primary/10">
+          <Info className="h-4 w-4" />
           <AlertDescription>
             <strong>Origin Whitelist:</strong> Only websites from allowed domains can use your
             project's widget. Leave empty to allow all origins (not recommended for production).
@@ -77,7 +72,6 @@ export function ProjectWhitelistForm({
                     size="sm"
                     onClick={() => handleRemoveOrigin(index)}
                     className="h-7 w-7 p-0"
-                    disabled={disabled}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -106,9 +100,8 @@ export function ProjectWhitelistForm({
                   handleAddOrigin();
                 }
               }}
-              disabled={disabled}
             />
-            <Button type="button" variant="secondary" onClick={handleAddOrigin} disabled={disabled}>
+            <Button type="button" variant="secondary" onClick={handleAddOrigin}>
               <Plus className="h-4 w-4 mr-2" />
               Add
             </Button>

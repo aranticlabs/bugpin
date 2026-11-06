@@ -81,6 +81,11 @@ describe('IntegrationDialog', () => {
 
     render(<IntegrationDialog open={true} onClose={onClose} projectId="project-1" />);
 
+    const labelsToggle = screen.getByRole('switch', { name: /add labels to issues/i });
+    expect(labelsToggle).toBeDisabled();
+    expect(labelsToggle).toHaveAccessibleDescription('Select a repository first.');
+    expect(screen.getByRole('switch', { name: /assign issues to users/i })).toBeDisabled();
+
     await user.type(screen.getByLabelText(/integration name/i), 'Main Repo');
     await user.type(screen.getByLabelText(/personal access token/i), 'token-123');
     await user.click(screen.getByTitle(/load repositories/i));
@@ -89,6 +94,9 @@ describe('IntegrationDialog', () => {
 
     await user.click(await screen.findByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /octo\/repo/i }));
+
+    expect(screen.queryByText('Select a repository first.')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /add labels to issues/i })).toBeEnabled();
 
     const labelsSwitch = document.querySelector('#enable-labels');
     expect(labelsSwitch).toBeTruthy();

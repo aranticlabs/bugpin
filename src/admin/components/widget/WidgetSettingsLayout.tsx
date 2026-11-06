@@ -19,12 +19,10 @@ type PreviewMode = 'light' | 'dark';
 function PreviewCard({
   description,
   collapsible = false,
-  disabled = false,
   children,
 }: {
   description: string;
   collapsible?: boolean;
-  disabled?: boolean;
   children: (mode: PreviewMode) => ReactNode;
 }) {
   const [storedOpen, setOpen] = usePreference('dialogPreviewOpen', true, {
@@ -45,20 +43,14 @@ function PreviewCard({
       <CardDescription>{description}</CardDescription>
     </div>
   );
-  const body = disabled ? (
-    <div aria-disabled="true" inert className="section-disabled">
-      {children(mode)}
-    </div>
-  ) : (
-    children(mode)
-  );
+  const body = children(mode);
   const modeSwitch = (
     <Tabs value={mode} onValueChange={(value) => setMode(value as PreviewMode)}>
       <TabsList className="h-8">
-        <TabsTrigger value="light" className="px-2 text-xs" disabled={disabled}>
+        <TabsTrigger value="light" className="px-2 text-xs">
           Light
         </TabsTrigger>
-        <TabsTrigger value="dark" className="px-2 text-xs" disabled={disabled}>
+        <TabsTrigger value="dark" className="px-2 text-xs">
           Dark
         </TabsTrigger>
       </TabsList>
@@ -106,15 +98,13 @@ export function LauncherPreviewCard({
   launcher,
   launcherGlobals,
   locale,
-  disabled,
 }: {
   launcher: WidgetLauncherButtonSettings;
   launcherGlobals?: { widgetLauncherButton: GlobalWidgetLauncherButtonSettings };
   locale?: LocaleCode;
-  disabled?: boolean;
 }) {
   return (
-    <PreviewCard description="Hover over the button to see its effects." disabled={disabled}>
+    <PreviewCard description="Hover over the button to see its effects.">
       {(mode) => (
         <div
           className={`relative min-h-[200px] rounded-lg border ${
@@ -133,19 +123,9 @@ export function LauncherPreviewCard({
   );
 }
 
-export function DialogPreviewCard({
-  colors,
-  disabled,
-}: {
-  colors: ThemeColors;
-  disabled?: boolean;
-}) {
+export function DialogPreviewCard({ colors }: { colors: ThemeColors }) {
   return (
-    <PreviewCard
-      disabled={disabled}
-      description="How the report dialog looks with these colors."
-      collapsible
-    >
+    <PreviewCard description="How the report dialog looks with these colors." collapsible>
       {(mode) => (
         <div
           className={`rounded-lg border p-6 ${mode === 'dark' ? 'bg-neutral-900' : 'bg-neutral-100'}`}

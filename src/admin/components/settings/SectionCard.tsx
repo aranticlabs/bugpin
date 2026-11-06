@@ -42,13 +42,20 @@ export type SettingsSection = keyof typeof SETTINGS_SECTIONS;
 
 interface SectionCardProps {
   section: SettingsSection;
+  badge?: ReactNode;
   action?: ReactNode;
   // Hidden when the page header already shows the same title and description.
   showHeader?: boolean;
   children: ReactNode;
 }
 
-export function SectionCard({ section, action, showHeader = true, children }: SectionCardProps) {
+export function SectionCard({
+  section,
+  badge,
+  action,
+  showHeader = true,
+  children,
+}: SectionCardProps) {
   if (!showHeader) {
     return (
       <Card>
@@ -58,7 +65,7 @@ export function SectionCard({ section, action, showHeader = true, children }: Se
   }
   const { title, description } = SETTINGS_SECTIONS[section];
   return (
-    <SettingsCard title={title} description={description} action={action}>
+    <SettingsCard title={title} description={description} badge={badge} action={action}>
       {children}
     </SettingsCard>
   );

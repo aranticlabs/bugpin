@@ -303,7 +303,7 @@ export function Users() {
                                 <label
                                   key={project.id}
                                   className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent ${
-                                    disabled ? 'cursor-not-allowed opacity-60' : ''
+                                    disabled ? 'pointer-events-none opacity-60' : ''
                                   }`}
                                 >
                                   <Checkbox

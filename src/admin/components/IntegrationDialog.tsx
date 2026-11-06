@@ -105,6 +105,7 @@ export function IntegrationDialog({
   const watchedToken = watch('accessToken');
   const watchedOwner = watch('owner');
   const watchedRepo = watch('repo');
+  const hasRepository = !!watchedOwner && !!watchedRepo;
 
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
@@ -570,12 +571,20 @@ export function IntegrationDialog({
               {/* Labels Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="enable-labels">Add labels to issues</Label>
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enable-labels">Add labels to issues</Label>
+                    {!hasRepository && (
+                      <p id="enable-labels-hint" className="text-xs text-muted-foreground">
+                        Select a repository first.
+                      </p>
+                    )}
+                  </div>
                   <Switch
                     id="enable-labels"
+                    aria-describedby={hasRepository ? undefined : 'enable-labels-hint'}
                     checked={enableLabels}
                     onCheckedChange={handleToggleLabels}
-                    disabled={!watchedOwner || !watchedRepo}
+                    disabled={!hasRepository}
                   />
                 </div>
 
@@ -651,12 +660,20 @@ export function IntegrationDialog({
               {/* Assignees Toggle */}
               <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="enable-assignees">Assign issues to users</Label>
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enable-assignees">Assign issues to users</Label>
+                    {!hasRepository && (
+                      <p id="enable-assignees-hint" className="text-xs text-muted-foreground">
+                        Select a repository first.
+                      </p>
+                    )}
+                  </div>
                   <Switch
                     id="enable-assignees"
+                    aria-describedby={hasRepository ? undefined : 'enable-assignees-hint'}
                     checked={enableAssignees}
                     onCheckedChange={handleToggleAssignees}
-                    disabled={!watchedOwner || !watchedRepo}
+                    disabled={!hasRepository}
                   />
                 </div>
 

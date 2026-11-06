@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react';
 import { DEFAULT_DIAGNOSTIC_SETTINGS, type DiagnosticSettings } from '@shared/types';
 import { Switch } from './ui/switch';
 import { SettingRow, SettingRows } from './ui/setting-row';
@@ -67,7 +68,16 @@ export function DiagnosticsSettingsForm({
             key={option.key}
             label={option.label}
             htmlFor={`diagnostic-${option.key}`}
-            description={option.description}
+            description={
+              lockedByPrivacy ? (
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  {option.description}
+                </span>
+              ) : (
+                option.description
+              )
+            }
           >
             <Switch
               id={`diagnostic-${option.key}`}

@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './car
 interface SettingsCardProps {
   title: string;
   description?: string;
+  badge?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -12,6 +13,7 @@ interface SettingsCardProps {
 export function SettingsCard({
   title,
   description,
+  badge,
   action,
   children,
   className,
@@ -20,7 +22,10 @@ export function SettingsCard({
     <Card className={className}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>{title}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>{title}</CardTitle>
+            {badge}
+          </div>
           {description && <CardDescription>{description}</CardDescription>}
         </div>
         {action}
