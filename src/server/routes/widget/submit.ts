@@ -10,11 +10,13 @@ import { dynamicRateLimiter, apiKeyGenerator } from '../../middleware/rate-limit
 import { logger } from '../../utils/logger.js';
 import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
+import { videoQuotaService } from '../../services/video-quota.service.js';
 import { resolveSubmitLocale } from '../../utils/locale.js';
 import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
 import { widgetPackageCompatibilityService } from '../../services/widget-package-compatibility.service.js';
 import { parseVersion } from '../../utils/version-compare.js';
 import type { LauncherTextBundle, ReportMetadata } from '@shared/types';
+import { normalizeMimeType } from '@shared/mime';
 
 const widget = new Hono();
 
@@ -148,7 +150,7 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
   // Parse request body
   const contentType = c.req.header('content-type') ?? '';
   let body: Record<string, unknown>;
-  let mediaFiles: File[] = [];
+  let mediaFiles: Array<{ file: File; isRecording: boolean }> = [];
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await c.req.parseBody({ all: true });
@@ -172,15 +174,28 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     const mediaField = formData['media'];
     if (mediaField) {
       if (Array.isArray(mediaField)) {
-        mediaFiles = mediaField.filter((f): f is File => f instanceof File);
+        mediaFiles = mediaField
+          .filter((f): f is File => f instanceof File)
+          .map((file) => ({ file, isRecording: false }));
       } else if (mediaField instanceof File) {
-        mediaFiles = [mediaField];
+        mediaFiles = [{ file: mediaField, isRecording: false }];
       }
+    }
+
+    const recordingField = formData['recording'];
+    if (Array.isArray(recordingField)) {
+      mediaFiles.push(
+        ...recordingField
+          .filter((file): file is File => file instanceof File)
+          .map((file) => ({ file, isRecording: true }))
+      );
+    } else if (recordingField instanceof File) {
+      mediaFiles.push({ file: recordingField, isRecording: true });
     }
 
     // Also check for legacy 'screenshot' field for backwards compatibility
     if (formData['screenshot'] instanceof File) {
-      mediaFiles.push(formData['screenshot']);
+      mediaFiles.push({ file: formData['screenshot'], isRecording: false });
     }
   } else {
     body = await c.req.json();
@@ -215,32 +230,52 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb ?? 10;
   const maxVideoMb =
     projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb ?? 50;
+  const maxVideoUploadMbPerDay =
+    projScreenshot?.maxVideoUploadMbPerDay ?? globalScreenshot.maxVideoUploadMbPerDay ?? 2048;
+  const enableScreenRecording =
+    projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording ?? false;
+  if (!enableScreenRecording && mediaFiles.some((file) => file.isRecording)) {
+    return c.json(
+      {
+        success: false,
+        error: 'SCREEN_RECORDING_DISABLED',
+        message: 'Screen recording is disabled for this project.',
+      },
+      403
+    );
+  }
   const imageLimitMb = Math.max(maxScreenshotMb, maxImageMb);
   const maxFileSizeBytes = imageLimitMb * 1024 * 1024;
   const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
   const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
 
-  const media: Array<{ data: Buffer; filename: string; mimeType: string }> = [];
-  for (const file of mediaFiles) {
-    // Early MIME type check before buffering
-    if (!allowedTypes.includes(file.type)) {
+  const media: Array<{
+    data: Buffer;
+    filename: string;
+    mimeType: string;
+    isRecording: boolean;
+  }> = [];
+  for (const { file, isRecording } of mediaFiles) {
+    const mimeType = normalizeMimeType(file.type);
+    // Reject unsupported types before copying file contents.
+    if (!allowedTypes.includes(mimeType)) {
       logger.warn('Media file rejected: invalid MIME type', {
         filename: file.name,
-        mimeType: file.type,
+        mimeType,
       });
       return c.json(
         {
           success: false,
           error: 'UNSUPPORTED_MEDIA_TYPE',
-          message: `Unsupported media type "${sanitizeForDisplay(file.type)}" for "${sanitizeForDisplay(file.name)}".`,
-          details: { filename: file.name, mimeType: file.type },
+          message: `Unsupported media type "${sanitizeForDisplay(mimeType)}" for "${sanitizeForDisplay(file.name)}".`,
+          details: { filename: file.name, mimeType },
         },
         415
       );
     }
 
-    // Early size check before buffering
-    const isVideo = file.type.startsWith('video/');
+    // Reject oversized files before copying file contents.
+    const isVideo = mimeType.startsWith('video/');
     const sizeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
     if (file.size > sizeLimit) {
       const limitMb = Math.round(sizeLimit / (1024 * 1024));
@@ -271,7 +306,8 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
       media.push({
         data: buffer,
         filename: file.name,
-        mimeType: file.type,
+        mimeType,
+        isRecording,
       });
     } catch (error) {
       logger.error('Failed to process media file', error, { filename: file.name });
@@ -287,47 +323,85 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     }
   }
 
-  const globalSettingsResult = await settingsService.getAll();
-  const globalLanguage = globalSettingsResult.success
-    ? globalSettingsResult.value.language
-    : undefined;
-  const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
-  const reporterLocale = resolveSubmitLocale({
-    claimed: data.locale,
-    projectMode: effectiveLanguage?.mode,
-    projectDefault: effectiveLanguage?.defaultLanguage,
-  });
+  const incomingVideoBytes = media.reduce(
+    (total, file) => total + (file.mimeType.startsWith('video/') ? file.data.length : 0),
+    0
+  );
+  const reservationResult = videoQuotaService.reserve(
+    projectResult.value.id,
+    incomingVideoBytes,
+    maxVideoUploadMbPerDay * 1024 * 1024
+  );
+  if (!reservationResult.success) {
+    if (reservationResult.code === 'VIDEO_QUOTA_EXCEEDED') {
+      return c.json(
+        {
+          success: false,
+          error: reservationResult.code,
+          message: reservationResult.error,
+        },
+        429
+      );
+    }
 
-  // Create report via service
-  const result = await reportsService.create({
-    apiKey,
-    title: data.title,
-    description: data.description,
-    priority: data.priority,
-    files: media,
-    annotations: data.annotations as object,
-    metadata: privacyPolicyService.applySubmissionPolicy(
-      data.metadata as ReportMetadata,
-      settings.privacy,
-      projectResult.value.settings
-    ),
-    reporterEmail: data.reporterEmail || undefined,
-    reporterName: data.reporterName || undefined,
-    reporterLocale,
-  });
-
-  if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 400);
+    logger.error('Failed to check video upload quota', {
+      projectId: projectResult.value.id,
+      error: reservationResult.error,
+    });
+    return c.json(
+      {
+        success: false,
+        error: reservationResult.code,
+        message: 'Unable to verify the video upload limit.',
+      },
+      500
+    );
   }
 
-  return c.json(
-    {
-      success: true,
-      reportId: result.value.id,
-      message: 'Bug report submitted successfully',
-    },
-    201
-  );
+  try {
+    const globalSettingsResult = await settingsService.getAll();
+    const globalLanguage = globalSettingsResult.success
+      ? globalSettingsResult.value.language
+      : undefined;
+    const effectiveLanguage = projectResult.value.settings?.language ?? globalLanguage;
+    const reporterLocale = resolveSubmitLocale({
+      claimed: data.locale,
+      projectMode: effectiveLanguage?.mode,
+      projectDefault: effectiveLanguage?.defaultLanguage,
+    });
+
+    const result = await reportsService.create({
+      apiKey,
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      files: media,
+      annotations: data.annotations as object,
+      metadata: privacyPolicyService.applySubmissionPolicy(
+        data.metadata as ReportMetadata,
+        settings.privacy,
+        projectResult.value.settings
+      ),
+      reporterEmail: data.reporterEmail || undefined,
+      reporterName: data.reporterName || undefined,
+      reporterLocale,
+    });
+
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 400);
+    }
+
+    return c.json(
+      {
+        success: true,
+        reportId: result.value.id,
+        message: 'Bug report submitted successfully',
+      },
+      201
+    );
+  } finally {
+    reservationResult.value();
+  }
 });
 
 // Get Widget Config
@@ -410,6 +484,13 @@ widget.get('/config/:apiKey', async (c) => {
     projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb;
   const maxVideoUploadSizeMb =
     projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb;
+  const enableScreenRecording =
+    projScreenshot?.enableScreenRecording ?? globalScreenshot.enableScreenRecording;
+  const allowRecordingMicrophone =
+    projScreenshot?.allowRecordingMicrophone ?? globalScreenshot.allowRecordingMicrophone;
+  const maxRecordingDurationSeconds =
+    projScreenshot?.maxRecordingDurationSeconds ?? globalScreenshot.maxRecordingDurationSeconds;
+  const recordingQuality = projScreenshot?.recordingQuality ?? globalScreenshot.recordingQuality;
   const theme = projButton?.theme ?? globalButton.theme;
   const position = projButton?.position ?? globalButton.position;
   const buttonShape = projButton?.buttonShape ?? globalButton.buttonShape;
@@ -492,6 +573,8 @@ widget.get('/config/:apiKey', async (c) => {
         networkCapture: diagnosticPolicy.networkCapture,
         storageKeysCapture: diagnosticPolicy.storageKeysCapture,
         userActivityCapture: diagnosticPolicy.userActivityCapture,
+        screenRecording: enableScreenRecording,
+        recordingMicrophone: enableScreenRecording && allowRecordingMicrophone,
       },
       theme,
       position,
@@ -536,6 +619,8 @@ widget.get('/config/:apiKey', async (c) => {
       maxScreenshotSizeMb,
       maxImageUploadSizeMb,
       maxVideoUploadSizeMb,
+      maxRecordingDurationSeconds,
+      recordingQuality,
       language: {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,

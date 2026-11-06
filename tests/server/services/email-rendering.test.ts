@@ -1,21 +1,13 @@
 import { describe, it, expect } from 'bun:test';
 import { resolveTemplate } from '../../../src/server/services/email.service';
 import { templateService } from '../../../src/server/services/template.service';
-import {
-  applyBrandColor,
-  appendFooterToHtml,
-} from '../../../src/server/constants/email-templates';
+import { applyBrandColor, appendFooterToHtml } from '../../../src/server/constants/email-templates';
 import {
   getStatusLabel,
   getPriorityLabel,
   formatReportDate,
 } from '../../../src/server/i18n/labels';
-import type {
-  ReportPriority,
-  ReportStatus,
-  Report,
-  LocaleCode,
-} from '../../../src/shared/types';
+import type { ReportPriority, ReportStatus, Report, LocaleCode } from '../../../src/shared/types';
 
 const BRAND_COLOR = '#02658D';
 

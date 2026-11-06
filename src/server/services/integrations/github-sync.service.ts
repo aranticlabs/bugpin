@@ -98,6 +98,7 @@ export const githubSyncService = {
             repo: githubConfig.repo,
             accessToken: githubConfig.accessToken,
             fileTransferMode: githubConfig.fileTransferMode,
+            publicVideoLinks: githubConfig.publicVideoLinks,
           }
         );
 
@@ -131,6 +132,7 @@ export const githubSyncService = {
             labels: githubConfig.labels,
             assignees: githubConfig.assignees,
             fileTransferMode: githubConfig.fileTransferMode,
+            publicVideoLinks: githubConfig.publicVideoLinks,
           }
         );
 

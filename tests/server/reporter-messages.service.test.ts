@@ -42,7 +42,9 @@ const baseMessage: ReporterMessage = {
 let reportById: Report | null = baseReport;
 let notifyReporterMessageCalls = 0;
 
-const createMock = mock(async (_reportId: string, _userId: string, _message: string) => baseMessage);
+const createMock = mock(
+  async (_reportId: string, _userId: string, _message: string) => baseMessage
+);
 const findByReportIdMock = mock(async (_reportId: string) => [baseMessage]);
 
 beforeEach(() => {

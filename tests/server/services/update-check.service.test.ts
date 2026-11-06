@@ -120,7 +120,7 @@ describe('updateCheckService.getStatus', () => {
     if (result.success) {
       expect(result.value.latest).toBe('1.0.7');
       expect(result.value.releaseUrl).toBe(
-        'https://github.com/aranticlabs/bugpin/releases/tag/v1.0.7',
+        'https://github.com/aranticlabs/bugpin/releases/tag/v1.0.7'
       );
     }
     const cacheWrites = writes.filter((w) => w.key === CACHE_KEY);
@@ -190,9 +190,7 @@ describe('updateCheckService.getStatus', () => {
     expect(result.success).toBe(true);
     const cacheWrite = writes.findLast((w) => w.key === CACHE_KEY)?.value as CacheRow;
     expect(cacheWrite.latest).toBe('1.0.5');
-    expect(cacheWrite.releaseUrl).toBe(
-      'https://github.com/aranticlabs/bugpin/releases/tag/v1.0.5',
-    );
+    expect(cacheWrite.releaseUrl).toBe('https://github.com/aranticlabs/bugpin/releases/tag/v1.0.5');
     expect(cacheWrite.lastError).toContain('503');
     if (result.success) {
       expect(result.value.latest).toBe('1.0.5');

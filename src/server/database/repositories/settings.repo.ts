@@ -1,3 +1,4 @@
+import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { getDb } from '../database.js';
 import type {
   AppSettings,
@@ -72,6 +73,11 @@ const DEFAULT_SCREENSHOT: GlobalScreenshotSettings = {
   maxScreenshotSize: 10,
   maxImageUploadSizeMb: 10,
   maxVideoUploadSizeMb: 50,
+  maxVideoUploadMbPerDay: 2048,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: DEFAULT_RECORDING_QUALITY,
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
@@ -250,6 +256,11 @@ export const settingsRepo = {
       screenshot: {
         ...DEFAULT_SCREENSHOT,
         ...(settings.screenshot as Partial<GlobalScreenshotSettings>),
+        maxVideoUploadSizeMb: Math.min(
+          (settings.screenshot as Partial<GlobalScreenshotSettings>)?.maxVideoUploadSizeMb ??
+            DEFAULT_SCREENSHOT.maxVideoUploadSizeMb,
+          100
+        ),
       },
       // Notification defaults
       notifications: {

@@ -127,11 +127,35 @@ export const settingsService = {
     if (input.screenshot?.maxVideoUploadSizeMb !== undefined) {
       if (
         input.screenshot.maxVideoUploadSizeMb < 1 ||
-        input.screenshot.maxVideoUploadSizeMb > 500
+        input.screenshot.maxVideoUploadSizeMb > 100
       ) {
         return Result.fail(
-          'Max video upload size must be between 1 and 500 MB',
+          'Max video upload size must be between 1 and 100 MB',
           'INVALID_VIDEO_UPLOAD_SIZE'
+        );
+      }
+    }
+
+    if (input.screenshot?.maxVideoUploadMbPerDay !== undefined) {
+      if (
+        input.screenshot.maxVideoUploadMbPerDay < 0 ||
+        input.screenshot.maxVideoUploadMbPerDay > 1048576
+      ) {
+        return Result.fail(
+          'Daily video upload limit must be between 0 and 1048576 MB',
+          'INVALID_VIDEO_UPLOAD_QUOTA'
+        );
+      }
+    }
+
+    if (input.screenshot?.maxRecordingDurationSeconds !== undefined) {
+      if (
+        input.screenshot.maxRecordingDurationSeconds < 10 ||
+        input.screenshot.maxRecordingDurationSeconds > 600
+      ) {
+        return Result.fail(
+          'Max recording duration must be between 10 and 600 seconds',
+          'INVALID_RECORDING_DURATION'
         );
       }
     }

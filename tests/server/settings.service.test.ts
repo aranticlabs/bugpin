@@ -120,10 +120,22 @@ describe('settingsService.update', () => {
     expect(retention.success).toBe(false);
     const screenshot = await settingsService.update({ screenshot: { maxScreenshotSize: 0 } });
     expect(screenshot.success).toBe(false);
+    const videoSize = await settingsService.update({
+      screenshot: { maxVideoUploadSizeMb: 101 },
+    });
+    expect(videoSize.success).toBe(false);
     const rateLimit = await settingsService.update({ rateLimitPerMinute: 0 });
     expect(rateLimit.success).toBe(false);
     const sessionMax = await settingsService.update({ sessionMaxAgeDays: 0 });
     expect(sessionMax.success).toBe(false);
+    const videoQuota = await settingsService.update({
+      screenshot: { maxVideoUploadMbPerDay: 1048577 },
+    });
+    expect(videoQuota.success).toBe(false);
+    const recordingDuration = await settingsService.update({
+      screenshot: { maxRecordingDurationSeconds: 9 },
+    });
+    expect(recordingDuration.success).toBe(false);
   });
 
   it('rejects invalid branding color', async () => {

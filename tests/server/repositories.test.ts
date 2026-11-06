@@ -396,6 +396,10 @@ describe('settingsRepo', () => {
     expect(settings.appName).toBe('BugPin');
     expect(settings.notifications.notifyOnNewReport).toBe(true);
     expect(settings.privacy).toEqual({ euPrivacyMode: false });
+    expect(settings.screenshot.maxVideoUploadMbPerDay).toBe(2048);
+    expect(settings.screenshot.enableScreenRecording).toBe(false);
+    expect(settings.screenshot.allowRecordingMicrophone).toBe(false);
+    expect(settings.screenshot.maxRecordingDurationSeconds).toBe(180);
   });
 
   it('updates and reads settings', async () => {
@@ -408,6 +412,18 @@ describe('settingsRepo', () => {
 
     const merged = await settingsRepo.updateNested('branding', { primaryColor: '#123456' });
     expect(merged.branding.primaryColor).toBe('#123456');
+  });
+
+  it('clamps legacy video upload limits on read', async () => {
+    await settingsRepo.set('screenshot', { maxVideoUploadSizeMb: 500 });
+    const settings = await settingsRepo.getAll();
+    expect(settings.screenshot.maxVideoUploadSizeMb).toBe(100);
+
+    const project = await projectsRepo.create({
+      name: 'Legacy video limit',
+      settings: { screenshot: { maxVideoUploadSizeMb: 500 } },
+    });
+    expect(project.settings.screenshot?.maxVideoUploadSizeMb).toBe(100);
   });
 
   it('replaces legacy "Found a bug?" tooltip with null at the global layer', async () => {
@@ -719,6 +735,67 @@ describe('filesRepo', () => {
 
     const deleted = await filesRepo.deleteByReportId(report.id);
     expect(deleted).toBe(2);
+  });
+
+  it('sums recent video bytes for one project', async () => {
+    const project = await createProject('Quota');
+    const otherProject = await createProject('Other');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Quota report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+    const otherReport = await reportsRepo.create({
+      projectId: otherProject.id,
+      title: 'Other report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    await filesRepo.create({
+      reportId: report.id,
+      type: 'video',
+      filename: 'recent.mp4',
+      path: '/tmp/recent.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 300,
+    });
+    const oldVideo = await filesRepo.create({
+      reportId: report.id,
+      type: 'video',
+      filename: 'old.mp4',
+      path: '/tmp/old.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 500,
+    });
+    await filesRepo.create({
+      reportId: report.id,
+      type: 'screenshot',
+      filename: 'screen.png',
+      path: '/tmp/screen.png',
+      mimeType: 'image/png',
+      sizeBytes: 700,
+    });
+    await filesRepo.create({
+      reportId: otherReport.id,
+      type: 'video',
+      filename: 'other.mp4',
+      path: '/tmp/other.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 900,
+    });
+    getDb().run('UPDATE files SET created_at = ? WHERE id = ?', [
+      new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      oldVideo.id,
+    ]);
+
+    const total = await filesRepo.getVideoSizeByProjectSince(
+      project.id,
+      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    );
+
+    expect(total).toBe(300);
   });
 });
 

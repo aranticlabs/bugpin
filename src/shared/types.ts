@@ -1,3 +1,5 @@
+import type { RecordingQuality } from './recording-quality';
+
 // Locale Types
 
 export type LocaleCode = 'en' | 'de' | 'fr' | 'nl' | 'es' | 'it' | 'ja' | 'zh';
@@ -225,6 +227,11 @@ export interface ScreenshotSettings {
   maxScreenshotSize?: number;
   maxImageUploadSizeMb?: number;
   maxVideoUploadSizeMb?: number;
+  maxVideoUploadMbPerDay?: number;
+  enableScreenRecording?: boolean;
+  allowRecordingMicrophone?: boolean;
+  maxRecordingDurationSeconds?: number;
+  recordingQuality?: RecordingQuality;
 }
 
 // Project language settings
@@ -492,6 +499,11 @@ export interface GlobalScreenshotSettings {
   maxScreenshotSize: number;
   maxImageUploadSizeMb: number;
   maxVideoUploadSizeMb: number;
+  maxVideoUploadMbPerDay: number;
+  enableScreenRecording: boolean;
+  allowRecordingMicrophone: boolean;
+  maxRecordingDurationSeconds: number;
+  recordingQuality: RecordingQuality;
 }
 
 // Settings Types
@@ -574,6 +586,7 @@ export interface GitHubIntegrationConfig {
   webhookId?: string; // GitHub webhook ID for bi-directional sync
   webhookSecret?: string; // Secret for verifying GitHub webhook payloads
   fileTransferMode?: 'link' | 'upload'; // 'link' (default) or 'upload' files to GitHub repo
+  publicVideoLinks?: boolean;
 }
 
 export interface JiraIntegrationConfig {

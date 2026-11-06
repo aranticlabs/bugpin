@@ -19,7 +19,6 @@ export function Screenshot() {
   const [formData, setFormData] = useState<ScreenshotSettings>({
     maxScreenshotSize: 10,
     maxImageUploadSizeMb: 10,
-    maxVideoUploadSizeMb: 50,
     useScreenCaptureAPI: false,
   });
 
@@ -36,7 +35,6 @@ export function Screenshot() {
       setFormData({
         maxScreenshotSize: settings.screenshot.maxScreenshotSize || 10,
         maxImageUploadSizeMb: settings.screenshot.maxImageUploadSizeMb || 10,
-        maxVideoUploadSizeMb: settings.screenshot.maxVideoUploadSizeMb || 50,
         useScreenCaptureAPI: settings.screenshot.useScreenCaptureAPI || false,
       });
     }
@@ -58,11 +56,13 @@ export function Screenshot() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!settings) return;
     mutation.mutate({
+      // Screenshot and recording settings share one stored object that is replaced on save.
       screenshot: {
+        ...settings.screenshot,
         maxScreenshotSize: formData.maxScreenshotSize || 10,
         maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
-        maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
         useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
       },
     });

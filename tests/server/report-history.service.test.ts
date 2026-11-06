@@ -3,12 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { config } from '../../src/server/config';
-import {
-  initDatabase,
-  initSchema,
-  closeDatabase,
-  getDb,
-} from '../../src/server/database/database';
+import { initDatabase, initSchema, closeDatabase, getDb } from '../../src/server/database/database';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';

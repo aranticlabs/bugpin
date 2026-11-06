@@ -10,6 +10,8 @@ const nl: WidgetCatalog = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Schermafbeeldingen',
   'dialog.tabs.mediaWithCount': 'Schermafbeeldingen ({count})',
+  'dialog.tabs.recording': 'Opnames',
+  'dialog.tabs.recordingWithCount': 'Opnames ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Korte beschrijving van het probleem',
@@ -51,6 +53,11 @@ const nl: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Dit niet meer tonen',
   'screenCapture.back': 'Terug',
   'screenCapture.confirm': 'Schermafbeelding maken',
+  'screenCapture.confirmRecording': 'Recorder openen',
+  'screenCapture.recording.body':
+    'Uw browser vraagt wat u wilt delen. Alles wat zichtbaar is, wordt opgenomen.',
+  'screenCapture.recording.windowHint':
+    'Kies het venster met deze pagina. Andere apps kunnen zichtbaar zijn.',
 
   'screenshot.privacyTip':
     'Tip: gebruik het annotatiegereedschap om gevoelige gegevens te verbergen voordat u verzendt.',
@@ -69,8 +76,8 @@ const nl: WidgetCatalog = {
   'screenshot.action.annotate': 'Annoteren',
   'screenshot.action.download': 'Downloaden',
   'screenshot.action.remove': 'Verwijderen',
-  'screenshot.helperText':
-    'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV, AVI (max {videoSize}MB)',
+  'screenshot.helperText': 'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.helperText': 'Ondersteund: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',
   'screenshot.error.imageTooLarge': 'Afbeelding te groot. Maximale grootte is {size}MB.',
@@ -81,9 +88,53 @@ const nl: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Schakel "Opnamekwaliteit verlagen" in of pas de grootte van het browservenster aan.',
 
+  'recording.record': 'Opname starten',
+  'recording.startShort': 'Starten',
+  'recording.start': 'Recorder openen',
+  'recording.microphone': 'Microfoon opnemen',
+  'recording.privacyTip': 'Alles wat zichtbaar is, wordt opgenomen.',
+  'recording.countdown': 'Opname start over {seconds}',
+  'recording.stop': 'Stoppen',
+  'recording.discard': 'Verwijderen',
+  'recording.pause': 'Pauzeren',
+  'recording.play': 'Afspelen',
+  'recording.expand': 'Video vergroten',
+  'recording.resume': 'Hervatten',
+  'recording.tool.cursor': 'Cursor',
+  'recording.tool.pen': 'Pen',
+  'recording.tool.laser': 'Laseraanwijzer',
+  'recording.tool.clickEffects': 'Klikeffecten',
+  'recording.tool.undo': 'Ongedaan maken',
+  'recording.tool.clear': 'Tekening wissen',
+  'recording.color.red': 'Rood',
+  'recording.color.amber': 'Amber',
+  'recording.color.green': 'Groen',
+  'recording.color.blue': 'Blauw',
+  'recording.color.white': 'Wit',
+  'recording.warning.wholeScreen': 'U deelt uw volledige scherm.',
+  'recording.notice.noMicrophone': 'Opname zonder microfoon.',
+  'recording.stopped.duration': 'Opname gestopt na {duration}.',
+  'recording.stopped.size': 'Opname gestopt bij de limiet van {size}MB.',
+  'recording.recovered': 'Opname opgeslagen. Open BugPin om door te gaan.',
+  'recording.error.unavailable': 'Schermopname is niet beschikbaar.',
+  'recording.error.failed': 'Opname mislukt. Probeer het opnieuw.',
+  'recording.error.empty': 'De opname was leeg. Probeer het opnieuw.',
+  'recording.oversized': 'De opname is {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Download de opname of maak een kortere clip.',
+  'recording.previewUnavailable': 'Videovoorbeeld niet beschikbaar.',
+
+  'submit.uploading': 'Uploaden: {percent}%',
+  'submit.cancelUpload': 'Upload annuleren',
+  'submit.error.tooLarge':
+    'De upload is te groot voor de server. Verwijder media en probeer het opnieuw.',
+  'submit.error.videoQuota':
+    'Video-uploads zijn gepauzeerd voor dit project. Verwijder de video om het rapport te verzenden.',
+
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',
   'toast.error.capture': 'Maken van schermafbeelding mislukt',
+  'toast.error.draftSave':
+    'Het concept kon niet worden opgeslagen. Houd de widget open en probeer het opnieuw.',
 
   'annotation.toolbar.select': 'Selecteren',
   'annotation.toolbar.pan': 'Verschuiven (of houd Spatie ingedrukt)',

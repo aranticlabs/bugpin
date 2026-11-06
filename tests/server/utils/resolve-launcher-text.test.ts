@@ -10,21 +10,21 @@ describe('resolveLauncherText', () => {
   });
 
   it('returns project active locale when set', () => {
-    expect(
-      resolveLauncherText({ en: 'EN', de: 'DE' }, { en: 'GEN' }, 'de', builtinTooltip),
-    ).toBe('DE');
+    expect(resolveLauncherText({ en: 'EN', de: 'DE' }, { en: 'GEN' }, 'de', builtinTooltip)).toBe(
+      'DE'
+    );
   });
 
   it('falls back to project en within project layer', () => {
-    expect(
-      resolveLauncherText({ en: 'EN' }, { en: 'GEN', de: 'GDE' }, 'de', builtinTooltip),
-    ).toBe('EN');
+    expect(resolveLauncherText({ en: 'EN' }, { en: 'GEN', de: 'GDE' }, 'de', builtinTooltip)).toBe(
+      'EN'
+    );
   });
 
   it('falls through to global when project is undefined', () => {
-    expect(
-      resolveLauncherText(undefined, { en: 'GEN', de: 'GDE' }, 'de', builtinTooltip),
-    ).toBe('GDE');
+    expect(resolveLauncherText(undefined, { en: 'GEN', de: 'GDE' }, 'de', builtinTooltip)).toBe(
+      'GDE'
+    );
   });
 
   it('falls through to global en when global active locale missing', () => {
@@ -41,12 +41,7 @@ describe('resolveLauncherText', () => {
 
   it('falls through to global when project object lacks usable entries', () => {
     expect(
-      resolveLauncherText(
-        { en: '' } as { en: string },
-        { en: 'GEN' },
-        'fr',
-        builtinTooltip,
-      ),
+      resolveLauncherText({ en: '' } as { en: string }, { en: 'GEN' }, 'fr', builtinTooltip)
     ).toBe('GEN');
   });
 
@@ -56,8 +51,8 @@ describe('resolveLauncherText', () => {
         { en: '', de: 'DE' } as { en: string; de: string },
         { en: 'GEN' },
         'de',
-        builtinTooltip,
-      ),
+        builtinTooltip
+      )
     ).toBe('DE');
   });
 });

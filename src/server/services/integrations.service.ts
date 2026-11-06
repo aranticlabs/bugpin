@@ -316,6 +316,7 @@ export const integrationsService = {
               labels: config.labels,
               assignees: config.assignees,
               fileTransferMode: config.fileTransferMode,
+              publicVideoLinks: config.publicVideoLinks,
             },
             options
           );
@@ -405,6 +406,12 @@ function validateConfig(
       }
       if (!githubConfig.accessToken || !githubConfig.accessToken.trim()) {
         return { success: false, error: 'GitHub access token is required' };
+      }
+      if (
+        githubConfig.publicVideoLinks !== undefined &&
+        typeof githubConfig.publicVideoLinks !== 'boolean'
+      ) {
+        return { success: false, error: 'Public video links must be true or false' };
       }
       return { success: true };
     }

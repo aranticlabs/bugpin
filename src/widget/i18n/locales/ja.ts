@@ -10,6 +10,8 @@ const ja: WidgetCatalog = {
   'dialog.tabs.details': '詳細',
   'dialog.tabs.media': 'スクリーンショット',
   'dialog.tabs.mediaWithCount': 'スクリーンショット（{count}件）',
+  'dialog.tabs.recording': '録画',
+  'dialog.tabs.recordingWithCount': '録画 ({count})',
 
   'dialog.fields.title.label': 'タイトル',
   'dialog.fields.title.placeholder': '問題の概要を簡潔に',
@@ -49,6 +51,11 @@ const ja: WidgetCatalog = {
   'screenCapture.dontShowAgain': '次回から表示しない',
   'screenCapture.back': '戻る',
   'screenCapture.confirm': '撮影',
+  'screenCapture.confirmRecording': '録画ツールを開く',
+  'screenCapture.recording.body':
+    '共有する内容をブラウザが確認します。表示されているものはすべて録画されます。',
+  'screenCapture.recording.windowHint':
+    'このページのウィンドウを選択してください。他のアプリが映る場合があります。',
 
   'screenshot.privacyTip': 'ヒント：送信前に注釈ツールで機密情報を隠してください。',
   'screenshot.capturing': '撮影中...',
@@ -66,8 +73,8 @@ const ja: WidgetCatalog = {
   'screenshot.action.annotate': '注釈',
   'screenshot.action.download': 'ダウンロード',
   'screenshot.action.remove': '削除',
-  'screenshot.helperText':
-    '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）／MP4、WebM、MOV、AVI（最大{videoSize}MB）',
+  'screenshot.helperText': '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）',
+  'recording.helperText': '対応形式：MP4、WebM、MOV（最大{videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '対応していない画像形式です：{type}',
   'screenshot.error.imageTooLarge': '画像サイズが大きすぎます。最大{size}MBまでです。',
@@ -78,9 +85,53 @@ const ja: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     '「キャプチャ品質を下げる」を有効にするか、ブラウザウィンドウのサイズを変更してください。',
 
+  'recording.record': '録画を開始',
+  'recording.startShort': '開始',
+  'recording.start': '録画ツールを開く',
+  'recording.microphone': 'マイクを含める',
+  'recording.privacyTip': '表示されているものはすべて録画されます。',
+  'recording.countdown': '{seconds} 秒後に録画を開始します',
+  'recording.stop': '停止',
+  'recording.discard': '破棄',
+  'recording.pause': '一時停止',
+  'recording.play': '再生',
+  'recording.expand': '動画を拡大',
+  'recording.resume': '再開',
+  'recording.tool.cursor': 'カーソル',
+  'recording.tool.pen': 'ペン',
+  'recording.tool.laser': 'レーザーポインター',
+  'recording.tool.clickEffects': 'クリックエフェクト',
+  'recording.tool.undo': '元に戻す',
+  'recording.tool.clear': '描画を消去',
+  'recording.color.red': '赤',
+  'recording.color.amber': '琥珀色',
+  'recording.color.green': '緑',
+  'recording.color.blue': '青',
+  'recording.color.white': '白',
+  'recording.warning.wholeScreen': '画面全体を共有しています。',
+  'recording.notice.noMicrophone': 'マイクなしで録画しています。',
+  'recording.stopped.duration': '{duration}後に録画を停止しました。',
+  'recording.stopped.size': '{size}MBの上限に達したため録画を停止しました。',
+  'recording.recovered': '録画を保存しました。BugPin を開いて続行してください。',
+  'recording.error.unavailable': '画面録画は利用できません。',
+  'recording.error.failed': '録画に失敗しました。もう一度お試しください。',
+  'recording.error.empty': '録画が空でした。もう一度お試しください。',
+  'recording.oversized': '録画サイズは{size}MBです（最大{limit}MB）。',
+  'recording.oversizedHint': 'ダウンロードするか、より短いクリップを録画してください。',
+  'recording.previewUnavailable': 'プレビューを表示できません。',
+
+  'submit.uploading': 'アップロード中 {percent}%',
+  'submit.cancelUpload': 'アップロードをキャンセル',
+  'submit.error.tooLarge':
+    'アップロードがサーバーの上限を超えています。メディアを減らして、もう一度お試しください。',
+  'submit.error.videoQuota':
+    'このプロジェクトでは動画のアップロードが一時停止されています。動画を削除して送信してください。',
+
   'toast.success.submit': 'バグレポートを送信しました！',
   'toast.error.submit': 'レポートの送信に失敗しました',
   'toast.error.capture': 'スクリーンショットの撮影に失敗しました',
+  'toast.error.draftSave':
+    '下書きを保存できませんでした。ウィジェットを開いたまま、もう一度お試しください。',
 
   'annotation.toolbar.select': '選択',
   'annotation.toolbar.pan': '移動（またはスペースキーを長押し）',

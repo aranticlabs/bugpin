@@ -3,6 +3,7 @@ import { render } from 'preact';
 import type { WidgetConfig } from '../../config';
 import { installDom } from '../helpers/dom';
 import { installFabricMock } from '../helpers/fabric-mock';
+import { installMockXMLHttpRequest } from '../helpers/xhr';
 
 installFabricMock();
 
@@ -60,12 +61,16 @@ const baseConfig: WidgetConfig = {
   enableConsoleCapture: true,
   enableNetworkCapture: true,
   enableStorageKeysCapture: false,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
   userActivityCapture: 'automatic',
   captureMethod: 'visible',
   useScreenCaptureAPI: false,
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: 'standard',
 };
 
 const originalFetch = globalThis.fetch;
@@ -77,7 +82,8 @@ const originalImage = globalThis.Image;
 const originalGetBoundingClientRect = globalThis.HTMLElement?.prototype.getBoundingClientRect;
 
 let restoreDom: (() => void) | null = null;
-let fetchCalls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+let submittedForms: FormData[] = [];
+let restoreXhr: (() => void) | null = null;
 
 class MockFileReader {
   result: string | ArrayBuffer | null = null;
@@ -113,13 +119,16 @@ class MockImage {
 beforeEach(() => {
   delete (globalThis as Record<string, unknown>).__fabricCanvasReady;
   restoreDom = installDom();
-  fetchCalls = [];
+  submittedForms = [];
 
-  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    fetchCalls.push([input, init]);
-    return new Response(JSON.stringify({ success: true, reportId: 'rpt_mock' }), { status: 200 });
-  };
+  const mockFetch = async () =>
+    new Response(JSON.stringify({ success: true, reportId: 'rpt_mock' }), { status: 200 });
   globalThis.fetch = mockFetch as unknown as typeof fetch;
+  restoreXhr = installMockXMLHttpRequest((request) => {
+    submittedForms.push(request.body as FormData);
+    request.progress(1, 2);
+    request.respond(200, JSON.stringify({ success: true, reportId: 'rpt_mock' }));
+  });
 
   globalThis.navigator = {
     userAgent: 'Mozilla/5.0',
@@ -155,6 +164,8 @@ beforeEach(() => {
 afterEach(() => {
   restoreDom?.();
   restoreDom = null;
+  restoreXhr?.();
+  restoreXhr = null;
 
   globalThis.fetch = originalFetch;
   globalThis.navigator = originalNavigator;
@@ -204,10 +215,9 @@ describe('App interactions', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(fetchCalls.length).toBe(1);
+    expect(submittedForms.length).toBe(1);
 
-    const [, init] = fetchCalls[0] ?? [];
-    const body = (init?.body ?? null) as FormData | null;
+    const body = submittedForms[0] ?? null;
     const data = body?.get('data');
     const parsed = typeof data === 'string' ? JSON.parse(data) : null;
 

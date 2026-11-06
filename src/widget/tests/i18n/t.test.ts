@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { __resetI18nForTests, getLocale, setLocale, subscribe, t } from '../../i18n/index';
+import en from '../../i18n/locales/en';
+import de from '../../i18n/locales/de';
+import es from '../../i18n/locales/es';
+import fr from '../../i18n/locales/fr';
+import italian from '../../i18n/locales/it';
+import ja from '../../i18n/locales/ja';
+import nl from '../../i18n/locales/nl';
+import zh from '../../i18n/locales/zh';
 
 describe('widget i18n runtime', () => {
   beforeEach(() => {
@@ -11,6 +19,28 @@ describe('widget i18n runtime', () => {
   });
 
   describe('t()', () => {
+    it('defines every recording and upload key in all locales', () => {
+      const keys = Object.keys(en).filter(
+        (key) =>
+          key.startsWith('recording.') ||
+          key.startsWith('screenCapture.recording.') ||
+          key.startsWith('submit.') ||
+          key.startsWith('dialog.tabs.recording') ||
+          key === 'screenCapture.confirmRecording' ||
+          key === 'screenshot.helperText'
+      );
+
+      for (const catalog of [de, es, fr, italian, ja, nl, zh]) {
+        for (const key of keys) {
+          const translated = (catalog as Record<string, string>)[key];
+          expect(translated).toBeTruthy();
+          expect(translated?.match(/\{\w+\}/g)?.sort() ?? []).toEqual(
+            (en as Record<string, string>)[key]?.match(/\{\w+\}/g)?.sort() ?? []
+          );
+        }
+      }
+    });
+
     it('returns the active locale entry when present', () => {
       setLocale('en');
       expect(t('tooltip.launcher')).toBe('Found a bug?');

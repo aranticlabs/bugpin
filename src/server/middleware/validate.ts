@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
+import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@shared/types';
 
 const webhookEventSchema = z.enum([
@@ -106,7 +107,12 @@ const projectScreenshotSchema = z
     useScreenCaptureAPI: z.boolean().optional(),
     maxScreenshotSize: z.number().int().min(1).max(50).optional(),
     maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-    maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+    maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
+    maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+    enableScreenRecording: z.boolean().optional(),
+    allowRecordingMicrophone: z.boolean().optional(),
+    maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+    recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
   })
   .strict();
 
@@ -209,6 +215,16 @@ interface ValidationOptions {
 }
 
 // Middleware
+
+// Updates do not carry the integration type, so typed keys are checked for every integration.
+// Only GitHub reads publicVideoLinks; it must be a real boolean because it grants public access.
+const integrationConfigSchema = z
+  .record(z.string(), z.unknown())
+  .refine(
+    (config) =>
+      config.publicVideoLinks === undefined || typeof config.publicVideoLinks === 'boolean',
+    { message: 'publicVideoLinks must be a boolean', path: ['publicVideoLinks'] }
+  );
 
 /**
  * Validation middleware factory
@@ -548,12 +564,17 @@ export const schemas = {
           useScreenCaptureAPI: z.boolean().optional(),
           maxScreenshotSize: z.number().int().min(1).max(50).optional(),
           maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-          maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+          maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
+          maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+          enableScreenRecording: z.boolean().optional(),
+          allowRecordingMicrophone: z.boolean().optional(),
+          maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+          recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
         })
         .optional(),
       maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),
       maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-      maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+      maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
       rateLimitPerMinute: z.number().int().min(1).max(1000).optional(),
       sessionMaxAgeDays: z.number().int().min(1).max(365).optional(),
       updateCheckEnabled: z.boolean().optional(),
@@ -566,13 +587,13 @@ export const schemas = {
     projectId: z.string().min(1, 'Project ID is required'),
     type: z.enum(['github', 'jira', 'slack', 'linear', 'webhook']),
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    config: z.record(z.string(), z.unknown()),
+    config: integrationConfigSchema,
   }),
 
   // Update integration request
   updateIntegration: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
+    config: integrationConfigSchema.optional(),
     isActive: z.boolean().optional(),
   }),
 

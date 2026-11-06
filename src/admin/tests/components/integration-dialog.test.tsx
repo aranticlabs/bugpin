@@ -45,6 +45,7 @@ const baseIntegration: Integration = {
     labels: ['bug'],
     assignees: ['alice'],
     syncMode: 'manual',
+    publicVideoLinks: true,
   },
   isActive: true,
   lastUsedAt: new Date().toISOString(),
@@ -156,6 +157,7 @@ describe('IntegrationDialog', () => {
     );
 
     expect(screen.getByText(/token saved/i)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /public video links/i })).toBeChecked();
 
     await user.click(screen.getByRole('button', { name: /change/i }));
     await user.type(screen.getByLabelText(/personal access token/i), 'new-token');
@@ -179,6 +181,7 @@ describe('IntegrationDialog', () => {
             labels: ['bug'],
             assignees: ['alice'],
             fileTransferMode: 'link',
+            publicVideoLinks: true,
           },
         },
       });

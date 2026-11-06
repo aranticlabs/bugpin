@@ -57,6 +57,14 @@ vi.mock('../../../components/ScreenshotSettingsForm', () => ({
   ),
 }));
 
+vi.mock('../../../components/RecordingSettingsForm', () => ({
+  RecordingSettingsForm: ({ onCustomToggle }: { onCustomToggle?: (enabled: boolean) => void }) => (
+    <button type="button" onClick={() => onCustomToggle?.(false)}>
+      Disable Recording
+    </button>
+  ),
+}));
+
 vi.mock('../../../components/NotificationSettingsForm', () => ({
   NotificationSettingsForm: ({
     onCustomToggle,
@@ -120,6 +128,10 @@ const baseProject: Project = {
       maxScreenshotSize: 5,
       maxImageUploadSizeMb: 10,
       maxVideoUploadSizeMb: 50,
+      maxVideoUploadMbPerDay: 2048,
+      enableScreenRecording: true,
+      allowRecordingMicrophone: true,
+      maxRecordingDurationSeconds: 120,
     },
     security: {
       allowedOrigins: ['example.com'],
@@ -310,6 +322,9 @@ describe('ProjectSettingsDialog', () => {
 
     await user.click(screen.getByRole('tab', { name: /screenshot/i }));
     await user.click(screen.getByRole('button', { name: /disable screenshot/i }));
+
+    await user.click(screen.getByRole('tab', { name: /recording/i }));
+    await user.click(screen.getByRole('button', { name: /disable recording/i }));
 
     await user.click(screen.getByRole('tab', { name: /whitelists/i }));
     await user.click(screen.getByRole('button', { name: /disable whitelist/i }));

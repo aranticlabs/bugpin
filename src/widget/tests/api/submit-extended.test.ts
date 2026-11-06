@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { installMockXMLHttpRequest } from '../helpers/xhr';
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -13,6 +14,7 @@ const originalIDBObjectStore = globalThis.IDBObjectStore;
 const originalIDBIndex = globalThis.IDBIndex;
 const originalIDBRequest = globalThis.IDBRequest;
 const originalIDBCursor = globalThis.IDBCursor;
+const originalXMLHttpRequest = globalThis.XMLHttpRequest;
 
 function setWidgetEnv() {
   const listeners = new Map<string, Array<() => void>>();
@@ -59,6 +61,7 @@ afterEach(() => {
   globalThis.IDBIndex = originalIDBIndex;
   globalThis.IDBRequest = originalIDBRequest;
   globalThis.IDBCursor = originalIDBCursor;
+  globalThis.XMLHttpRequest = originalXMLHttpRequest;
 });
 
 describe('submit API (offline + errors)', () => {
@@ -85,12 +88,9 @@ describe('submit API (offline + errors)', () => {
     expect(await getPendingCount()).toBe(1);
   });
 
-  it('buffers report when fetch throws network error', async () => {
+  it('buffers report when XHR reports a network error', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
-    const mockFetch = () => {
-      throw new TypeError('fetch failed');
-    };
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    installMockXMLHttpRequest((request) => request.fail());
 
     const { submitReport } = await import('../../api/submit');
     const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
@@ -111,9 +111,9 @@ describe('submit API (offline + errors)', () => {
 
   it('throws for server errors', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
-    const mockFetch = async () =>
-      new Response(JSON.stringify({ success: false, message: 'Nope' }), { status: 400 });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    installMockXMLHttpRequest((request) => {
+      request.respond(400, JSON.stringify({ success: false, message: 'Nope' }));
+    });
 
     const { submitReport } = await import('../../api/submit');
     const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
@@ -130,6 +130,99 @@ describe('submit API (offline + errors)', () => {
     ).rejects.toThrow('Nope');
     expect(await getPendingCount()).toBe(0);
   });
+
+  it('reports a useful error for a non-JSON 413 response', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest((request) => request.respond(413, ''));
+
+    const { submitReport } = await import('../../api/submit');
+
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      })
+    ).rejects.toThrow('too large');
+  });
+
+  it('localizes the video quota error code', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest((request) =>
+      request.respond(
+        429,
+        JSON.stringify({
+          success: false,
+          error: 'VIDEO_QUOTA_EXCEEDED',
+          message: 'Server quota message',
+        })
+      )
+    );
+
+    const { submitReport } = await import('../../api/submit');
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      })
+    ).rejects.toThrow('Video uploads are paused for this project');
+  });
+
+  it('aborts without buffering the report', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest(() => undefined);
+
+    const { submitReport } = await import('../../api/submit');
+    const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
+    await clearBuffer();
+    const controller = new AbortController();
+    const submission = submitReport(
+      {
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      },
+      { signal: controller.signal }
+    );
+
+    controller.abort();
+
+    await expect(submission).rejects.toMatchObject({ name: 'AbortError' });
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('rejects an already aborted submission without sending XHR', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    let opened = false;
+    installMockXMLHttpRequest(() => {
+      opened = true;
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const { submitReport } = await import('../../api/submit');
+
+    await expect(
+      submitReport(
+        {
+          apiKey: 'proj_key',
+          serverUrl: 'https://example.com',
+          title: 'Bug report',
+          priority: 'medium',
+          metadata: baseMetadata,
+        },
+        { signal: controller.signal }
+      )
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(opened).toBe(false);
+  });
 });
 
 describe('submit API (media + config)', () => {
@@ -137,50 +230,113 @@ describe('submit API (media + config)', () => {
     globalThis.navigator = { onLine: true } as Navigator;
 
     let capturedNames: string[] = [];
+    let capturedRecordings: string[] = [];
     let capturedData: { mediaCount?: number; mediaAnnotations?: unknown[] } | null = null;
+    const progress: number[] = [];
 
-    const mockFetch = async (_url: URL | RequestInfo, options?: RequestInit) => {
-      const body = (options?.body ?? null) as FormData | null;
+    installMockXMLHttpRequest((request) => {
+      const body = request.body as FormData | null;
       if (body) {
         const entries = body.getAll('media');
         capturedNames = entries.map((entry) => (entry as File).name ?? 'unknown');
+        capturedRecordings = body
+          .getAll('recording')
+          .map((entry) => (entry as File).name ?? 'unknown');
         const rawData = body.get('data');
         if (typeof rawData === 'string') {
           capturedData = JSON.parse(rawData);
         }
       }
-
-      return new Response(JSON.stringify({ success: true, reportId: 'rpt_2' }), { status: 200 });
-    };
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+      request.progress(50, 100);
+      request.respond(200, JSON.stringify({ success: true, reportId: 'rpt_2' }));
+    });
 
     const { submitReport } = await import('../../api/submit');
 
-    await submitReport({
-      apiKey: 'proj_key',
-      serverUrl: 'https://example.com',
+    await submitReport(
+      {
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+        media: [
+          {
+            dataUrl: 'data:image/jpeg;base64,AA==',
+            mimeType: 'image/jpeg',
+            annotations: { note: 'anno' },
+          },
+          {
+            dataUrl: 'data:image/png;base64,AA==',
+            mimeType: 'image/png',
+          },
+          {
+            blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'video/quicktime' }),
+            mimeType: 'video/quicktime',
+          },
+          {
+            blob: new Blob([new Uint8Array([0, 0, 0, 24])], { type: 'video/mp4' }),
+            mimeType: 'video/mp4',
+            source: 'recording',
+          },
+        ],
+      },
+      { onProgress: (fraction) => progress.push(fraction) }
+    );
+
+    expect(capturedNames.some((name) => name.startsWith('screenshot-0.'))).toBe(true);
+    expect(capturedNames.some((name) => name.startsWith('screenshot-1.'))).toBe(true);
+    expect(capturedNames).toContain('video-2.mov');
+    expect(capturedRecordings).toEqual(['recording-3.mp4']);
+    expect((capturedData as unknown as { mediaCount?: number })?.mediaCount).toBe(4);
+    expect(
+      (capturedData as unknown as { mediaAnnotations?: unknown[] })?.mediaAnnotations?.length
+    ).toBe(1);
+    expect(progress).toEqual([0.5]);
+  });
+
+  it('counts the JSON field in the request size', async () => {
+    const { buildSubmitFormData } = await import('../../api/submit-form');
+    const { formData, byteSize } = buildSubmitFormData({
       title: 'Bug report',
+      description: 'Description',
       priority: 'medium',
       metadata: baseMetadata,
       media: [
         {
-          dataUrl: 'data:image/jpeg;base64,AA==',
-          mimeType: 'image/jpeg',
-          annotations: { note: 'anno' },
-        },
-        {
-          dataUrl: 'data:image/png;base64,AA==',
-          mimeType: 'image/png',
+          blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' }),
+          mimeType: 'video/mp4',
         },
       ],
     });
+    const data = formData.get('data');
 
-    expect(capturedNames.some((name) => name.startsWith('screenshot-0.'))).toBe(true);
-    expect(capturedNames.some((name) => name.startsWith('screenshot-1.'))).toBe(true);
-    expect((capturedData as unknown as { mediaCount?: number })?.mediaCount).toBe(2);
-    expect(
-      (capturedData as unknown as { mediaAnnotations?: unknown[] })?.mediaAnnotations?.length
-    ).toBe(1);
+    expect(typeof data).toBe('string');
+    expect(byteSize).toBe(new TextEncoder().encode(data as string).byteLength + 3);
+  });
+
+  it('rejects media larger than the request limit before opening XHR', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    let opened = false;
+    installMockXMLHttpRequest(() => {
+      opened = true;
+    });
+    const oversized = new Blob([]);
+    Object.defineProperty(oversized, 'size', { value: 256 * 1024 * 1024 + 1 });
+
+    const { submitReport } = await import('../../api/submit');
+
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+        media: [{ blob: oversized, mimeType: 'video/mp4' }],
+      })
+    ).rejects.toThrow('too large');
+    expect(opened).toBe(false);
   });
 
   it('throws when widget config fetch fails', async () => {
