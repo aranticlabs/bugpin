@@ -8,8 +8,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Checkbox } from '../../components/ui/checkbox';
 import {
   Select,
@@ -49,20 +47,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../../components/ui/tooltip';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import {
-  Search,
-  RefreshCw,
-  CheckCircle,
-  AlertCircle,
-  Trash2,
-  X,
-  Share2,
-  ChevronDown,
-} from 'lucide-react';
+import { ArrowUpDown, Search, RefreshCw, Trash2, X, Share2, ChevronDown } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { downloadReportsShare, type ReportShareFormat } from '../../lib/reportsShareExport';
 import {
@@ -70,6 +68,7 @@ import {
   ASSIGNED_TO_ME_FILTER,
   UNASSIGNED_FILTER,
   REPORT_SORT_KEYS,
+  REPORT_STATUSES,
   type ReportSortKey,
   type TablePageSize,
 } from '@shared/types';
@@ -79,13 +78,24 @@ import { DEFAULT_TABLE_PAGE_SIZE, TablePagination } from '../../components/Table
 import { SortableTableHead, type SortDirection } from '../../components/SortableTableHead';
 import { FileDropzone } from '../../components/FileDropzone';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../components/ui/tooltip';
-import { formatDate as formatAbsoluteDate } from '../../lib/utils';
-import type { ManualReportChannel, ProjectSummary, Report, User } from '@shared/types';
+  AssigneeDisplay,
+  GitHubSyncIcon,
+  formatRelativeDate,
+} from '../../components/report/ReportFields';
+import {
+  ReportPriorityLabel,
+  ReportStatusLabel,
+} from '../../components/report/ReportStatusPriority';
+import { ReportViewSwitcher } from '../../components/report-board/ReportViewSwitcher';
+import { ReportsBoard } from './ReportsBoard';
+import type {
+  ManualReportChannel,
+  ProjectSummary,
+  Report,
+  ReportStatus,
+  ReportView,
+  User,
+} from '@shared/types';
 
 const PROJECT_DEFAULT_ASSIGNEE = '__project_default__';
 const UNASSIGNED_ASSIGNEE = '__unassigned__';
@@ -156,6 +166,26 @@ function parseReportSort(params: URLSearchParams): {
   return { key, direction: params.get('dir') === 'asc' ? 'asc' : 'desc' };
 }
 
+const MANUAL_SORT: { key: ReportSortKey; direction: SortDirection } = {
+  key: 'position',
+  direction: 'asc',
+};
+
+const BOARD_SORT_OPTIONS: { key: ReportSortKey; label: string }[] = [
+  { key: 'position', label: 'Manual' },
+  { key: 'createdAt', label: 'Newest' },
+  { key: 'updatedAt', label: 'Last updated' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'title', label: 'Title' },
+  { key: 'project', label: 'Project' },
+  { key: 'assignee', label: 'Assignee' },
+];
+
+function parseStatusFilter(value: string): ReportStatus[] {
+  const statuses = REPORT_STATUSES.filter((status) => value.split(',').includes(status));
+  return statuses.length > 0 ? statuses : [...REPORT_STATUSES];
+}
+
 export function Reports({
   projectId: fixedProjectId,
   headerStart,
@@ -177,12 +207,15 @@ export function Reports({
 
   const page = parseInt(searchParams.get('page') || '1');
   const [pageSize, setPageSize] = usePreference('reportsPageSize', DEFAULT_TABLE_PAGE_SIZE);
+  const [view, setView] = usePreference('reportsView', 'list', { cache: true });
   const status = searchParams.get('status') || '';
   const priority = searchParams.get('priority') || '';
   const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
   const assignedTo = searchParams.get('assignedTo') || '';
-  const source = searchParams.get('source') || '';
-  const sort = parseReportSort(searchParams);
+  const requestedSort = parseReportSort(searchParams);
+  // Manual order exists only on the board; the list falls back to its default sort.
+  const sort = requestedSort.key === 'position' ? DEFAULT_REPORT_SORT : requestedSort;
+  const boardSort = searchParams.has('sort') ? requestedSort : MANUAL_SORT;
 
   // Fetch projects for filter
   const { data: projectsData } = useQuery({
@@ -223,7 +256,6 @@ export function Reports({
         priority,
         projectId,
         assignedTo,
-        source,
         sort,
         search: searchParams.get('search'),
       },
@@ -234,7 +266,6 @@ export function Reports({
       if (priority) params.priority = priority;
       if (projectId) params.projectId = projectId;
       if (assignedTo) params.assignedTo = assignedTo;
-      if (source) params.source = source;
       params.sortBy = sort.key;
       params.sortOrder = sort.direction;
       if (searchParams.get('search')) params.search = searchParams.get('search')!;
@@ -242,6 +273,7 @@ export function Reports({
       const response = await api.get('/reports', { params });
       return response.data;
     },
+    enabled: view === 'list',
   });
 
   const selectedReadOnly =
@@ -488,6 +520,27 @@ export function Reports({
     setSearchParams(params);
   };
 
+  const handleBoardSort = (key: ReportSortKey) => {
+    const direction: SortDirection = ASCENDING_FIRST.includes(key) ? 'asc' : 'desc';
+    // Reads the latest params, since a drop can switch to Manual after other changes.
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      if (key === MANUAL_SORT.key) {
+        params.delete('sort');
+        params.delete('dir');
+      } else {
+        params.set('sort', key);
+        params.set('dir', direction);
+      }
+      return params;
+    });
+  };
+
+  const handleViewChange = (nextView: ReportView) => {
+    setSelectedIds(new Set());
+    setView(nextView);
+  };
+
   const handlePageSizeChange = (nextPageSize: TablePageSize) => {
     setPageSize(nextPageSize);
     handlePageChange(1);
@@ -508,8 +561,8 @@ export function Reports({
             <div className="space-y-1">
               <h1 className="text-2xl font-bold">Reports</h1>
               <p className="text-muted-foreground">
-                Track and triage bug reports from all projects. Open a report to see its
-                screenshots, logs, and activity.
+                Track and triage bug reports from all projects. Open a report to see its captures,
+                logs, and activity.
               </p>
             </div>
           )}
@@ -521,7 +574,7 @@ export function Reports({
       <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
         <form
           onSubmit={handleSearch}
-          className="relative min-w-0 flex-1 xl:min-w-32 xl:max-w-72 xl:flex-[2_1_0%]"
+          className="relative min-w-40 flex-1 xl:min-w-32 xl:max-w-72 xl:flex-[2_1_0%]"
         >
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -621,33 +674,67 @@ export function Reports({
             </Select>
           )}
 
-          <Select
-            value={source || 'all'}
-            onValueChange={(value) => handleFilterChange('source', value)}
-          >
-            <SelectTrigger
-              className="min-w-32 flex-1 xl:min-w-20 xl:max-w-[150px]"
-              aria-label="Filter by source"
-            >
-              <SelectValue placeholder="All sources" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="widget">Widget</SelectItem>
-              <SelectItem value="manual">Manual</SelectItem>
-            </SelectContent>
-          </Select>
+          {view === 'board' && (
+            <TooltipProvider>
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        aria-label="Sort cards"
+                      >
+                        <ArrowUpDown />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Sort:{' '}
+                    {BOARD_SORT_OPTIONS.find((option) => option.key === boardSort.key)?.label ??
+                      'Custom'}
+                  </TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    Sort cards by
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={boardSort.key}
+                    onValueChange={(value) => {
+                      const option = BOARD_SORT_OPTIONS.find(
+                        (candidate) => candidate.key === value
+                      );
+                      if (option) handleBoardSort(option.key);
+                    }}
+                  >
+                    {BOARD_SORT_OPTIONS.filter(
+                      (option) => !(fixedProjectId && option.key === 'project')
+                    ).map((option) => (
+                      <DropdownMenuRadioItem key={option.key} value={option.key}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TooltipProvider>
+          )}
         </div>
 
-        {canManageReports && (
-          <Button onClick={openCreateDialog} className="ml-auto shrink-0">
-            Create Report
-          </Button>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <ReportViewSwitcher value={view} onChange={handleViewChange} />
+          {canManageReports && (
+            <Button onClick={openCreateDialog} className="shrink-0">
+              Create Report
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Bulk actions toolbar */}
-      {selectedIds.size > 0 && (
+      {view === 'list' && selectedIds.size > 0 && (
         <div ref={bulkBarRef} className="sticky top-0 z-20 -mt-2 bg-background pt-2">
           <Card className="bg-muted/50">
             <CardContent className="p-4">
@@ -1017,359 +1104,247 @@ export function Reports({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reports — mobile card list */}
-      <div className="md:hidden space-y-3">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Spinner className="text-primary" />
-          </div>
-        ) : data?.data?.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center text-muted-foreground">
-              No reports found
-            </CardContent>
-          </Card>
-        ) : (
-          data?.data?.map((report: Report) => (
-            <Card
-              key={report.id}
-              className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
-              onClick={() => openReport(report.id)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div onClick={(e) => e.stopPropagation()} className="mt-0.5">
-                    <Checkbox
-                      checked={selectedIds.has(report.id)}
-                      onCheckedChange={(checked) => handleSelectOne(report.id, checked as boolean)}
-                      aria-label={`Select ${report.title}`}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium">{report.title}</p>
-                    {report.licenseLocked && (
-                      <p className="text-xs text-muted-foreground">Read-only · License limit</p>
-                    )}
-                    <p className="text-sm text-muted-foreground truncate">
-                      {report.metadata?.url || 'No URL'}
-                    </p>
-                    {report.reporterEmail && (
-                      <p className="text-xs text-muted-foreground">
-                        {report.reporterName || report.reporterEmail}
-                      </p>
-                    )}
-                    <div className="mt-2">
-                      <AssigneeDisplay user={report.assignee} compact />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <StatusBadge status={report.status} />
-                      <PriorityBadge priority={report.priority} />
-                      <span className="text-xs text-muted-foreground">
-                        {report.projectName || 'Unknown'}
-                      </span>
-                      <GitHubSyncIcon report={report} />
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {formatDate(report.createdAt)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-        {data && data.total > 0 && (
-          <TablePagination
-            total={data.total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            itemLabel={REPORT_LABEL}
-          />
-        )}
-      </div>
-
-      {/* Reports table */}
-      <Card
-        className="hidden md:block"
-        style={{ '--table-sticky-top': `${bulkBarHeight}px` } as CSSProperties}
-      >
-        <Table stickyHeader>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">
-                <Checkbox
-                  checked={
-                    data?.data?.length > 0 && data.data.every((r: Report) => selectedIds.has(r.id))
-                  }
-                  onCheckedChange={handleSelectAll}
-                  aria-label="Select all"
-                />
-              </TableHead>
-              <SortableTableHead
-                label="Report"
-                sortKey="title"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-              <SortableTableHead
-                label="Project"
-                sortKey="project"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-              <SortableTableHead
-                label="Status"
-                sortKey="status"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-              <SortableTableHead
-                label="Priority"
-                sortKey="priority"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-              <SortableTableHead
-                label="Assignee"
-                sortKey="assignee"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-              <TableHead className="w-[50px]">
-                <RefreshCw className="h-4 w-4" />
-              </TableHead>
-              <SortableTableHead
-                label="Created"
-                sortKey="createdAt"
-                activeKey={sort.key}
-                direction={sort.direction}
-                onSort={handleSort}
-              />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      {view === 'board' ? (
+        <ReportsBoard
+          filters={{
+            priority,
+            projectId,
+            assignedTo,
+            search: searchParams.get('search') || '',
+            sortBy: boardSort.key,
+            sortOrder: boardSort.direction,
+          }}
+          visibleStatuses={parseStatusFilter(status)}
+          canManageReports={canManageReports}
+          showProject={!fixedProjectId}
+          onOpenReport={openReport}
+          onManualOrder={() => handleBoardSort(MANUAL_SORT.key)}
+        />
+      ) : (
+        <>
+          {/* Reports — mobile card list */}
+          <div className="md:hidden space-y-3">
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
-                  <Spinner className="mx-auto text-primary" />
-                </TableCell>
-              </TableRow>
+              <div className="flex justify-center py-12">
+                <Spinner className="text-primary" />
+              </div>
             ) : data?.data?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+              <Card>
+                <CardContent className="p-12 text-center text-muted-foreground">
                   No reports found
-                </TableCell>
-              </TableRow>
+                </CardContent>
+              </Card>
             ) : (
               data?.data?.map((report: Report) => (
-                <TableRow
+                <Card
                   key={report.id}
                   className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
                   onClick={() => openReport(report.id)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={selectedIds.has(report.id)}
-                      onCheckedChange={(checked) => handleSelectOne(report.id, checked as boolean)}
-                      aria-label={`Select ${report.title}`}
-                    />
-                  </TableCell>
-                  <TableCell className="w-full max-w-0">
-                    <p className="font-medium">{report.title}</p>
-                    {report.licenseLocked && (
-                      <p className="text-xs text-muted-foreground">Read-only · License limit</p>
-                    )}
-                    <p className="truncate text-sm text-muted-foreground">
-                      {report.metadata?.url || 'No URL'}
-                    </p>
-                    {report.reporterEmail && (
-                      <p className="text-xs text-muted-foreground">
-                        {report.reporterName || report.reporterEmail}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">
-                      {report.projectName || 'Unknown'}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={report.status} />
-                  </TableCell>
-                  <TableCell>
-                    <PriorityBadge priority={report.priority} />
-                  </TableCell>
-                  <TableCell>
-                    <AssigneeDisplay user={report.assignee} compact />
-                  </TableCell>
-                  <TableCell>
-                    <GitHubSyncIcon report={report} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(report.createdAt)}
-                  </TableCell>
-                </TableRow>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div onClick={(e) => e.stopPropagation()} className="mt-0.5">
+                        <Checkbox
+                          checked={selectedIds.has(report.id)}
+                          onCheckedChange={(checked) =>
+                            handleSelectOne(report.id, checked as boolean)
+                          }
+                          aria-label={`Select ${report.title}`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{report.title}</p>
+                        {report.licenseLocked && (
+                          <p className="text-xs text-muted-foreground">Read-only · License limit</p>
+                        )}
+                        <p className="text-sm text-muted-foreground truncate">
+                          {report.metadata?.url || 'No URL'}
+                        </p>
+                        {report.reporterEmail && (
+                          <p className="text-xs text-muted-foreground">
+                            {report.reporterName || report.reporterEmail}
+                          </p>
+                        )}
+                        <div className="mt-2">
+                          <AssigneeDisplay user={report.assignee} compact />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <ReportStatusLabel status={report.status} />
+                          <ReportPriorityLabel priority={report.priority} />
+                          <span className="text-xs text-muted-foreground">
+                            {report.projectName || 'Unknown'}
+                          </span>
+                          <GitHubSyncIcon report={report} />
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {formatRelativeDate(report.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))
             )}
-          </TableBody>
-        </Table>
+            {data && data.total > 0 && (
+              <TablePagination
+                total={data.total}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+                itemLabel={REPORT_LABEL}
+              />
+            )}
+          </div>
 
-        {data && (
-          <TablePagination
-            className="border-t px-4 py-3"
-            total={data.total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            itemLabel={REPORT_LABEL}
-          />
-        )}
-      </Card>
-    </div>
-  );
-}
+          {/* Reports table */}
+          <Card
+            className="@container hidden md:block"
+            style={{ '--table-sticky-top': `${bulkBarHeight}px` } as CSSProperties}
+          >
+            <Table stickyHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={
+                        data?.data?.length > 0 &&
+                        data.data.every((r: Report) => selectedIds.has(r.id))
+                      }
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <SortableTableHead
+                    label="Report"
+                    sortKey="title"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Project"
+                    sortKey="project"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Status"
+                    sortKey="status"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Priority"
+                    sortKey="priority"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Assignee"
+                    sortKey="assignee"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                  <TableHead className="w-[50px]">
+                    <RefreshCw className="h-4 w-4" />
+                  </TableHead>
+                  <SortableTableHead
+                    label="Created"
+                    sortKey="createdAt"
+                    activeKey={sort.key}
+                    direction={sort.direction}
+                    onSort={handleSort}
+                  />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <Spinner className="mx-auto text-primary" />
+                    </TableCell>
+                  </TableRow>
+                ) : data?.data?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                      No reports found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.data?.map((report: Report) => (
+                    <TableRow
+                      key={report.id}
+                      className={`cursor-pointer hover:bg-muted/50 ${selectedIds.has(report.id) ? 'bg-muted/30' : ''}`}
+                      onClick={() => openReport(report.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(report.id)}
+                          onCheckedChange={(checked) =>
+                            handleSelectOne(report.id, checked as boolean)
+                          }
+                          aria-label={`Select ${report.title}`}
+                        />
+                      </TableCell>
+                      <TableCell className="w-[45%] min-w-48 max-w-0">
+                        <p className="font-medium">{report.title}</p>
+                        {report.licenseLocked && (
+                          <p className="text-xs text-muted-foreground">Read-only · License limit</p>
+                        )}
+                        <p className="truncate text-sm text-muted-foreground">
+                          {report.metadata?.url || 'No URL'}
+                        </p>
+                        {report.reporterEmail && (
+                          <p className="text-xs text-muted-foreground">
+                            {report.reporterName || report.reporterEmail}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="@6xl:whitespace-nowrap">
+                        <span className="text-sm text-muted-foreground @6xl:block @6xl:max-w-60 @6xl:truncate">
+                          {report.projectName || 'Unknown'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="@6xl:whitespace-nowrap">
+                        <ReportStatusLabel status={report.status} />
+                      </TableCell>
+                      <TableCell className="@6xl:whitespace-nowrap">
+                        <ReportPriorityLabel priority={report.priority} />
+                      </TableCell>
+                      <TableCell className="@6xl:whitespace-nowrap">
+                        <AssigneeDisplay user={report.assignee} compact />
+                      </TableCell>
+                      <TableCell>
+                        <GitHubSyncIcon report={report} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground @6xl:whitespace-nowrap">
+                        {formatRelativeDate(report.createdAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
 
-function StatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    open: 'Open',
-    in_progress: 'In Progress',
-    resolved: 'Resolved',
-    closed: 'Closed',
-  };
-
-  return (
-    <Badge variant="outline" className={`status-${status}`}>
-      {labels[status] || status}
-    </Badge>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <Badge variant="outline" className={`priority-${priority} uppercase text-xs`}>
-      {priority}
-    </Badge>
-  );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return 'Today';
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else {
-    return formatAbsoluteDate(date);
-  }
-}
-
-function GitHubSyncIcon({ report }: { report: Report }) {
-  if (!report.githubSyncStatus && !report.githubIssueUrl) {
-    return null;
-  }
-
-  if (report.githubSyncStatus === 'synced' && report.githubIssueUrl) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <a
-              href={report.githubIssueUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-green-600 hover:text-green-700"
-            >
-              <CheckCircle className="h-4 w-4" />
-            </a>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>GitHub Issue #{report.githubIssueNumber}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  if (report.githubSyncStatus === 'pending') {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-amber-500">
-              <Spinner size="sm" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Sync pending</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  if (report.githubSyncStatus === 'error') {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-destructive">
-              <AlertCircle className="h-4 w-4" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Sync failed</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return null;
-}
-
-function AssigneeDisplay({
-  user,
-  compact = false,
-}: {
-  user?: Pick<User, 'name' | 'email' | 'avatarUrl'>;
-  compact?: boolean;
-}) {
-  if (!user) {
-    return <span className="text-sm text-muted-foreground">Unassigned</span>;
-  }
-
-  const fallback =
-    user.name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join('') || '?';
-
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <Avatar className={compact ? 'h-6 w-6' : 'h-8 w-8'}>
-        {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.name} /> : null}
-        <AvatarFallback className="bg-bugpin-primary-100 text-bugpin-primary-700 dark:bg-bugpin-primary-900 dark:text-bugpin-primary-300 text-[10px]">
-          {fallback}
-        </AvatarFallback>
-      </Avatar>
-      <span className="text-sm text-muted-foreground truncate">{user.name}</span>
+            {data && (
+              <TablePagination
+                className="border-t px-4 py-3"
+                total={data.total}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+                itemLabel={REPORT_LABEL}
+              />
+            )}
+          </Card>
+        </>
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
 } from '@shared/types';
 import { api, getApiErrorMessage } from '../../api/client';
 import { usePreference } from '../../hooks/useUserPreferences';
+import { useFillScrollParentHeight } from '../../hooks/useFillScrollParentHeight';
 import { Button } from '../../components/ui/button';
 import {
   DropdownMenu,
@@ -31,17 +32,14 @@ import { DraggableReportBoard } from '../../components/report-board/DraggableRep
 import {
   AssigneeDisplay,
   GitHubSyncIcon,
-  PriorityBadge,
   formatRelativeDate,
 } from '../../components/report/ReportFields';
+import {
+  REPORT_STATUS_LABELS,
+  ReportPriorityIcon,
+} from '../../components/report/ReportStatusPriority';
 
-const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
-
+const BOARD_MIN_HEIGHT = 320;
 const BOARD_PAGE_SIZE = 20;
 const NO_COLLAPSED_COLUMNS: ReportStatus[] = [];
 
@@ -154,7 +152,7 @@ function BoardCardContent({ report, showProject }: { report: Report; showProject
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex min-w-0 items-center gap-2 pr-7">
-        <PriorityBadge priority={report.priority} />
+        <ReportPriorityIcon priority={report.priority} />
         {showProject && (
           <span className="truncate text-xs text-muted-foreground">
             {report.projectName || 'Unknown'}
@@ -343,9 +341,12 @@ export function ReportsBoard({
 
   const manualOrder = filters.sortBy === 'position';
   const canMove = (report: Report) => canManageReports && !report.licenseLocked;
+  const [boardRef, boardHeight] = useFillScrollParentHeight<HTMLDivElement>(BOARD_MIN_HEIGHT);
 
   const boardProps = {
     columns,
+    height: boardHeight,
+    containerRef: boardRef,
     statusLabels: REPORT_STATUS_LABELS,
     collapsed,
     onToggleCollapsed: (status: ReportStatus) =>

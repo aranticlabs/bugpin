@@ -1,33 +1,9 @@
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import type { Report, User } from '@shared/types';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Badge } from '../ui/badge';
 import { Spinner } from '../ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { formatDate as formatAbsoluteDate } from '../../lib/utils';
-
-export function StatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    open: 'Open',
-    in_progress: 'In Progress',
-    resolved: 'Resolved',
-    closed: 'Closed',
-  };
-
-  return (
-    <Badge variant="outline" className={`status-${status}`}>
-      {labels[status] || status}
-    </Badge>
-  );
-}
-
-export function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <Badge variant="outline" className={`priority-${priority} uppercase text-xs`}>
-      {priority}
-    </Badge>
-  );
-}
 
 export function formatRelativeDate(dateString: string): string {
   const date = new Date(dateString);

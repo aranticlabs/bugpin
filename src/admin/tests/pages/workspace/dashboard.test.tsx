@@ -86,7 +86,7 @@ describe('Dashboard Page', () => {
     );
   });
 
-  it('displays report items with status and priority badges', async () => {
+  it('displays report items with their status and priority', async () => {
     // Override with specific report data
     server.use(
       http.get('/api/reports', () => {
@@ -118,11 +118,9 @@ describe('Dashboard Page', () => {
       { timeout: 5000 }
     );
 
-    // Check for status badge - "Open" appears in both stat card and badge
-    // so we use getAllByText to check there's at least one
+    // "Open" appears in both a stat card and the report's status
     expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
-    // Check for priority badge
-    expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
     // Check for URL display
     expect(screen.getByText('https://example.com/page')).toBeInTheDocument();
   });

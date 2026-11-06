@@ -12,6 +12,10 @@ import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import {
+  ReportPriorityLabel,
+  ReportStatusLabel,
+} from '../../components/report/ReportStatusPriority';
 import { Label } from '../../components/ui/label';
 import { Separator } from '../../components/ui/separator';
 import { Textarea } from '../../components/ui/textarea';
@@ -71,9 +75,18 @@ import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
 import { ActivityDialog } from '../../components/report/ActivityDialog';
 import { useReportHistory } from '../../hooks/useReportHistory';
-import type { AppSettings, Project, Report, ReportSource, User } from '@shared/types';
+import {
+  REPORT_STATUSES,
+  type AppSettings,
+  type Project,
+  type Report,
+  type ReportPriority,
+  type ReportSource,
+  type User,
+} from '@shared/types';
 
 const UNASSIGNED_VALUE = '__unassigned__';
+const PRIORITY_ORDER: ReportPriority[] = ['lowest', 'low', 'medium', 'high', 'highest'];
 
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -939,10 +952,11 @@ export function ReportDetail() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="resolved">Resolved</SelectItem>
-                            <SelectItem value="closed">Closed</SelectItem>
+                            {REPORT_STATUSES.map((status) => (
+                              <SelectItem key={status} value={status}>
+                                <ReportStatusLabel status={status} />
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         {justResolved &&
@@ -1005,7 +1019,7 @@ export function ReportDetail() {
                       </>
                     ) : (
                       <div>
-                        <StatusBadge status={report.status} />
+                        <ReportStatusLabel status={report.status} />
                       </div>
                     )}
                   </div>
@@ -1017,16 +1031,16 @@ export function ReportDetail() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="lowest">Lowest</SelectItem>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="highest">Highest</SelectItem>
+                          {PRIORITY_ORDER.map((priority) => (
+                            <SelectItem key={priority} value={priority}>
+                              <ReportPriorityLabel priority={priority} />
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     ) : (
                       <div>
-                        <PriorityBadge priority={report.priority} />
+                        <ReportPriorityLabel priority={report.priority} />
                       </div>
                     )}
                   </div>
@@ -1450,29 +1464,6 @@ function InfoRow({ label, value, isLink }: { label: string; value?: string; isLi
         <span className="text-right">{value}</span>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    open: 'Open',
-    in_progress: 'In Progress',
-    resolved: 'Resolved',
-    closed: 'Closed',
-  };
-
-  return (
-    <Badge variant="outline" className={`status-${status}`}>
-      {labels[status] || status}
-    </Badge>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <Badge variant="outline" className={`priority-${priority} uppercase text-xs`}>
-      {priority}
-    </Badge>
   );
 }
 

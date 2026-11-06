@@ -2,10 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
+import {
+  ReportPriorityLabel,
+  ReportStatusIcon,
+  ReportStatusLabel,
+} from '../../components/report/ReportStatusPriority';
 import { Spinner } from '../../components/ui/spinner';
 import { reportOriginState } from '../../lib/reportOrigin';
-import { ClipboardList, Clock, CheckCircle, Zap } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 
 interface DashboardStats {
   total: number;
@@ -63,26 +67,26 @@ export function Dashboard() {
         <StatCard
           title="Total Reports"
           value={stats.total}
-          icon={<ClipboardList className="h-5 w-5" />}
-          variant="default"
+          icon={<ClipboardList className="size-5" />}
+          iconClassName="bg-primary/10 text-primary"
         />
         <StatCard
           title="Open"
           value={openReports}
-          icon={<Clock className="h-5 w-5" />}
-          variant="blue"
+          icon={<ReportStatusIcon status="open" className="size-5" />}
+          iconClassName="bg-sky-500/10"
         />
         <StatCard
           title="In Progress"
           value={stats.byStatus.in_progress || 0}
-          icon={<Zap className="h-5 w-5" />}
-          variant="yellow"
+          icon={<ReportStatusIcon status="in_progress" className="size-5" />}
+          iconClassName="bg-indigo-500/10"
         />
         <StatCard
           title="Resolved"
           value={resolvedReports}
-          icon={<CheckCircle className="h-5 w-5" />}
-          variant="green"
+          icon={<ReportStatusIcon status="resolved" className="size-5" />}
+          iconClassName="bg-emerald-500/10"
         />
       </div>
 
@@ -115,9 +119,9 @@ export function Dashboard() {
                         {report.metadata?.url}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 sm:ml-4 sm:shrink-0">
-                      <StatusBadge status={report.status} />
-                      <PriorityBadge priority={report.priority} />
+                    <div className="flex items-center gap-4 sm:ml-4 sm:shrink-0">
+                      <ReportStatusLabel status={report.status} />
+                      <ReportPriorityLabel priority={report.priority} />
                     </div>
                   </div>
                 </Link>
@@ -143,25 +147,18 @@ function StatCard({
   title,
   value,
   icon,
-  variant,
+  iconClassName,
 }: {
   title: string;
   value: number | string;
   icon: React.ReactNode;
-  variant: 'default' | 'blue' | 'green' | 'yellow';
+  iconClassName: string;
 }) {
-  const iconClasses = {
-    default: 'bg-primary/10 text-primary',
-    blue: 'bg-blue-100 text-blue-600',
-    green: 'bg-green-100 text-green-600',
-    yellow: 'bg-yellow-100 text-yellow-600',
-  };
-
   return (
     <Card>
       <CardContent className="p-6">
         <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-lg ${iconClasses[variant]}`}>{icon}</div>
+          <div className={`p-3 rounded-lg ${iconClassName}`}>{icon}</div>
           <div>
             <p className="text-sm text-muted-foreground">{title}</p>
             <p className="text-2xl font-bold">{value}</p>
@@ -169,30 +166,5 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-// Status Badge Component
-function StatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    open: 'Open',
-    in_progress: 'In Progress',
-    resolved: 'Resolved',
-    closed: 'Closed',
-  };
-
-  return (
-    <Badge variant="outline" className={`status-${status}`}>
-      {labels[status] || status}
-    </Badge>
-  );
-}
-
-// Priority Badge Component
-function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <Badge variant="outline" className={`priority-${priority} uppercase text-xs`}>
-      {priority}
-    </Badge>
   );
 }

@@ -835,7 +835,7 @@ export function ProjectsPage() {
                                 </WithTooltip>
                               </TableCell>
                             )}
-                            <TableCell className="w-full">
+                            <TableCell className="w-[40%]">
                               <div className="flex min-w-0 items-center gap-1">
                                 <Link
                                   to={projectUrl(project.id)}
