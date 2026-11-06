@@ -163,8 +163,12 @@ CI checks that npm releases are at least 72 hours old. Run
 
 If release age is the only failure, wait until the reported eligibility time or
 ask a repository admin to approve that run through **Review deployments**.
-Other failures still block CI. Fork PRs blocked by private EE access need help
-from a maintainer.
+Other failures still block CI. PRs with unchanged dependency inputs pass without
+EE access. CE dependency, manifest, or check configuration changes validate the
+public CE lockfile. Changes to the EE revision or submodule configuration require
+both lockfiles; fork PRs making those changes need a trusted maintainer branch
+with EE access. Pushes to `dev`/`main`, manual runs, and Docker builds always
+validate both lockfiles.
 
 ```bash
 # Install dependencies
