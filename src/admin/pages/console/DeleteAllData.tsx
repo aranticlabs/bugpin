@@ -40,7 +40,10 @@ export function DeleteAllData() {
     onSuccess: ({ deleted }) => {
       queryClient.invalidateQueries();
       toast.success(`Deleted ${deleted} ${deleted === 1 ? 'report' : 'reports'}`);
-      handleOpenChange(false);
+      // Closes directly: handleOpenChange ignores close requests while the mutation is pending,
+      // which it still is from this callback's point of view.
+      setOpen(false);
+      setConfirmation('');
     },
     onError: (error: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(error.response?.data?.message || 'Failed to delete data');
