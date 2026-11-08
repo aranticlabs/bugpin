@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
@@ -86,8 +87,18 @@ function checkForeignKeys(db: Database): void {
   }
 }
 
+function verifyBackup(filename: string): void {
+  const backup = new Database(filename, { readonly: true });
+  try {
+    checkIntegrity(backup);
+  } finally {
+    backup.close();
+  }
+}
+
 export class MigrationRunner {
   private backupPath: string | undefined;
+  private freshInstall: boolean | undefined;
 
   constructor(
     private readonly db: Database,
@@ -120,7 +131,37 @@ export class MigrationRunner {
     let stagingDirectory: string | undefined;
     try {
       const databasePath = path.resolve(this.db.filename);
-      const space = fs.statfsSync(path.dirname(databasePath));
+      const parent = path.dirname(databasePath);
+      for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
+        if (entry.isDirectory() && entry.name.startsWith('.bugpin-upgrade-')) {
+          fs.rmSync(path.join(parent, entry.name), { recursive: true });
+        }
+      }
+      // Bootstrap creates user tables before run(), so retain the state seen before bootstrap.
+      this.freshInstall ??=
+        this.db
+          .query(
+            "SELECT 1 FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND tbl_name != 'migrations' LIMIT 1"
+          )
+          .get() === null;
+      if (this.freshInstall) return;
+
+      const applied = [...this.appliedNames()].sort();
+      const state = createHash('sha256').update(JSON.stringify(applied)).digest('hex');
+      const prefix = `${path.basename(databasePath)}.pre-upgrade-`;
+      const previous = fs
+        .readdirSync(parent)
+        .filter((name) => name.startsWith(prefix) && name.endsWith(`-${state}-first.bak`));
+      if (previous.length > 0) {
+        verifyBackup(path.join(parent, previous[0]));
+        // Keep the original recovery point while replacing snapshots from failed retries.
+        for (const name of fs.readdirSync(parent)) {
+          if (name.startsWith(prefix) && name.endsWith(`-${state}-retry.bak`)) {
+            fs.unlinkSync(path.join(parent, name));
+          }
+        }
+      }
+      const space = fs.statfsSync(parent);
       const { page_count: pageCount } = this.db
         .query<{ page_count: number }, []>('PRAGMA page_count')
         .get()!;
@@ -134,19 +175,15 @@ export class MigrationRunner {
         throw new Error(`Insufficient disk space for database backup: ${required} bytes required`);
       }
 
-      const version = [...this.appliedNames()].sort().at(-1)?.split('_')[0] ?? '000';
+      const version = applied.at(-1)?.split('_')[0] ?? '000';
       const timestamp = `${new Date().toISOString().replaceAll(':', '-')}-${crypto.randomUUID()}`;
-      const backupPath = `${databasePath}.pre-upgrade-${version}-${timestamp}.bak`;
-      stagingDirectory = fs.mkdtempSync(path.join(path.dirname(databasePath), '.bugpin-upgrade-'));
+      const kind = previous.length === 0 ? 'first' : 'retry';
+      const backupPath = `${databasePath}.pre-upgrade-${version}-${timestamp}-${state}-${kind}.bak`;
+      stagingDirectory = fs.mkdtempSync(path.join(parent, '.bugpin-upgrade-'));
       const stagingPath = path.join(stagingDirectory, 'snapshot.db');
       this.db.query('VACUUM INTO ?').run(stagingPath);
       fs.chmodSync(stagingPath, 0o600);
-      const backup = new Database(stagingPath, { readonly: true });
-      try {
-        checkIntegrity(backup);
-      } finally {
-        backup.close();
-      }
+      verifyBackup(stagingPath);
       fs.renameSync(stagingPath, backupPath);
       this.backupPath = backupPath;
       logger.info('Verified pre-upgrade database backup', { path: backupPath });
@@ -162,6 +199,7 @@ export class MigrationRunner {
     this.prepare();
     this.db.exec(MIGRATIONS_SCHEMA);
 
+    let migrated = false;
     for (const file of this.pendingFiles()) {
       logger.info('Applying migration', { file });
       const migration = migrations[file];
@@ -176,6 +214,7 @@ export class MigrationRunner {
         checkForeignKeys(this.db);
         this.db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
         this.db.exec('COMMIT');
+        migrated = true;
       } catch (error) {
         if (this.db.inTransaction) this.db.exec('ROLLBACK');
         logger.error('Migration failed; pre-upgrade backup retained', error, {
@@ -188,11 +227,14 @@ export class MigrationRunner {
       }
     }
 
-    checkIntegrity(this.db);
-    checkForeignKeys(this.db);
-    if (this.backupPath) {
-      this.rotateBackups();
-      this.backupPath = undefined;
+    if (migrated) {
+      checkIntegrity(this.db);
+      checkForeignKeys(this.db);
+      if (this.backupPath) {
+        this.rotateBackups();
+        this.backupPath = undefined;
+      }
+      this.freshInstall = undefined;
     }
     logger.info('All migrations applied');
   }

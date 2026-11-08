@@ -42,6 +42,26 @@ function schema(db: Database): unknown[] {
   return db.query('SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name').all();
 }
 
+it('bootstraps a fresh installation without retaining an empty upgrade snapshot', async () => {
+  await initDatabase();
+  await initSchema();
+  expect(fs.readdirSync(directory).filter((name) => name.endsWith('.bak'))).toEqual([]);
+  await runMigrations();
+  expect(fs.readdirSync(directory).filter((name) => name.endsWith('.bak'))).toEqual([]);
+  const files = fs
+    .readdirSync(config.migrationsDir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+  expect(getDb().query('SELECT name FROM migrations ORDER BY name').all()).toEqual(
+    files.map((name) => ({ name }))
+  );
+  closeDatabase();
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  expect(fs.readdirSync(directory).filter((name) => name.endsWith('.bak'))).toEqual([]);
+});
+
 it('produces identical sqlite_schema for a fresh bootstrap and an existing installation', async () => {
   await initDatabase();
   await initSchema();

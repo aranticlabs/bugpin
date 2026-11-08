@@ -38,6 +38,56 @@ function backups(): string[] {
 }
 
 describe('migration runner', () => {
+  it('does not validate a database when no migration is pending', () => {
+    writeMigration('001_test.sql', 'CREATE TABLE upgraded (id INTEGER);');
+    runner.run();
+    db.exec(`PRAGMA foreign_keys = OFF;
+      CREATE TABLE children (parent INTEGER REFERENCES existing(id));
+      INSERT INTO children VALUES (99);
+      PRAGMA foreign_keys = ON;`);
+    const query = db.query;
+    const validation = spyOn(db, 'query').mockImplementation(function (
+      this: Database,
+      sql: string
+    ) {
+      if (sql === 'PRAGMA integrity_check' || sql === 'PRAGMA foreign_key_check') {
+        throw new Error('Unexpected migration validation');
+      }
+      return query.call(this, sql);
+    } as Database['query']);
+    try {
+      expect(() => runner.run()).not.toThrow();
+      expect(() => new MigrationRunner(db, sqlDirectory).run()).not.toThrow();
+      expect(
+        validation.mock.calls.some(
+          ([sql]) => sql === 'PRAGMA integrity_check' || sql === 'PRAGMA foreign_key_check'
+        )
+      ).toBe(false);
+    } finally {
+      validation.mockRestore();
+    }
+    expect(db.query('PRAGMA foreign_key_check').all()).toHaveLength(1);
+  });
+
+  it('validates a run that only records an already satisfied migration', () => {
+    db.exec("CREATE TABLE reports (reporter_locale TEXT NOT NULL DEFAULT 'en');");
+    writeMigration(
+      '003_add_reporter_locale.sql',
+      fs.readFileSync(path.join(sourceDirectory, '003_add_reporter_locale.sql'), 'utf8')
+    );
+    const validation = spyOn(db, 'query');
+    try {
+      runner.run();
+      expect(validation.mock.calls.some(([sql]) => sql === 'PRAGMA integrity_check')).toBe(true);
+      expect(validation.mock.calls.some(([sql]) => sql === 'PRAGMA foreign_key_check')).toBe(true);
+      expect(db.query('SELECT name FROM migrations').all()).toEqual([
+        { name: '003_add_reporter_locale.sql' },
+      ]);
+    } finally {
+      validation.mockRestore();
+    }
+  });
+
   it('takes no backup without pending migrations, including a missing directory', () => {
     runner.run();
     fs.rmdirSync(sqlDirectory);
@@ -119,6 +169,67 @@ describe('migration runner', () => {
     writeMigration('001_test.sql', 'CREATE TABLE upgraded (id INTEGER);');
     runner.run();
     expect(backups().sort()).toEqual([current, 'bugpin.db.pre-upgrade-003-old.bak'].sort());
+  });
+
+  it('bounds snapshots across failing restarts while retaining the original and latest data', () => {
+    writeMigration('001_test.sql', 'CREATE TABLE rolled_back (id INTEGER); INVALID SQL;');
+    expect(() => runner.run()).toThrow();
+    const original = backups()[0];
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      db.close();
+      db = new Database(databasePath);
+      db.run('UPDATE existing SET value = ?', [`attempt-${attempt}`]);
+      expect(() => new MigrationRunner(db, sqlDirectory).run()).toThrow();
+      expect(backups()).toHaveLength(2);
+      expect(backups()).toContain(original);
+      const latest = backups().find((name) => name !== original)!;
+      const backup = new Database(path.join(directory, latest), { readonly: true });
+      try {
+        expect(backup.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+        expect(backup.query('SELECT value FROM existing').get()).toEqual({
+          value: `attempt-${attempt}`,
+        });
+      } finally {
+        backup.close();
+      }
+    }
+    const backup = new Database(path.join(directory, original), { readonly: true });
+    try {
+      expect(backup.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+      expect(backup.query('SELECT value FROM existing').get()).toEqual({ value: 'before' });
+    } finally {
+      backup.close();
+    }
+  });
+
+  it('cleans abandoned staging directories before checking available disk space', () => {
+    writeMigration('001_test.sql', 'CREATE TABLE upgraded (id INTEGER);');
+    const stale = path.join(directory, '.bugpin-upgrade-abandoned');
+    const unrelated = path.join(directory, 'unrelated');
+    fs.mkdirSync(stale);
+    fs.writeFileSync(path.join(stale, 'snapshot.db'), new Uint8Array(1024 * 1024));
+    fs.mkdirSync(unrelated);
+    fs.writeFileSync(path.join(unrelated, 'keep'), 'keep');
+    fs.symlinkSync(unrelated, path.join(directory, '.bugpin-upgrade-link'));
+    fs.writeFileSync(path.join(directory, '.bugpin-upgrade-file'), 'keep');
+    const statfs = fs.statfsSync;
+    const spaceCheck = spyOn(fs, 'statfsSync').mockImplementation(((
+      ...args: Parameters<typeof fs.statfsSync>
+    ) => {
+      expect(fs.existsSync(stale)).toBe(false);
+      return statfs(...args);
+    }) as typeof fs.statfsSync);
+    try {
+      runner.run();
+      expect(spaceCheck).toHaveBeenCalled();
+      expect(fs.readFileSync(path.join(unrelated, 'keep'), 'utf8')).toBe('keep');
+      expect(fs.lstatSync(path.join(directory, '.bugpin-upgrade-link')).isSymbolicLink()).toBe(
+        true
+      );
+      expect(fs.readFileSync(path.join(directory, '.bugpin-upgrade-file'), 'utf8')).toBe('keep');
+    } finally {
+      spaceCheck.mockRestore();
+    }
   });
 
   it('rejects insufficient space before writing the backup or migration ledger', () => {
