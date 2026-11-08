@@ -25,7 +25,7 @@ import type {
   ProjectNotificationDefaults,
   ApiToken,
   ApiTokenScope,
-  ReporterMessage,
+  ReportMessage,
   LocaleCode,
 } from '@shared/types';
 
@@ -196,6 +196,8 @@ export interface IRecentReportsRepository {
 
 export interface CreateFileData {
   reportId: string;
+  messageId?: string;
+  uploadedByReporterId?: string;
   type: FileType;
   filename: string;
   path: string;
@@ -318,12 +320,11 @@ export interface IApiTokensRepository {
   deleteExpired(): Promise<number>;
 }
 
-// Reporter Messages Repository Interface
+// Report Messages Repository Interface
 
-export interface IReporterMessagesRepository {
-  create(reportId: string, userId: string, message: string): Promise<ReporterMessage>;
-  findByReportId(reportId: string): Promise<ReporterMessage[]>;
-  findLatestByReportId(reportId: string): Promise<ReporterMessage | null>;
+export interface IReportMessagesRepository {
+  create(reportId: string, userId: string, message: string): Promise<ReportMessage>;
+  findByReportId(reportId: string): Promise<ReportMessage[]>;
 }
 
 // User Preferences Repository Interface

@@ -103,6 +103,8 @@ beforeEach(() => {
   filesRepo.findById = async () => ({
     id: 'file_1',
     reportId: 'rpt_1',
+    messageId: null,
+    uploadedByReporterId: null,
     type: 'screenshot',
     filename: 'file.png',
     path: storedFilePath,

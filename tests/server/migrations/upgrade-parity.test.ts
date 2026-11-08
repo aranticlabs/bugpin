@@ -205,7 +205,6 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
   const tables = [
     'reports',
     'report_history',
-    'reporter_messages',
     'files',
     'user_recent_reports',
     'user_pinned_projects',
@@ -223,11 +222,24 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
   const staff = await usersRepo.findById('staff');
   if (!staff) throw new Error('Staff fixture missing');
   const now = Date.parse('2026-02-01');
-  const xp = await gamificationService.getPersonal(
-    staff,
-    gamificationRepo.listUserResolutions(['staff']),
-    now
+  const legacyMessageTimes = db
+    .query<{ userId: string; at: string }, []>(
+      'SELECT user_id AS userId, sent_at AS at FROM reporter_messages'
+    )
+    .all();
+  const messageTimes = spyOn(gamificationRepo, 'listReporterMessageTimes').mockReturnValue(
+    legacyMessageTimes
   );
+  let xp: Awaited<ReturnType<typeof gamificationService.getPersonal>>;
+  try {
+    xp = await gamificationService.getPersonal(
+      staff,
+      gamificationRepo.listUserResolutions(['staff']),
+      now
+    );
+  } finally {
+    messageTimes.mockRestore();
+  }
   if (!xp.success || !xp.value) throw new Error('XP fixture must be active');
   expect(xp.value.progress.xp).toBeGreaterThan(0);
   const search = db

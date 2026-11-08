@@ -160,7 +160,7 @@ afterAll(() => {
 beforeEach(async () => {
   const db = getDb();
   db.exec('DELETE FROM report_history');
-  db.exec('DELETE FROM reporter_messages');
+  db.exec('DELETE FROM report_messages');
   db.exec('DELETE FROM reports');
   db.exec('DELETE FROM users');
   db.exec('DELETE FROM projects');
@@ -416,7 +416,7 @@ describe('dashboardService.getPersonal', () => {
 
     const reportId = await createReport({ createdAt: ago(DAY) });
     getDb().run(
-      'INSERT INTO reporter_messages (id, report_id, user_id, message) VALUES (?, ?, ?, ?)',
+      "INSERT INTO report_messages (id, report_id, user_id, body, author_kind, author_name) VALUES (?, ?, ?, ?, 'staff', 'Alex')",
       [randomUUID(), reportId, me.id, 'Thanks, fixed in the next release']
     );
 
@@ -454,7 +454,7 @@ describe('history from before gamification', () => {
     });
     const messaged = await createReport({ createdAt: ago(200 * DAY) });
     getDb().run(
-      'INSERT INTO reporter_messages (id, report_id, user_id, message, sent_at) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO report_messages (id, report_id, user_id, body, created_at, author_kind, author_name) VALUES (?, ?, ?, ?, ?, 'staff', 'Alex')",
       [randomUUID(), messaged, me.id, 'Old message', ago(200 * DAY)]
     );
 

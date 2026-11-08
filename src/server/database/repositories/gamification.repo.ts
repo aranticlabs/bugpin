@@ -108,8 +108,8 @@ export const gamificationRepo = {
     if (userIds.length === 0) return [];
     return getDb()
       .query(
-        `SELECT user_id AS userId, sent_at AS at FROM reporter_messages
-         WHERE user_id IN (${placeholders(userIds)})`
+        `SELECT user_id AS userId, created_at AS at FROM report_messages
+         WHERE author_kind = 'staff' AND user_id IN (${placeholders(userIds)})`
       )
       .all(...userIds) as UserTimeRow[];
   },

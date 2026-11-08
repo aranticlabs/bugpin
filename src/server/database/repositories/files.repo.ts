@@ -8,6 +8,8 @@ import type { FileRecord, FileType } from '@shared/types';
 interface FileRow {
   id: string;
   report_id: string;
+  message_id: string | null;
+  uploaded_by_reporter_id: string | null;
   type: FileType;
   filename: string;
   path: string;
@@ -24,6 +26,8 @@ function mapRowToFile(row: FileRow): FileRecord {
   return {
     id: row.id,
     reportId: row.report_id,
+    messageId: row.message_id,
+    uploadedByReporterId: row.uploaded_by_reporter_id,
     type: row.type,
     filename: row.filename,
     path: row.path,
@@ -49,8 +53,8 @@ export const filesRepo = {
     const now = new Date().toISOString();
 
     db.run(
-      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, created_at, message_id, uploaded_by_reporter_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.reportId,
@@ -62,6 +66,8 @@ export const filesRepo = {
         data.width ?? null,
         data.height ?? null,
         now,
+        data.messageId ?? null,
+        data.uploadedByReporterId ?? null,
       ]
     );
 
@@ -89,6 +95,13 @@ export const filesRepo = {
     const rows = db
       .query('SELECT * FROM files WHERE report_id = ? ORDER BY created_at ASC')
       .all(reportId) as FileRow[];
+    return rows.map(mapRowToFile);
+  },
+
+  async findByMessageId(messageId: string): Promise<FileRecord[]> {
+    const rows = getDb()
+      .query<FileRow, [string]>('SELECT * FROM files WHERE message_id = ? ORDER BY created_at, id')
+      .all(messageId);
     return rows.map(mapRowToFile);
   },
 

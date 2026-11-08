@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { reporterMessagesService } from '../../services/reporter-messages.service.js';
+import { reportMessagesService } from '../../services/report-messages.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 
@@ -19,7 +19,7 @@ reporterMessages.post(
     const user = c.get('user');
     const { message, ccSender } = await c.req.json();
 
-    const result = await reporterMessagesService.send(reportId, user.id, message, ccSender);
+    const result = await reportMessagesService.send(reportId, user.id, message, ccSender);
 
     if (!result.success) {
       const status =
@@ -39,7 +39,7 @@ reporterMessages.post(
 reporterMessages.get('/:id/reporter-messages', validate({ params: schemas.id }), async (c) => {
   const reportId = c.req.param('id');
 
-  const result = await reporterMessagesService.listByReport(reportId);
+  const result = await reportMessagesService.listByReport(reportId);
 
   if (!result.success) {
     const status = result.code === 'NOT_FOUND' ? 404 : 400;

@@ -1,14 +1,29 @@
-import { reporterMessagesRepo } from '../database/repositories/reporter-messages.repo.js';
+import { reportMessagesRepo } from '../database/repositories/report-messages.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { notificationsService } from './notifications.service.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
-import type { ReporterMessage } from '@shared/types';
+import type { ReportMessage, ReporterMessage } from '@shared/types';
 
-// Service
+function toLegacyMessage(message: ReportMessage): ReporterMessage {
+  return {
+    id: message.id,
+    reportId: message.reportId,
+    userId: message.userId,
+    userName: message.authorName,
+    message: message.body,
+    sentAt: message.createdAt,
+    createdAt: message.createdAt,
+    authorKind: message.authorKind,
+    reporterId: message.reporterId,
+    authorName: message.authorName,
+    files: message.files,
+    hiddenAt: message.hiddenAt,
+  };
+}
 
-export const reporterMessagesService = {
+export const reportMessagesService = {
   async send(
     reportId: string,
     userId: string,
@@ -28,7 +43,7 @@ export const reporterMessagesService = {
       return Result.fail('Report does not have a reporter email address', 'NO_REPORTER_EMAIL');
     }
 
-    const savedMessage = await reporterMessagesRepo.create(reportId, userId, message);
+    const savedMessage = await reportMessagesRepo.create(reportId, userId, message);
 
     // Fire-and-forget email notification
     notificationsService.notifyReporterMessage(report, message, userId, ccSender).catch((error) => {
@@ -37,7 +52,7 @@ export const reporterMessagesService = {
       });
     });
 
-    return Result.ok(savedMessage);
+    return Result.ok(toLegacyMessage(savedMessage));
   },
 
   async listByReport(reportId: string): Promise<Result<ReporterMessage[]>> {
@@ -46,7 +61,7 @@ export const reporterMessagesService = {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
 
-    const messages = await reporterMessagesRepo.findByReportId(reportId);
-    return Result.ok(messages);
+    const messages = await reportMessagesRepo.findByReportId(reportId);
+    return Result.ok(messages.map(toLegacyMessage));
   },
 };

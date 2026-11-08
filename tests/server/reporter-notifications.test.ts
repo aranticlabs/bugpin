@@ -2,16 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { notificationsService } from '../../src/server/services/notifications.service';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
-import { reporterMessagesRepo } from '../../src/server/database/repositories/reporter-messages.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { emailService } from '../../src/server/services/email.service';
 import { logger } from '../../src/server/utils/logger';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
-import type { Project, Report, User, ReporterMessage } from '../../src/shared/types';
+import type { Project, Report, User } from '../../src/shared/types';
 
 const originalProjectsRepo = { ...projectsRepo };
 const originalUsersRepo = { ...usersRepo };
-const originalReporterMessagesRepo = { ...reporterMessagesRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalEmailService = { ...emailService };
 const originalLogger = { ...logger };
@@ -58,16 +56,6 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
-const baseMessage: ReporterMessage = {
-  id: 'msg_1',
-  reportId: 'rpt_1',
-  userId: 'usr_1',
-  userName: 'Admin User',
-  message: 'We are looking into this.',
-  sentAt: new Date().toISOString(),
-  createdAt: new Date().toISOString(),
-};
-
 let projectById: Project | null = baseProject;
 
 const sendReporterConfirmationEmail = mock(async () => ({ success: true }));
@@ -85,7 +73,6 @@ beforeEach(() => {
 
   projectsRepo.findById = async () => projectById;
   usersRepo.findById = async () => baseUser;
-  reporterMessagesRepo.findLatestByReportId = async () => null;
 
   settingsRepo.getAll = async () =>
     ({
@@ -116,7 +103,6 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(usersRepo, originalUsersRepo);
-  Object.assign(reporterMessagesRepo, originalReporterMessagesRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(emailService, originalEmailService);
   Object.assign(logger, originalLogger);
@@ -179,8 +165,7 @@ describe('notificationsService.notifyReporterStatusChange', () => {
     );
   });
 
-  it('does not include stale reporter messages', async () => {
-    reporterMessagesRepo.findLatestByReportId = async () => baseMessage;
+  it('does not include unrelated messages in status emails', async () => {
     await notificationsService.notifyReporterStatusChange(baseReport, 'open', 'resolved');
     const callArgs = sendReporterStatusChangeEmail.mock.calls[0][1];
     expect(callArgs.reporterMessage).toBeUndefined();
