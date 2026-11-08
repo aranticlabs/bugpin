@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { delay, http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { mockUsers } from '../../mocks/handlers';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
@@ -225,16 +225,26 @@ describe('Users', () => {
 
   it('keeps both assignments when projects are checked in quick succession', async () => {
     const user = userEvent.setup();
+    let finishSave!: () => void;
+    const savePending = new Promise<void>((resolve) => {
+      finishSave = resolve;
+    });
     recordPatches(async () => {
-      await delay(50);
+      await savePending;
       return HttpResponse.json({ success: true });
     });
     renderWithProviders(<Users />);
 
     const row = await findViewerRow();
     await user.click(within(row).getByRole('button', { name: /no default projects/i }));
-    await user.click(await screen.findByRole('checkbox', { name: 'Test Project' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Another Project' }));
+    try {
+      await user.click(await screen.findByRole('checkbox', { name: 'Test Project' }));
+      await waitFor(() => expect(patches).toHaveLength(1));
+      await user.click(screen.getByRole('checkbox', { name: 'Another Project' }));
+      expect(patches).toHaveLength(1);
+    } finally {
+      finishSave();
+    }
 
     await waitFor(() => expect(patches).toHaveLength(2));
     expect(patches[1].body).toEqual({ defaultProjectIds: ['project-1', 'project-2'] });

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
-import { delay, http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
 import { server } from '../../mocks/server';
 import { mockUsers } from '../../mocks/handlers';
@@ -429,18 +429,28 @@ describe('UserDetail', () => {
 
   it('keeps both default projects when they are checked in quick succession', async () => {
     const user = userEvent.setup();
+    let finishSave!: () => void;
+    const savePending = new Promise<void>((resolve) => {
+      finishSave = resolve;
+    });
     server.use(
       http.patch('/api/users/:id', async ({ request }) => {
         const response = await record(request);
-        await delay(50);
+        await savePending;
         return response;
       })
     );
     renderUser('user-3');
 
     const group = await screen.findByRole('group', { name: 'Default Projects' });
-    await user.click(await within(group).findByRole('checkbox', { name: 'Test Project' }));
-    await user.click(within(group).getByRole('checkbox', { name: 'Another Project' }));
+    try {
+      await user.click(await within(group).findByRole('checkbox', { name: 'Test Project' }));
+      await waitFor(() => expect(requests).toHaveLength(1));
+      await user.click(within(group).getByRole('checkbox', { name: 'Another Project' }));
+      expect(requests).toHaveLength(1);
+    } finally {
+      finishSave();
+    }
 
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(requests[1].body).toEqual({ defaultProjectIds: ['project-1', 'project-2'] });
