@@ -5,8 +5,10 @@ import { ScreenshotManager, CapturedMedia } from './ScreenshotManager.js';
 import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
 import { ScreenCaptureConsentDialog, type ConsentMode } from './ScreenCaptureConsentDialog.js';
 import { ScreenRecordingPanel } from './ScreenRecordingPanel.js';
+import type { LauncherTextBundle } from '@shared/types';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import { resolveLauncherText } from '../i18n/resolve-launcher-text.js';
 
 export interface FormData {
   title: string;
@@ -16,8 +18,25 @@ export interface FormData {
   reporterName: string;
 }
 
+const PRIORITY_VALUES = [
+  'highest',
+  'high',
+  'medium',
+  'low',
+  'lowest',
+] as const satisfies ReadonlyArray<FormData['priority']>;
+
+export interface WidgetDialogContent {
+  title: LauncherTextBundle;
+  titlePlaceholder: LauncherTextBundle;
+  descriptionPlaceholder: LauncherTextBundle;
+  submitButtonText: LauncherTextBundle;
+  showPriority: boolean;
+}
+
 interface WidgetDialogProps {
   hidePoweredBy?: boolean;
+  content?: WidgetDialogContent;
   onClose: () => void;
   onSubmit: (data: FormData, media: CapturedMedia[]) => void;
   onCaptureScreenshot: () => void;
@@ -65,6 +84,7 @@ const TAB_ICONS = {
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   hidePoweredBy = false,
+  content,
   onClose,
   onSubmit,
   onCaptureScreenshot,
@@ -100,7 +120,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   oversizedRecording = null,
   onDismissOversizedRecording = () => undefined,
 }) => {
-  useLocale();
+  const locale = useLocale();
+  const contentText = (bundle: LauncherTextBundle | undefined, fallback: string) =>
+    (bundle ? resolveLauncherText(bundle.project, bundle.global, locale, null) : null) ?? fallback;
+  const showPriority = content?.showPriority ?? true;
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   const images = media.filter((item) => item.mimeType.startsWith('image/'));
@@ -193,7 +216,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
       >
         {/* Header */}
         <div class="shrink-0 flex items-center justify-between p-6 border-b border-solid border-border">
-          <h1 id="bugpin-title">{t('dialog.title')}</h1>
+          <h1 id="bugpin-title">{contentText(content?.title, t('dialog.title'))}</h1>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('aria.close')}>
             <X class="w-5 h-5" />
           </Button>
@@ -228,7 +251,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                     <Input
                       id="bugpin-title-input"
                       type="text"
-                      placeholder={t('dialog.fields.title.placeholder')}
+                      placeholder={contentText(
+                        content?.titlePlaceholder,
+                        t('dialog.fields.title.placeholder')
+                      )}
                       value={formData.title}
                       onInput={(e) =>
                         handleInputChange('title', (e.target as HTMLInputElement).value)
@@ -249,7 +275,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                     <Label for="bugpin-description">{t('dialog.fields.description.label')}</Label>
                     <Textarea
                       id="bugpin-description"
-                      placeholder={t('dialog.fields.description.placeholder')}
+                      placeholder={contentText(
+                        content?.descriptionPlaceholder,
+                        t('dialog.fields.description.placeholder')
+                      )}
                       value={formData.description}
                       onInput={(e) =>
                         handleInputChange('description', (e.target as HTMLTextAreaElement).value)
@@ -257,23 +286,20 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                     />
                   </div>
 
-                  {/* Priority */}
-                  <div class="flex flex-col gap-1.5">
-                    <Label for="bugpin-priority">{t('dialog.fields.priority.label')}</Label>
-                    <Select
-                      id="bugpin-priority"
-                      value={formData.priority}
-                      onChange={(e) =>
-                        handleInputChange('priority', (e.target as HTMLSelectElement).value)
-                      }
-                    >
-                      <option value="highest">{t('dialog.priority.highest')}</option>
-                      <option value="high">{t('dialog.priority.high')}</option>
-                      <option value="medium">{t('dialog.priority.medium')}</option>
-                      <option value="low">{t('dialog.priority.low')}</option>
-                      <option value="lowest">{t('dialog.priority.lowest')}</option>
-                    </Select>
-                  </div>
+                  {showPriority && (
+                    <div class="flex flex-col gap-1.5">
+                      <Label for="bugpin-priority">{t('dialog.fields.priority.label')}</Label>
+                      <Select
+                        id="bugpin-priority"
+                        value={formData.priority}
+                        onValueChange={(priority) => handleInputChange('priority', priority)}
+                        options={PRIORITY_VALUES.map((priority) => ({
+                          value: priority,
+                          label: t(`dialog.priority.${priority}`),
+                        }))}
+                      />
+                    </div>
+                  )}
 
                   {/* Name */}
                   <div class="flex flex-col gap-1.5">
@@ -385,7 +411,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 >
                   {isSubmitting && uploadProgress !== null
                     ? t('submit.uploading', { percent: Math.round(uploadProgress * 100) })
-                    : t('dialog.buttons.submit')}
+                    : contentText(content?.submitButtonText, t('dialog.buttons.submit'))}
                 </Button>
               </div>
             </div>
@@ -400,7 +426,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               href="https://bugpin.io"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-primary no-underline font-medium hover:underline hover:text-primary-hover"
+              class="text-brand no-underline font-medium hover:underline hover:text-brand-hover"
             >
               BugPin
             </a>

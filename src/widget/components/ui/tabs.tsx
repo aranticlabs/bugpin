@@ -16,7 +16,7 @@ interface TabsProps {
 export const Tabs: FunctionComponent<TabsProps> = ({ tabs, activeTab, onTabChange }) => {
   return (
     <div
-      class="inline-flex max-w-full flex-wrap p-1 bg-muted rounded gap-1"
+      class="inline-flex max-w-full flex-wrap p-1 bg-tab-bar rounded gap-1"
       role="tablist"
       aria-orientation="horizontal"
     >
@@ -32,9 +32,10 @@ export const Tabs: FunctionComponent<TabsProps> = ({ tabs, activeTab, onTabChang
             aria-controls={`tabpanel-${tab.id}`}
             tabIndex={isActive ? 0 : -1}
             class={cn(
-              'flex items-center gap-2 px-3 py-1.5 border-none rounded-md bg-transparent text-muted-foreground text-sm font-medium font-sans cursor-pointer transition-colors',
-              'hover:text-foreground',
-              isActive && 'bg-background text-foreground shadow-sm'
+              'flex items-center gap-2 px-3 py-1.5 border-none rounded-md bg-transparent text-tab-foreground text-sm font-medium font-sans cursor-pointer transition-colors',
+              isActive
+                ? 'bg-active-tab text-active-tab-foreground shadow-sm'
+                : 'hover:text-tab-hover-foreground'
             )}
             onClick={() => onTabChange(tab.id)}
           >

@@ -147,6 +147,17 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-hover-foreground: var(--primary-hover-foreground);
+  --color-secondary-button: var(--secondary-button);
+  --color-secondary-button-foreground: var(--secondary-button-foreground);
+  --color-secondary-button-hover: var(--secondary-button-hover);
+  --color-secondary-button-hover-foreground: var(--secondary-button-hover-foreground);
+  --color-tab-bar: var(--tab-bar);
+  --color-active-tab: var(--active-tab);
+  --color-active-tab-foreground: var(--active-tab-foreground);
+  --color-tab-foreground: var(--tab-foreground);
+  --color-tab-hover-foreground: var(--tab-hover-foreground);
+  --color-brand: var(--bugpin-primary-700);
+  --color-brand-hover: var(--bugpin-primary-800);
 
   /* Radius tokens */
   --radius-sm: calc(var(--bugpin-radius) - 4px);
@@ -276,6 +287,21 @@
     --primary-foreground: var(--button-text-color, #fafafa);
     --primary-hover: var(--button-hover-color, var(--bugpin-primary-800));
     --primary-hover-foreground: var(--button-hover-text-color, #fafafa);
+    --secondary-button: var(--secondary-button-color, var(--background));
+    --secondary-button-foreground: var(--secondary-button-text-color, var(--foreground));
+    --secondary-button-hover: var(
+      --secondary-button-hover-color,
+      color-mix(in srgb, var(--foreground) 10%, var(--background))
+    );
+    --secondary-button-hover-foreground: var(
+      --secondary-button-hover-text-color,
+      var(--foreground)
+    );
+    --tab-bar: var(--tab-bar-color, var(--muted));
+    --active-tab: var(--active-tab-color, var(--background));
+    --active-tab-foreground: var(--active-tab-text-color, var(--foreground));
+    --tab-foreground: var(--tab-text-color, var(--muted-foreground));
+    --tab-hover-foreground: var(--tab-text-hover-color, var(--active-tab-foreground));
   }
 
   /* Dark theme variable overrides */

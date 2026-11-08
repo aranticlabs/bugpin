@@ -58,6 +58,15 @@ const baseConfig: WidgetConfig = {
   dialogLightSecondaryColor: '#f5f5f5',
   dialogLightInputColor: '#ffffff',
   dialogLightForegroundColor: '#0a0a0a',
+  dialogLightSecondaryButtonColor: '#ffffff',
+  dialogLightSecondaryButtonTextColor: '#0a0a0a',
+  dialogLightSecondaryButtonHoverColor: '#e5e5e5',
+  dialogLightSecondaryButtonTextHoverColor: '#0a0a0a',
+  dialogLightTabBarColor: '#f5f5f5',
+  dialogLightActiveTabColor: '#ffffff',
+  dialogLightActiveTabTextColor: '#0a0a0a',
+  dialogLightTabTextColor: '#737373',
+  dialogLightTabTextHoverColor: '#0a0a0a',
   dialogDarkButtonColor: '#000000',
   dialogDarkTextColor: '#ffffff',
   dialogDarkButtonHoverColor: '#111111',
@@ -66,9 +75,23 @@ const baseConfig: WidgetConfig = {
   dialogDarkSecondaryColor: '#262626',
   dialogDarkInputColor: '#1a1a1a',
   dialogDarkForegroundColor: '#fafafa',
+  dialogDarkSecondaryButtonColor: '#0a0a0a',
+  dialogDarkSecondaryButtonTextColor: '#fafafa',
+  dialogDarkSecondaryButtonHoverColor: '#404040',
+  dialogDarkSecondaryButtonTextHoverColor: '#fafafa',
+  dialogDarkTabBarColor: '#262626',
+  dialogDarkActiveTabColor: '#0a0a0a',
+  dialogDarkActiveTabTextColor: '#fafafa',
+  dialogDarkTabTextColor: '#a3a3a3',
+  dialogDarkTabTextHoverColor: '#fafafa',
   enableHoverScaleEffect: true,
   tooltipEnabled: false,
   tooltipText: { project: undefined, global: null, builtin: null },
+  dialogTitle: { project: undefined, global: null, builtin: null },
+  dialogTitlePlaceholder: { project: undefined, global: null, builtin: null },
+  dialogDescriptionPlaceholder: { project: undefined, global: null, builtin: null },
+  dialogSubmitButtonText: { project: undefined, global: null, builtin: null },
+  dialogShowPriority: true,
   enableScreenshot: true,
   enableAnnotation: true,
   enableConsoleCapture: true,
@@ -259,6 +282,59 @@ describe('widget components', () => {
     expect(html).toContain('h-[770px]');
     expect(html).not.toContain('min-h-[770px]');
     expect(html).toContain('max-h-[calc(100vh-40px)]');
+  });
+
+  it('renders custom dialog texts and hides the priority field', () => {
+    const html = renderToString(
+      <WidgetDialog
+        content={{
+          title: {
+            project: { en: 'Send Feedback' },
+            global: { en: 'Global Title' },
+            builtin: null,
+          },
+          titlePlaceholder: { project: undefined, global: { en: 'Short summary' }, builtin: null },
+          descriptionPlaceholder: { project: null, global: { en: 'Unused' }, builtin: null },
+          submitButtonText: { project: { en: 'Send' }, global: null, builtin: null },
+          showPriority: false,
+        }}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onCaptureScreenshot={() => undefined}
+        onAnnotateMedia={() => undefined}
+        media={[]}
+        onAddMedia={() => undefined}
+        onRemoveMedia={() => undefined}
+        isSubmitting={false}
+        uploadProgress={null}
+        onCancelSubmit={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        activeTab="details"
+        onActiveTabChange={() => undefined}
+        formData={{
+          title: '',
+          description: '',
+          priority: 'medium',
+          reporterEmail: '',
+          reporterName: '',
+        }}
+        onFormDataChange={() => undefined}
+        showScreenCaptureConsent={false}
+        onConsentConfirm={() => undefined}
+        onConsentCancel={() => undefined}
+        reduceScreenshotQuality={false}
+        onReduceScreenshotQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />
+    );
+    expect(html).toContain('Send Feedback');
+    expect(html).not.toContain('Report a Bug');
+    expect(html).toContain('placeholder="Short summary"');
+    expect(html).toContain('placeholder="Steps to reproduce, expected behavior, etc."');
+    expect(html).toContain('>Send</button>');
+    expect(html).not.toContain('bugpin-priority');
   });
 
   it('renders widget dialog media tab with count', () => {

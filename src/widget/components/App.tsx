@@ -61,6 +61,15 @@ function dialogThemeVars(config: WidgetConfig, theme: 'light' | 'dark'): JSX.CSS
         '--muted': config.dialogDarkSecondaryColor,
         '--input-background': config.dialogDarkInputColor,
         '--foreground': config.dialogDarkForegroundColor,
+        '--secondary-button-color': config.dialogDarkSecondaryButtonColor,
+        '--secondary-button-text-color': config.dialogDarkSecondaryButtonTextColor,
+        '--secondary-button-hover-color': config.dialogDarkSecondaryButtonHoverColor,
+        '--secondary-button-hover-text-color': config.dialogDarkSecondaryButtonTextHoverColor,
+        '--tab-bar-color': config.dialogDarkTabBarColor,
+        '--active-tab-color': config.dialogDarkActiveTabColor,
+        '--active-tab-text-color': config.dialogDarkActiveTabTextColor,
+        '--tab-text-color': config.dialogDarkTabTextColor,
+        '--tab-text-hover-color': config.dialogDarkTabTextHoverColor,
       }
     : {
         '--button-color': config.dialogLightButtonColor,
@@ -71,6 +80,15 @@ function dialogThemeVars(config: WidgetConfig, theme: 'light' | 'dark'): JSX.CSS
         '--muted': config.dialogLightSecondaryColor,
         '--input-background': config.dialogLightInputColor,
         '--foreground': config.dialogLightForegroundColor,
+        '--secondary-button-color': config.dialogLightSecondaryButtonColor,
+        '--secondary-button-text-color': config.dialogLightSecondaryButtonTextColor,
+        '--secondary-button-hover-color': config.dialogLightSecondaryButtonHoverColor,
+        '--secondary-button-hover-text-color': config.dialogLightSecondaryButtonTextHoverColor,
+        '--tab-bar-color': config.dialogLightTabBarColor,
+        '--active-tab-color': config.dialogLightActiveTabColor,
+        '--active-tab-text-color': config.dialogLightActiveTabTextColor,
+        '--tab-text-color': config.dialogLightTabTextColor,
+        '--tab-text-hover-color': config.dialogLightTabTextHoverColor,
       };
 }
 
@@ -766,6 +784,13 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       {step === 'form' && (
         <WidgetDialogComponent
           hidePoweredBy={config.hidePoweredBy}
+          content={{
+            title: config.dialogTitle,
+            titlePlaceholder: config.dialogTitlePlaceholder,
+            descriptionPlaceholder: config.dialogDescriptionPlaceholder,
+            submitButtonText: config.dialogSubmitButtonText,
+            showPriority: config.dialogShowPriority,
+          }}
           onClose={handleRequestClose}
           onSubmit={handleSubmit}
           onCaptureScreenshot={handleCaptureScreenshot}
@@ -821,7 +846,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
                 <button
                   type="button"
                   onClick={handleCloseDiscardDraft}
-                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-border bg-background text-foreground hover:bg-muted transition-colors"
+                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-border bg-secondary-button text-secondary-button-foreground hover:bg-secondary-button-hover hover:text-secondary-button-hover-foreground transition-colors"
                 >
                   {t('closeConfirm.discardButton')}
                 </button>

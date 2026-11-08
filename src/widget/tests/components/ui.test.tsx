@@ -25,13 +25,21 @@ describe('widget UI components', () => {
     expect(html).toContain('aria-invalid="true"');
   });
 
-  it('renders select options', () => {
+  it('renders the selected option label in a combobox trigger', () => {
     const html = renderToString(
-      <Select>
-        <option value="one">One</option>
-      </Select>
+      <Select
+        id="choice"
+        value="two"
+        options={[
+          { value: 'one', label: 'One' },
+          { value: 'two', label: 'Two' },
+        ]}
+        onValueChange={() => {}}
+      />
     );
-    expect(html).toContain('One');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('Two');
+    expect(html).not.toContain('role="listbox"');
   });
 
   it('renders required label marker', () => {

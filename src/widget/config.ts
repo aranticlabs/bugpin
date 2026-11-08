@@ -44,6 +44,15 @@ export interface WidgetConfig {
   dialogLightSecondaryColor: string;
   dialogLightInputColor: string;
   dialogLightForegroundColor: string;
+  dialogLightSecondaryButtonColor: string;
+  dialogLightSecondaryButtonTextColor: string;
+  dialogLightSecondaryButtonHoverColor: string;
+  dialogLightSecondaryButtonTextHoverColor: string;
+  dialogLightTabBarColor: string;
+  dialogLightActiveTabColor: string;
+  dialogLightActiveTabTextColor: string;
+  dialogLightTabTextColor: string;
+  dialogLightTabTextHoverColor: string;
   // Dialog colors (dark mode)
   dialogDarkButtonColor: string;
   dialogDarkTextColor: string;
@@ -53,9 +62,23 @@ export interface WidgetConfig {
   dialogDarkSecondaryColor: string;
   dialogDarkInputColor: string;
   dialogDarkForegroundColor: string;
+  dialogDarkSecondaryButtonColor: string;
+  dialogDarkSecondaryButtonTextColor: string;
+  dialogDarkSecondaryButtonHoverColor: string;
+  dialogDarkSecondaryButtonTextHoverColor: string;
+  dialogDarkTabBarColor: string;
+  dialogDarkActiveTabColor: string;
+  dialogDarkActiveTabTextColor: string;
+  dialogDarkTabTextColor: string;
+  dialogDarkTabTextHoverColor: string;
   enableHoverScaleEffect: boolean;
   tooltipEnabled: boolean;
   tooltipText: LauncherTextBundle;
+  dialogTitle: LauncherTextBundle;
+  dialogTitlePlaceholder: LauncherTextBundle;
+  dialogDescriptionPlaceholder: LauncherTextBundle;
+  dialogSubmitButtonText: LauncherTextBundle;
+  dialogShowPriority: boolean;
   enableScreenshot: boolean;
   enableAnnotation: boolean;
   enableConsoleCapture: boolean;
@@ -105,6 +128,15 @@ export const defaultConfig: WidgetConfig = {
   dialogLightSecondaryColor: '#f5f5f5',
   dialogLightInputColor: '#ffffff',
   dialogLightForegroundColor: '#0a0a0a',
+  dialogLightSecondaryButtonColor: '#ffffff',
+  dialogLightSecondaryButtonTextColor: '#0a0a0a',
+  dialogLightSecondaryButtonHoverColor: '#e5e5e5',
+  dialogLightSecondaryButtonTextHoverColor: '#0a0a0a',
+  dialogLightTabBarColor: '#f5f5f5',
+  dialogLightActiveTabColor: '#ffffff',
+  dialogLightActiveTabTextColor: '#0a0a0a',
+  dialogLightTabTextColor: '#737373',
+  dialogLightTabTextHoverColor: '#0a0a0a',
   // Dialog colors (dark mode)
   dialogDarkButtonColor: '#02658D',
   dialogDarkTextColor: '#ffffff',
@@ -114,9 +146,23 @@ export const defaultConfig: WidgetConfig = {
   dialogDarkSecondaryColor: '#262626',
   dialogDarkInputColor: '#1a1a1a',
   dialogDarkForegroundColor: '#fafafa',
+  dialogDarkSecondaryButtonColor: '#0a0a0a',
+  dialogDarkSecondaryButtonTextColor: '#fafafa',
+  dialogDarkSecondaryButtonHoverColor: '#404040',
+  dialogDarkSecondaryButtonTextHoverColor: '#fafafa',
+  dialogDarkTabBarColor: '#262626',
+  dialogDarkActiveTabColor: '#0a0a0a',
+  dialogDarkActiveTabTextColor: '#fafafa',
+  dialogDarkTabTextColor: '#a3a3a3',
+  dialogDarkTabTextHoverColor: '#fafafa',
   enableHoverScaleEffect: true,
   tooltipEnabled: false,
   tooltipText: { project: undefined, global: null, builtin: null },
+  dialogTitle: { project: undefined, global: null, builtin: null },
+  dialogTitlePlaceholder: { project: undefined, global: null, builtin: null },
+  dialogDescriptionPlaceholder: { project: undefined, global: null, builtin: null },
+  dialogSubmitButtonText: { project: undefined, global: null, builtin: null },
+  dialogShowPriority: true,
   enableScreenshot: true,
   enableAnnotation: true,
   enableConsoleCapture: true,
