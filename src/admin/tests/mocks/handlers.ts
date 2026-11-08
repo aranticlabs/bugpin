@@ -228,6 +228,7 @@ export const mockDashboardOverview: DashboardOverview = {
       oldValue: 'open',
       newValue: 'resolved',
       createdAt: new Date().toISOString(),
+      actor: 'user',
     },
   ],
 };
@@ -257,6 +258,7 @@ export const mockDashboardPersonal: DashboardPersonal = {
     ],
   },
   gamification: null,
+  resolveXp: {},
 };
 
 const mockGamificationSettings: GamificationSettings = {
@@ -674,7 +676,7 @@ export const handlers = [
   http.get('/api/gamification/me', () =>
     HttpResponse.json({
       success: true,
-      gamification: { available: false, canOptOut: false, optedOut: false },
+      gamification: { available: false, canOptOut: false, optedOut: false, active: false },
     })
   ),
   http.get('/api/gamification', () =>
@@ -769,6 +771,13 @@ export const handlers = [
           darkTextColor: '#FFFFFF',
           darkButtonHoverColor: '#03789E',
           darkTextHoverColor: '#FFFFFF',
+        },
+        widgetDialogContent: {
+          title: null,
+          titlePlaceholder: null,
+          descriptionPlaceholder: null,
+          submitButtonText: null,
+          showPriority: true,
         },
         screenshot: {
           useScreenCaptureAPI: false,

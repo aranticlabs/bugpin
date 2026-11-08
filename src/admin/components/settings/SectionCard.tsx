@@ -9,12 +9,20 @@ import { Spinner } from '../ui/spinner';
 // so both places always describe a section the same way.
 export const SETTINGS_SECTIONS = {
   launcher: {
-    title: 'Launcher Button',
-    description: 'How the button that opens the widget looks on the website.',
+    title: 'General',
+    description: 'Position, size, icon, text, theme and tooltip of the launcher button.',
+  },
+  launcherColors: {
+    title: 'Colors',
+    description: 'Button and text colors of the launcher button in light and dark mode.',
   },
   dialog: {
-    title: 'Dialog Colors',
+    title: 'Colors',
     description: 'Colors of the report dialog: buttons, background, inputs and text.',
+  },
+  dialogContent: {
+    title: 'General',
+    description: 'Title, placeholders, priority field and submit button of the report dialog.',
   },
   language: {
     title: 'Language',
@@ -82,15 +90,17 @@ export function SectionLoading() {
 export function ResetToDefaultButton({
   onReset,
   disabled = false,
+  label = 'Reset to Default',
 }: {
   onReset: () => void;
   disabled?: boolean;
+  label?: string;
 }) {
   return (
     <div>
       <Button type="button" variant="outline" onClick={onReset} disabled={disabled}>
         <RotateCcw className="mr-2 h-4 w-4" />
-        Reset to Default
+        {label}
       </Button>
     </div>
   );

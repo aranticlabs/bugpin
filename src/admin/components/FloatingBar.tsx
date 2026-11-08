@@ -22,7 +22,7 @@ export function FloatingBarArea({ children }: { children: ReactNode }) {
 }
 
 /**
- * A pill-shaped bar floating over the bottom of the page content. Outside a FloatingBarArea it
+ * A bar floating over the bottom of the page content. Outside a FloatingBarArea it
  * sticks to the bottom of its scroll container instead.
  */
 export function FloatingBar({
@@ -40,7 +40,7 @@ export function FloatingBar({
       role="region"
       aria-label={label}
       className={cn(
-        'pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-3xl border bg-popover py-2 pl-5 pr-2 shadow-lg sm:rounded-full',
+        'pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-xl border bg-popover py-2 pl-5 pr-2 shadow-lg',
         className
       )}
     >

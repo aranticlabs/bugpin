@@ -9,8 +9,12 @@ export const createImage = (url: string): Promise<HTMLImageElement> =>
     image.src = url;
   });
 
-// Helper function to get cropped image
-export async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<Blob> {
+// PNG keeps transparency; JPEG gives smaller files for photos.
+export async function getCroppedImg(
+  imageSrc: string,
+  pixelCrop: Area,
+  type: 'image/jpeg' | 'image/png' = 'image/jpeg'
+): Promise<Blob> {
   const image = await createImage(imageSrc);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -46,8 +50,8 @@ export async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<
           reject(new Error('Canvas is empty'));
         }
       },
-      'image/jpeg',
-      0.95
+      type,
+      type === 'image/jpeg' ? 0.95 : undefined
     );
   });
 }
