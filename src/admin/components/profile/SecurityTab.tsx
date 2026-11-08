@@ -15,8 +15,8 @@ import {
 import { ChangePasswordForm } from '../ChangePasswordForm';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Separator } from '../ui/separator';
+import { SettingsCard } from '../ui/settings-card';
+import { SettingRow, SettingRows } from '../ui/setting-row';
 import { Spinner } from '../ui/spinner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PasskeyNameDialog } from './PasskeyNameDialog';
@@ -39,21 +39,21 @@ function PasswordCard() {
   const [open, setOpen] = useState(false);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Password</CardTitle>
-        <CardDescription>The password you use to sign in</CardDescription>
-      </CardHeader>
-      <CardContent className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          {user?.passwordChangedAt
-            ? `Last changed ${formatDate(user.passwordChangedAt)}`
-            : 'Not changed since the account was created'}
-        </p>
-        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-          Change password
-        </Button>
-      </CardContent>
+    <SettingsCard title="Password" description="The password you use to sign in.">
+      <SettingRows>
+        <SettingRow
+          label="Last Changed"
+          description={
+            user?.passwordChangedAt
+              ? formatDate(user.passwordChangedAt)
+              : 'Not changed since the account was created.'
+          }
+        >
+          <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+            Change password
+          </Button>
+        </SettingRow>
+      </SettingRows>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -69,27 +69,7 @@ function PasswordCard() {
           />
         </DialogContent>
       </Dialog>
-    </Card>
-  );
-}
-
-function SettingRow({
-  title,
-  detail,
-  action,
-}: {
-  title: string;
-  detail: React.ReactNode;
-  action: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        <div className="text-sm text-muted-foreground">{detail}</div>
-      </div>
-      <div className="shrink-0">{action}</div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -116,62 +96,63 @@ export function TwoFactorCard({ className }: { className?: string }) {
   const hasSecondFactor = !!status && (status.totpEnabled || status.passkeys.length > 0);
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>Two-Factor Authentication</CardTitle>
-        <CardDescription>
-          {status?.policy === 'everyone' || (status?.setupRequired ?? false)
-            ? 'Your administrator requires a second step when you sign in.'
-            : 'Add a second step to your sign-in.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading || !status ? (
-          <div className="flex justify-center py-4">
-            <Spinner />
-          </div>
-        ) : (
-          <>
-            <SettingRow
-              title="Authenticator app"
-              detail={
+    <SettingsCard
+      className={className}
+      title="Two-Factor Authentication"
+      description={
+        status?.policy === 'everyone' || (status?.setupRequired ?? false)
+          ? 'Your administrator requires a second step when you sign in.'
+          : 'Add a second step to your sign-in.'
+      }
+    >
+      {isLoading || !status ? (
+        <div className="flex justify-center py-4">
+          <Spinner />
+        </div>
+      ) : (
+        <SettingRows>
+          <SettingRow
+            label={
+              <span className="flex items-center gap-2">
+                Authenticator App
                 <Badge variant={status.totpEnabled ? 'default' : 'secondary'}>
                   {status.totpEnabled ? 'On' : 'Off'}
                 </Badge>
-              }
-              action={
-                status.totpEnabled ? (
-                  <Button type="button" variant="outline" onClick={() => setDisableOpen(true)}>
-                    Turn off
-                  </Button>
-                ) : (
-                  <Button type="button" onClick={() => setSetupPasswordOpen(true)}>
-                    Set up
-                  </Button>
-                )
-              }
-            />
-            <Separator />
+              </span>
+            }
+            description="Enter a code from an authenticator app when you sign in."
+          >
+            {status.totpEnabled ? (
+              <Button type="button" variant="outline" onClick={() => setDisableOpen(true)}>
+                Turn off
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => setSetupPasswordOpen(true)}>
+                Set up
+              </Button>
+            )}
+          </SettingRow>
+          <div className="py-3">
             <SettingRow
-              title="Passkeys"
-              detail={
+              className="py-0"
+              label="Passkeys"
+              description={
                 passkeysSupported()
-                  ? 'Sign in with your fingerprint, face or device PIN'
-                  : 'This browser does not support passkeys'
+                  ? 'Sign in with your fingerprint, face or device PIN.'
+                  : 'This browser does not support passkeys.'
               }
-              action={
-                <Button
-                  type="button"
-                  variant={status.passkeys.length > 0 ? 'outline' : 'default'}
-                  onClick={() => setAddPasskeyPasswordOpen(true)}
-                  disabled={!passkeysSupported()}
-                >
-                  Add passkey
-                </Button>
-              }
-            />
+            >
+              <Button
+                type="button"
+                variant={status.passkeys.length > 0 ? 'outline' : 'default'}
+                onClick={() => setAddPasskeyPasswordOpen(true)}
+                disabled={!passkeysSupported()}
+              >
+                Add passkey
+              </Button>
+            </SettingRow>
             {status.passkeys.length > 0 && (
-              <ul className="divide-y rounded-md border">
+              <ul className="mt-3 divide-y rounded-md border">
                 {status.passkeys.map((passkey) => (
                   <li
                     key={passkey.id}
@@ -210,23 +191,19 @@ export function TwoFactorCard({ className }: { className?: string }) {
                 ))}
               </ul>
             )}
-            {hasSecondFactor && (
-              <>
-                <Separator />
-                <SettingRow
-                  title="Recovery codes"
-                  detail={`${status.recoveryCodesRemaining} of 10 left`}
-                  action={
-                    <Button type="button" variant="outline" onClick={() => setRegenerateOpen(true)}>
-                      Regenerate
-                    </Button>
-                  }
-                />
-              </>
-            )}
-          </>
-        )}
-      </CardContent>
+          </div>
+          {hasSecondFactor && (
+            <SettingRow
+              label="Recovery Codes"
+              description={`${status.recoveryCodesRemaining} of 10 left.`}
+            >
+              <Button type="button" variant="outline" onClick={() => setRegenerateOpen(true)}>
+                Regenerate
+              </Button>
+            </SettingRow>
+          )}
+        </SettingRows>
+      )}
 
       <PasswordConfirmDialog
         open={setupPasswordOpen}
@@ -352,6 +329,6 @@ export function TwoFactorCard({ className }: { className?: string }) {
           void refresh();
         }}
       />
-    </Card>
+    </SettingsCard>
   );
 }

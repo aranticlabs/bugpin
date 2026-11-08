@@ -180,7 +180,7 @@ describe('TwoFactorCard passkeys', () => {
     expect(await screen.findByText('MacBook Touch ID')).toBeInTheDocument();
     expect(screen.getByText(/last used/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add passkey/i })).toBeEnabled();
-    expect(screen.getByText('9 of 10 left')).toBeInTheDocument();
+    expect(screen.getByText('9 of 10 left.')).toBeInTheDocument();
   });
 
   it('removes a passkey after the password is confirmed', async () => {

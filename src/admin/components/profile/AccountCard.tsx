@@ -9,10 +9,12 @@ import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { SettingsCard } from '../ui/settings-card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Slider } from '../ui/slider';
+import { SettingRow, SettingRows } from '../ui/setting-row';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import {
@@ -28,30 +30,20 @@ import { Spinner } from '../ui/spinner';
 import { getCroppedImg } from '../../lib/imageUtils';
 import { UnsavedChangesGuard } from '../UnsavedChangesGuard';
 import { submitForm } from '../../lib/submitForm';
+import { apiErrorCode, apiErrorMessage } from '../../lib/apiError';
+import type { User } from '@shared/types';
 
 export function AccountCard() {
   const { user } = useAuth();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Account</CardTitle>
-        <CardDescription>Your profile picture, name and email address</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SettingsCard title="Account" description="Your profile picture, name and email address.">
+      <div className="space-y-6">
         <ProfileSection user={user} />
         <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsCard>
   );
-}
-
-interface User {
-  id?: string;
-  name?: string;
-  email?: string;
-  role?: string;
-  avatarUrl?: string;
 }
 
 function ProfileSection({ user }: { user: User | null }) {
@@ -84,8 +76,8 @@ function ProfileSection({ user }: { user: User | null }) {
       setUploading(false);
       setIsDialogOpen(false);
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to upload avatar');
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, 'Failed to upload avatar'));
       setUploading(false);
     },
   });
@@ -101,10 +93,15 @@ function ProfileSection({ user }: { user: User | null }) {
       toast.success('Avatar removed successfully');
       setIsDialogOpen(false);
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to remove avatar');
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, 'Failed to remove avatar'));
     },
   });
+
+  useEffect(() => {
+    if (!imageToCrop) return;
+    return () => URL.revokeObjectURL(imageToCrop);
+  }, [imageToCrop]);
 
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
     setCroppedAreaPixels(croppedAreaPixels);
@@ -127,23 +124,24 @@ function ProfileSection({ user }: { user: User | null }) {
       return;
     }
 
-    // Check if image is square
+    // Square images upload directly, others open the crop dialog
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
 
     img.onload = () => {
-      const isSquare = img.width === img.height;
-      URL.revokeObjectURL(objectUrl);
-
-      if (isSquare) {
-        // Upload directly if square
+      if (img.width === img.height) {
+        URL.revokeObjectURL(objectUrl);
         setUploading(true);
         uploadMutation.mutate(file);
       } else {
-        // Show crop dialog if not square
         setOriginalFile(file);
-        setImageToCrop(URL.createObjectURL(file));
+        setImageToCrop(objectUrl);
       }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      toast.error('Could not read the image. Choose another file.');
     };
 
     img.src = objectUrl;
@@ -162,8 +160,6 @@ function ProfileSection({ user }: { user: User | null }) {
       const croppedBlob = await getCroppedImg(imageToCrop, croppedAreaPixels);
       const croppedFile = new File([croppedBlob], originalFile.name, { type: 'image/jpeg' });
 
-      // Clean up
-      URL.revokeObjectURL(imageToCrop);
       setImageToCrop(null);
       setOriginalFile(null);
       setCrop({ x: 0, y: 0 });
@@ -171,16 +167,13 @@ function ProfileSection({ user }: { user: User | null }) {
 
       // Upload cropped image
       uploadMutation.mutate(croppedFile);
-    } catch (error) {
+    } catch {
       toast.error('Failed to crop image');
       setUploading(false);
     }
   };
 
   const handleCropCancel = () => {
-    if (imageToCrop) {
-      URL.revokeObjectURL(imageToCrop);
-    }
     setImageToCrop(null);
     setOriginalFile(null);
     setCrop({ x: 0, y: 0 });
@@ -322,17 +315,15 @@ function ProfileSection({ user }: { user: User | null }) {
               )}
             </div>
 
-            {/* Zoom Slider */}
-            <div className="space-y-2">
-              <Label>Zoom</Label>
-              <input
-                type="range"
+            <div className="space-y-3">
+              <Label id="avatar-zoom-label">Zoom</Label>
+              <Slider
+                aria-labelledby="avatar-zoom-label"
                 min={1}
                 max={3}
                 step={0.1}
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-full"
+                value={[zoom]}
+                onValueChange={([next]) => setZoom(next)}
               />
             </div>
           </div>
@@ -358,102 +349,146 @@ function ProfileSection({ user }: { user: User | null }) {
   );
 }
 
-const updateProfileSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
-});
+const PASSWORD_REQUIRED_MESSAGE = 'Enter your current password to change your email address';
+const PASSWORD_ERROR_CODES = new Set(['PASSWORD_REQUIRED', 'INVALID_PASSWORD']);
 
-type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
+// Matches the server, which ignores surrounding spaces and letter case when comparing emails.
+function isSameEmail(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function createProfileSchema(savedEmail: () => string) {
+  return z
+    .object({
+      name: z.string().min(2, 'Name must be at least 2 characters'),
+      email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
+      currentPassword: z.string(),
+    })
+    .superRefine((data, ctx) => {
+      if (!isSameEmail(data.email, savedEmail()) && !data.currentPassword) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['currentPassword'],
+          message: PASSWORD_REQUIRED_MESSAGE,
+        });
+      }
+    });
+}
+
+type UpdateProfileFormData = z.infer<ReturnType<typeof createProfileSchema>>;
+
+interface ProfileUpdate {
+  name?: string;
+  email?: string;
+  currentPassword?: string;
+}
 
 function UpdateProfileSection({ user }: { user: User | null }) {
   const { refreshUser } = useAuth();
   const queryClient = useQueryClient();
-  const [originalValues, setOriginalValues] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-  });
+  const savedName = user?.name ?? '';
+  const savedEmail = user?.email ?? '';
+  const savedEmailRef = useRef(savedEmail);
+  const [schema] = useState(() => createProfileSchema(() => savedEmailRef.current));
 
   const {
     register,
     handleSubmit,
     watch,
     reset,
+    setError,
     formState: { errors },
   } = useForm<UpdateProfileFormData>({
-    resolver: zodResolver(updateProfileSchema),
-    defaultValues: {
-      name: user?.name || '',
-      email: user?.email || '',
-    },
+    resolver: zodResolver(schema),
+    defaultValues: { name: savedName, email: savedEmail, currentPassword: '' },
   });
 
   const watchedName = watch('name');
   const watchedEmail = watch('email');
+  const emailChanged = !isSameEmail(watchedEmail, savedEmail);
 
+  // Only a change of the saved name or email refreshes the fields, and edits in progress stay.
   useEffect(() => {
-    if (user) {
-      reset({ name: user.name || '', email: user.email || '' });
-      setOriginalValues({ name: user.name || '', email: user.email || '' });
-    }
-  }, [user, reset]);
+    savedEmailRef.current = savedEmail;
+    reset({ name: savedName, email: savedEmail, currentPassword: '' }, { keepDirtyValues: true });
+  }, [savedName, savedEmail, reset]);
 
   const mutation = useMutation({
-    mutationFn: async (data: { name?: string; email?: string }) => {
+    mutationFn: async (data: ProfileUpdate) => {
       const response = await api.patch('/users/me/profile', data);
-      return response.data;
+      return response.data as { user?: User };
     },
     onSuccess: async (response) => {
-      await refreshUser();
-      queryClient.invalidateQueries({ queryKey: ['users'] });
       const updatedUser = response.user;
       if (updatedUser) {
-        reset({ name: updatedUser.name || '', email: updatedUser.email || '' });
-        setOriginalValues({ name: updatedUser.name || '', email: updatedUser.email || '' });
+        savedEmailRef.current = updatedUser.email;
+        reset({ name: updatedUser.name, email: updatedUser.email, currentPassword: '' });
       }
+      await refreshUser();
+      queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success('Profile updated successfully');
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      const errorMessage = err.response?.data?.message || 'Failed to update profile';
-      toast.error(errorMessage);
+    onError: (err) => {
+      const code = apiErrorCode(err);
+      if (code && PASSWORD_ERROR_CODES.has(code)) {
+        setError(
+          'currentPassword',
+          {
+            message: apiErrorMessage(
+              err,
+              code === 'INVALID_PASSWORD' ? 'The password is incorrect' : PASSWORD_REQUIRED_MESSAGE
+            ),
+          },
+          { shouldFocus: true }
+        );
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Failed to update profile'));
     },
   });
 
-  const toUpdates = (data: UpdateProfileFormData) => {
-    const updates: { name?: string; email?: string } = {};
-
-    if (data.name !== originalValues.name) {
-      updates.name = data.name;
-    }
-
-    if (data.email !== originalValues.email) {
+  const toUpdates = (data: UpdateProfileFormData): ProfileUpdate => {
+    const updates: ProfileUpdate = {};
+    if (data.name !== savedName) updates.name = data.name;
+    if (!isSameEmail(data.email, savedEmail)) {
       updates.email = data.email;
+      updates.currentPassword = data.currentPassword;
     }
-
     return updates;
   };
 
-  const hasChanges = watchedName !== originalValues.name || watchedEmail !== originalValues.email;
+  const hasChanges = watchedName !== savedName || emailChanged;
 
   return (
     <div className="flex flex-1 flex-col">
       <UnsavedChangesGuard
         isDirty={hasChanges}
         onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(toUpdates(data)))}
-        onDiscard={() => reset()}
+        onDiscard={() => reset({ name: savedName, email: savedEmail, currentPassword: '' })}
       />
-      <div className="flex flex-1 flex-col gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="profile-name">
-            Name <span className="text-destructive">*</span>
-          </Label>
+      <SettingRows>
+        <SettingRow
+          label={
+            <>
+              Name <span className="text-destructive">*</span>
+            </>
+          }
+          htmlFor="profile-name"
+          controlClassName="@sm:w-80"
+        >
           <Input id="profile-name" type="text" {...register('name')} aria-invalid={!!errors.name} />
           {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="profile-email">
-            Email Address <span className="text-destructive">*</span>
-          </Label>
+        </SettingRow>
+        <SettingRow
+          label={
+            <>
+              Email Address <span className="text-destructive">*</span>
+            </>
+          }
+          htmlFor="profile-email"
+          description="Used to sign in and for notifications."
+          controlClassName="@sm:w-80"
+        >
           <Input
             id="profile-email"
             type="email"
@@ -461,9 +496,36 @@ function UpdateProfileSection({ user }: { user: User | null }) {
             aria-invalid={!!errors.email}
           />
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-          <p className="text-sm text-muted-foreground">Used for login and notifications</p>
-        </div>
-      </div>
+        </SettingRow>
+        {emailChanged && (
+          <SettingRow
+            label={
+              <>
+                Current password <span className="text-destructive">*</span>
+              </>
+            }
+            htmlFor="profile-current-password"
+            description="Confirms that you are changing your own email address."
+            controlClassName="@sm:w-80"
+          >
+            <Input
+              id="profile-current-password"
+              type="password"
+              autoComplete="current-password"
+              {...register('currentPassword')}
+              aria-invalid={!!errors.currentPassword}
+              aria-describedby={
+                errors.currentPassword ? 'profile-current-password-error' : undefined
+              }
+            />
+            {errors.currentPassword && (
+              <p id="profile-current-password-error" className="text-xs text-destructive">
+                {errors.currentPassword.message}
+              </p>
+            )}
+          </SettingRow>
+        )}
+      </SettingRows>
     </div>
   );
 }
