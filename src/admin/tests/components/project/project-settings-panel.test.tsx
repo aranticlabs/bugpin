@@ -360,10 +360,11 @@ describe('ProjectSettingsPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show dialog' }));
     await user.click(screen.getByRole('switch', { name: /use custom dialog colors/i }));
-    expect(screen.getByRole('link', { name: 'Edit project defaults' })).toHaveAttribute(
-      'href',
-      '/settings/project-defaults/dialog-colors'
-    );
+    const dialogDefaultsLinks = screen.getAllByRole('link', { name: 'Edit project defaults' });
+    expect(dialogDefaultsLinks).toHaveLength(2);
+    for (const link of dialogDefaultsLinks) {
+      expect(link).toHaveAttribute('href', '/settings/project-defaults/dialog');
+    }
 
     await user.click(screen.getByRole('button', { name: 'Show launcher' }));
     await user.click(screen.getByRole('switch', { name: /use custom launcher button settings/i }));
@@ -394,9 +395,9 @@ describe('ProjectSettingsPanel', () => {
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
         settings: expect.objectContaining({
-          widgetDialog: undefined,
-          widgetLauncherButton: undefined,
-          screenshot: undefined,
+          widgetDialog: null,
+          widgetLauncherButton: null,
+          screenshot: null,
           security: baseProject.settings?.security,
         }),
       });
@@ -548,7 +549,7 @@ describe('ProjectSettingsPanel', () => {
     expect(screen.getByLabelText('Dialog preview')).toBeInTheDocument();
     expect(screen.getByText('Widget dialog fields')).toBeInTheDocument();
     expect(screen.queryByText('Launcher button fields')).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Dark' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Dark' })).not.toBeInTheDocument();
   });
 
   it('returns a project to the instance diagnostics when Custom is turned off', async () => {
@@ -577,10 +578,10 @@ describe('ProjectSettingsPanel', () => {
     await waitFor(() => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
         settings: expect.objectContaining({
-          activityCapture: undefined,
-          consoleCapture: undefined,
-          networkCapture: undefined,
-          storageKeysCapture: undefined,
+          activityCapture: null,
+          consoleCapture: null,
+          networkCapture: null,
+          storageKeysCapture: null,
         }),
       });
     });
