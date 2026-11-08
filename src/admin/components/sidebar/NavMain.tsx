@@ -53,6 +53,7 @@ interface ReportView {
   key: keyof ReportViewCounts;
   title: string;
   icon: LucideIcon;
+  iconClassName: string;
   params: Record<string, string>;
 }
 
@@ -63,15 +64,23 @@ const REPORT_VIEWS: ReportView[] = [
     key: 'assignedToMe',
     title: 'Assigned to me',
     icon: UserCheck,
+    iconClassName: 'text-violet-600 dark:text-violet-400',
     params: { assignedTo: ASSIGNED_TO_ME_FILTER, status: ACTIVE_STATUS_PARAM },
   },
   {
     key: 'unassigned',
     title: 'Unassigned',
     icon: Inbox,
+    iconClassName: 'text-amber-500 dark:text-amber-400',
     params: { assignedTo: UNASSIGNED_FILTER, status: ACTIVE_STATUS_PARAM },
   },
-  { key: 'active', title: 'Open', icon: CircleDot, params: { status: ACTIVE_STATUS_PARAM } },
+  {
+    key: 'active',
+    title: 'Open',
+    icon: CircleDot,
+    iconClassName: 'text-sky-500',
+    params: { status: ACTIVE_STATUS_PARAM },
+  },
 ];
 
 // The server keeps the last 20 opened reports per user.
@@ -331,7 +340,7 @@ export function NavMain() {
                 tooltip={labelWithCount(view.title, viewCounts?.[view.key])}
               >
                 <Link to={reportsUrl(view.params)} onClick={closeSidebarOnMobile}>
-                  <view.icon />
+                  <view.icon className={view.iconClassName} />
                   <span>{view.title}</span>
                 </Link>
               </SidebarMenuButton>
