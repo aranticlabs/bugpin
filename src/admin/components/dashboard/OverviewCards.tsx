@@ -317,7 +317,7 @@ function priorityName(value: string | undefined): string {
     : (value ?? 'unknown');
 }
 
-const ACTOR_NAMES = { widget: 'Widget', deleted_user: 'Deleted user' } as const;
+const ACTOR_NAMES = { widget: 'Widget', deleted_user: 'Deleted user', system: 'System' } as const;
 
 function actorName(item: DashboardActivityItem): string {
   return item.actor === 'user' ? (item.userName ?? 'Unknown user') : ACTOR_NAMES[item.actor];
@@ -329,6 +329,8 @@ function ActorAvatar({ item }: { item: DashboardActivityItem }) {
       <AvatarFallback className="text-2xs">
         {item.actor === 'widget' ? (
           <Bug className="size-3.5" aria-hidden />
+        ) : item.actor === 'system' ? (
+          <Info className="size-3.5" aria-hidden />
         ) : item.actor === 'deleted_user' || !item.userName ? (
           <UserX className="size-3.5" aria-hidden />
         ) : (

@@ -360,6 +360,33 @@ describe('Dashboard Page', () => {
     expect(await screen.findByText('Your queue is clear')).toBeInTheDocument();
   });
 
+  it('names system ownership activity without a staff author', async () => {
+    server.use(
+      http.get('/api/dashboard/overview', () =>
+        HttpResponse.json({
+          success: true,
+          overview: {
+            ...mockDashboardOverview,
+            activity: [
+              {
+                id: 'ownership',
+                reportId: 'report-1',
+                reportTitle: 'Login button broken',
+                action: 'owner_assigned',
+                actor: 'system',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          },
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('System')).toBeInTheDocument();
+    expect(screen.getByText('assigned a reporter to')).toBeInTheDocument();
+    expect(screen.queryByText('Deleted user')).not.toBeInTheDocument();
+  });
+
   it('names the widget and deleted users in the activity feed, with priority labels', async () => {
     const entry = (overrides: Partial<DashboardActivityItem>): DashboardActivityItem => ({
       id: `history-${overrides.action}-${overrides.actor}`,

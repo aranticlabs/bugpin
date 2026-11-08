@@ -1117,8 +1117,8 @@ export interface DashboardAttentionItem {
   since: string;
 }
 
-/** Who made a change: a current user, the widget, or a user who has since been deleted */
-export type DashboardActivityActor = 'user' | 'widget' | 'deleted_user';
+/** Who is shown as the author of an activity entry */
+export type DashboardActivityActor = 'user' | 'widget' | 'deleted_user' | 'system';
 
 export interface DashboardActivityItem extends ReportHistoryEntry {
   reportTitle: string;
