@@ -29,3 +29,13 @@ export function resolvePathInside(baseDir: string, ...parts: string[]): string |
 
   return resolved;
 }
+
+/**
+ * Resolve a URL path such as `/assets/app.js` under `baseDir`.
+ * Empty segments from leading or repeated slashes are ignored; any unsafe segment returns null.
+ */
+export function resolveStaticPath(baseDir: string, requestPath: string): string | null {
+  const segments = requestPath.split('/').filter((segment) => segment.length > 0);
+  if (segments.length === 0) return null;
+  return resolvePathInside(baseDir, ...segments);
+}

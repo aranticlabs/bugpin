@@ -226,7 +226,10 @@ test('strict mode blocks young EE releases while CI mode requests approval for t
   const pending = await runAgeCLI(metadata, true);
   expect(pending.exitCode).toBe(0);
   expect(pending.output).toContain('approval_required=true');
-  expect(pending.output).toContain('young_packages=["example@2.0.0 (0.0h old; minimum 72h)"]');
+  expect(pending.summary).toContain('| [example]');
+  expect(pending.summary).toContain('| 2.0.0 |');
+  expect(pending.summary).toContain('**Review deployments**');
+  expect(pending.summary).toContain('only to this run and revision');
 });
 
 test('CI mode requires no approval for mature versions but cannot waive invalid metadata', async () => {
@@ -236,7 +239,8 @@ test('CI mode requires no approval for mature versions but cannot waive invalid 
   );
   expect(mature.exitCode).toBe(0);
   expect(mature.output).toContain('approval_required=false');
-  expect(mature.output).toContain('young_packages=[]');
+  expect(mature.summary).toContain('No npm releases younger than 72 hours.');
+  expect(mature.summary).not.toContain('**Review deployments**');
   for (const metadata of [
     { time: { '1.0.0': '2026-01-01T00:00:00Z' } },
     { time: { '1.0.0': 'invalid', '2.0.0': new Date().toISOString() } },
@@ -253,16 +257,16 @@ test('CI mode requires no approval for mature versions but cannot waive invalid 
   }
 });
 
-test('approval titles receive every young version, including scoped packages', async () => {
+test('approval summaries include every young version, including scoped packages', async () => {
   const pending = await runAgeCLI(
     { time: { '1.0.0': '2026-01-01T00:00:00Z', '1.4.4': new Date().toISOString() } },
     true,
     ['@types/bun@1.4.4', 'bun-types@1.4.4']
   );
   expect(pending.exitCode).toBe(0);
-  expect(pending.output).toContain(
-    'young_packages=["@types/bun@1.4.4 (0.0h old; minimum 72h)","bun-types@1.4.4 (0.0h old; minimum 72h)"]'
-  );
+  expect(pending.summary).toContain('[@types/bun]');
+  expect(pending.summary).toContain('[bun-types]');
+  expect(pending.summary.match(/\| 1\.4\.4 \|/g)).toHaveLength(2);
   expect(pending.stderr).toContain('published ');
   expect(pending.stderr).toContain('eligible at ');
   expect(pending.summary).toContain('[@types/bun](');
@@ -297,7 +301,8 @@ test('workflow enforcement cannot pass on rejected, missing, canceled, or skippe
     ).text()
   ) as {
     jobs: {
-      enforce: { steps: Array<{ run: string }> };
+      validate: { name: string };
+      enforce: { name: string; needs: string[]; if: string; steps: Array<{ run: string }> };
       'approve-young-releases': {
         name: string;
         environment: { name: string; url: string };
@@ -306,37 +311,53 @@ test('workflow enforcement cannot pass on rejected, missing, canceled, or skippe
       };
     };
   };
+  expect(policy.jobs.validate.name).toBe('Check dependency ages');
+  expect(policy.jobs.enforce.name).toBe('Dependency policy');
+  expect(policy.jobs.enforce.needs).toEqual(['validate', 'approve-young-releases']);
+  expect(policy.jobs.enforce.if).toBe('${{ always() }}');
   expect(policy.jobs['approve-young-releases'].environment.name).toBe('dependency-age-override');
   expect(policy.jobs['approve-young-releases'].environment.url).toBe(
     '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary'
   );
-  expect(policy.jobs['approve-young-releases'].name).toBe(
-    "Approve young releases: ${{ join(fromJSON(needs.validate.outputs.young_packages || '[]'), ', ') }}"
-  );
+  expect(policy.jobs['approve-young-releases'].name).toBe('Approve age exception');
   expect(policy.jobs['approve-young-releases'].needs).toBe('validate');
   expect(policy.jobs['approve-young-releases'].if).toBe(
     "needs.validate.outputs.approval_required == 'true'"
   );
-  for (const [validation, required, approval, expected] of [
-    ['success', 'false', 'skipped', 0],
-    ['success', 'true', 'success', 0],
-    ['failure', 'true', 'success', 1],
-    ['success', 'true', 'failure', 1],
-    ['success', 'true', 'cancelled', 1],
-    ['success', 'true', 'skipped', 1],
-    ['success', '', 'skipped', 1],
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin policy summary-'));
+  directories.push(directory);
+  const summary = join(directory, 'summary');
+  for (const [validation, required, approval, expected, message] of [
+    ['success', 'false', 'skipped', 0, 'No age exception was needed'],
+    ['success', 'true', 'success', 0, 'administrator approved'],
+    ['failure', 'true', 'success', 1, 'rerun failed jobs'],
+    ['cancelled', 'false', 'skipped', 1, 'validation did not succeed'],
+    ['skipped', 'false', 'skipped', 1, 'validation did not succeed'],
+    ['success', 'true', 'failure', 1, 'Review deployments'],
+    ['success', 'true', 'cancelled', 1, 'Review deployments'],
+    ['success', 'true', 'skipped', 1, 'Review deployments'],
+    ['success', '', 'skipped', 1, 'did not report whether approval was required'],
   ] as const) {
+    await Bun.write(summary, '');
     const child = Bun.spawn(['bash', '-e', '-c', policy.jobs.enforce.steps[0].run], {
       env: {
         ...process.env,
         VALIDATION_RESULT: validation,
         APPROVAL_REQUIRED: required,
         APPROVAL_RESULT: approval,
+        GITHUB_STEP_SUMMARY: summary,
       },
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    expect(await child.exited).toBe(expected);
+    const [code, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(expected);
+    expect(await Bun.file(summary).text()).toContain(message);
+    expect(stdout.includes('::error::')).toBe(expected !== 0);
   }
 });
 
@@ -345,6 +366,7 @@ test('PR and Docker workflows share the age policy without skipping build valida
     Bun.YAML.parse(
       await Bun.file(new URL(`../../.github/workflows/${name}`, import.meta.url)).text()
     ) as {
+      on: { pull_request: { branches: string[] }; push: { branches: string[] } };
       jobs: Record<
         string,
         { uses?: string; needs?: string; if?: string; steps?: Array<{ run?: string }> }
@@ -354,8 +376,9 @@ test('PR and Docker workflows share the age policy without skipping build valida
   const docker = await read('docker-publish.yml');
   expect(pr.jobs['age-policy'].uses).toBe('./.github/workflows/dependency-age-policy.yml');
   expect(docker.jobs['age-policy'].uses).toBe(pr.jobs['age-policy'].uses);
-  expect(pr.jobs['dependency-age'].needs).toBe('age-policy');
-  expect(pr.jobs['dependency-age'].if).toBe('${{ always() }}');
+  expect(pr.on.pull_request.branches).toEqual(['main', 'dev']);
+  expect(pr.on.push.branches).toEqual(['main', 'dev']);
+  expect(Object.keys(pr.jobs)).toEqual(['age-policy']);
   expect(docker.jobs['build-and-push'].needs).toBe('age-policy');
   expect(
     docker.jobs['build-and-push'].steps?.some(

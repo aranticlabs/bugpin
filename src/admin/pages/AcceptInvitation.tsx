@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,19 +12,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Bug, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Spinner } from '../components/ui/spinner';
+import { PasswordRequirements, passwordMeetsPolicy } from '../components/PasswordRequirements';
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy';
+import type { PasswordPolicy } from '@shared/password-policy';
 
-const acceptInvitationSchema = z
-  .object({
-    name: z.string().min(2, 'Name must be at least 2 characters'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your password'),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ['confirmPassword'],
-  });
+function createAcceptInvitationSchema(policy: PasswordPolicy) {
+  return z
+    .object({
+      name: z.string().min(2, 'Name must be at least 2 characters'),
+      password: z.string(),
+      confirmPassword: z.string().min(1, 'Please confirm your password'),
+    })
+    .refine((data) => passwordMeetsPolicy(data.password, policy), {
+      message: 'Password does not meet the requirements',
+      path: ['password'],
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: "Passwords don't match",
+      path: ['confirmPassword'],
+    });
+}
 
-type AcceptInvitationFormData = z.infer<typeof acceptInvitationSchema>;
+type AcceptInvitationFormData = z.infer<ReturnType<typeof createAcceptInvitationSchema>>;
 
 interface InvitationData {
   email: string;
@@ -42,11 +51,14 @@ export function AcceptInvitation() {
   const [invitation, setInvitation] = useState<InvitationData | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const policy = usePasswordPolicy();
+  const acceptInvitationSchema = useMemo(() => createAcceptInvitationSchema(policy), [policy]);
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<AcceptInvitationFormData>({
     resolver: zodResolver(acceptInvitationSchema),
@@ -222,10 +234,11 @@ export function AcceptInvitation() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Min. 8 characters"
+                autoComplete="new-password"
                 {...register('password')}
                 aria-invalid={!!errors.password}
               />
+              <PasswordRequirements password={watch('password')} policy={policy} />
               {errors.password && (
                 <p className="text-xs text-destructive">{errors.password.message}</p>
               )}

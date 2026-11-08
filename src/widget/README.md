@@ -9,7 +9,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 - **Annotation Tools** - Draw, highlight, blur, and add text
 - **Privacy First** - Self-hosted, your data stays on your servers
 - **Customizable** - Match your brand colors and style
-- **Lightweight** - Less than 175KB gzipped
+- **Lightweight** - Less than 190KB gzipped
 - **Dark Mode** - Automatic theme detection
 - **Responsive** - Works on all devices
 - **Multilingual** - Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection from `<html lang>` or the visitor's browser
@@ -147,6 +147,14 @@ email.
 - Your reverse proxy must accept uploads up to the configured video size and allow enough time for
   slower uploads. See the [reverse proxy guide](https://docs.bugpin.io/installation/reverse-proxy).
   The widget shows upload progress, and reporters can cancel a running upload.
+
+## Offline and failed submissions
+
+If the widget cannot reach the server, it stores the report in the browser and sends it automatically
+once the connection is back, and tells the reporter so. Each report carries a submission id, so
+retries never create a second report. If the server is reachable but the upload is rejected on the
+way, for example by a reverse proxy size limit, the reporter is asked to remove or shrink attachments
+and try again.
 
 ## Privacy and diagnostic capture
 
@@ -380,5 +388,6 @@ MIT
 ## Support
 
 - [Documentation](https://docs.bugpin.io)
+- [Changelog](https://github.com/aranticlabs/bugpin/tree/main/Changelog/widget)
 - [Report Issues](https://github.com/bugpin/bugpin/issues)
 - [Discussions](https://github.com/bugpin/bugpin/discussions)

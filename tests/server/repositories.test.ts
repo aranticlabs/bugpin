@@ -324,6 +324,26 @@ describe('usersRepo', () => {
     expect(deleted).toBe(true);
   });
 
+  it('never issues or accepts an invitation for an account that was not invited', async () => {
+    const user = await usersRepo.create({
+      email: 'direct@example.com',
+      passwordHash: 'original-hash',
+      name: 'Direct',
+      role: 'admin',
+    });
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+
+    const reissued = await usersRepo.updateInvitationToken(user.id, 'planted-token', expiresAt);
+    expect(reissued).toBeNull();
+
+    getDb().run('UPDATE users SET invitation_token = ? WHERE id = ?', ['planted-token', user.id]);
+    const accepted = await usersRepo.acceptInvitation(user.id, 'planted-token', 'attacker-hash');
+    expect(accepted).toBeNull();
+
+    const withPassword = await usersRepo.findByEmailWithPassword('direct@example.com');
+    expect(withPassword?.passwordHash).toBe('original-hash');
+  });
+
   it('accepts an invitation only once for a given token', async () => {
     const token = 'invite-token-once';
     const expiresAt = new Date(Date.now() + 60_000).toISOString();

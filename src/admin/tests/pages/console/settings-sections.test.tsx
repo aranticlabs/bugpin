@@ -10,7 +10,7 @@ import {
 import { Settings } from '../../../pages/console/Settings';
 import { Recording } from '../../../pages/widget/Recording';
 import { Screenshot } from '../../../pages/widget/Screenshot';
-import { Security } from '../../../pages/console/Security';
+import { PasswordPolicySettings, Security, TwoFactor } from '../../../pages/console/Security';
 import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
@@ -167,7 +167,7 @@ describe('Settings sections', () => {
     fireEvent.change(rateLimitInput, { target: { value: '120' } });
     fireEvent.change(sessionInput, { target: { value: '14' } });
 
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getAllByRole('button', { name: /save changes/i })[0]);
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith(
@@ -177,6 +177,45 @@ describe('Settings sections', () => {
           sessionMaxAgeDays: 14,
         })
       );
+    });
+  });
+
+  it('saves the password policy on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<PasswordPolicySettings />);
+
+    const minLength = await screen.findByLabelText(/minimum length/i);
+    await waitFor(() => expect(minLength).toHaveValue(12));
+    fireEvent.change(minLength, { target: { value: '16' } });
+    await user.click(screen.getByLabelText(/special character/i));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        passwordPolicy: {
+          minLength: 16,
+          requireUppercase: true,
+          requireLowercase: false,
+          requireNumber: true,
+          requireSymbol: true,
+        },
+      });
+    });
+  });
+
+  it('saves the two-factor policy on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<TwoFactor />);
+
+    await screen.findAllByText('Admins only');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'admins' });
     });
   });
 

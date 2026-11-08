@@ -115,8 +115,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        submission_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.projectId,
@@ -131,6 +131,7 @@ export const reportsRepo = {
         data.reporterName ?? null,
         data.reporterLocale ?? 'en',
         data.assignedTo ?? null,
+        data.submissionId ?? null,
         now,
         now,
       ]
@@ -141,6 +142,14 @@ export const reportsRepo = {
       throw new Error('Failed to create report');
     }
     return report;
+  },
+
+  /** The report a widget submission created, used to answer retries of the same submission */
+  findIdBySubmission(projectId: string, submissionId: string): string | null {
+    const row = getDb()
+      .query('SELECT id FROM reports WHERE project_id = ? AND submission_id = ?')
+      .get(projectId, submissionId) as { id: string } | null;
+    return row?.id ?? null;
   },
 
   /**

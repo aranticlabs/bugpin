@@ -48,7 +48,7 @@ import {
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
-import { Trash2, RefreshCw, Mail, ChevronsUpDown } from 'lucide-react';
+import { Trash2, RefreshCw, Mail, ChevronsUpDown, ShieldOff } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import type { DefaultProjectReference, Project, User } from '@shared/types';
 
@@ -71,6 +71,7 @@ export function Users() {
   const { user: currentUser } = useAuth();
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const [resetTwoFactorUser, setResetTwoFactorUser] = useState<User | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -159,6 +160,20 @@ export function Users() {
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'Failed to delete user');
+    },
+  });
+
+  const resetTwoFactorMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(`/users/${userId}/two-factor`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setResetTwoFactorUser(null);
+      toast.success('Two-factor authentication reset');
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'Failed to reset two-factor authentication');
     },
   });
 
@@ -352,6 +367,15 @@ export function Users() {
                         </Badge>
                       </Button>
                     )}
+                    {user.twoFactorEnabled && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-1"
+                        title="Two-factor authentication on"
+                      >
+                        2FA
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -368,6 +392,17 @@ export function Users() {
                           ) : (
                             <RefreshCw className="h-4 w-4" />
                           )}
+                        </Button>
+                      )}
+                      {user.twoFactorEnabled && user.id !== currentUser?.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setResetTwoFactorUser(user)}
+                          title="Reset two-factor authentication"
+                          aria-label="Reset two-factor authentication"
+                        >
+                          <ShieldOff className="h-4 w-4" />
                         </Button>
                       )}
                       <Button
@@ -394,6 +429,32 @@ export function Users() {
         onInvite={(data) => inviteMutation.mutate(data)}
         isLoading={inviteMutation.isPending}
       />
+
+      {/* Reset Two-Factor Confirmation */}
+      <AlertDialog open={!!resetTwoFactorUser} onOpenChange={() => setResetTwoFactorUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset two-factor authentication</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the authenticator app, passkeys and recovery codes of "
+              {resetTwoFactorUser?.name}" ({resetTwoFactorUser?.email}). Use it when they lost their
+              device. If a two-factor policy applies, they set up a new method at their next
+              sign-in.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="outline-destructive"
+              onClick={() =>
+                resetTwoFactorUser && resetTwoFactorMutation.mutate(resetTwoFactorUser.id)
+              }
+            >
+              Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>

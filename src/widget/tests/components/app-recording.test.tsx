@@ -541,6 +541,65 @@ describe('App screen recording', () => {
     expect(recoveryStore.remove).toHaveBeenCalledWith('proj_key', 'recording-session');
   });
 
+  it('does not restore a removed clip from the saved draft after closing', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    current.resolveFinished(makeResult(100));
+    await flush();
+    expect((await draftStorage.load('proj_key'))?.media).toHaveLength(1);
+
+    (dialogProps?.onRemoveMedia as (id: string) => void)('recording-recording-session');
+    await flush();
+    expect((await draftStorage.load('proj_key'))?.media).toEqual([]);
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:close'));
+    await flush();
+    expect(dialog()).toBeNull();
+    document.dispatchEvent(new window.CustomEvent('bugpin:open'));
+    await flush();
+
+    expect(clips()).toEqual([]);
+  });
+
+  it('does not restore a removed clip on the next page', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    current.resolveFinished(makeResult(100));
+    await flush();
+    (dialogProps?.onRemoveMedia as (id: string) => void)('recording-recording-session');
+    await flush();
+
+    render(null, container);
+    dialogProps = null;
+    await renderOpenApp();
+
+    expect(dialog()).not.toBeNull();
+    expect(clips()).toEqual([]);
+  });
+
+  it('keeps the remaining clips in the saved draft when one is removed', async () => {
+    await renderOpenApp();
+    await reachRecording();
+    current.resolveFinished(makeResult(100));
+    await flush();
+    const kept: CapturedMedia = {
+      id: 'capture-kept',
+      dataUrl: 'data:image/png;base64,AA==',
+      timestamp: new Date(),
+      annotated: false,
+      mimeType: 'image/png',
+    };
+    (dialogProps?.onAddMedia as (item: CapturedMedia) => void)(kept);
+    await flush();
+
+    (dialogProps?.onRemoveMedia as (id: string) => void)('recording-recording-session');
+    await flush();
+
+    expect((await draftStorage.load('proj_key'))?.media.map((item) => item.id)).toEqual([
+      'capture-kept',
+    ]);
+  });
+
   it('recovers a recording abandoned in another tab when the widget opens', async () => {
     let calls = 0;
     recoveryStore.recover = mock(async () => {

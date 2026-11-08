@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { authService } from '../services/auth.service.js';
+import { twoFactorService } from '../services/two-factor.service.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import type { ApiTokenValidationResult } from '../types/ee-plugin.js';
 import type { User, Session } from '@shared/types';
@@ -17,6 +18,35 @@ declare module 'hono' {
 }
 
 // Middleware
+
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/change-password', '/api/auth/logout']);
+
+function passwordChangeRequired(user: User, path: string): boolean {
+  return user.mustChangePassword === true && !PASSWORD_CHANGE_ALLOWED_PATHS.has(path);
+}
+
+const passwordChangeRequiredBody = {
+  success: false,
+  error: 'PASSWORD_CHANGE_REQUIRED',
+  message: 'You must change your password before continuing',
+} as const;
+
+// While the two-factor policy requires setup, only sign-out, password and second-factor
+// management stay available.
+const TWO_FACTOR_SETUP_ALLOWED_PREFIXES = ['/api/auth/two-factor', '/api/auth/passkeys'];
+
+function twoFactorSetupRequired(user: User, path: string): boolean {
+  if (user.twoFactorSetupRequired !== true || PASSWORD_CHANGE_ALLOWED_PATHS.has(path)) return false;
+  return !TWO_FACTOR_SETUP_ALLOWED_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  );
+}
+
+const twoFactorSetupRequiredBody = {
+  success: false,
+  error: 'TWO_FACTOR_SETUP_REQUIRED',
+  message: 'You must set up two-factor authentication before continuing',
+} as const;
 
 /**
  * Authentication middleware
@@ -37,6 +67,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
     if (!result.success)
       return c.json({ success: false, error: result.code, message: result.error }, 401);
     const token = result.value;
+    if (token.user.mustChangePassword) return c.json(passwordChangeRequiredBody, 403);
     const scope = ['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) ? 'read' : 'write';
     if (!service.hasScope(token, scope) || (scope === 'write' && token.user.role === 'viewer')) {
       return c.json(
@@ -50,7 +81,9 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
         403
       );
     }
-    c.set('user', token.user);
+    const tokenUser = await twoFactorService.describeUser(token.user);
+    if (tokenUser.twoFactorSetupRequired) return c.json(twoFactorSetupRequiredBody, 403);
+    c.set('user', tokenUser);
     c.set('apiToken', token);
     return next();
   }
@@ -66,6 +99,12 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       { success: false, error: result.code ?? 'UNAUTHORIZED', message: result.error },
       401
     );
+  if (passwordChangeRequired(result.value.user, c.req.path)) {
+    return c.json(passwordChangeRequiredBody, 403);
+  }
+  if (twoFactorSetupRequired(result.value.user, c.req.path)) {
+    return c.json(twoFactorSetupRequiredBody, 403);
+  }
   c.set('user', result.value.user);
   c.set('session', result.value.session);
 

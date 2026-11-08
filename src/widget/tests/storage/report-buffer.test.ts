@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 
 const originalFetch = globalThis.fetch;
@@ -114,6 +114,7 @@ describe('report buffer', () => {
     await clearBuffer();
 
     const id = await bufferReport({
+      submissionId: 'submission-1',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -141,6 +142,7 @@ describe('report buffer', () => {
     await clearBuffer();
 
     await bufferReport({
+      submissionId: 'submission-1',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -163,6 +165,7 @@ describe('report buffer', () => {
     await clearBuffer();
 
     await bufferReport({
+      submissionId: 'submission-1',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -178,15 +181,23 @@ describe('report buffer', () => {
     const originalNow = Date.now;
     let now = Date.now();
     Date.now = () => now;
+    const consoleError = spyOn(console, 'error').mockImplementation(() => undefined);
 
-    for (let attempt = 0; attempt < 6; attempt++) {
-      await syncPendingReports();
-      now += 600000;
+    try {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await expect(syncPendingReports()).resolves.toMatchObject({ synced: 0 });
+        now += 600000;
+      }
+
+      expect(await getPendingCount()).toBe(0);
+      expect(consoleError).toHaveBeenCalledWith(
+        '[BugPin] Max retries exceeded, removing report:',
+        expect.any(String)
+      );
+    } finally {
+      Date.now = originalNow;
+      consoleError.mockRestore();
     }
-
-    expect(await getPendingCount()).toBe(0);
-
-    Date.now = originalNow;
   });
 
   it('submits a quota-limited buffered report without its video', async () => {
@@ -195,6 +206,7 @@ describe('report buffer', () => {
     await clearBuffer();
 
     await bufferReport({
+      submissionId: 'submission-1',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -262,6 +274,7 @@ describe('report buffer', () => {
       await import('../../storage/report-buffer');
     await clearBuffer();
     await bufferReport({
+      submissionId: 'submission-1',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -279,5 +292,203 @@ describe('report buffer', () => {
 
     expect(await getPendingCount()).toBe(0);
     stopAutoSync();
+  });
+
+  it('reuses the stored submission ID on every retry', async () => {
+    const { bufferReport, syncPendingReports, getPendingReports, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      submissionId: 'submission-retry',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    });
+
+    globalThis.navigator = { onLine: true } as Navigator;
+    const sentIds: string[] = [];
+    let attempt = 0;
+    globalThis.fetch = (async (_input, init) => {
+      const data = JSON.parse((init?.body as FormData).get('data') as string);
+      sentIds.push(data.submissionId);
+      attempt++;
+      return attempt === 1
+        ? new Response(JSON.stringify({ message: 'Bad gateway' }), { status: 502 })
+        : new Response(null, { status: 200 });
+    }) as typeof fetch;
+
+    const originalNow = Date.now;
+    let now = Date.now();
+    Date.now = () => now;
+    try {
+      await syncPendingReports();
+      expect((await getPendingReports())[0]?.submissionId).toBe('submission-retry');
+      now += 600000;
+      await syncPendingReports();
+    } finally {
+      Date.now = originalNow;
+    }
+
+    expect(sentIds).toEqual(['submission-retry', 'submission-retry']);
+    expect(await getPendingReports()).toEqual([]);
+  });
+
+  it('assigns and keeps a submission ID for reports buffered without one', async () => {
+    const { bufferReport, syncPendingReports, getPendingReports, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    } as Parameters<typeof bufferReport>[0]);
+
+    globalThis.navigator = { onLine: true } as Navigator;
+    const sentIds: string[] = [];
+    globalThis.fetch = (async (_input, init) => {
+      sentIds.push(JSON.parse((init?.body as FormData).get('data') as string).submissionId);
+      return new Response(null, { status: 503 });
+    }) as typeof fetch;
+
+    await syncPendingReports();
+
+    const stored = (await getPendingReports())[0]?.submissionId;
+    expect(stored).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(sentIds).toEqual([stored as string]);
+  });
+
+  it('treats a duplicate submission response as success', async () => {
+    const { bufferReport, syncPendingReports, getPendingCount, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      submissionId: 'submission-1',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    });
+
+    globalThis.navigator = { onLine: true } as Navigator;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ success: true, reportId: 'rpt_1', duplicate: true }), {
+        status: 200,
+      })) as unknown as typeof fetch;
+
+    expect(await syncPendingReports()).toEqual({ synced: 1, failed: 0 });
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('does not start a second sync while one is in flight', async () => {
+    const { bufferReport, syncPendingReports, getPendingCount, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      submissionId: 'submission-1',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    });
+
+    globalThis.navigator = { onLine: true } as Navigator;
+    let releaseUpload!: () => void;
+    const uploadDone = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    let requests = 0;
+    globalThis.fetch = (async () => {
+      requests++;
+      await uploadDone;
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const first = syncPendingReports();
+    for (let i = 0; i < 10 && requests === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const second = await syncPendingReports();
+    releaseUpload();
+
+    expect(second).toEqual({ synced: 0, failed: 0 });
+    expect(await first).toEqual({ synced: 1, failed: 0 });
+    expect(requests).toBe(1);
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('skips the sync while another tab holds the sync lock', async () => {
+    const { bufferReport, syncPendingReports, getPendingCount, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      submissionId: 'submission-1',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    });
+
+    const requestedLocks: Array<{ name: string; ifAvailable?: boolean }> = [];
+    let lockHeld = true;
+    const locks = {
+      request: async (
+        name: string,
+        options: LockOptions,
+        callback: (lock: Lock | null) => unknown
+      ) => {
+        requestedLocks.push({ name, ifAvailable: options.ifAvailable });
+        return callback(lockHeld ? null : ({ name, mode: 'exclusive' } as Lock));
+      },
+    };
+    globalThis.navigator = { onLine: true, locks } as unknown as Navigator;
+    let requests = 0;
+    globalThis.fetch = (async () => {
+      requests++;
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    expect(await syncPendingReports()).toEqual({ synced: 0, failed: 0 });
+    expect(requests).toBe(0);
+    expect(await getPendingCount()).toBe(1);
+
+    lockHeld = false;
+    expect(await syncPendingReports()).toEqual({ synced: 1, failed: 0 });
+    expect(requests).toBe(1);
+    expect(requestedLocks).toEqual([
+      { name: 'bugpin-report-sync', ifAvailable: true },
+      { name: 'bugpin-report-sync', ifAvailable: true },
+    ]);
+  });
+
+  it('syncs without the lock when the lock request is rejected', async () => {
+    const { bufferReport, syncPendingReports, getPendingCount, clearBuffer } =
+      await import('../../storage/report-buffer');
+    await clearBuffer();
+    await bufferReport({
+      submissionId: 'submission-1',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: { url: 'https://example.com' },
+    });
+
+    const locks = {
+      request: async () => {
+        throw new DOMException('Opaque origin', 'SecurityError');
+      },
+    };
+    globalThis.navigator = { onLine: true, locks } as unknown as Navigator;
+    globalThis.fetch = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
+
+    expect(await syncPendingReports()).toEqual({ synced: 1, failed: 0 });
+    expect(await getPendingCount()).toBe(0);
   });
 });

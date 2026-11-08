@@ -48,6 +48,15 @@ const localizedStringSchema = z
 
 const projectLocalizedTextField = z.union([z.null(), localizedStringSchema]).optional();
 
+// A WebAuthn credential as serialized by the browser; SimpleWebAuthn checks the details
+const webAuthnCredentialSchema = z.looseObject({
+  id: z.string().min(1).max(1024),
+  rawId: z.string().min(1).max(1024),
+  type: z.literal('public-key'),
+  response: z.record(z.string(), z.unknown()),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+});
+
 const positionEnum = z.enum(['bottom-right', 'bottom-left', 'top-right', 'top-left']);
 const buttonShapeEnum = z.enum(['rectangle', 'round']);
 const themeEnum = z.enum(['auto', 'light', 'dark']);
@@ -456,12 +465,53 @@ export const schemas = {
     isActive: z.boolean().optional(),
   }),
 
+  // Second login step: exactly one of an authenticator code or a recovery code
+  twoFactorLogin: z
+    .object({
+      challengeToken: z.string().min(1).max(200),
+      code: z.string().min(6).max(10).optional(),
+      recoveryCode: z.string().min(10).max(20).optional(),
+    })
+    .refine((data) => (data.code === undefined) !== (data.recoveryCode === undefined), {
+      message: 'Provide either code or recoveryCode',
+    }),
+
+  twoFactorPasskeyOptions: z.object({ challengeToken: z.string().min(1).max(200) }),
+  twoFactorPasskeyLogin: z.object({
+    challengeToken: z.string().min(1).max(200),
+    response: webAuthnCredentialSchema,
+  }),
+  passkeyLogin: z.object({
+    challengeId: z.string().min(1).max(200),
+    response: webAuthnCredentialSchema,
+  }),
+
+  // Two-factor management
+  twoFactorCode: z.object({ code: z.string().min(6).max(10) }),
+  passwordConfirmation: z.object({ password: z.string().min(1).max(200) }),
+  passkeyRegistration: z.object({
+    response: webAuthnCredentialSchema,
+    name: z.string().trim().max(100).optional(),
+  }),
+  passkeyRename: z.object({ name: z.string().trim().min(1).max(100) }),
+
   // Update settings request
   updateSettings: z
     .object({
       invitationExpirationDays: z.number().int().min(1).max(365).optional(),
       widgetDialog: themeColorsSchema.strict().optional(),
       enforceHttps: z.boolean().optional(),
+      twoFactorPolicy: z.enum(['off', 'admins', 'everyone']).optional(),
+      passwordPolicy: z
+        .object({
+          minLength: z.number().int().min(8).max(128),
+          requireUppercase: z.boolean(),
+          requireLowercase: z.boolean(),
+          requireNumber: z.boolean(),
+          requireSymbol: z.boolean(),
+        })
+        .strict()
+        .optional(),
       s3Enabled: z.boolean().optional(),
       s3Config: z
         .object({

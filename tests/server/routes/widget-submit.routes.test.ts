@@ -248,6 +248,81 @@ describe('widget submit request body limit', () => {
   });
 });
 
+describe('widget submit idle timeout', () => {
+  function createTimeoutEnv() {
+    const timeouts: number[] = [];
+    return {
+      timeouts,
+      env: {
+        timeout: (_request: Request, seconds: number) => {
+          timeouts.push(seconds);
+        },
+      },
+    };
+  }
+
+  it('keeps the server idle timeout for requests without a valid API key', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(res.status).toBe(401);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('keeps the server idle timeout for reports without a recording', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify(validSubmitBody),
+      },
+      env
+    );
+
+    expect(res.status).toBe(201);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('extends the idle timeout to a finite bound once a recording has been received', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(timeouts).toEqual([255]);
+  });
+});
+
 describe('widget routes', () => {
   describe('POST /widget/submit', () => {
     it('returns 401 when API key is missing', async () => {
@@ -419,6 +494,53 @@ describe('widget routes', () => {
       const body = await res.json();
       expect(body.success).toBe(true);
       expect(body.reportId).toBe('rpt_1');
+    });
+
+    it('answers a repeated submission with the existing report instead of a new one', async () => {
+      const created: string[] = [];
+      const stored = new Map<string, string>();
+      reportsService.findIdByWidgetSubmission = (projectId, submissionId) =>
+        stored.get(`${projectId}:${submissionId}`) ?? null;
+      reportsService.create = async (input) => {
+        // Slow enough that the retry arrives while the first request is still running
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const id = `rpt_${created.length + 1}`;
+        created.push(id);
+        if (input.submissionId) stored.set(`prj_1:${input.submissionId}`, id);
+        return Result.ok({ ...baseReport, id });
+      };
+
+      const app = createApp();
+      const submit = () =>
+        app.request('http://localhost/widget/submit', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+          body: JSON.stringify({ ...validSubmitBody, submissionId: 'sub_0123456789' }),
+        });
+
+      const responses = await Promise.all([submit(), submit()]);
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 201]);
+      const retry = responses.find((res) => res.status === 200);
+      expect(await retry?.json()).toMatchObject({
+        success: true,
+        reportId: 'rpt_1',
+        duplicate: true,
+      });
+      expect(created).toEqual(['rpt_1']);
+
+      const later = await submit();
+      expect(later.status).toBe(200);
+      expect(created).toEqual(['rpt_1']);
+    });
+
+    it('rejects a malformed submission id', async () => {
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify({ ...validSubmitBody, submissionId: 'bad id' }),
+      });
+      expect(res.status).toBe(400);
     });
 
     it('returns 400 when service fails', async () => {
