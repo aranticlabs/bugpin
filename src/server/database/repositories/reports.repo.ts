@@ -295,16 +295,16 @@ export const reportsRepo = {
       sets.push('status = ?');
       params.push(updates.status);
 
-      // Track status change timestamps
+      // Preserve timestamps and the resolver when the status has not changed.
       if (updates.status === 'resolved') {
-        sets.push('resolved_at = ?');
+        sets.push("resolved_at = CASE WHEN status = 'resolved' THEN resolved_at ELSE ? END");
         params.push(now);
         if (updates.resolvedBy) {
-          sets.push('resolved_by = ?');
+          sets.push("resolved_by = CASE WHEN status = 'resolved' THEN resolved_by ELSE ? END");
           params.push(updates.resolvedBy);
         }
       } else if (updates.status === 'closed') {
-        sets.push('closed_at = ?');
+        sets.push("closed_at = CASE WHEN status = 'closed' THEN closed_at ELSE ? END");
         params.push(now);
       } else if (updates.status === 'open' || updates.status === 'in_progress') {
         // Reopen - clear resolved/closed timestamps

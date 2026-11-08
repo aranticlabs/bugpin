@@ -542,6 +542,67 @@ describe('integrationsRepo', () => {
 });
 
 describe('reportsRepo', () => {
+  it('preserves the resolution time and resolver when saving an already resolved report', async () => {
+    const project = await createProject('Resolution history');
+    const resolver = await createUser('resolver@example.com');
+    const editor = await createUser('editor@example.com');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Resolved report',
+      metadata: baseMetadata,
+    });
+    const resolvedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?', [
+      'resolved',
+      resolvedAt,
+      resolver.id,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+      title: 'Updated title',
+    });
+    expect(saved).toMatchObject({ title: 'Updated title', resolvedAt, resolvedBy: resolver.id });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'in_progress' });
+    expect(reopened?.resolvedAt).toBeUndefined();
+    expect(reopened?.resolvedBy).toBeUndefined();
+
+    const resolved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+    });
+    expect(resolved?.resolvedAt).toBeTruthy();
+    expect(resolved?.resolvedAt).not.toBe(resolvedAt);
+    expect(resolved?.resolvedBy).toBe(editor.id);
+  });
+
+  it('preserves the closure time when saving an already closed report', async () => {
+    const project = await createProject('Closure history');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Closed report',
+      metadata: baseMetadata,
+    });
+    const closedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, closed_at = ? WHERE id = ?', [
+      'closed',
+      closedAt,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, { status: 'closed', priority: 'high' });
+    expect(saved).toMatchObject({ priority: 'high', closedAt });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'open' });
+    expect(reopened?.closedAt).toBeUndefined();
+    const closed = await reportsRepo.update(report.id, { status: 'closed' });
+    expect(closed?.closedAt).toBeTruthy();
+    expect(closed?.closedAt).not.toBe(closedAt);
+  });
+
   it('creates, updates, and deletes reports', async () => {
     const project = await createProject('Reports');
 
