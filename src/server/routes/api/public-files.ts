@@ -28,8 +28,8 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
       rangeHeader: c.req.header('range'),
       size: file.sizeBytes,
       mimeType: file.mimeType,
-      cacheControl:
-        file.type === 'video' ? 'private, max-age=300' : 'public, max-age=31536000, immutable',
+      cacheControl: 'public, max-age=86400',
+      filename: file.filename,
       headOnly: c.req.method === 'HEAD',
     });
 

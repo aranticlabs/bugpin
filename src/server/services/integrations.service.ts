@@ -299,7 +299,7 @@ export const integrationsService = {
     }
 
     // Load report files
-    const files = await filesRepo.findByReportId(reportId);
+    const files = await filesRepo.findOriginalByReportId(reportId);
 
     try {
       let result: ForwardReportResult;

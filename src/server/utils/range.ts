@@ -45,12 +45,25 @@ export async function createFileResponse(options: {
   mimeType: string;
   cacheControl: string;
   headOnly?: boolean;
+  filename?: string;
 }): Promise<Response | null> {
   const parsedRange = parseRangeHeader(options.rangeHeader, options.size);
-  const sharedHeaders = {
+  const sharedHeaders: Record<string, string> = {
     'Accept-Ranges': 'bytes',
     'Cache-Control': options.cacheControl,
+    'X-Content-Type-Options': 'nosniff',
   };
+  if (options.filename) {
+    const inline = /^(image\/(png|jpeg|gif|webp)|video\/(mp4|webm|quicktime))$/.test(
+      options.mimeType
+    );
+    const filename = (options.filename.split(/[\\/]/).pop() || 'file').replace(
+      /[^\x20-\x7e]|["\\]/g,
+      '_'
+    );
+    sharedHeaders['Content-Disposition'] =
+      `${inline ? 'inline' : 'attachment'}; filename="${filename}"`;
+  }
 
   if (parsedRange === 'unsatisfiable') {
     return new Response(null, {

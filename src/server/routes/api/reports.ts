@@ -441,7 +441,7 @@ reports.get('/:id/files', validate({ params: schemas.id }), async (c) => {
 reports.get('/:reportId/files/:fileId', async (c) => {
   const fileId = c.req.param('fileId');
 
-  const result = await reportsService.serveFile(fileId);
+  const result = await reportsService.serveFile(c.req.param('reportId'), fileId);
 
   if (!result.success) {
     return c.json({ success: false, error: result.code, message: result.error }, 404);
@@ -453,7 +453,8 @@ reports.get('/:reportId/files/:fileId', async (c) => {
     rangeHeader: c.req.header('range'),
     size: file.sizeBytes,
     mimeType: file.mimeType,
-    cacheControl: 'private, max-age=86400',
+    cacheControl: 'private, no-store',
+    filename: file.filename,
     headOnly: c.req.method === 'HEAD',
   });
 

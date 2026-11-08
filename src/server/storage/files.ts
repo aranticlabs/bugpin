@@ -283,7 +283,12 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
   }
 
   const filePath = path.join(reportDir, storedFilename);
-  fs.writeFileSync(filePath, buffer);
+  try {
+    fs.writeFileSync(filePath, buffer);
+  } catch (error) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    throw error;
+  }
 
   logger.info('File saved to local storage', {
     fileId,

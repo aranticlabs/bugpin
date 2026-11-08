@@ -80,7 +80,7 @@ export const githubSyncService = {
     await reportsRepo.markPendingSync(reportId);
 
     // Load report files
-    const files = await filesRepo.findByReportId(reportId);
+    const files = await filesRepo.findOriginalByReportId(reportId);
 
     const syncAccess = checkProjectLicense(report.projectId);
     if (!syncAccess.success) return syncAccess;

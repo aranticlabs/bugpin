@@ -94,7 +94,7 @@ beforeEach(() => {
     updateReportPayload = updates;
     return reportById;
   };
-  filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
 
   githubService.testConnection = async () => ({ success: true, repoName: 'org/repo' });
   githubService.createIssue = async () => ({

@@ -151,6 +151,7 @@ beforeEach(() => {
     ({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } }) as never;
 
   filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
   filesRepo.create = async (input) => {
     fileCreateTypes.push(input.type);
     fileCreateRecords.push(input);

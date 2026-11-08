@@ -106,7 +106,7 @@ beforeEach(() => {
     return baseIntegration;
   };
 
-  filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
 
   githubService.createIssue = async () => ({
     success: true,

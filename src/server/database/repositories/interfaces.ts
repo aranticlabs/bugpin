@@ -322,9 +322,32 @@ export interface IApiTokensRepository {
 
 // Report Messages Repository Interface
 
+export type StoredReportMessage = Omit<ReportMessage, 'files'>;
+
+export type MessageAuthor =
+  { kind: 'staff'; userId: string } | { kind: 'reporter'; reporterId: string };
+
+export interface MessageWriteContext {
+  projectId: string;
+  status: ReportStatus;
+  reporterId: string | null;
+  reporterEmail: string | null;
+  settings: ProjectSettings;
+}
+
 export interface IReportMessagesRepository {
-  create(reportId: string, userId: string, message: string): Promise<ReportMessage>;
-  findByReportId(reportId: string): Promise<ReportMessage[]>;
+  insert(reportId: string, author: MessageAuthor, body: string): StoredReportMessage | null;
+  findById(reportId: string, messageId: string): StoredReportMessage | null;
+  findByReportId(reportId: string, visibleOnly?: boolean): Promise<StoredReportMessage[]>;
+  writeContext(reportId: string): MessageWriteContext | null;
+  hasAuthor(author: MessageAuthor): boolean;
+  recordActivity(reportId: string, author: MessageAuthor, now: string): void;
+  setHidden(
+    reportId: string,
+    messageId: string,
+    userId: string,
+    hidden: boolean
+  ): StoredReportMessage | null;
 }
 
 // User Preferences Repository Interface

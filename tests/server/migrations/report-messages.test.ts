@@ -154,7 +154,12 @@ it('keeps author snapshots, returns both authors and their files, and counts onl
   await runMigrations();
   seedReport();
   const db = getDb();
-  const staffMessage = await reportMessagesRepo.create('report', 'staff', 'A staff reply');
+  const staffMessage = reportMessagesRepo.insert(
+    'report',
+    { kind: 'staff', userId: 'staff' },
+    'A staff reply'
+  );
+  if (!staffMessage) throw new Error('Missing staff fixture');
   db.exec(`
     INSERT INTO reporters (id, email, display_name) VALUES ('reporter', 'reporter@example.com', 'Reporter');
     INSERT INTO report_messages (id, report_id, author_kind, reporter_id, author_name, body, created_at)
