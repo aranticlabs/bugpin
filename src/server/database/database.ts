@@ -264,6 +264,12 @@ export async function initSchema(): Promise<void> {
   db.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_submission ON reports(project_id, submission_id) WHERE submission_id IS NOT NULL`
   );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_reports_resolved_at ON reports(resolved_at) WHERE resolved_at IS NOT NULL`
+  );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_reports_closed_at ON reports(closed_at) WHERE closed_at IS NOT NULL`
+  );
 
   // Report history table
   db.exec(`
@@ -286,6 +292,9 @@ export async function initSchema(): Promise<void> {
   );
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_report_history_user_action ON report_history(user_id, action)`
+  );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_report_history_report_action ON report_history(report_id, action, created_at)`
   );
 
   // Files table

@@ -187,6 +187,7 @@ describe('database lifecycle', () => {
       db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
         CREATE TABLE reports (id TEXT PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE reporter_messages (id TEXT PRIMARY KEY, user_id TEXT, sent_at TEXT);
         CREATE TABLE users (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,6 +234,7 @@ describe('database lifecycle', () => {
       db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
         CREATE TABLE reports (id TEXT PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE reporter_messages (id TEXT PRIMARY KEY, user_id TEXT, sent_at TEXT);
         CREATE TABLE users (id TEXT PRIMARY KEY);
         INSERT INTO users (id) VALUES ('usr_existing');
         CREATE TABLE migrations (

@@ -8,7 +8,7 @@ import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type { User, UserRole, Session } from '@shared/types';
 import { passwordPolicyService } from './password-policy.service.js';
-import { gamificationService } from './gamification.service.js';
+import { applyNewUserDefaultOrRemove } from './users.service.js';
 
 // Types
 
@@ -85,7 +85,8 @@ export const invitationsService = {
       invitationToken: token,
       invitationTokenExpiresAt: expiresAt,
     });
-    await gamificationService.applyNewUserDefault(user.id);
+    const defaulted = await applyNewUserDefaultOrRemove(user.id);
+    if (!defaulted.success) return defaulted;
 
     // Send invitation email
     const appUrl = settings.appUrl || '';
@@ -247,7 +248,7 @@ export const invitationsService = {
     // Hash password
     const passwordHash = await hashPassword(input.password);
 
-    // Accept invitation (token must still be unconsumed — loses the race otherwise)
+    // The token must still be unconsumed, otherwise a concurrent accept already won
     const user = await usersRepo.acceptInvitation(
       userWithToken.id,
       input.token,

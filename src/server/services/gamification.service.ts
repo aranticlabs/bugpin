@@ -1,12 +1,22 @@
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { userPreferencesRepo } from '../database/repositories/user-preferences.repo.js';
+import {
+  gamificationRepo,
+  type UserResolutionRow,
+  type UserTimeRow,
+} from '../database/repositories/gamification.repo.js';
 import { userPreferencesService } from './user-preferences.service.js';
-import { dashboardRepo, type UserResolutionRow } from '../database/repositories/dashboard.repo.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
+import { gamificationStatus } from '@shared/gamification';
 import {
+  ACHIEVEMENT_TARGETS,
+  AMBER_WAITED_DAYS,
+  DRAGONFLY_TRIAGE_MINUTES,
   EARLY_RESOLVE_MINUTES,
+  FIREFLY_RESOLVE_HOURS,
+  LADYBUG_STAYS_FIXED_DAYS,
   LEVEL_XP,
   XP_BY_PRIORITY,
   XP_PER_REPORTER_MESSAGE,
@@ -15,7 +25,10 @@ import {
   type GamificationProgress,
   type GamificationSelf,
   type GamificationSettings,
+  type GamificationTeam,
   type GamificationUser,
+  type TeamMember,
+  type TeamPeriod,
   type User,
 } from '@shared/types';
 
@@ -30,8 +43,7 @@ type WorkspaceSettings = Omit<GamificationSettings, 'users'>;
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
-const STAYS_FIXED_DAYS = 14;
-const COLD_CASE_DAYS = 90;
+const TEAM_PERIOD_DAYS: Record<Exclude<TeamPeriod, 'all'>, number> = { '30d': 30, '90d': 90 };
 
 export interface UpdateGamificationInput {
   enabled?: boolean;
@@ -41,15 +53,39 @@ export interface UpdateGamificationInput {
   users?: Record<string, boolean>;
 }
 
+export interface PersonalGamification {
+  progress: GamificationProgress;
+  resolveXp: Record<string, number>;
+}
+
 function hoursBetween(from: string, to: string): number {
   return (Date.parse(to) - Date.parse(from)) / HOUR_MS;
 }
 
-function progressFromTimes(
-  id: AchievementId,
-  times: string[],
-  target: number
-): AchievementProgress {
+/**
+ * When the clock for fast resolutions starts: the first assignment to anyone, or arrival when the
+ * report was never assigned. Handing a report back and forth does not restart it.
+ */
+function clockStart(row: Pick<UserResolutionRow, 'firstAssignedAt' | 'createdAt'>): string {
+  return row.firstAssignedAt ?? row.createdAt;
+}
+
+function groupByUser<T extends { userId: string }>(rows: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = groups.get(row.userId);
+    if (list) list.push(row);
+    else groups.set(row.userId, [row]);
+  }
+  return groups;
+}
+
+function times(rows: UserTimeRow[] | undefined): string[] {
+  return (rows ?? []).map((row) => row.at);
+}
+
+function progressFromTimes(id: AchievementId, times: string[]): AchievementProgress {
+  const target = ACHIEVEMENT_TARGETS[id];
   return {
     id,
     current: Math.min(times.length, target),
@@ -67,8 +103,7 @@ function resolvedWithin(
     .filter(
       (row) =>
         priorities.includes(row.priority) &&
-        row.assignedAt !== null &&
-        hoursBetween(row.assignedAt, row.resolvedAt) <= maxHours
+        hoursBetween(clockStart(row), row.resolvedAt) <= maxHours
     )
     .map((row) => row.resolvedAt);
 }
@@ -96,9 +131,9 @@ export function levelFor(
   };
 }
 
-/** Resolutions that were not reopened within two weeks, counted once those two weeks are over */
+/** Resolutions that were not reopened within the window, counted once the window is over */
 function staysFixed(resolutions: UserResolutionRow[], now: number): string[] {
-  const window = STAYS_FIXED_DAYS * DAY_MS;
+  const window = LADYBUG_STAYS_FIXED_DAYS * DAY_MS;
   return resolutions
     .map((row) => ({ row, settledAt: Date.parse(row.resolvedAt) + window }))
     .filter(
@@ -112,15 +147,16 @@ function staysFixed(resolutions: UserResolutionRow[], now: number): string[] {
 function waitedLong(resolutions: UserResolutionRow[]): string[] {
   return resolutions
     .filter(
-      (row) => Date.parse(row.resolvedAt) - Date.parse(row.createdAt) > COLD_CASE_DAYS * DAY_MS
+      (row) => Date.parse(row.resolvedAt) - Date.parse(row.createdAt) > AMBER_WAITED_DAYS * DAY_MS
     )
     .map((row) => row.resolvedAt);
 }
 
-/** Resolved within the early window, counted from assignment, or from arrival when never assigned */
-export function resolvedEarly(row: UserResolutionRow): boolean {
-  const start = Date.parse(row.assignedAt ?? row.createdAt);
-  return Date.parse(row.resolvedAt) - start <= EARLY_RESOLVE_MINUTES * 60_000;
+/** Resolved within the early window of its first assignment, or of arrival when never assigned */
+export function resolvedEarly(
+  row: Pick<UserResolutionRow, 'firstAssignedAt' | 'createdAt' | 'resolvedAt'>
+): boolean {
+  return Date.parse(row.resolvedAt) - Date.parse(clockStart(row)) <= EARLY_RESOLVE_MINUTES * 60_000;
 }
 
 export function xpFor(resolutions: UserResolutionRow[], reporterMessages: number): number {
@@ -140,14 +176,14 @@ export function buildProgress(
   const xp = xpFor(resolutions, reporterMessages);
   const resolvedTimes = resolutions.map((row) => row.resolvedAt);
   const achievements: AchievementProgress[] = [
-    progressFromTimes('hatchling', resolvedTimes, 1),
-    progressFromTimes('cocoon', resolvedTimes, 100),
-    progressFromTimes('butterfly', resolvedTimes, 500),
-    progressFromTimes('firefly', resolvedWithin(resolutions, ['highest'], 4), 1),
-    progressFromTimes('dragonfly', quickTriageTimes, 50),
-    progressFromTimes('ladybug', staysFixed(resolutions, now), 25),
-    progressFromTimes('web_weaver', firstVisitsToNewProjects(resolutions), 5),
-    progressFromTimes('amber', waitedLong(resolutions), 1),
+    progressFromTimes('hatchling', resolvedTimes),
+    progressFromTimes('cocoon', resolvedTimes),
+    progressFromTimes('butterfly', resolvedTimes),
+    progressFromTimes('firefly', resolvedWithin(resolutions, ['highest'], FIREFLY_RESOLVE_HOURS)),
+    progressFromTimes('dragonfly', quickTriageTimes),
+    progressFromTimes('ladybug', staysFixed(resolutions, now)),
+    progressFromTimes('web_weaver', firstVisitsToNewProjects(resolutions)),
+    progressFromTimes('amber', waitedLong(resolutions)),
   ];
   return { xp, ...levelFor(xp), achievements };
 }
@@ -161,17 +197,21 @@ async function workspaceSettings(): Promise<WorkspaceSettings> {
   };
 }
 
-/** Workspace and admin switches only, before the user's own choice */
-function availableTo(user: User, workspace: WorkspaceSettings): boolean {
-  return workspace.enabled && user.role !== 'viewer' && user.gamificationEnabled !== false;
+function statusFor(user: User, workspace: WorkspaceSettings, optedOut: boolean) {
+  return gamificationStatus(
+    { role: user.role, enabled: user.gamificationEnabled !== false, optedOut },
+    workspace
+  );
 }
 
 function selfFor(user: User, workspace: WorkspaceSettings, optedOut: boolean): GamificationSelf {
-  const available = availableTo(user, workspace);
+  const status = statusFor(user, workspace, optedOut);
+  const available = status === 'on' || status === 'opted-out';
   return {
     available,
     canOptOut: available && workspace.allowOptOut,
     optedOut,
+    active: status === 'on',
   };
 }
 
@@ -191,6 +231,21 @@ function toGamificationUser(user: User, optedOut: boolean): GamificationUser {
   };
 }
 
+/** XP that resolving each open assigned report would earn at this moment */
+function resolveXpFor(userId: string, now: number): Record<string, number> {
+  const resolvedAt = new Date(now).toISOString();
+  return Object.fromEntries(
+    gamificationRepo
+      .listOpenAssigned(userId, resolvedAt)
+      .map((row) => [
+        row.reportId,
+        row.resolvedBefore
+          ? 0
+          : XP_BY_PRIORITY[row.priority] * (resolvedEarly({ ...row, resolvedAt }) ? 2 : 1),
+      ])
+  );
+}
+
 export const gamificationService = {
   async getSettings(): Promise<Result<GamificationSettings>> {
     const optOuts = await userPreferencesRepo.listGamificationOptOuts();
@@ -207,19 +262,17 @@ export const gamificationService = {
       const known = new Set((await usersRepo.findAll()).map((user) => user.id));
       const unknown = changes.find(([id]) => !known.has(id));
       if (unknown) return Result.fail(`User ${unknown[0]} not found`, 'NOT_FOUND');
-      usersRepo.setGamification(
-        changes.filter(([, enabled]) => enabled).map(([id]) => id),
-        true
-      );
-      usersRepo.setGamification(
-        changes.filter(([, enabled]) => !enabled).map(([id]) => id),
-        false
-      );
     }
-    for (const key of ['enabled', 'newUsersDefault', 'allowOptOut', 'showRanking'] as const) {
-      const value = input[key];
-      if (value !== undefined) await settingsRepo.set(KEYS[key], value);
-    }
+    const settings = Object.fromEntries(
+      (['enabled', 'newUsersDefault', 'allowOptOut', 'showRanking'] as const).flatMap((key) =>
+        input[key] === undefined ? [] : [[KEYS[key], input[key]]]
+      )
+    );
+    gamificationRepo.saveSettings({
+      settings,
+      enable: changes.filter(([, enabled]) => enabled).map(([id]) => id),
+      disable: changes.filter(([, enabled]) => !enabled).map(([id]) => id),
+    });
     logger.info('Gamification settings updated', {
       enabled: input.enabled,
       newUsersDefault: input.newUsersDefault,
@@ -230,26 +283,101 @@ export const gamificationService = {
     return this.getSettings();
   },
 
-  /** Viewers never take part, whatever the switches say. An opt-out counts only while allowed. */
-  async isActiveFor(user: User): Promise<boolean> {
+  async isActiveFor(user: User): Promise<Result<boolean>> {
     const self = selfFor(user, await workspaceSettings(), await isOptedOut(user.id));
-    return self.available && !(self.canOptOut && self.optedOut);
+    return Result.ok(self.active);
+  },
+
+  /**
+   * People left out of team-wide resolve times: turned off by an admin, or opted out while the
+   * workspace allows it. Their choice keeps their numbers out of figures others can see.
+   */
+  async excludedFromTeamStats(): Promise<Result<Set<string>>> {
+    const workspace = await workspaceSettings();
+    const optOuts = await userPreferencesRepo.listGamificationOptOuts();
+    const excluded = (await usersRepo.findAll())
+      .filter(
+        (user) =>
+          user.gamificationEnabled === false || (workspace.allowOptOut && optOuts.has(user.id))
+      )
+      .map((user) => user.id);
+    return Result.ok(new Set(excluded));
+  },
+
+  /** Level, achievements and the XP each open report would earn; null when the user is not active */
+  async getPersonal(
+    user: User,
+    resolutions: UserResolutionRow[],
+    now = Date.now()
+  ): Promise<Result<PersonalGamification | null>> {
+    const active = await this.isActiveFor(user);
+    if (!active.success) return active;
+    if (!active.value) return Result.ok(null);
+    const triage = gamificationRepo.listQuickTriage([user.id], DRAGONFLY_TRIAGE_MINUTES * 60);
+    const messages = gamificationRepo.listReporterMessageTimes([user.id]);
+    return Result.ok({
+      progress: buildProgress(resolutions, times(triage), now, messages.length),
+      resolveXp: resolveXpFor(user.id, now),
+    });
   },
 
   /**
    * Everyone who currently takes part, for the Team tab. Only someone who takes part may see it,
    * and people who are turned off or opted out stay hidden.
    */
-  async teamFor(viewer: User): Promise<Result<{ ranking: boolean; members: User[] }>> {
+  async getTeam(
+    viewer: User,
+    period: TeamPeriod,
+    now = Date.now()
+  ): Promise<Result<GamificationTeam>> {
     const workspace = await workspaceSettings();
     const optOuts = await userPreferencesRepo.listGamificationOptOuts();
-    const takesPart = (user: User) =>
-      availableTo(user, workspace) && !(workspace.allowOptOut && optOuts.has(user.id));
+    const takesPart = (user: User) => statusFor(user, workspace, optOuts.has(user.id)) === 'on';
     if (!takesPart(viewer)) {
       return Result.fail('Gamification is not available for this account', 'FORBIDDEN');
     }
-    const members = (await usersRepo.findAll()).filter((user) => user.isActive && takesPart(user));
-    return Result.ok({ ranking: workspace.showRanking, members });
+    const people = (await usersRepo.findAll()).filter((user) => user.isActive && takesPart(user));
+    const ids = people.map((user) => user.id);
+    const resolutionsBy = groupByUser(gamificationRepo.listUserResolutions(ids));
+    const triageBy = groupByUser(
+      gamificationRepo.listQuickTriage(ids, DRAGONFLY_TRIAGE_MINUTES * 60)
+    );
+    const messagesBy = groupByUser(gamificationRepo.listReporterMessageTimes(ids));
+    const since = period === 'all' ? null : now - TEAM_PERIOD_DAYS[period] * DAY_MS;
+    const inPeriod = (iso: string) => since === null || Date.parse(iso) >= since;
+
+    const members: TeamMember[] = people.map((user) => {
+      const resolutions = resolutionsBy.get(user.id) ?? [];
+      const messages = times(messagesBy.get(user.id));
+      const progress = buildProgress(
+        resolutions,
+        times(triageBy.get(user.id)),
+        now,
+        messages.length
+      );
+      return {
+        id: user.id,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        level: progress.level,
+        xp: progress.xp,
+        periodXp:
+          since === null
+            ? progress.xp
+            : xpFor(
+                resolutions.filter((row) => inPeriod(row.resolvedAt)),
+                messages.filter(inPeriod).length
+              ),
+        achievements: progress.achievements,
+      };
+    });
+
+    members.sort((a, b) =>
+      workspace.showRanking
+        ? b.periodXp - a.periodXp || b.xp - a.xp || a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name)
+    );
+    return Result.ok({ ranking: workspace.showRanking, period, members });
   },
 
   async getSelf(user: User): Promise<Result<GamificationSelf>> {
@@ -268,22 +396,10 @@ export const gamificationService = {
   },
 
   /** New accounts follow the workspace default; existing switches are left alone */
-  async applyNewUserDefault(userId: string): Promise<void> {
+  async applyNewUserDefault(userId: string): Promise<Result<void>> {
     if (!(await workspaceSettings()).newUsersDefault) {
       usersRepo.setGamification([userId], false);
     }
-  },
-
-  progressFor(
-    userId: string,
-    resolutions: UserResolutionRow[],
-    now = Date.now()
-  ): GamificationProgress {
-    return buildProgress(
-      resolutions,
-      dashboardRepo.listQuickTriage(userId),
-      now,
-      dashboardRepo.countReporterMessages(userId)
-    );
+    return Result.ok(undefined);
   },
 };

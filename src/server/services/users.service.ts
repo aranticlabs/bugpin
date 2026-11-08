@@ -43,6 +43,22 @@ async function hashPassword(password: string): Promise<string> {
   });
 }
 
+/**
+ * Applies the workspace gamification default to a freshly created user. On failure the user
+ * is removed again so a half-configured account is never left behind.
+ */
+export async function applyNewUserDefaultOrRemove(userId: string): Promise<Result<void>> {
+  const applied = await Result.tryAsync(() => gamificationService.applyNewUserDefault(userId));
+  const outcome = applied.success ? applied.value : applied;
+  if (outcome.success) return outcome;
+
+  await usersRepo.delete(userId);
+  logger.error('Failed to apply the gamification default to a new user', outcome.error, {
+    userId,
+  });
+  return Result.fail('Failed to create user', 'CREATE_FAILED');
+}
+
 async function attachDefaultProjects(user: User): Promise<User> {
   const projects = await projectsRepo.findAll();
   const defaultProjects: DefaultProjectReference[] = projects
@@ -122,7 +138,8 @@ export const usersService = {
     };
 
     const user = await usersRepo.create(userData);
-    await gamificationService.applyNewUserDefault(user.id);
+    const defaulted = await applyNewUserDefaultOrRemove(user.id);
+    if (!defaulted.success) return defaulted;
 
     logger.info('User created', { userId: user.id, email: user.email, role: user.role });
     return Result.ok(user);

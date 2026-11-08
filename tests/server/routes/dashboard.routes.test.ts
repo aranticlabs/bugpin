@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { dashboardRoutes } from '../../../src/server/routes/api/dashboard';
 import { gamificationRoutes } from '../../../src/server/routes/api/gamification';
 import { authService } from '../../../src/server/services/auth.service';
@@ -14,6 +14,7 @@ import {
 import { Result } from '../../../src/server/utils/result';
 import type {
   DashboardOverview,
+  DashboardPersonal,
   GamificationSettings,
   Session,
   User,
@@ -57,6 +58,24 @@ const overview: DashboardOverview = {
   activity: [],
 };
 
+const personal: DashboardPersonal = {
+  assignedOpen: 0,
+  oldestAssignedAt: null,
+  resolvedThisMonth: 0,
+  resolvedLastMonth: 0,
+  resolveTime: {
+    medianHours: null,
+    previousMedianHours: null,
+    teamMedianHours: null,
+    bestHours: null,
+    resolvedLast30Days: 0,
+    weekly: [],
+    byPriority: [],
+  },
+  gamification: null,
+  resolveXp: {},
+};
+
 const originalAuthService = { ...authService };
 const originalDashboardService = { ...dashboardService };
 const originalGamificationService = { ...gamificationService };
@@ -89,7 +108,7 @@ beforeEach(() => {
   optOuts = [];
   gamificationService.setOptOut = async (_user, optedOut) => {
     optOuts.push(optedOut);
-    return Result.ok({ available: true, canOptOut: true, optedOut });
+    return Result.ok({ available: true, canOptOut: true, optedOut, active: !optedOut });
   };
   gamificationService.update = async (input) => {
     updates.push(input);
@@ -117,13 +136,63 @@ describe('dashboard routes', () => {
     await request('/dashboard/overview');
     expect(overviewQueries[0]?.range).toBe(30);
     expect((await request('/dashboard/overview?range=12')).status).toBe(400);
+    expect((await request('/dashboard/overview?range=abc')).status).toBe(400);
+  });
+
+  it('passes an unknown time zone on, for the service to fall back to UTC', async () => {
+    expect((await request('/dashboard/overview?timeZone=Not/AZone')).status).toBe(200);
+    expect(overviewQueries[0]?.timeZone).toBe('Not/AZone');
+    const tooLong = `Europe/${'x'.repeat(100)}`;
+    expect((await request(`/dashboard/overview?timeZone=${tooLong}`)).status).toBe(400);
+  });
+
+  it('maps an unexpected service failure to 500', async () => {
+    dashboardService.getOverview = async () => Result.fail('Disk full', 'QUERY_FAILED');
+    const res = await request('/dashboard/overview');
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'QUERY_FAILED',
+      message: 'Disk full',
+    });
+  });
+
+  it('limits how often one account can load the dashboard', async () => {
+    signedIn = { ...userWithRole('editor'), id: 'usr_burst' };
+    const statuses: number[] = [];
+    for (let index = 0; index < 121; index++) {
+      statuses.push((await request('/dashboard/overview')).status);
+    }
+    expect(statuses.slice(0, 120).every((status) => status === 200)).toBe(true);
+    expect(statuses[120]).toBe(429);
+  });
+});
+
+describe('personal route', () => {
+  it('loads the signed-in user with their time zone', async () => {
+    signedIn = userWithRole('editor');
+    const calls: [string, string | undefined][] = [];
+    dashboardService.getPersonal = async (user, timeZone) => {
+      calls.push([user.id, timeZone]);
+      return Result.ok(personal);
+    };
+    const res = await request('/dashboard/me?timeZone=Europe/Berlin');
+    expect(res.status).toBe(200);
+    expect(calls).toEqual([['usr_editor', 'Europe/Berlin']]);
+  });
+
+  it('maps service failures to their status', async () => {
+    dashboardService.getPersonal = async () => Result.fail('Not allowed', 'FORBIDDEN');
+    expect((await request('/dashboard/me')).status).toBe(403);
+    dashboardService.getPersonal = async () => Result.fail('Broken', 'QUERY_FAILED');
+    expect((await request('/dashboard/me')).status).toBe(500);
   });
 });
 
 describe('team route', () => {
   it('returns the team for the requested period, or 403 for people who do not take part', async () => {
     const periods: string[] = [];
-    dashboardService.getTeam = async (_user, period) => {
+    gamificationService.getTeam = async (_user, period) => {
       periods.push(period);
       return Result.ok({ ranking: true, period, members: [] });
     };
@@ -137,7 +206,7 @@ describe('team route', () => {
     expect(periods).toEqual(['90d', '30d']);
     expect((await request('/dashboard/team?period=7d')).status).toBe(400);
 
-    dashboardService.getTeam = async () => Result.fail('Not available', 'FORBIDDEN');
+    gamificationService.getTeam = async () => Result.fail('Not available', 'FORBIDDEN');
     expect((await request('/dashboard/team')).status).toBe(403);
   });
 });

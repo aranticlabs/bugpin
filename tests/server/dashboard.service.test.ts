@@ -15,8 +15,9 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { dashboardService, median } from '../../src/server/services/dashboard.service';
-import type { UserResolutionRow } from '../../src/server/database/repositories/dashboard.repo';
+import type { UserResolutionRow } from '../../src/server/database/repositories/gamification.repo';
 import { userPreferencesService } from '../../src/server/services/user-preferences.service';
+import { Result } from '../../src/server/utils/result';
 import {
   buildProgress,
   gamificationService,
@@ -24,13 +25,16 @@ import {
   resolvedEarly,
   xpFor,
 } from '../../src/server/services/gamification.service';
-import type {
-  ReportHistoryAction,
-  ReportMetadata,
-  ReportPriority,
-  ReportStatus,
-  User,
-  UserRole,
+import {
+  ACHIEVEMENT_IDS,
+  ACHIEVEMENT_TARGETS,
+  type AchievementId,
+  type ReportHistoryAction,
+  type ReportMetadata,
+  type ReportPriority,
+  type ReportStatus,
+  type User,
+  type UserRole,
 } from '../../src/shared/types';
 
 const originalConfig = { ...config };
@@ -188,11 +192,13 @@ describe('buildProgress', () => {
     overrides: Partial<UserResolutionRow> & Pick<UserResolutionRow, 'reportId'>
   ): UserResolutionRow {
     return {
+      userId: 'u1',
       projectId: 'p1',
       priority: 'medium',
       createdAt: '2026-10-31T10:00:00.000Z',
       resolvedAt: '2026-11-01T10:00:00.000Z',
       assignedAt: null,
+      firstAssignedAt: null,
       reopenedAt: null,
       ...overrides,
     };
@@ -204,7 +210,7 @@ describe('buildProgress', () => {
         resolution({
           reportId: 'a',
           priority: 'highest',
-          assignedAt: '2026-11-01T08:00:00.000Z',
+          firstAssignedAt: '2026-11-01T08:00:00.000Z',
         }),
         resolution({
           reportId: 'b',
@@ -240,12 +246,12 @@ describe('buildProgress', () => {
     const early = resolution({
       reportId: 'early',
       priority: 'high',
-      assignedAt: '2026-11-01T09:10:00.000Z',
+      firstAssignedAt: '2026-11-01T09:10:00.000Z',
     });
     const late = resolution({
       reportId: 'late',
       priority: 'high',
-      assignedAt: '2026-11-01T08:59:00.000Z',
+      firstAssignedAt: '2026-11-01T08:59:00.000Z',
     });
     const neverAssigned = resolution({
       reportId: 'arrived',
@@ -376,9 +382,11 @@ describe('dashboardService.getPersonal', () => {
   it('measures time to resolve from assignment and compares with the team', async () => {
     const me = await createUser('Alex', 'admin');
     const teammate = await createUser('Sam', 'editor');
+    const third = await createUser('Kim', 'editor');
     await resolveAfter(me, 'highest', 3 * DAY, 2);
     await resolveAfter(me, 'medium', 5 * DAY, 10);
     await resolveAfter(teammate, 'medium', 4 * DAY, 30);
+    await resolveAfter(third, 'medium', 4 * DAY, 20);
     await createReport({ createdAt: ago(9 * DAY), assignedTo: me.id });
 
     const result = await dashboardService.getPersonal(me, 'UTC', NOW);
@@ -388,7 +396,7 @@ describe('dashboardService.getPersonal', () => {
     expect(personal.assignedOpen).toBe(1);
     expect(personal.resolvedThisMonth).toBe(2);
     expect(personal.resolveTime.medianHours).toBe(6);
-    expect(personal.resolveTime.teamMedianHours).toBe(10);
+    expect(personal.resolveTime.teamMedianHours).toBe(15);
     expect(personal.resolveTime.bestHours).toBe(2);
     expect(personal.resolveTime.resolvedLast30Days).toBe(2);
     expect(personal.resolveTime.weekly).toHaveLength(12);
@@ -398,6 +406,7 @@ describe('dashboardService.getPersonal', () => {
       team: 20,
     });
     expect(personal.gamification).toBeNull();
+    expect(personal.resolveXp).toEqual({});
   });
 
   it('returns progress only when the workspace and the user both have it on', async () => {
@@ -468,7 +477,7 @@ describe('history from before gamification', () => {
   });
 });
 
-describe('dashboardService.getTeam', () => {
+describe('gamificationService.getTeam', () => {
   it('ranks people by XP in the chosen period and hides anyone who does not take part', async () => {
     const alex = await createUser('Alex', 'admin');
     const sam = await createUser('Sam', 'editor');
@@ -489,7 +498,7 @@ describe('dashboardService.getTeam', () => {
     await gamificationService.setOptOut(jordanUser, true);
 
     const rank = async (period: '30d' | '90d' | 'all') => {
-      const result = await dashboardService.getTeam(alex, period, NOW);
+      const result = await gamificationService.getTeam(alex, period, NOW);
       if (!result.success) throw new Error(result.error);
       expect(result.value.ranking).toBe(true);
       expect(result.value.period).toBe(period);
@@ -509,7 +518,7 @@ describe('dashboardService.getTeam', () => {
     ]);
 
     await gamificationService.update({ showRanking: false });
-    const listed = await dashboardService.getTeam(sam, '90d', NOW);
+    const listed = await gamificationService.getTeam(sam, '90d', NOW);
     if (!listed.success) throw new Error(listed.error);
     expect(listed.value.ranking).toBe(false);
     expect(listed.value.members.map((member) => member.name)).toEqual(['Alex', 'Sam']);
@@ -518,7 +527,7 @@ describe('dashboardService.getTeam', () => {
   it('refuses people who do not take part themselves', async () => {
     const viewer = await createUser('Mia', 'viewer');
     await gamificationService.update({ enabled: true });
-    const result = await dashboardService.getTeam(viewer, '30d', NOW);
+    const result = await gamificationService.getTeam(viewer, '30d', NOW);
     expect(result.success).toBe(false);
     if (!result.success) expect(result.code).toBe('FORBIDDEN');
   });
@@ -564,10 +573,11 @@ describe('gamificationService', () => {
       available: true,
       canOptOut: true,
       optedOut: true,
+      active: false,
     });
     const reloaded = await usersRepo.findById(alex.id);
     if (!reloaded) throw new Error('missing user');
-    expect(await gamificationService.isActiveFor(reloaded)).toBe(false);
+    expect(await gamificationService.isActiveFor(reloaded)).toEqual(Result.ok(false));
     const settings = await gamificationService.getSettings();
     if (!settings.success) throw new Error(settings.error);
     expect(settings.value.users.find((user) => user.id === alex.id)?.optedOut).toBe(true);
@@ -575,7 +585,7 @@ describe('gamificationService', () => {
     expect(preferences.success && preferences.value.gamificationOptedOut).toBe(true);
 
     await gamificationService.update({ allowOptOut: false });
-    expect(await gamificationService.isActiveFor(reloaded)).toBe(true);
+    expect(await gamificationService.isActiveFor(reloaded)).toEqual(Result.ok(true));
     const refused = await gamificationService.setOptOut(reloaded, false);
     expect(refused.success).toBe(false);
     if (!refused.success) expect(refused.code).toBe('FORBIDDEN');
@@ -603,5 +613,395 @@ describe('gamificationService', () => {
     const result = await gamificationService.update({ users: { nobody: true } });
     expect(result.success).toBe(false);
     if (!result.success) expect(result.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('levelFor boundaries', () => {
+  it('reaches a level at exactly its XP and not one point before', () => {
+    expect(levelFor(99).level).toBe(1);
+    expect(levelFor(100).level).toBe(2);
+    expect(levelFor(249).level).toBe(2);
+    expect(levelFor(250).level).toBe(3);
+    expect(levelFor(9_999).level).toBe(9);
+    expect(levelFor(10_000)).toEqual({ level: 10, levelStartXp: 10000, nextLevelXp: null });
+  });
+});
+
+describe('early resolve clock', () => {
+  const base = {
+    createdAt: '2026-10-01T00:00:00.000Z',
+    resolvedAt: '2026-11-01T10:00:00.000Z',
+  };
+
+  it('counts from the first assignment, so handing a report back and forth does not restart it', () => {
+    expect(resolvedEarly({ ...base, firstAssignedAt: '2026-11-01T09:00:00.000Z' })).toBe(true);
+    expect(resolvedEarly({ ...base, firstAssignedAt: '2026-11-01T08:59:59.000Z' })).toBe(false);
+    expect(resolvedEarly({ ...base, firstAssignedAt: '2026-10-20T10:00:00.000Z' })).toBe(false);
+  });
+
+  it('counts from arrival when the report was never assigned', () => {
+    expect(resolvedEarly({ ...base, firstAssignedAt: null })).toBe(false);
+    expect(
+      resolvedEarly({
+        createdAt: '2026-11-01T09:30:00.000Z',
+        resolvedAt: '2026-11-01T10:00:00.000Z',
+        firstAssignedAt: null,
+      })
+    ).toBe(true);
+  });
+
+  it('gives no double XP for self-assigning an old report that someone else got first', async () => {
+    const me = await createUser('Alex', 'admin');
+    const other = await createUser('Sam', 'editor');
+    const id = await createReport({
+      priority: 'highest',
+      status: 'resolved',
+      createdAt: ago(30 * DAY),
+      resolvedAt: ago(DAY - 10 * 60_000),
+      resolvedBy: me.id,
+      assignedTo: me.id,
+    });
+    addHistory(id, other.id, 'assignee_changed', null, other.id, ago(20 * DAY));
+    addHistory(id, me.id, 'assignee_changed', other.id, me.id, ago(DAY));
+    addHistory(id, me.id, 'status_changed', 'open', 'resolved', ago(DAY - 10 * 60_000));
+    await gamificationService.update({ enabled: true });
+
+    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.gamification?.xp).toBe(50);
+    expect(
+      result.value.gamification?.achievements.find((item) => item.id === 'firefly')?.unlockedAt
+    ).toBeUndefined();
+  });
+});
+
+describe('achievement rules', () => {
+  const now = Date.parse('2026-12-31T12:00:00.000Z');
+  let sequence = 0;
+
+  function row(overrides: Partial<UserResolutionRow> = {}): UserResolutionRow {
+    sequence++;
+    const resolvedAt = new Date(Date.parse('2026-11-01T00:00:00.000Z') + sequence * HOUR);
+    return {
+      userId: 'u1',
+      reportId: `r${sequence}`,
+      projectId: 'p1',
+      priority: 'medium',
+      createdAt: new Date(resolvedAt.getTime() - 10 * HOUR).toISOString(),
+      resolvedAt: resolvedAt.toISOString(),
+      assignedAt: null,
+      firstAssignedAt: null,
+      reopenedAt: null,
+      ...overrides,
+    };
+  }
+
+  const times = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      new Date(Date.UTC(2026, 10, 1, index)).toISOString()
+    );
+
+  // Builds the least data that meets an achievement, given how many qualifying events there are
+  const scenarios: Record<
+    AchievementId,
+    (count: number) => { rows: UserResolutionRow[]; triage: string[] }
+  > = {
+    hatchling: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
+    cocoon: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
+    butterfly: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
+    firefly: (count) => ({
+      rows: Array.from({ length: count }, () => {
+        const fast = row({ priority: 'highest' });
+        return {
+          ...fast,
+          firstAssignedAt: new Date(Date.parse(fast.resolvedAt) - 4 * HOUR).toISOString(),
+        };
+      }),
+      triage: [],
+    }),
+    dragonfly: (count) => ({ rows: [], triage: times(count) }),
+    ladybug: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
+    web_weaver: (count) => ({
+      rows: Array.from({ length: count }, (_, index) => row({ projectId: `p${index}` })),
+      triage: [],
+    }),
+    amber: (count) => ({
+      rows: Array.from({ length: count }, () => {
+        const old = row();
+        return { ...old, createdAt: new Date(Date.parse(old.resolvedAt) - 91 * DAY).toISOString() };
+      }),
+      triage: [],
+    }),
+  };
+
+  for (const id of ACHIEVEMENT_IDS) {
+    it(`unlocks ${id} at its target and not one short of it`, () => {
+      const target = ACHIEVEMENT_TARGETS[id];
+      const progressFor = (count: number) => {
+        sequence = 0;
+        const { rows, triage } = scenarios[id](count);
+        return buildProgress(rows, triage, now).achievements.find((item) => item.id === id);
+      };
+      expect(progressFor(target)?.unlockedAt).toBeDefined();
+      expect(progressFor(target - 1)).toMatchObject({ current: target - 1, unlockedAt: undefined });
+    });
+  }
+
+  it('does not count a fast resolution of a non-highest report towards Firefly', () => {
+    const fast = row({ priority: 'high' });
+    const progress = buildProgress([{ ...fast, firstAssignedAt: fast.resolvedAt }], [], now);
+    expect(progress.achievements.find((item) => item.id === 'firefly')?.current).toBe(0);
+  });
+
+  it('counts a triage at exactly the 60-minute limit towards Dragonfly', async () => {
+    const me = await createUser('Alex', 'admin');
+    const id = await createReport({ createdAt: '2026-11-01T10:00:00.000Z' });
+    addHistory(id, me.id, 'priority_changed', 'medium', 'high', '2026-11-01T11:00:00.000Z');
+    const late = await createReport({ createdAt: '2026-11-01T10:00:00.000Z' });
+    addHistory(late, me.id, 'priority_changed', 'medium', 'high', '2026-11-01T11:00:01.000Z');
+    await gamificationService.update({ enabled: true });
+
+    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(
+      result.value.gamification?.achievements.find((item) => item.id === 'dragonfly')?.current
+    ).toBe(1);
+  });
+});
+
+describe('resolving a report that is already resolved', () => {
+  it('keeps who resolved it and when', async () => {
+    const first = await createUser('Alex', 'admin');
+    const second = await createUser('Sam', 'editor');
+    const id = await createReport({ createdAt: ago(3 * DAY) });
+
+    await reportsRepo.update(id, { status: 'resolved', resolvedBy: first.id });
+    const resolved = await reportsRepo.findById(id);
+    await reportsRepo.update(id, { status: 'resolved', resolvedBy: second.id });
+    const again = await reportsRepo.findById(id);
+
+    expect(again?.resolvedBy).toBe(first.id);
+    expect(again?.resolvedAt).toBe(resolved?.resolvedAt);
+  });
+
+  it('keeps when a closed report was closed', async () => {
+    const id = await createReport({ createdAt: ago(3 * DAY) });
+    await reportsRepo.update(id, { status: 'closed' });
+    const closed = await reportsRepo.findById(id);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await reportsRepo.update(id, { status: 'closed' });
+    expect((await reportsRepo.findById(id))?.closedAt).toBe(closed?.closedAt);
+  });
+
+  it('still records a new resolver after the report was reopened', async () => {
+    const first = await createUser('Alex', 'admin');
+    const second = await createUser('Sam', 'editor');
+    const id = await createReport({ createdAt: ago(3 * DAY) });
+    await reportsRepo.update(id, { status: 'resolved', resolvedBy: first.id });
+    await reportsRepo.update(id, { status: 'open' });
+    await reportsRepo.update(id, { status: 'resolved', resolvedBy: second.id });
+    expect((await reportsRepo.findById(id))?.resolvedBy).toBe(second.id);
+  });
+});
+
+describe('personal resolve time', () => {
+  it('counts reports resolved without being assigned, timed from their arrival', async () => {
+    const me = await createUser('Alex', 'admin');
+    const id = await createReport({
+      status: 'resolved',
+      createdAt: ago(2 * DAY + 5 * HOUR),
+      resolvedAt: ago(2 * DAY),
+      resolvedBy: me.id,
+    });
+    addHistory(id, me.id, 'status_changed', 'open', 'resolved', ago(2 * DAY));
+
+    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.resolveTime.resolvedLast30Days).toBe(1);
+    expect(result.value.resolveTime.medianHours).toBe(5);
+  });
+
+  it('hides team figures when fewer than three people resolved reports', async () => {
+    const me = await createUser('Alex', 'admin');
+    const teammate = await createUser('Sam', 'editor');
+    await resolveAfter(me, 'medium', 3 * DAY, 4);
+    await resolveAfter(teammate, 'medium', 3 * DAY, 30);
+
+    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.resolveTime.medianHours).toBe(4);
+    expect(result.value.resolveTime.teamMedianHours).toBeNull();
+    expect(result.value.resolveTime.weekly.every((week) => week.team === null)).toBe(true);
+    expect(result.value.resolveTime.byPriority.every((row) => row.team === null)).toBe(true);
+  });
+
+  it('leaves people who opted out or were turned off out of the team figures', async () => {
+    const me = await createUser('Alex', 'admin');
+    const sam = await createUser('Sam', 'editor');
+    const kim = await createUser('Kim', 'editor');
+    const lee = await createUser('Lee', 'editor');
+    await resolveAfter(me, 'medium', 3 * DAY, 2);
+    await resolveAfter(sam, 'medium', 3 * DAY, 4);
+    await resolveAfter(kim, 'medium', 3 * DAY, 6);
+    await resolveAfter(lee, 'medium', 5 * DAY, 50);
+    await gamificationService.update({ enabled: true });
+
+    const all = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!all.success) throw new Error(all.error);
+    expect(all.value.resolveTime.teamMedianHours).toBe(5);
+
+    await gamificationService.setOptOut(lee, true);
+    const withoutLee = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!withoutLee.success) throw new Error(withoutLee.error);
+    expect(withoutLee.value.resolveTime.teamMedianHours).toBe(4);
+
+    await gamificationService.update({ users: { [kim.id]: false } });
+    const tooFew = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!tooFew.success) throw new Error(tooFew.error);
+    expect(tooFew.value.resolveTime.teamMedianHours).toBeNull();
+  });
+});
+
+describe('XP for resolving open reports', () => {
+  it('shows base XP, double XP inside the early window, and none for a report resolved before', async () => {
+    const me = await createUser('Alex', 'admin');
+    await gamificationService.update({ enabled: true });
+    const waiting = await createReport({
+      priority: 'high',
+      createdAt: ago(3 * DAY),
+      assignedTo: me.id,
+    });
+    addHistory(waiting, me.id, 'assignee_changed', null, me.id, ago(2 * DAY));
+    const fresh = await createReport({
+      priority: 'high',
+      createdAt: ago(30 * 60_000),
+      assignedTo: me.id,
+    });
+    const again = await createReport({
+      priority: 'high',
+      createdAt: ago(10 * DAY),
+      assignedTo: me.id,
+    });
+    addHistory(again, me.id, 'status_changed', 'open', 'resolved', ago(5 * DAY));
+    addHistory(again, me.id, 'status_changed', 'resolved', 'open', ago(4 * DAY));
+
+    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.resolveXp).toEqual({ [waiting]: 30, [fresh]: 60, [again]: 0 });
+  });
+});
+
+describe('overview edge cases', () => {
+  it('lists the most urgent reports first even when older, lower ones fill the limit', async () => {
+    for (let index = 0; index < 10; index++) {
+      await createReport({
+        title: `Stale ${index}`,
+        priority: 'lowest',
+        createdAt: ago(60 * DAY),
+        updatedAt: ago((40 + index) * DAY),
+      });
+    }
+    await createReport({
+      title: 'Stale and urgent',
+      priority: 'highest',
+      createdAt: ago(60 * DAY),
+      updatedAt: ago(20 * DAY),
+      assignedTo: (await createUser('Alex', 'admin')).id,
+    });
+
+    const result = await dashboardService.getOverview({ projectId, range: 30 }, NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.needsAttentionTotal).toBe(11);
+    expect(result.value.needsAttention).toHaveLength(10);
+    expect(result.value.needsAttention[0]?.title).toBe('Stale and urgent');
+  });
+
+  it('leaves out reports of deleted projects', async () => {
+    await createReport({ createdAt: ago(DAY) });
+    await projectsRepo.delete(projectId);
+
+    const result = await dashboardService.getOverview({ range: 7 }, NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.kpis.backlog.value).toBe(0);
+    expect(result.value.kpis.created.value).toBe(0);
+    expect(result.value.activity).toEqual([]);
+  });
+
+  it('sends assignees without their email address', async () => {
+    const editor = await createUser('Priya', 'editor');
+    await createReport({
+      createdAt: ago(30 * DAY),
+      updatedAt: ago(30 * DAY),
+      assignedTo: editor.id,
+    });
+    const result = await dashboardService.getOverview({ projectId, range: 30 }, NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.needsAttention[0]?.assignee).toEqual({
+      id: editor.id,
+      name: 'Priya',
+      avatarUrl: undefined,
+    });
+  });
+
+  it('tells widget activity apart from activity of deleted users', async () => {
+    const editor = await createUser('Priya', 'editor');
+    const widget = await createReport({ title: 'From widget', createdAt: ago(2 * DAY) });
+    addHistory(widget, null, 'created', null, null, ago(2 * DAY));
+    addHistory(widget, null, 'assignee_changed', null, editor.id, ago(2 * DAY - 1000));
+    addHistory(widget, null, 'status_changed', 'open', 'resolved', ago(DAY));
+    addHistory(widget, editor.id, 'priority_changed', 'medium', 'high', ago(HOUR));
+
+    const result = await dashboardService.getOverview({ projectId, range: 7 }, NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.activity.map((item) => [item.action, item.actor])).toEqual([
+      ['priority_changed', 'user'],
+      ['status_changed', 'deleted_user'],
+      ['assignee_changed', 'widget'],
+      ['created', 'widget'],
+    ]);
+  });
+});
+
+describe('time zones', () => {
+  it('puts a report on the calendar day of the requested time zone', async () => {
+    await createReport({ createdAt: '2026-11-05T23:30:00.000Z' });
+    const dayOf = async (timeZone: string) => {
+      const result = await dashboardService.getOverview({ projectId, range: 7, timeZone }, NOW);
+      if (!result.success) throw new Error(result.error);
+      return result.value.intake.filter((day) => day.created > 0).map((day) => day.date);
+    };
+    expect(await dayOf('UTC')).toEqual(['2026-11-05']);
+    expect(await dayOf('Asia/Tokyo')).toEqual(['2026-11-06']);
+    expect(await dayOf('America/Los_Angeles')).toEqual(['2026-11-05']);
+  });
+
+  it('keeps day boundaries right across a daylight saving change', async () => {
+    // New York leaves daylight saving time on 2026-11-01
+    await createReport({ createdAt: '2026-11-01T04:30:00.000Z' });
+    await createReport({ createdAt: '2026-11-02T04:30:00.000Z' });
+    const result = await dashboardService.getOverview(
+      { projectId, range: 7, timeZone: 'America/New_York' },
+      NOW
+    );
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.intake.find((day) => day.date === '2026-11-01')?.created).toBe(2);
+  });
+
+  it('falls back to UTC for an unknown time zone', async () => {
+    await createReport({ createdAt: '2026-11-05T23:30:00.000Z' });
+    const result = await dashboardService.getOverview(
+      { projectId, range: 7, timeZone: 'Not/AZone' },
+      NOW
+    );
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.intake.find((day) => day.date === '2026-11-05')?.created).toBe(1);
+  });
+
+  it('reports no change instead of a broken trend for a new workspace', async () => {
+    await createReport({ createdAt: ago(DAY) });
+    const result = await dashboardService.getOverview({ projectId, range: 7 }, NOW);
+    if (!result.success) throw new Error(result.error);
+    expect(result.value.kpis.created).toMatchObject({ value: 1, previous: 0 });
+    expect(result.value.kpis.resolveHours).toMatchObject({ value: null, previous: null });
   });
 });

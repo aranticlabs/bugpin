@@ -1,24 +1,28 @@
 import {
   dashboardRepo,
+  type ActivityRow,
   type AttentionRow,
   type ReportTimelineRow,
   type ResolutionRow,
 } from '../database/repositories/dashboard.repo.js';
+import { gamificationRepo } from '../database/repositories/gamification.repo.js';
 import { enrichHistoryEntry } from './report-history.service.js';
-import { gamificationService, xpFor } from './gamification.service.js';
+import { gamificationService } from './gamification.service.js';
 import { Result } from '../utils/result.js';
 import {
   REPORT_PRIORITIES,
+  RESOLVE_HISTORY_DAYS,
+  RESOLVE_TREND_WEEKS,
+  RESOLVE_WINDOW_DAYS,
   type AttentionReason,
+  type DashboardActivityActor,
+  type DashboardActivityItem,
   type DashboardAttentionItem,
   type DashboardDayCount,
   type DashboardKpi,
   type DashboardOverview,
   type DashboardPersonal,
   type DashboardRange,
-  type GamificationTeam,
-  type TeamMember,
-  type TeamPeriod,
   type ReportPriority,
   type ResolveTimeSummary,
   type User,
@@ -28,23 +32,19 @@ const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const SERIES_DAYS = 14;
 const KPI_WINDOW_DAYS = 7;
-const RESOLVE_WINDOW_DAYS = 30;
-const RESOLVE_TREND_WEEKS = 12;
-const PERSONAL_HISTORY_DAYS = 90;
 const STALE_AFTER_DAYS = 14;
 const REOPENED_WITHIN_DAYS = 14;
 const ATTENTION_LIMIT = 10;
 const ACTIVITY_LIMIT = 30;
-const TEAM_PERIOD_DAYS: Record<Exclude<TeamPeriod, 'all'>, number> = { '30d': 30, '90d': 90 };
+/** Fewer resolvers than this and a team figure could reveal one person's times */
+const MIN_TEAM_RESOLVERS = 3;
+/** A default assignee is recorded right after the report itself */
+const CREATION_GRACE_MS = 60_000;
 
 const ATTENTION_ORDER: AttentionReason[] = ['reopened', 'unassigned', 'stale'];
-const PRIORITY_RANK: Record<ReportPriority, number> = {
-  highest: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  lowest: 4,
-};
+const PRIORITY_RANK = Object.fromEntries(
+  REPORT_PRIORITIES.map((priority, index) => [priority, index])
+) as Record<ReportPriority, number>;
 
 export interface OverviewQuery {
   projectId?: string;
@@ -183,24 +183,31 @@ interface TimedResolution {
   priority: ReportPriority;
 }
 
+/** Counted from the hand-over to the resolver, or from arrival when it never was handed to them */
 function timedResolutions(rows: ResolutionRow[]): TimedResolution[] {
-  return rows
-    .filter((row) => row.assignedAt !== null)
-    .map((row) => ({
-      resolvedBy: row.resolvedBy,
-      resolvedAt: Date.parse(row.resolvedAt),
-      hours: (Date.parse(row.resolvedAt) - Date.parse(row.assignedAt as string)) / HOUR_MS,
-      priority: row.priority,
-    }));
+  return rows.map((row) => ({
+    resolvedBy: row.resolvedBy,
+    resolvedAt: Date.parse(row.resolvedAt),
+    hours: (Date.parse(row.resolvedAt) - Date.parse(row.assignedAt ?? row.createdAt)) / HOUR_MS,
+    priority: row.priority,
+  }));
+}
+
+/** Median of the team's times, or null when too few people resolved reports to keep it anonymous */
+function teamMedian(list: TimedResolution[]): number | null {
+  const resolvers = new Set(list.map((row) => row.resolvedBy));
+  return resolvers.size < MIN_TEAM_RESOLVERS ? null : median(list.map((row) => row.hours));
 }
 
 function summarizeResolveTime(
   rows: ResolutionRow[],
   userId: string,
+  excludedFromTeam: Set<string>,
   now: number
 ): ResolveTimeSummary {
   const all = timedResolutions(rows);
   const mine = all.filter((row) => row.resolvedBy === userId);
+  const team = all.filter((row) => !excludedFromTeam.has(row.resolvedBy));
   const between = (list: TimedResolution[], fromDaysAgo: number, toDaysAgo: number) =>
     list.filter(
       (row) =>
@@ -212,7 +219,7 @@ function summarizeResolveTime(
   return {
     medianHours: median(hours(mineRecent)),
     previousMedianHours: median(hours(between(mine, RESOLVE_WINDOW_DAYS * 2, RESOLVE_WINDOW_DAYS))),
-    teamMedianHours: median(hours(between(all, RESOLVE_WINDOW_DAYS, 0))),
+    teamMedianHours: teamMedian(between(team, RESOLVE_WINDOW_DAYS, 0)),
     bestHours: mine.length ? Math.round(Math.min(...hours(mine)) * 10) / 10 : null,
     resolvedLast30Days: mineRecent.length,
     weekly: Array.from({ length: RESOLVE_TREND_WEEKS }, (_, index) => {
@@ -220,15 +227,35 @@ function summarizeResolveTime(
       return {
         weekStart: new Date(now - fromDaysAgo * DAY_MS).toISOString(),
         mine: median(hours(between(mine, fromDaysAgo, fromDaysAgo - 7))),
-        team: median(hours(between(all, fromDaysAgo, fromDaysAgo - 7))),
+        team: teamMedian(between(team, fromDaysAgo, fromDaysAgo - 7)),
       };
     }),
     byPriority: REPORT_PRIORITIES.map((priority) => ({
       priority,
       mine: median(hours(mine.filter((row) => row.priority === priority))),
-      team: median(hours(all.filter((row) => row.priority === priority))),
+      team: teamMedian(team.filter((row) => row.priority === priority)),
     })),
   };
+}
+
+/**
+ * History keeps no user once that user is deleted, so a missing user means the widget only for
+ * widget reports, on the creation entry or the default assignee recorded with it.
+ */
+function actorOf(row: ActivityRow): DashboardActivityActor {
+  if (row.userId) return 'user';
+  if (row.reportSource !== 'widget') return 'deleted_user';
+  if (row.action === 'created') return 'widget';
+  const atCreation =
+    Date.parse(row.createdAt) - Date.parse(row.reportCreatedAt) <= CREATION_GRACE_MS;
+  return row.action === 'assignee_changed' && !row.oldValue && atCreation
+    ? 'widget'
+    : 'deleted_user';
+}
+
+async function toActivityItem(row: ActivityRow): Promise<DashboardActivityItem> {
+  const { reportTitle, reportSource: _source, reportCreatedAt: _created, ...entry } = row;
+  return { ...(await enrichHistoryEntry(entry)), reportTitle, actor: actorOf(row) };
 }
 
 export const dashboardService = {
@@ -256,10 +283,13 @@ export const dashboardService = {
 
     const reopenedSince = new Date(now - REOPENED_WITHIN_DAYS * DAY_MS).toISOString();
     const staleBefore = new Date(now - STALE_AFTER_DAYS * DAY_MS).toISOString();
+    // A report can show up in more than one list but is kept only once, so each list fetches
+    // enough rows that the merged top items are complete.
+    const perList = ATTENTION_LIMIT * ATTENTION_ORDER.length;
     const needsAttention = attentionItems({
-      reopened: dashboardRepo.listReopened(query.projectId, reopenedSince, ATTENTION_LIMIT),
-      unassigned: dashboardRepo.listUnassignedUrgent(query.projectId, ATTENTION_LIMIT),
-      stale: dashboardRepo.listStale(query.projectId, staleBefore, ATTENTION_LIMIT),
+      reopened: dashboardRepo.listReopened(query.projectId, reopenedSince, perList),
+      unassigned: dashboardRepo.listUnassignedUrgent(query.projectId, perList),
+      stale: dashboardRepo.listStale(query.projectId, staleBefore, perList),
     });
     const needsAttentionTotal = dashboardRepo.countNeedsAttention(
       query.projectId,
@@ -268,10 +298,7 @@ export const dashboardService = {
     );
 
     const activity = await Promise.all(
-      dashboardRepo.listActivity(query.projectId, ACTIVITY_LIMIT).map(async (row) => ({
-        ...(await enrichHistoryEntry(row)),
-        reportTitle: row.reportTitle,
-      }))
+      dashboardRepo.listActivity(query.projectId, ACTIVITY_LIMIT).map(toActivityItem)
     );
 
     return Result.ok({
@@ -297,59 +324,29 @@ export const dashboardService = {
     const key = dayKeyer(safeTimeZone(timeZone));
     const thisMonth = key(new Date(now)).slice(0, 7);
     const lastMonth = shiftDay(`${thisMonth}-01`, -1).slice(0, 7);
-    const resolutions = dashboardRepo.listUserResolutions(user.id);
+    const resolutions = gamificationRepo.listUserResolutions([user.id]);
     const monthOf = (iso: string) => key(iso).slice(0, 7);
     const assigned = dashboardRepo.summarizeAssigned(user.id);
-    const since = new Date(now - PERSONAL_HISTORY_DAYS * DAY_MS).toISOString();
+    const since = new Date(now - RESOLVE_HISTORY_DAYS * DAY_MS).toISOString();
+
+    const excluded = await gamificationService.excludedFromTeamStats();
+    if (!excluded.success) return excluded;
+    const gamification = await gamificationService.getPersonal(user, resolutions, now);
+    if (!gamification.success) return gamification;
 
     return Result.ok({
       assignedOpen: assigned.count,
       oldestAssignedAt: assigned.oldestAssignedAt,
       resolvedThisMonth: resolutions.filter((row) => monthOf(row.resolvedAt) === thisMonth).length,
       resolvedLastMonth: resolutions.filter((row) => monthOf(row.resolvedAt) === lastMonth).length,
-      resolveTime: summarizeResolveTime(dashboardRepo.listResolutions(since), user.id, now),
-      gamification: (await gamificationService.isActiveFor(user))
-        ? gamificationService.progressFor(user.id, resolutions, now)
-        : null,
+      resolveTime: summarizeResolveTime(
+        dashboardRepo.listResolutions(since),
+        user.id,
+        excluded.value,
+        now
+      ),
+      gamification: gamification.value?.progress ?? null,
+      resolveXp: gamification.value?.resolveXp ?? {},
     });
-  },
-
-  async getTeam(
-    viewer: User,
-    period: TeamPeriod,
-    now = Date.now()
-  ): Promise<Result<GamificationTeam>> {
-    const team = await gamificationService.teamFor(viewer);
-    if (!team.success) return team;
-    const since = period === 'all' ? null : now - TEAM_PERIOD_DAYS[period] * DAY_MS;
-    const inPeriod = (iso: string) => since === null || Date.parse(iso) >= since;
-
-    const members: TeamMember[] = team.value.members.map((user) => {
-      const resolutions = dashboardRepo.listUserResolutions(user.id);
-      const progress = gamificationService.progressFor(user.id, resolutions, now);
-      const messages = dashboardRepo.listReporterMessageTimes(user.id).filter(inPeriod).length;
-      return {
-        id: user.id,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-        level: progress.level,
-        xp: progress.xp,
-        periodXp:
-          since === null
-            ? progress.xp
-            : xpFor(
-                resolutions.filter((row) => inPeriod(row.resolvedAt)),
-                messages
-              ),
-        achievements: progress.achievements,
-      };
-    });
-
-    members.sort((a, b) =>
-      team.value.ranking
-        ? b.periodXp - a.periodXp || b.xp - a.xp || a.name.localeCompare(b.name)
-        : a.name.localeCompare(b.name)
-    );
-    return Result.ok({ ranking: team.value.ranking, period, members });
   },
 };
