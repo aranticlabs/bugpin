@@ -406,6 +406,8 @@ export interface Webhook {
   updatedAt: string;
 }
 
+export type WebhookResponse = Omit<Webhook, 'secret'> & { secretSet: boolean };
+
 // API Request/Response Types
 
 export interface CreateReportRequest {
