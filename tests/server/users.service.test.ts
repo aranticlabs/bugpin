@@ -42,7 +42,7 @@ let projects: Project[] = [];
 beforeEach(() => {
   passwordPolicyService.getPolicy = async () => DEFAULT_PASSWORD_POLICY;
   twoFactorRepo.listUserIdsWithTwoFactor = async () => new Set(['usr_1']);
-  projectLicenseService.checkAccess = () => Result.ok(undefined);
+  checkAccess = spyOn(projectLicense, 'checkProjectLicense').mockReturnValue(Result.ok(undefined));
   lastCreateInput = undefined;
   lastUpdateInput = undefined;
   deletedUserId = null;

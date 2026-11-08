@@ -515,7 +515,7 @@ it('does not commit sync results or errors after the project is deselected durin
     reportById = { ...baseReport, ...(mode === 'update' ? { githubIssueNumber: 123 } : {}) };
     updateSyncPayload = undefined;
     updateLastUsedId = null;
-    projectLicenseService.checkAccess = () => Result.ok(undefined);
+    checkAccess.mockReturnValue(Result.ok(undefined));
     const started = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     const remote = async () => {
