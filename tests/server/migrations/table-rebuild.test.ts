@@ -3,8 +3,9 @@ import { Database } from 'bun:sqlite';
 import { rebuildTable } from '../../../src/server/database/table-rebuild';
 
 let db: Database;
-const definition =
+const columnDefinitions =
   'id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, board_position REAL NOT NULL DEFAULT 0';
+const definition = `CREATE TABLE reports (${columnDefinitions})`;
 const columns = {
   id: 'id',
   title: 'title',
@@ -15,7 +16,7 @@ const columns = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.exec(`PRAGMA foreign_keys = ON;
-    CREATE TABLE reports (${definition});
+    ${definition};
     INSERT INTO reports (rowid, id, title, description, board_position) VALUES
       (7, 'first', 'Searchable first', 'original', 2.5), (42, 'second', 'Second report', NULL, -1.5);
     CREATE TABLE files (report_id TEXT REFERENCES reports(id) ON DELETE CASCADE);
@@ -60,6 +61,32 @@ function rebuild(targetDefinition: string, targetColumns: Record<string, string>
 }
 
 describe('table rebuild', () => {
+  it.each(['reports', '"reports"'])('preserves the canonical complete table SQL for %s', (name) => {
+    const canonical = `CREATE TABLE IF NOT EXISTS ${name} (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      board_position REAL NOT NULL DEFAULT 0
+    )`;
+    const bootstrap = new Database(':memory:');
+    try {
+      bootstrap.exec(canonical);
+      const expected = bootstrap
+        .query("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'reports'")
+        .get();
+      rebuild(canonical);
+      expect(
+        db.query("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'reports'").get()
+      ).toEqual(expected);
+      expect(db.query('SELECT rowid, id FROM reports ORDER BY rowid').all()).toEqual([
+        { rowid: 7, id: 'first' },
+        { rowid: 42, id: 'second' },
+      ]);
+    } finally {
+      bootstrap.close();
+    }
+  });
+
   it('preserves rowids, data, counts, indexes, views, external triggers and cascading references', () => {
     const before = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
     const dependents = db
@@ -67,7 +94,7 @@ describe('table rebuild', () => {
         "SELECT type, name, sql FROM sqlite_schema WHERE type IN ('view', 'trigger', 'index') ORDER BY name"
       )
       .all();
-    rebuild(`${definition}, original_description TEXT`, {
+    rebuild(`CREATE TABLE reports (${columnDefinitions}, original_description TEXT)`, {
       ...columns,
       original_description: 'description',
     });
@@ -116,7 +143,7 @@ describe('table rebuild', () => {
     const schema = db.query('SELECT type, name, sql FROM sqlite_schema ORDER BY name').all();
     const rows = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
     expect(() =>
-      rebuild('id TEXT PRIMARY KEY, title TEXT, description TEXT', {
+      rebuild('CREATE TABLE reports (id TEXT PRIMARY KEY, title TEXT, description TEXT)', {
         id: 'id',
         title: 'title',
         description: 'description',

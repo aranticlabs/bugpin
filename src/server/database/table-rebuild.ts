@@ -14,7 +14,7 @@ function identifier(name: string): string {
 export function rebuildTable(
   db: Database,
   table: string,
-  definition: string,
+  createTableSql: string,
   columns: Record<string, string>,
   ftsTable?: string
 ): void {
@@ -34,15 +34,23 @@ export function rebuildTable(
     )
     .all(table);
   const replacement = identifier(`new_${table}`);
-  db.exec(`CREATE TABLE ${replacement} (${definition})`);
-  db.exec(`INSERT INTO ${replacement} (rowid, ${Object.keys(columns).map(identifier).join(', ')})
-    SELECT rowid, ${Object.values(columns).join(', ')} FROM ${identifier(table)}`);
+  db.exec(`CREATE TABLE ${replacement} AS SELECT rowid,
+    ${Object.entries(columns)
+      .map(([name, expression]) => `${expression} AS ${identifier(name)}`)
+      .join(', ')}
+    FROM ${identifier(table)}`);
 
   for (const object of [...objects].reverse()) {
     if (object.type !== 'index') db.exec(`DROP ${object.type} ${identifier(object.name)}`);
   }
   db.exec(`DROP TABLE ${identifier(table)}`);
-  db.exec(`ALTER TABLE ${replacement} RENAME TO ${identifier(table)}`);
+  // Creating the final table directly preserves the canonical SQL text and identifier quoting.
+  db.exec(createTableSql);
+  const names = Object.keys(columns).map(identifier).join(', ');
+  db.exec(
+    `INSERT INTO ${identifier(table)} (rowid, ${names}) SELECT rowid, ${names} FROM ${replacement}`
+  );
+  db.exec(`DROP TABLE ${replacement}`);
   for (const object of objects) db.exec(object.sql);
   if (ftsTable) {
     db.run(`INSERT INTO ${identifier(ftsTable)} (${identifier(ftsTable)}) VALUES ('rebuild')`);
