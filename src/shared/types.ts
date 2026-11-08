@@ -141,36 +141,6 @@ export interface Reporter {
   updatedAt: string;
 }
 
-export interface ReporterSession {
-  id: string;
-  tokenHash: string;
-  reporterId: string;
-  createdAt: string;
-  lastUsedAt: string;
-  expiresAt: string;
-  absoluteExpiresAt: string;
-  revokedAt: string | null;
-}
-
-export interface ReporterAuthToken {
-  id: string;
-  tokenHash: string;
-  email: string;
-  purpose: 'login';
-  source: ReporterAuthTokenSource;
-  reportId: string | null;
-  expiresAt: string;
-  consumedAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
-export interface ReporterEmailSuppression {
-  email: string;
-  source: ReporterSuppressionSource;
-  createdAt: string;
-}
-
 export interface ReporterPortalProjectSettings {
   enabled: boolean;
   allowNewFeedback: boolean;
