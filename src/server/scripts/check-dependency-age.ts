@@ -215,19 +215,16 @@ if (import.meta.main) {
       if (summary) {
         await Bun.write(
           summary,
-          `${await Bun.file(summary).text()}\n${dependencyAgeSummary(issues)}`
+          `${await Bun.file(summary).text()}\n${dependencyAgeSummary(issues)}${
+            outcome === 'approval-required'
+              ? '\nAn administrator must approve these releases. Open this workflow run, select **Review deployments**, and approve **dependency-age-override** to continue. The exception applies only to this run and revision.\n'
+              : ''
+          }`
         );
       }
-      const youngPackages = issues.flatMap(({ release }) =>
-        release
-          ? [
-              `${release.name}@${release.version} (${release.ageHours.toFixed(1)}h old; minimum 72h)`,
-            ]
-          : []
-      );
       await Bun.write(
         output,
-        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\nyoung_packages=${JSON.stringify(youngPackages)}\n`
+        `${await Bun.file(output).text()}approval_required=${outcome === 'approval-required'}\n`
       );
     }
     if (outcome === 'failed' || (outcome === 'approval-required' && !requestApproval)) {

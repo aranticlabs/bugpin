@@ -12,11 +12,11 @@ permissions:
 
 jobs:
   validate:
+    name: Check dependency ages
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       approval_required: ${{ steps.age.outputs.approval_required }}
-      young_packages: ${{ steps.age.outputs.young_packages }}
     steps:
       - name: Checkout exact CE revision
         uses: actions/checkout@v4
@@ -95,8 +95,7 @@ jobs:
           done
 
   approve-young-releases:
-    name: >-
-      Approve young releases: ${{ join(fromJSON(needs.validate.outputs.young_packages || '[]'), ', ') }}
+    name: Approve age exception
     needs: validate
     if: needs.validate.outputs.approval_required == 'true'
     runs-on: ubuntu-latest
@@ -110,19 +109,34 @@ jobs:
         run: echo "Admin-approved release age exception for CE $APPROVED_SHA and its pinned EE revision in this workflow run."
 
   enforce:
+    name: Dependency policy
     needs: [validate, approve-young-releases]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Enforce validation and age approval
+      - name: Summarize dependency policy
         env:
           VALIDATION_RESULT: ${{ needs.validate.result }}
           APPROVAL_REQUIRED: ${{ needs.validate.outputs.approval_required }}
           APPROVAL_RESULT: ${{ needs.approve-young-releases.result }}
         run: |
-          test "$VALIDATION_RESULT" = success
-          if [ "$APPROVAL_REQUIRED" = true ]; then
-            test "$APPROVAL_RESULT" = success
+          status=0
+          if [ "$VALIDATION_RESULT" != success ]; then
+            message="Dependency validation did not succeed ($VALIDATION_RESULT). Review the Check dependency ages job. For a download or network failure, rerun failed jobs. Age exceptions cannot waive validation errors."
+            status=1
+          elif [ "$APPROVAL_REQUIRED" = false ]; then
+            message="Dependency ages passed. No age exception was needed."
+          elif [ "$APPROVAL_REQUIRED" = true ] && [ "$APPROVAL_RESULT" = success ]; then
+            message="Dependency ages verified. An administrator approved the age exception for this revision."
+          elif [ "$APPROVAL_REQUIRED" = true ]; then
+            message="The age exception was not approved ($APPROVAL_RESULT). Rerun failed jobs to request approval again, then use Review deployments in this workflow run."
+            status=1
           else
-            test "$APPROVAL_REQUIRED" = false
+            message="Dependency validation did not report whether approval was required. Review the Check dependency ages job and rerun failed jobs."
+            status=1
           fi
+          printf '## Dependency policy\n\n%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::$message"
+          fi
+          exit "$status"
