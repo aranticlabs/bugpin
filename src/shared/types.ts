@@ -1,5 +1,6 @@
 import type { RecordingQuality } from './recording-quality';
 import type { PasswordPolicy } from './password-policy';
+import type { ReportOwner } from './reporter-types';
 
 // Locale Types
 
@@ -278,6 +279,7 @@ export interface Report {
   reporterName?: string;
   reporterLocale: LocaleCode;
   reporterId?: string;
+  owner?: ReportOwner;
   claimableEmail?: string;
   originalDescription?: string;
   originalDescriptionBackfilled?: boolean;
@@ -516,6 +518,7 @@ export interface CustomField {
 }
 
 export interface Project {
+  reporterPortalPrerequisites?: string[];
   licenseLocked?: boolean;
   id: string;
   name: string;
@@ -673,6 +676,7 @@ export interface CreateReportRequest {
 }
 
 export interface ReportFilter {
+  reporterId?: string;
   projectId?: string;
   source?: ReportSource;
   status?: ReportStatus[];
@@ -692,7 +696,7 @@ export interface ReportFilter {
 /** The reports a board shows, which limits the cards a drop on a sorted board reorders */
 export type ReportBoardScope = Pick<
   ReportFilter,
-  'projectId' | 'status' | 'priority' | 'assignedTo' | 'search'
+  'projectId' | 'reporterId' | 'status' | 'priority' | 'assignedTo' | 'search'
 >;
 
 /** Where a report is dropped on the board */

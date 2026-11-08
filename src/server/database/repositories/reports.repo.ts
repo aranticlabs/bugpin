@@ -144,6 +144,7 @@ function decodeCursor(
 type ReportConditionFilter = Pick<
   ReportFilter,
   | 'projectId'
+  | 'reporterId'
   | 'source'
   | 'status'
   | 'priority'
@@ -165,6 +166,10 @@ function reportConditions(filter: ReportConditionFilter): {
   if (filter.projectId) {
     conditions.push('reports.project_id = ?');
     params.push(filter.projectId);
+  }
+  if (filter.reporterId) {
+    conditions.push('reports.reporter_id = ?');
+    params.push(filter.reporterId);
   }
 
   if (filter.source) {

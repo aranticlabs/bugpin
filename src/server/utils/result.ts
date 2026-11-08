@@ -1,5 +1,6 @@
 export type Result<T> =
-  { success: true; value: T } | { success: false; error: string; code?: string };
+  | { success: true; value: T }
+  | { success: false; error: string; code?: string; details?: string[] };
 
 export const Result = {
   /**
@@ -12,8 +13,8 @@ export const Result = {
   /**
    * Create a failed result
    */
-  fail<T>(error: string, code?: string): Result<T> {
-    return { success: false, error, code };
+  fail<T>(error: string, code?: string, details?: string[]): Result<T> {
+    return { success: false, error, code, ...(details ? { details } : {}) };
   },
 
   /**

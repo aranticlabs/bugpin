@@ -28,6 +28,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
 
   const filter = {
     projectId: query.projectId,
+    reporterId: query.reporterId,
     source: query.source as 'widget' | 'manual' | undefined,
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],

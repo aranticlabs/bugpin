@@ -25,6 +25,7 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
+import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { normalizeUrl } from '../utils/validators.js';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
@@ -780,7 +781,11 @@ export const reportsService = {
     const files = await filesRepo.findByReportId(id);
 
     return Result.ok({
-      report: { ...report, licenseLocked: !checkProjectLicense(report.projectId).success },
+      report: {
+        ...report,
+        licenseLocked: !checkProjectLicense(report.projectId).success,
+        owner: Result.unwrap(reporterOwnershipService.describeOwner(report)),
+      },
       files,
     });
   },

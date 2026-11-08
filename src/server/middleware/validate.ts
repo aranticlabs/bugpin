@@ -240,6 +240,11 @@ const widgetDialogContentProjectSchema = z
 
 const projectSettingsSchema = z
   .object({
+    reporterPortal: z
+      .object({ enabled: z.boolean(), allowNewFeedback: z.boolean() })
+      .strict()
+      .nullable()
+      .optional(),
     defaultAssigneeUserId: z.string().nullable().optional(),
     language: projectLanguageSchema.nullable().optional(),
     widgetLauncherButton: widgetLauncherButtonProjectSchema.nullable().optional(),
@@ -418,6 +423,7 @@ const boardMoveShape = {
       scope: z
         .object({
           projectId: z.string().min(1).max(64).optional(),
+          reporterId: z.string().min(1).max(64).optional(),
           status: z.array(z.enum(REPORT_STATUSES)).max(REPORT_STATUSES.length).optional(),
           priority: z.array(z.enum(REPORT_PRIORITIES)).max(REPORT_PRIORITIES.length).optional(),
           assignedTo: z.string().min(1).max(64).optional(),
@@ -450,6 +456,7 @@ export const schemas = {
   // Report filter query
   reportFilter: z.object({
     projectId: z.string().optional(),
+    reporterId: z.string().min(1).max(64).optional(),
     source: z.enum(['widget', 'manual']).optional(),
     status: z.string().optional(), // comma-separated list
     priority: z.string().optional(), // comma-separated list

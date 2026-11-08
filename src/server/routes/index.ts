@@ -31,6 +31,8 @@ import { passkeyRoutes } from './api/passkeys.js';
 import { getEERoutes } from '../utils/ee.js';
 import { logger } from '../utils/logger.js';
 import { portalRoutes } from './portal/index.js';
+import { reportersRoutes } from './api/reporters.js';
+import { reportOwnerRoutes } from './api/report-owner.js';
 
 export function createApiRouter(): Hono {
   const api = new Hono();
@@ -41,6 +43,8 @@ export function createApiRouter(): Hono {
   api.route('/auth/passkeys', passkeyRoutes);
   api.route('/auth', authRoutes);
   api.route('/reports', reportsRoutes);
+  api.route('/reports', reportOwnerRoutes);
+  api.route('/reporters', reportersRoutes);
   api.route('/reports', reporterMessagesRoutes);
   api.route('/reports', reportHistoryRoutes);
   api.route('/dashboard', dashboardRoutes);

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { projectsService } from '../../services/projects.service.js';
 import { workspaceViewsService } from '../../services/workspace-views.service.js';
+import { reporterPortalSettingsService } from '../../services/reporter-portal-settings.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 
@@ -103,7 +104,15 @@ projects.post('/', authorize(['admin']), validate({ body: schemas.createProject 
   const result = await projectsService.create(body);
 
   if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 400);
+    return c.json(
+      {
+        success: false,
+        error: result.code,
+        message: result.error,
+        ...(result.details ? { details: result.details } : {}),
+      },
+      result.code === 'PORTAL_PREREQUISITES_MISSING' ? 409 : 400
+    );
   }
 
   return c.json(
@@ -128,14 +137,54 @@ projects.patch(
     const result = await projectsService.update(id, body);
 
     if (!result.success) {
-      const status = result.code === 'NOT_FOUND' ? 404 : 400;
-      return c.json({ success: false, error: result.code, message: result.error }, status);
+      const status =
+        result.code === 'NOT_FOUND'
+          ? 404
+          : result.code === 'PORTAL_PREREQUISITES_MISSING'
+            ? 409
+            : 400;
+      return c.json(
+        {
+          success: false,
+          error: result.code,
+          message: result.error,
+          ...(result.details ? { details: result.details } : {}),
+        },
+        status
+      );
     }
 
     return c.json({
       success: true,
       project: result.value,
     });
+  }
+);
+
+projects.post(
+  '/:id/reporter-portal/test-login',
+  authorize(['admin']),
+  validate({ params: schemas.id }),
+  async (c) => {
+    const result = await reporterPortalSettingsService.testLogin(
+      c.req.param('id'),
+      c.get('user').email
+    );
+    if (!result.success)
+      return c.json(
+        {
+          success: false,
+          error: result.code,
+          message: result.error,
+          ...(result.details ? { details: result.details } : {}),
+        },
+        result.code === 'NOT_FOUND'
+          ? 404
+          : result.code === 'PORTAL_PREREQUISITES_MISSING'
+            ? 409
+            : 400
+      );
+    return c.json({ success: true });
   }
 );
 
