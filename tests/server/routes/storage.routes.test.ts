@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
 // Mock EE module to ensure requireEEFeature returns 402
@@ -55,7 +57,10 @@ const originalAuthService = { ...authService };
 
 let currentUser = baseUser;
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   currentUser = baseUser;
 
   authService.validateSession = async () =>
@@ -66,6 +71,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
 });
 
@@ -132,6 +138,7 @@ describe('storage routes (CE stub - returns 402)', () => {
         method: 'POST',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({}),
@@ -150,6 +157,7 @@ describe('storage routes (CE stub - returns 402)', () => {
         method: 'POST',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({}),
@@ -164,7 +172,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/storage/migrate/cancel', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);
@@ -178,7 +186,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/storage/migrate/cancel', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(403);
@@ -190,7 +198,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/storage/s3/test', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);
@@ -204,7 +212,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/storage/s3/test', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(403);

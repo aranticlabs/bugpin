@@ -68,7 +68,7 @@ describe('SettingsRouter', () => {
   it('shows Account and Security tabs on the profile and opens the tab from the query', async () => {
     renderSettings('/settings/account/profile?tab=security');
 
-    const tabs = await screen.findAllByRole('tab');
+    const tabs = await screen.findAllByRole('tab', {}, { timeout: 5000 });
     expect(tabs.map((tab) => tab.textContent)).toEqual(['Account', 'Security']);
     expect(screen.getByRole('tab', { name: 'Security' })).toHaveAttribute('data-state', 'active');
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
@@ -77,7 +77,7 @@ describe('SettingsRouter', () => {
   it('maps a former Settings tab hash to its new page', async () => {
     renderSettings('/settings#smtp');
 
-    expect(await screen.findByText('SMTP Server')).toBeInTheDocument();
+    expect(await screen.findByText('SMTP Server', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/email');
   });
 

@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reporterMessagesService } from '../../../src/server/services/reporter-messages.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User, ReporterMessage } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -39,7 +41,10 @@ const originalReporterMessagesService = { ...reporterMessagesService };
 
 let userRole: User['role'] = 'admin';
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   userRole = 'admin';
 
   authService.validateSession = async () =>
@@ -54,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(reporterMessagesService, originalReporterMessagesService);
 });
@@ -71,6 +77,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: 'We are looking into this.' }),
@@ -87,6 +94,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: '' }),
@@ -102,6 +110,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: 'Hello' }),
@@ -118,6 +127,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: 'Hello' }),
@@ -132,6 +142,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: 'Hello' }),
@@ -146,6 +157,7 @@ describe('reporter-messages routes POST', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ message: 'We are looking into this.' }),

@@ -12,10 +12,15 @@ interface ReporterSession {
 }
 
 export const reporterSessionsRepo = {
-  create(tokenHash: string, reporterId: string, now: string): ReporterSession {
+  create(data: {
+    tokenHash: string;
+    reporterId: string;
+    now: string;
+    expiresAt: string;
+    absoluteExpiresAt: string;
+  }): ReporterSession {
+    const { tokenHash, reporterId, now, expiresAt, absoluteExpiresAt } = data;
     const id = generateId('rses');
-    const expiresAt = new Date(Date.parse(now) + 30 * 86400000).toISOString();
-    const absoluteExpiresAt = new Date(Date.parse(now) + 90 * 86400000).toISOString();
     getDb().run(
       `INSERT INTO reporter_sessions (id, token_hash, reporter_id, created_at, last_used_at, expires_at, absolute_expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -54,5 +59,20 @@ export const reporterSessionsRepo = {
       now,
       id,
     ]);
+  },
+
+  revokeByReporterId(id: string, now: string): void {
+    getDb().run(
+      'UPDATE reporter_sessions SET revoked_at = ? WHERE reporter_id = ? AND revoked_at IS NULL',
+      [now, id]
+    );
+  },
+
+  deleteOlderThan(cutoff: string): number {
+    return getDb().run(
+      `DELETE FROM reporter_sessions WHERE julianday(expires_at) < julianday(?)
+      OR julianday(absolute_expires_at) < julianday(?) OR julianday(revoked_at) < julianday(?)`,
+      [cutoff, cutoff, cutoff]
+    ).changes;
   },
 };

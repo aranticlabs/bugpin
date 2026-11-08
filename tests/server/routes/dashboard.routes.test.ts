@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { dashboardRoutes } from '../../../src/server/routes/api/dashboard';
 import { gamificationRoutes } from '../../../src/server/routes/api/gamification';
 import { authService } from '../../../src/server/services/auth.service';
@@ -12,6 +13,7 @@ import {
   type UpdateGamificationInput,
 } from '../../../src/server/services/gamification.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type {
   DashboardOverview,
   DashboardPersonal,
@@ -90,12 +92,19 @@ function request(path: string, method = 'GET', body?: unknown) {
   app.route('/gamification', gamificationRoutes);
   return app.request(`http://localhost${path}`, {
     method,
-    headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+    headers: {
+      cookie: 'session=sess_1',
+      origin: 'http://localhost',
+      'content-type': 'application/json',
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   signedIn = userWithRole('admin');
   overviewQueries = [];
   updates = [];
@@ -117,6 +126,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(dashboardService, originalDashboardService);
   Object.assign(gamificationService, originalGamificationService);

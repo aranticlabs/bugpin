@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { projectsService } from '../../../src/server/services/projects.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Project, Session, User } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -48,7 +50,10 @@ let regenerateResult: Result<Project> = Result.ok({ ...baseProject, apiKey: 'pro
 let lastUpdateBody: unknown;
 let lastSummaryOptions: { includeApiKeyPrefix?: boolean } | undefined;
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   listResult = [baseProject];
   projectResult = baseProject;
   createResult = Result.ok(baseProject);
@@ -85,6 +90,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(projectsService, originalProjectsService);
 });
@@ -152,6 +158,7 @@ describe('projects routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'Project' }),
@@ -165,6 +172,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New' }),
@@ -178,6 +186,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ settings: { defaultAssigneeUserId: 'usr_2' } }),
@@ -191,7 +200,7 @@ describe('projects routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/projects/prj_1', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
   });
@@ -200,7 +209,7 @@ describe('projects routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/projects/prj_1/regenerate-key', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
   });
@@ -211,6 +220,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -229,6 +239,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ settings: { language: null } }),
@@ -243,6 +254,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -260,6 +272,7 @@ describe('projects routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -285,7 +298,11 @@ describe('projects routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/projects/prj_1', {
       method: 'PATCH',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ settings }),
     });
     expect(res.status).toBe(200);
@@ -297,7 +314,11 @@ describe('projects routes', () => {
     for (const color of ['', 'blue', '#123']) {
       const res = await app.request('http://localhost/projects/prj_1', {
         method: 'PATCH',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify({ settings: { widgetDialog: { lightButtonColor: color } } }),
       });
       expect(res.status).toBe(400);

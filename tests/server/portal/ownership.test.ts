@@ -87,6 +87,12 @@ it('attaches widget reports across enabled projects after verified login even wi
     metadata,
     claimableEmail: 'jane@example.com',
   });
+  const unchangedTimestamp = '2026-01-01T00:00:00.000Z';
+  getDb().run('UPDATE reports SET updated_at = ? WHERE id IN (?, ?)', [
+    unchangedTimestamp,
+    reportId,
+    secondReport.id,
+  ]);
   const minted = Result.unwrap(
     reporterAuthService.mintLoginToken('jane@example.com', 'request', reportId)
   );
@@ -104,6 +110,7 @@ it('attaches widget reports across enabled projects after verified login even wi
     expect(report.reporterId).toBe(session.reporter.id);
     expect(report.claimableEmail).toBeUndefined();
     expect(report.ownerSeenAt).toBeUndefined();
+    expect(report.updatedAt).toBe(unchangedTimestamp);
     expect(
       getDb()
         .query(

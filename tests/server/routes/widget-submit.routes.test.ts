@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { widgetRoutes } from '../../../src/server/routes/widget/submit';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
 import {
   DEFAULT_BRANDING,
   settingsRepo,
 } from '../../../src/server/database/repositories/settings.repo';
-import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { settingsService } from '../../../src/server/services/settings.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';

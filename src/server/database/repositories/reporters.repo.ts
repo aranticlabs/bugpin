@@ -47,20 +47,11 @@ export const reportersRepo = {
     return row ? mapReporter(row) : null;
   },
 
-  resolve(email: string, now: string): Reporter {
+  resolve(email: string, displayName: string, now: string): Reporter {
     getDb().run(
       `INSERT OR IGNORE INTO reporters (id, email, display_name, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
-      [
-        generateId('rptr'),
-        email,
-        email
-          .split('@')[0]
-          .replace(/[\x00-\x1f\x7f]/g, '')
-          .slice(0, 80),
-        now,
-        now,
-      ]
+      [generateId('rptr'), email, displayName, now, now]
     );
     return this.findByEmail(email)!;
   },
@@ -72,6 +63,96 @@ export const reportersRepo = {
       id,
     ]);
     return this.findById(id)!;
+  },
+
+  list(filter: {
+    search?: string;
+    status?: 'active' | 'suspended';
+    cursor?: { createdAt: string; id: string };
+    limit: number;
+  }): { reporters: Reporter[]; total: number } {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (filter.search) {
+      conditions.push("(email LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')");
+      const search = `%${filter.search.replace(/[\\%_]/g, '\\$&')}%`;
+      params.push(search, search);
+    }
+    if (filter.status)
+      conditions.push(`suspended_at IS ${filter.status === 'active' ? '' : 'NOT '}NULL`);
+    const where = () => (conditions.length ? `WHERE ${conditions.join(' AND ')}` : '');
+    const total = getDb()
+      .query<{ count: number }, string[]>(`SELECT COUNT(*) AS count FROM reporters ${where()}`)
+      .get(...params)!.count;
+    if (filter.cursor) {
+      conditions.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      params.push(filter.cursor.createdAt, filter.cursor.createdAt, filter.cursor.id);
+    }
+    const rows = getDb()
+      .query<ReporterRow, (string | number)[]>(
+        `SELECT * FROM reporters ${where()} ORDER BY created_at DESC, id DESC LIMIT ?`
+      )
+      .all(...params, filter.limit + 1);
+    return { reporters: rows.map(mapReporter), total };
+  },
+
+  ownedProjects(
+    ids: string[]
+  ): Array<{ reporterId: string; projectId: string; projectName: string; reportCount: number }> {
+    if (!ids.length) return [];
+    return getDb()
+      .query<
+        { reporterId: string; projectId: string; projectName: string; reportCount: number },
+        string[]
+      >(
+        `SELECT reports.reporter_id AS reporterId, projects.id AS projectId, projects.name AS projectName, COUNT(*) AS reportCount
+       FROM reports JOIN projects ON projects.id = reports.project_id
+       WHERE reports.reporter_id IN (${ids.map(() => '?').join(',')})
+       GROUP BY reports.reporter_id, projects.id ORDER BY projects.name, projects.id`
+      )
+      .all(...ids);
+  },
+
+  setSuspension(id: string, suspendedAt: string | null, userId: string | null, now: string): void {
+    getDb().run(
+      'UPDATE reporters SET suspended_at = ?, suspended_by_user_id = ?, updated_at = ? WHERE id = ?',
+      [suspendedAt, userId, now, id]
+    );
+  },
+
+  recordRevocation(id: string, userId: string | null, now: string): void {
+    getDb().run(
+      'UPDATE reporters SET sessions_revoked_at = ?, sessions_revoked_by_user_id = ?, updated_at = ? WHERE id = ?',
+      [now, userId, now, id]
+    );
+  },
+
+  anonymizeMessages(id: string, authorName: string): void {
+    if (
+      getDb()
+        .query("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'report_messages'")
+        .get()
+    ) {
+      getDb().run(
+        "UPDATE report_messages SET author_name = ? WHERE author_kind = 'reporter' AND reporter_id = ?",
+        [authorName, id]
+      );
+    }
+  },
+
+  delete(id: string): void {
+    getDb().run('DELETE FROM reporters WHERE id = ?', [id]);
+  },
+
+  findIdle(cutoff: string): Reporter[] {
+    return getDb()
+      .query<ReporterRow, [string]>(
+        `SELECT * FROM reporters WHERE julianday(COALESCE(last_login_at, created_at)) < julianday(?)
+       AND NOT EXISTS (SELECT 1 FROM reports WHERE reports.reporter_id = reporters.id)
+       AND NOT EXISTS (SELECT 1 FROM reports WHERE reports.reporter_id IS NULL AND reports.claimable_email = reporters.email)`
+      )
+      .all(cutoff)
+      .map(mapReporter);
   },
 
   transaction<T>(work: () => T): T {

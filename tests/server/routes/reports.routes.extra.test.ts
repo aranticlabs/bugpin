@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { authService } from '../../../src/server/services/auth.service';
 import {
@@ -12,6 +13,7 @@ import {
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import { syncQueueService } from '../../../src/server/services/integrations/sync-queue.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Report, Session, User, Integration } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -83,7 +85,10 @@ const originalFilesRepo = { ...filesRepo };
 const originalIntegrationsService = { ...integrationsService };
 const originalSyncQueueService = { ...syncQueueService };
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   integrationsService.forwardReport = async () => forwardResult;
 
   forwardResult = Result.ok({ type: 'github', id: '123' });
@@ -127,6 +132,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(filesRepo, originalFilesRepo);
   Object.assign(integrationsService, originalIntegrationsService);
@@ -195,6 +201,7 @@ describe('reports routes extras', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ extra: true }),
@@ -210,6 +217,7 @@ describe('reports routes extras', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({}),
@@ -225,6 +233,7 @@ describe('reports routes extras', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({}),
@@ -238,7 +247,7 @@ describe('reports routes extras', () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/retry-sync', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
 
     expect(res.status).toBe(404);
@@ -249,7 +258,7 @@ describe('reports routes extras', () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/retry-sync', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
 
     expect(res.status).toBe(400);
@@ -260,7 +269,7 @@ describe('reports routes extras', () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/retry-sync', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
 
     expect(res.status).toBe(200);

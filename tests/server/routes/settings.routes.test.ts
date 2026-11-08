@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
 import { settingsService } from '../../../src/server/services/settings.service';
 import { emailService } from '../../../src/server/services/email.service';
@@ -59,12 +60,15 @@ function asRole(role: User['role']) {
 function jsonRequest(method: string, body: unknown, cookie = 'session=sess_1'): RequestInit {
   return {
     method,
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { cookie, origin: 'http://localhost', 'content-type': 'application/json' },
     body: JSON.stringify(body),
   };
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ ...storedSettings, appUrl: 'http://localhost' });
   authService.validateSession = async () =>
     Result.ok({
       user: baseUser,
@@ -82,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(emailService, originalEmailService);
@@ -119,6 +124,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -130,7 +136,11 @@ describe('settings routes', () => {
     const app = createApp();
     const accepted = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({
         privacy: {
           euPrivacyMode: true,
@@ -141,7 +151,11 @@ describe('settings routes', () => {
 
     const rejected = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ privacy: { euPrivacyMode: 'yes' } }),
     });
     expect(rejected.status).toBe(400);
@@ -151,14 +165,22 @@ describe('settings routes', () => {
     const app = createApp();
     const accepted = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ diagnostics: { networkCapture: false, storageKeysCapture: true } }),
     });
     expect(accepted.status).toBe(200);
 
     const rejected = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ diagnostics: { screenCapture: true } }),
     });
     expect(rejected.status).toBe(400);
@@ -171,6 +193,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -185,6 +208,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -198,6 +222,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({}),
@@ -212,6 +237,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -233,6 +259,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -257,6 +284,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -503,7 +531,11 @@ describe('settings routes permissions', () => {
         const init = request.init();
         const res = await createApp().request(`http://localhost${request.path}`, {
           ...init,
-          headers: { ...Object.fromEntries(new Headers(init.headers)), cookie: 'session=sess_1' },
+          headers: {
+            ...Object.fromEntries(new Headers(init.headers)),
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+          },
         });
         expect(res.status).toBe(403);
         expect(deleted).toBe(false);

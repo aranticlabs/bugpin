@@ -20,17 +20,19 @@ const requestSchema = z
   .strict();
 const tokenSchema = z.object({ token: z.string().min(1).max(128) }).strict();
 
-function loginIpLimit(request: boolean) {
+function loginIpLimit(kind: 'request' | 'preview' | 'exchange') {
   return rateLimiter({
-    name: request ? 'portal-login-request-ip' : 'portal-login-exchange-ip',
+    name: `portal-login-${kind}-ip`,
     window: 900,
     max: async () => {
       const { reporterPortalLimits: limits } = await settingsCacheService.getAll();
-      return request ? limits.loginRequestsPerIpPer15Min : limits.loginExchangesPerIpPer15Min;
+      return kind === 'request'
+        ? limits.loginRequestsPerIpPer15Min
+        : limits.loginExchangesPerIpPer15Min;
     },
     keyGenerator: (c) => rateLimitAddress(getClientIp(c) ?? 'unknown'),
     onLimit: (c) =>
-      request
+      kind === 'request'
         ? c.json({ success: true })
         : c.json({ success: false, error: 'RATE_LIMITED', message: 'Too many requests' }, 429),
   });
@@ -57,7 +59,7 @@ export const portalAuthRoutes = new Hono();
 
 portalAuthRoutes.post(
   '/request',
-  loginIpLimit(true),
+  loginIpLimit('request'),
   validate({ body: requestSchema }),
   loginEmailLimit(false),
   async (c) => {
@@ -66,14 +68,14 @@ portalAuthRoutes.post(
   }
 );
 
-portalAuthRoutes.post('/preview', loginIpLimit(false), validate({ body: tokenSchema }), (c) => {
+portalAuthRoutes.post('/preview', loginIpLimit('preview'), validate({ body: tokenSchema }), (c) => {
   const result = reporterAuthService.preview(validatedBody(c, tokenSchema).token);
   return c.json({ success: true, ...Result.unwrap(result) });
 });
 
 portalAuthRoutes.post(
   '/resend',
-  loginIpLimit(true),
+  loginIpLimit('request'),
   validate({ body: tokenSchema }),
   loginEmailLimit(true),
   async (c) => {
@@ -84,7 +86,7 @@ portalAuthRoutes.post(
 
 portalAuthRoutes.post(
   '/exchange',
-  loginIpLimit(false),
+  loginIpLimit('exchange'),
   validate({ body: tokenSchema }),
   async (c) => {
     const result = reporterAuthService.exchange(

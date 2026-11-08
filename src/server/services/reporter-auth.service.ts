@@ -27,6 +27,8 @@ function toPortalMe(reporter: Reporter): PortalMe {
 }
 
 const invalidToken = () => Result.fail<never>('This link is not valid', 'INVALID_TOKEN');
+const sessionLifetime = 30 * 86400000;
+const absoluteSessionLifetime = 90 * 86400000;
 
 export const reporterAuthService = {
   mintLoginToken(
@@ -35,8 +37,9 @@ export const reporterAuthService = {
     reportId?: string
   ): Result<{ email: string; secret: string; expiresAt: string }> {
     email = normalizeEmail(email);
-    if (!isValidEmail(email) || reportersRepo.findByEmail(email)?.suspendedAt)
-      return invalidToken();
+    if (!isValidEmail(email)) return Result.fail('Invalid email address', 'INVALID_EMAIL');
+    if (reportersRepo.findByEmail(email)?.suspendedAt)
+      return Result.fail('Reporter is suspended', 'REPORTER_SUSPENDED');
     const secret = generateSecureToken();
     const now = new Date().toISOString();
     const expiresAt = new Date(
@@ -92,14 +95,14 @@ export const reporterAuthService = {
     const token = reporterAuthTokensRepo.findByHash(hashToken(secret));
     if (
       !token ||
-      token.consumed_at ||
-      token.revoked_at ||
+      token.consumedAt ||
+      token.revokedAt ||
       reportersRepo.findByEmail(token.email)?.suspendedAt
     ) {
       return Result.ok({ state: 'invalid' });
     }
     return Result.ok({
-      state: Date.parse(token.expires_at) <= Date.now() ? 'expired' : 'valid',
+      state: Date.parse(token.expiresAt) <= Date.now() ? 'expired' : 'valid',
       maskedEmail: maskEmail(token.email),
     });
   },
@@ -109,9 +112,9 @@ export const reporterAuthService = {
     if (
       !token ||
       token.source === 'request' ||
-      token.consumed_at ||
-      token.revoked_at ||
-      Date.parse(token.expires_at) > Date.now() ||
+      token.consumedAt ||
+      token.revokedAt ||
+      Date.parse(token.expiresAt) > Date.now() ||
       reportersRepo.findByEmail(token.email)?.suspendedAt
     )
       return Result.ok(null);
@@ -143,18 +146,28 @@ export const reporterAuthService = {
       const token = reporterAuthTokensRepo.findByHash(tokenHash);
       if (
         !token ||
-        token.consumed_at ||
-        token.revoked_at ||
-        Date.parse(token.expires_at) <= Date.parse(now) ||
+        token.consumedAt ||
+        token.revokedAt ||
+        Date.parse(token.expiresAt) <= Date.parse(now) ||
         reportersRepo.findByEmail(token.email)?.suspendedAt
       )
         return invalidToken();
       if (!reporterAuthTokensRepo.consume(token.id, now)) return invalidToken();
-      const reporter = reportersRepo.resolve(token.email, now);
+      const displayName = token.email
+        .split('@')[0]
+        .replace(/[\x00-\x1f\x7f]/g, '')
+        .slice(0, 80);
+      const reporter = reportersRepo.resolve(token.email, displayName, now);
       const attachedReportCount = Result.unwrap(
-        reporterOwnershipService.attachClaimable(reporter.id, reporter.email, now)
+        reporterOwnershipService.attachClaimable(reporter.id, reporter.email)
       );
-      const session = reporterSessionsRepo.create(sessionHash, reporter.id, now);
+      const session = reporterSessionsRepo.create({
+        tokenHash: sessionHash,
+        reporterId: reporter.id,
+        now,
+        expiresAt: new Date(Date.parse(now) + sessionLifetime).toISOString(),
+        absoluteExpiresAt: new Date(Date.parse(now) + absoluteSessionLifetime).toISOString(),
+      });
       if (previousHash) {
         const previous = reporterSessionsRepo.findByHash(previousHash);
         if (previous) reporterSessionsRepo.revoke(previous.id, now);
@@ -165,8 +178,8 @@ export const reporterAuthService = {
         attachedReportCount,
         sessionSecret,
         expiresAt: session.expiresAt,
-        ...(token.report_id && reporterOwnershipRepo.canAccess(token.report_id, reporter.id)
-          ? { targetReportId: token.report_id }
+        ...(token.reportId && reporterOwnershipRepo.canAccess(token.reportId, reporter.id)
+          ? { targetReportId: token.reportId }
           : {}),
       });
     });
@@ -189,7 +202,7 @@ export const reporterAuthService = {
       return Result.fail('Authentication required', 'UNAUTHORIZED');
     if (now - Date.parse(session.lastUsedAt) >= 3600000) {
       session.expiresAt = new Date(
-        Math.min(now + 30 * 86400000, Date.parse(session.absoluteExpiresAt))
+        Math.min(now + sessionLifetime, Date.parse(session.absoluteExpiresAt))
       ).toISOString();
       reporterSessionsRepo.renew(session.id, new Date(now).toISOString(), session.expiresAt);
     }

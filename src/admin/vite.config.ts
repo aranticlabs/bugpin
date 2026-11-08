@@ -63,6 +63,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:7301',
         changeOrigin: true,
+        xfwd: true,
       },
       '/branding': {
         target: 'http://localhost:7301',

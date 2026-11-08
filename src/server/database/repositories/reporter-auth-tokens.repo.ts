@@ -2,15 +2,14 @@ import { getDb } from '../database.js';
 import { generateId } from '../../utils/id.js';
 import type { ReporterAuthTokenSource } from '@shared/types';
 
-interface AuthTokenRow {
+interface ReporterAuthToken {
   id: string;
-  token_hash: string;
   email: string;
   source: ReporterAuthTokenSource;
-  report_id: string | null;
-  expires_at: string;
-  consumed_at: string | null;
-  revoked_at: string | null;
+  reportId: string | null;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
 }
 
 export const reporterAuthTokensRepo = {
@@ -37,10 +36,12 @@ export const reporterAuthTokensRepo = {
     );
   },
 
-  findByHash(hash: string): AuthTokenRow | null {
+  findByHash(hash: string): ReporterAuthToken | null {
     return getDb()
-      .query<AuthTokenRow, [string]>(
-        "SELECT * FROM reporter_auth_tokens WHERE token_hash = ? AND purpose = 'login'"
+      .query<ReporterAuthToken, [string]>(
+        `SELECT id, email, source, report_id AS reportId, expires_at AS expiresAt,
+         consumed_at AS consumedAt, revoked_at AS revokedAt FROM reporter_auth_tokens
+         WHERE token_hash = ? AND purpose = 'login'`
       )
       .get(hash);
   },
@@ -53,5 +54,19 @@ export const reporterAuthTokensRepo = {
         [now, id, now]
       ).changes === 1
     );
+  },
+
+  revokeByEmail(email: string, now: string): void {
+    getDb().run(
+      'UPDATE reporter_auth_tokens SET revoked_at = ? WHERE email = ? AND consumed_at IS NULL AND revoked_at IS NULL',
+      [now, email]
+    );
+  },
+
+  deleteOlderThan(cutoff: string): number {
+    return getDb().run(
+      'DELETE FROM reporter_auth_tokens WHERE julianday(expires_at) < julianday(?) OR julianday(consumed_at) < julianday(?)',
+      [cutoff, cutoff]
+    ).changes;
   },
 };

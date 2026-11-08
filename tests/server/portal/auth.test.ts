@@ -45,8 +45,12 @@ function count(table: 'reporters' | 'reporter_auth_tokens' | 'reporter_sessions'
 }
 
 it('returns identical neutral responses for unknown, known, suspended, and limited requests', async () => {
-  reportersRepo.resolve('known@example.com', new Date().toISOString());
-  const suspended = reportersRepo.resolve('suspended@example.com', new Date().toISOString());
+  reportersRepo.resolve('known@example.com', 'Known', new Date().toISOString());
+  const suspended = reportersRepo.resolve(
+    'suspended@example.com',
+    'Suspended',
+    new Date().toISOString()
+  );
   getDb().run('UPDATE reporters SET suspended_at = ? WHERE id = ?', [
     new Date().toISOString(),
     suspended.id,
@@ -108,21 +112,24 @@ it('shares the per-email allowance between requests and expired-link resends', a
   expect(sent).toHaveLength(1);
 });
 
-it('limits preview and exchange by IP without consuming the token', async () => {
+it('gives preview and exchange separate IP counters with the same configured maximum', async () => {
   await settingsRepo.updateAll({
     reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginExchangesPerIpPer15Min: 1 },
   });
   settingsCacheService.invalidate();
   const { secret } = mint();
   expect((await portalPost(app, '/auth/preview', { token: secret })).status).toBe(200);
-  const response = await portalPost(app, '/auth/exchange', { token: secret });
+  expect((await portalPost(app, '/auth/preview', { token: secret })).status).toBe(429);
+  expect((await portalPost(app, '/auth/exchange', { token: secret })).status).toBe(200);
+  const outstanding = mint('other@example.com');
+  const response = await portalPost(app, '/auth/exchange', { token: outstanding.secret });
   expect(response.status).toBe(429);
   expect(await response.json()).toEqual({
     success: false,
     error: 'RATE_LIMITED',
     message: 'Too many requests',
   });
-  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumed_at).toBeNull();
+  expect(reporterAuthTokensRepo.findByHash(hashToken(outstanding.secret))!.consumedAt).toBeNull();
 });
 
 it('resolves one account for normalized email and rejects a suspended account token', () => {
@@ -140,7 +147,17 @@ it('resolves one account for normalized email and rejects a suspended account to
     state: 'invalid',
   });
   expect(reporterAuthService.exchange(outstanding.secret).success).toBe(false);
-  expect(reporterAuthTokensRepo.findByHash(hashToken(outstanding.secret))!.consumed_at).toBeNull();
+  expect(reporterAuthTokensRepo.findByHash(hashToken(outstanding.secret))!.consumedAt).toBeNull();
+  expect(reporterAuthService.mintLoginToken('jane+tag@example.com', 'request')).toEqual({
+    success: false,
+    error: 'Reporter is suspended',
+    code: 'REPORTER_SUSPENDED',
+  });
+  expect(reporterAuthService.mintLoginToken('invalid', 'request')).toEqual({
+    success: false,
+    error: 'Invalid email address',
+    code: 'INVALID_EMAIL',
+  });
 });
 
 it('puts requested secrets only in link fragments and stores only their hashes', async () => {
@@ -153,7 +170,7 @@ it('puts requested secrets only in link fragments and stores only their hashes',
   expect(secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
   const token = reporterAuthTokensRepo.findByHash(hashToken(secret))!;
   expect(token.email).toBe('jane+tag@example.com');
-  expect(Date.parse(token.expires_at) - Date.now()).toBeWithin(899000, 900001);
+  expect(Date.parse(token.expiresAt) - Date.now()).toBeWithin(899000, 900001);
   expect(JSON.stringify(getDb().query('SELECT * FROM reporter_auth_tokens').all())).not.toContain(
     secret
   );
@@ -196,7 +213,12 @@ it('resends expired email links only to the stored email with a fresh requested 
   });
   expect(sent[0].to[0].email).toBe('jane@example.com');
   expect(count('reporter_auth_tokens')).toBe(2);
-  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumed_at).toBeNull();
+  const replacementSecret = new URL(sent[0].text!.split(' ')[5].split('\n')[0]).hash.slice(1);
+  const replacement = reporterAuthTokensRepo.findByHash(hashToken(replacementSecret))!;
+  expect(replacement.source).toBe('request');
+  expect(Date.parse(replacement.expiresAt) - Date.now()).toBeWithin(899000, 900001);
+  expect((await portalPost(app, '/auth/exchange', { token: replacementSecret })).status).toBe(200);
+  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumedAt).toBeNull();
   getDb().run('UPDATE reporter_auth_tokens SET revoked_at = ? WHERE token_hash = ?', [
     new Date().toISOString(),
     hashToken(secret),
@@ -241,7 +263,7 @@ it('rolls token consumption, reporter creation, attachment, and history back whe
   expect(() => reporterAuthService.exchange(secret)).toThrow('refused');
   expect(count('reporters')).toBe(0);
   expect(count('reporter_sessions')).toBe(0);
-  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumed_at).toBeNull();
+  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumedAt).toBeNull();
 });
 
 it('renews sessions only hourly and caps renewal at the absolute expiry', () => {

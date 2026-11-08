@@ -55,7 +55,7 @@ function usersApp(): Hono {
   return app;
 }
 
-function sendJson(
+async function sendJson(
   app: Hono,
   cookie: string,
   method: string,
@@ -65,7 +65,11 @@ function sendJson(
   return Promise.resolve(
     app.request(`http://localhost${url}`, {
       method,
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: {
+        cookie,
+        origin: new URL((await settingsRepo.getAll()).appUrl || 'http://localhost').origin,
+        'content-type': 'application/json',
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   );

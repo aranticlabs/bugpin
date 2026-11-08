@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { notificationPreferences } from '../../../src/server/routes/api/notification-preferences';
 import { notificationsService } from '../../../src/server/services/notifications.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type {
   NotificationDefaultSettings,
   NotificationPreferences as NotificationPreferencesType,
@@ -79,7 +81,10 @@ const originalNotificationsService = { ...notificationsService };
 
 let currentUser = baseUser;
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   currentUser = baseUser;
 
   authService.validateSession = async () =>
@@ -98,6 +103,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(notificationsService, originalNotificationsService);
 });
@@ -176,6 +182,7 @@ describe('notification-preferences routes', () => {
         method: 'PATCH',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -200,6 +207,7 @@ describe('notification-preferences routes', () => {
           method: 'PATCH',
           headers: {
             cookie: 'session=sess_1',
+            origin: 'http://localhost',
             'content-type': 'application/json',
           },
           body: JSON.stringify({
@@ -267,6 +275,7 @@ describe('notification-preferences routes', () => {
           method: 'PATCH',
           headers: {
             cookie: 'session=sess_1',
+            origin: 'http://localhost',
             'content-type': 'application/json',
           },
           body: JSON.stringify({
@@ -290,6 +299,7 @@ describe('notification-preferences routes', () => {
           method: 'PATCH',
           headers: {
             cookie: 'session=sess_1',
+            origin: 'http://localhost',
             'content-type': 'application/json',
           },
           body: JSON.stringify({
@@ -309,7 +319,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_1/defaults',
         {
           method: 'DELETE',
-          headers: { cookie: 'session=sess_1' },
+          headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         }
       );
 
@@ -326,7 +336,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_1/defaults',
         {
           method: 'DELETE',
-          headers: { cookie: 'session=sess_1' },
+          headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         }
       );
 
@@ -342,7 +352,7 @@ describe('notification-preferences routes', () => {
         'http://localhost/notification-preferences/projects/prj_missing/defaults',
         {
           method: 'DELETE',
-          headers: { cookie: 'session=sess_1' },
+          headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         }
       );
 
