@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
+import { isEEAvailable } from '../../src/server/utils/ee';
 
 test('inactive branding uses defaults and renewal restores saved customization across assets and emails', async () => {
   const child = Bun.spawn(
