@@ -153,7 +153,15 @@ export class MigrationRunner {
         .readdirSync(parent)
         .filter((name) => name.startsWith(prefix) && name.endsWith(`-${state}-first.bak`));
       if (previous.length > 0) {
-        verifyBackup(path.join(parent, previous[0]));
+        const retainedPath = path.join(parent, previous[0]);
+        try {
+          verifyBackup(retainedPath);
+        } catch (error) {
+          throw new Error(
+            `Retained pre-upgrade snapshot failed verification: ${retainedPath}. Preserve other recovery snapshots and restore or move this file before retrying.`,
+            { cause: error }
+          );
+        }
         // Keep the original recovery point while replacing snapshots from failed retries.
         for (const name of fs.readdirSync(parent)) {
           if (name.startsWith(prefix) && name.endsWith(`-${state}-retry.bak`)) {

@@ -202,6 +202,29 @@ describe('migration runner', () => {
     }
   });
 
+  it('identifies a corrupt retained first snapshot and preserves valid retry recovery points', () => {
+    writeMigration('001_test.sql', 'INVALID SQL;');
+    expect(() => runner.run()).toThrow();
+    const original = backups()[0];
+    expect(() => new MigrationRunner(db, sqlDirectory).run()).toThrow();
+    const retained = backups().sort();
+    const retry = retained.find((name) => name !== original)!;
+    const originalPath = path.join(directory, original);
+    fs.writeFileSync(originalPath, 'corrupt');
+    const restarted = new MigrationRunner(db, sqlDirectory);
+    expect(() => restarted.run()).toThrow(
+      `Retained pre-upgrade snapshot failed verification: ${originalPath}`
+    );
+    expect(backups().sort()).toEqual(retained);
+    const backup = new Database(path.join(directory, retry), { readonly: true });
+    try {
+      expect(backup.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+      expect(backup.query('SELECT value FROM existing').get()).toEqual({ value: 'before' });
+    } finally {
+      backup.close();
+    }
+  });
+
   it('cleans abandoned staging directories before checking available disk space', () => {
     writeMigration('001_test.sql', 'CREATE TABLE upgraded (id INTEGER);');
     const stale = path.join(directory, '.bugpin-upgrade-abandoned');
