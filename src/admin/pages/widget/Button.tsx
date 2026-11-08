@@ -1,10 +1,6 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
+import { useDraft, useSettings, useUpdateSettings } from '../../hooks/useSettings';
 import {
   SectionCard,
   SectionLoading,
@@ -13,16 +9,18 @@ import {
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
 import {
   LauncherPreviewCard,
+  useColorMode,
   SettingsWithPreview,
 } from '../../components/widget/WidgetSettingsLayout';
+import { changedFields } from '../../lib/changedFields';
+import type { ColorMode } from '../../components/ThemeColorPicker';
 import type {
-  AppSettings,
   LocaleCode,
   GlobalWidgetLauncherButtonSettings,
   WidgetLauncherButtonSettings,
 } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
-import { submitForm } from '../../lib/submitForm';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 
 const localizedStringWithEnSchema = z.object({
   en: z.string().trim().min(1, 'English value is required'),
@@ -78,7 +76,17 @@ const _typeCheckReverse: GlobalWidgetLauncherButtonSettings = {} as ButtonSettin
 void _typeCheck;
 void _typeCheckReverse;
 
-const DEFAULT_BUTTON_SETTINGS: ButtonSettingsFormValues = {
+type ColorKey =
+  | 'lightButtonColor'
+  | 'lightTextColor'
+  | 'lightButtonHoverColor'
+  | 'lightTextHoverColor'
+  | 'darkButtonColor'
+  | 'darkTextColor'
+  | 'darkButtonHoverColor'
+  | 'darkTextHoverColor';
+
+const DEFAULT_GENERAL_SETTINGS: Omit<ButtonSettingsFormValues, ColorKey> = {
   position: 'bottom-right',
   buttonText: null,
   buttonShape: 'round',
@@ -89,31 +97,28 @@ const DEFAULT_BUTTON_SETTINGS: ButtonSettingsFormValues = {
   buttonOffsetY: 20,
   buttonSizeUnit: 'px',
   theme: 'auto',
-  lightButtonColor: '#02658D',
-  lightTextColor: '#ffffff',
-  lightButtonHoverColor: '#024F6F',
-  lightTextHoverColor: '#ffffff',
-  darkButtonColor: '#02658D',
-  darkTextColor: '#ffffff',
-  darkButtonHoverColor: '#036F9B',
-  darkTextHoverColor: '#ffffff',
   enableHoverScaleEffect: true,
   tooltipEnabled: true,
   tooltipText: null,
 };
 
-export function Button() {
-  return <WidgetLauncherButtonSettingsSection />;
-}
+const DEFAULT_COLORS: Record<ColorMode, Partial<ButtonSettingsFormValues>> = {
+  light: {
+    lightButtonColor: '#02658D',
+    lightTextColor: '#ffffff',
+    lightButtonHoverColor: '#024F6F',
+    lightTextHoverColor: '#ffffff',
+  },
+  dark: {
+    darkButtonColor: '#02658D',
+    darkTextColor: '#ffffff',
+    darkButtonHoverColor: '#036F9B',
+    darkTextHoverColor: '#ffffff',
+  },
+};
 
-function WidgetLauncherButtonSettingsSection() {
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+export function Button() {
+  const { data: settings, isLoading } = useSettings();
 
   if (isLoading || !settings?.widgetLauncherButton) {
     return (
@@ -123,81 +128,89 @@ function WidgetLauncherButtonSettingsSection() {
     );
   }
 
-  return <ButtonSettingsForm initialValues={settings.widgetLauncherButton} />;
+  return <ButtonSettingsForm saved={settings.widgetLauncherButton} />;
 }
 
-function ButtonSettingsForm({ initialValues }: { initialValues: ButtonSettingsFormValues }) {
-  const queryClient = useQueryClient();
-  const {
-    handleSubmit,
-    watch,
-    setValue,
-    reset,
-    formState: { errors, isDirty },
-  } = useForm<ButtonSettingsFormValues>({
-    resolver: zodResolver(buttonSettingsSchema),
-    defaultValues: initialValues,
-    mode: 'onSubmit',
-  });
-
-  const watched = watch();
-
+function ButtonSettingsForm({ saved }: { saved: ButtonSettingsFormValues }) {
+  const draft = useDraft<ButtonSettingsFormValues>(saved);
+  const value = draft.value ?? saved;
+  const [showErrors, setShowErrors] = useState(false);
   const [previewLocale, setPreviewLocale] = useState<LocaleCode>('en');
-
-  const mutation = useMutation({
-    mutationFn: async (data: ButtonSettingsFormValues) => {
-      const response = await api.put('/settings', { widgetLauncherButton: data });
-      return response.data;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      reset(variables);
-      toast.success('Widget button settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
+  const [colorMode, setColorMode] = useColorMode();
+  const mutation = useUpdateSettings({
+    successMessage: 'Widget button settings saved successfully',
   });
 
-  const handleFormChange = (partial: WidgetLauncherButtonSettings) => {
-    for (const key of Object.keys(partial) as Array<keyof WidgetLauncherButtonSettings>) {
-      const next = partial[key];
-      if (next === undefined) continue;
-      setValue(key as keyof ButtonSettingsFormValues, next as never, {
-        shouldDirty: true,
-        shouldValidate: false,
-      });
-    }
+  const handleFormChange = (next: WidgetLauncherButtonSettings) => {
+    draft.patch(changedFields<ButtonSettingsFormValues>(next, value, { skipUndefined: true }));
   };
 
-  const handleReset = () => {
-    handleFormChange(DEFAULT_BUTTON_SETTINGS);
+  const save = async () => {
+    if (!buttonSettingsSchema.safeParse(value).success) {
+      setShowErrors(true);
+      return false;
+    }
+    await mutation.mutateAsync({ widgetLauncherButton: draft.changes });
+    draft.reset();
+    setShowErrors(false);
+    return true;
+  };
+
+  const discard = () => {
+    draft.reset();
+    setShowErrors(false);
   };
 
   const buttonTextError =
-    errors.buttonText?.message ??
-    (errors.buttonText as { en?: { message?: string } } | undefined)?.en?.message;
+    showErrors && value.buttonText && !value.buttonText.en.trim()
+      ? 'English value is required'
+      : undefined;
 
   return (
-    <SettingsWithPreview
-      preview={<LauncherPreviewCard launcher={watched} locale={previewLocale} />}
-    >
-      <SectionCard section="launcher" showHeader={false}>
-        <UnsavedChangesGuard
-          isDirty={isDirty}
-          onSave={() => submitForm(handleSubmit, (data) => mutation.mutateAsync(data))}
-          onDiscard={() => reset()}
-        />
-        <div className="space-y-6">
-          <WidgetLauncherButtonSettingsForm
-            value={watched}
-            onChange={handleFormChange}
-            buttonTextError={buttonTextError}
-            onPreviewLocaleChange={setPreviewLocale}
-          />
-          <ResetToDefaultButton onReset={handleReset} disabled={mutation.isPending} />
-        </div>
-      </SectionCard>
-    </SettingsWithPreview>
+    <Tabs defaultValue="general" className="space-y-6">
+      <UnsavedChangesGuard isDirty={draft.isDirty} onSave={save} onDiscard={discard} />
+      <TabsList>
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="colors">Colors</TabsTrigger>
+      </TabsList>
+      <SettingsWithPreview
+        preview={<LauncherPreviewCard launcher={value} locale={previewLocale} mode={colorMode} />}
+      >
+        <TabsContent value="general" forceMount className="mt-0">
+          <SectionCard section="launcher" showHeader={false}>
+            <div className="space-y-6">
+              <WidgetLauncherButtonSettingsForm
+                value={value}
+                onChange={handleFormChange}
+                buttonTextError={buttonTextError}
+                onPreviewLocaleChange={setPreviewLocale}
+              />
+              <ResetToDefaultButton
+                onReset={() => handleFormChange(DEFAULT_GENERAL_SETTINGS)}
+                disabled={mutation.isPending}
+              />
+            </div>
+          </SectionCard>
+        </TabsContent>
+        <TabsContent value="colors" forceMount className="mt-0">
+          <SectionCard section="launcherColors" showHeader={false}>
+            <div className="space-y-6">
+              <WidgetLauncherButtonSettingsForm
+                part="colors"
+                value={value}
+                onChange={handleFormChange}
+                colorMode={colorMode}
+                onColorModeChange={setColorMode}
+              />
+              <ResetToDefaultButton
+                label={colorMode === 'dark' ? 'Reset to Dark Default' : 'Reset to Light Default'}
+                onReset={() => handleFormChange(DEFAULT_COLORS[colorMode])}
+                disabled={mutation.isPending}
+              />
+            </div>
+          </SectionCard>
+        </TabsContent>
+      </SettingsWithPreview>
+    </Tabs>
   );
 }

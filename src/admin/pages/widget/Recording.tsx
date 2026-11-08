@@ -1,14 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
-import { api } from '../../api/client';
 import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import { RecordingSettingsForm } from '../../components/RecordingSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useDraft, useSettings, useUpdateSettings } from '../../hooks/useSettings';
+import { changedFields } from '../../lib/changedFields';
 
-const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
+const fromSettings = (stored: Partial<AppSettings['screenshot']> = {}): ScreenshotSettings => ({
   maxVideoUploadSizeMb: stored.maxVideoUploadSizeMb || 50,
   maxVideoUploadMbPerDay: stored.maxVideoUploadMbPerDay ?? 2048,
   enableScreenRecording: stored.enableScreenRecording ?? false,
@@ -18,76 +16,25 @@ const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => 
 });
 
 export function Recording() {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<ScreenshotSettings>({
-    maxVideoUploadSizeMb: 50,
-    maxVideoUploadMbPerDay: 2048,
-    enableScreenRecording: false,
-    allowRecordingMicrophone: false,
-    maxRecordingDurationSeconds: 180,
-    recordingQuality: DEFAULT_RECORDING_QUALITY,
+  const { data: settings, isLoading } = useSettings();
+  const draft = useDraft<ScreenshotSettings>(settings && fromSettings(settings.screenshot));
+  const mutation = useUpdateSettings({
+    successMessage: 'Recording settings saved successfully',
   });
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
-
-  useEffect(() => {
-    if (settings) setFormData(fromSettings(settings.screenshot));
-  }, [settings]);
-
-  const isDirty =
-    !!settings && JSON.stringify(formData) !== JSON.stringify(fromSettings(settings.screenshot));
-
-  const mutation = useMutation({
-    mutationFn: async (data: Partial<AppSettings>) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Recording settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
-
-  const handleChange = (next: ScreenshotSettings) => {
-    const enabledChanged = !!next.enableScreenRecording !== !!formData.enableScreenRecording;
-    setFormData(next);
-    // The on/off switch saves by itself: while recording is off the form is locked, so it could
-    // not be saved afterwards.
-    if (enabledChanged && settings) {
-      const enabled = !!next.enableScreenRecording;
-      mutation.mutate({
-        screenshot: {
-          ...settings.screenshot,
-          enableScreenRecording: enabled,
-          ...(enabled ? {} : { allowRecordingMicrophone: false }),
-        },
-      });
+  // Recording and screenshot settings share one stored object, so only the changed recording
+  // fields are sent and the server merges them into it.
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({ screenshot: draft.changes });
+      draft.reset();
+      return true;
+    } catch {
+      return false;
     }
   };
 
-  const buildPayload = (current: AppSettings): Partial<AppSettings> => ({
-    // Recording and screenshot settings share one stored object that is replaced on save.
-    screenshot: {
-      ...current.screenshot,
-      maxVideoUploadSizeMb: formData.maxVideoUploadSizeMb || 50,
-      maxVideoUploadMbPerDay: formData.maxVideoUploadMbPerDay ?? 2048,
-      enableScreenRecording: formData.enableScreenRecording ?? false,
-      allowRecordingMicrophone: formData.allowRecordingMicrophone ?? false,
-      maxRecordingDurationSeconds: formData.maxRecordingDurationSeconds ?? 180,
-      recordingQuality: formData.recordingQuality ?? DEFAULT_RECORDING_QUALITY,
-    },
-  });
-
-  if (isLoading) {
+  if (isLoading || !draft.value) {
     return (
       <SectionCard section="recording">
         <SectionLoading />
@@ -95,20 +42,34 @@ export function Recording() {
     );
   }
 
+  const value = draft.value;
+
+  const handleChange = (next: ScreenshotSettings) => {
+    const changes = changedFields(next, value);
+    draft.patch(changes);
+    // The on/off switch saves by itself: while recording is off the form is locked, so it could
+    // not be saved afterwards. Only the switch is sent, other unsaved edits stay in the draft.
+    if (changes.enableScreenRecording !== undefined) {
+      const enabled = changes.enableScreenRecording;
+      mutation.mutate({
+        screenshot: {
+          enableScreenRecording: enabled,
+          ...(enabled ? {} : { allowRecordingMicrophone: false }),
+        },
+      });
+    }
+  };
+
   return (
     <SectionCard section="recording">
       <UnsavedChangesGuard
-        isDirty={isDirty && !!formData.enableScreenRecording}
-        onSave={() =>
-          settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
-        }
-        onDiscard={() => {
-          if (settings) setFormData(fromSettings(settings.screenshot));
-        }}
+        isDirty={draft.isDirty && !!value.enableScreenRecording}
+        onSave={save}
+        onDiscard={draft.reset}
       />
       <div className="space-y-6">
         <RecordingSettingsForm
-          value={formData}
+          value={value}
           onChange={handleChange}
           disabled={mutation.isPending}
         />

@@ -18,12 +18,22 @@ vi.mock('../../../components/WidgetDialogSettingsForm', async (importOriginal) =
   ...(await importOriginal<typeof import('../../../components/WidgetDialogSettingsForm')>()),
   WidgetDialogSettingsForm: ({
     onChange,
+    colorMode,
+    onColorModeChange,
   }: {
     onChange: (value: Record<string, string>) => void;
+    colorMode?: 'light' | 'dark';
+    onColorModeChange?: (mode: 'light' | 'dark') => void;
   }) => (
-    <button type="button" onClick={() => onChange({ lightButtonColor: '#123456' })}>
-      Change Widget Colors
-    </button>
+    <>
+      <button type="button" onClick={() => onChange({ lightButtonColor: '#123456' })}>
+        Change Widget Colors
+      </button>
+      <button type="button" onClick={() => onColorModeChange?.('light')}>
+        Edit light colors
+      </button>
+      <p>Editing {colorMode} colors</p>
+    </>
   ),
 }));
 
@@ -33,22 +43,27 @@ vi.mock('../../../components/WidgetLauncherButtonSettingsForm', async (importOri
   >()),
   WidgetLauncherButtonSettingsForm: ({
     onChange,
+    part,
   }: {
     onChange: (value: Record<string, unknown>) => void;
-  }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onChange({
-          buttonText: { en: 'Report issue' },
-          tooltipEnabled: true,
-          tooltipText: { en: 'Need help?' },
-        })
-      }
-    >
-      Change Widget Button
-    </button>
-  ),
+    part?: 'general' | 'colors';
+  }) =>
+    part === 'colors' ? (
+      <p>Launcher colors</p>
+    ) : (
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            buttonText: { en: 'Report issue' },
+            tooltipEnabled: true,
+            tooltipText: { en: 'Need help?' },
+          })
+        }
+      >
+        Change Widget Button
+      </button>
+    ),
 }));
 
 vi.mock('sonner', () => ({
@@ -76,6 +91,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  localStorage.removeItem('bugpin-theme');
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -97,16 +113,70 @@ describe('Widget settings pages', () => {
     await waitFor(() => {
       expect(brandingApiMocks.updateWidgetPrimaryColors).toHaveBeenCalled();
       const [colors] = brandingApiMocks.updateWidgetPrimaryColors.mock.calls[0] ?? [];
-      expect(colors).toEqual(expect.objectContaining({ lightButtonColor: '#123456' }));
+      expect(colors).toEqual({ lightButtonColor: '#123456' });
       expect(toast.success).toHaveBeenCalled();
     });
 
     // Reset to default should only load defaults into form, not save
     brandingApiMocks.updateWidgetPrimaryColors.mockClear();
-    await user.click(screen.getByRole('button', { name: /reset to default/i }));
+    await user.click(screen.getByRole('button', { name: 'Reset to Light Default' }));
 
     // Verify it did NOT trigger a save
     expect(brandingApiMocks.updateWidgetPrimaryColors).not.toHaveBeenCalled();
+  });
+
+  it('resets only the dialog colors of the mode being edited', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('bugpin-theme', 'dark');
+
+    renderWithQueryAndRouter(<Dialog />);
+
+    await user.click(await screen.findByRole('button', { name: /change widget colors/i }));
+    await user.click(screen.getByRole('button', { name: 'Reset to Dark Default' }));
+    expect(brandingApiMocks.updateWidgetPrimaryColors).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      const [colors] = brandingApiMocks.updateWidgetPrimaryColors.mock.calls[0] ?? [];
+      expect(colors).toEqual(
+        expect.objectContaining({
+          lightButtonColor: '#123456',
+          darkButtonColor: '#02658D',
+          darkTextColor: '#ffffff',
+        })
+      );
+      expect(colors).not.toHaveProperty('lightTextColor');
+    });
+    localStorage.removeItem('bugpin-theme');
+  });
+
+  it('saves custom dialog texts and the priority switch from the General tab', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQueryAndRouter(<Dialog />);
+
+    await user.click(await screen.findByRole('switch', { name: 'Use custom Dialog Title' }));
+    const titleInput = screen.getAllByRole('textbox')[0];
+    expect(titleInput).toHaveValue('Report a Bug');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Send Feedback');
+    await user.click(screen.getByRole('switch', { name: 'Show Priority' }));
+
+    const preview = screen.getByLabelText('Dialog preview');
+    expect(within(preview).getByText('Send Feedback')).toBeInTheDocument();
+    expect(within(preview).queryByRole('combobox', { name: 'Priority' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        widgetDialogContent: {
+          title: expect.objectContaining({ en: 'Send Feedback', de: 'Bug melden' }),
+          showPriority: false,
+        },
+      });
+    });
   });
 
   it('saves and resets widget launcher button settings', async () => {
@@ -119,16 +189,13 @@ describe('Widget settings pages', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith(
-        '/settings',
-        expect.objectContaining({
-          widgetLauncherButton: expect.objectContaining({
-            buttonText: expect.objectContaining({ en: 'Report issue' }),
-            tooltipEnabled: true,
-            tooltipText: expect.objectContaining({ en: 'Need help?' }),
-          }),
-        })
-      );
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        widgetLauncherButton: {
+          buttonText: { en: 'Report issue' },
+          tooltipEnabled: true,
+          tooltipText: { en: 'Need help?' },
+        },
+      });
       expect(toast.success).toHaveBeenCalled();
     });
 
@@ -138,6 +205,35 @@ describe('Widget settings pages', () => {
 
     // Verify it did NOT trigger a save
     expect(putSpy).not.toHaveBeenCalled();
+  });
+
+  it('sends only the launcher fields that a reset changed', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQueryAndRouter(<Button />);
+
+    await screen.findByRole('button', { name: /change widget button/i });
+    await user.click(screen.getByRole('button', { name: /reset to default/i }));
+    expect(putSpy).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() =>
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        widgetLauncherButton: { buttonIcon: 'bug', tooltipEnabled: true },
+      })
+    );
+  });
+
+  it('splits the launcher button into General and Colors tabs', async () => {
+    renderWithQueryAndRouter(<Button />);
+
+    await screen.findByRole('button', { name: /change widget button/i });
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['General', 'Colors']);
+    expect(screen.getByText('Launcher colors')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /reset to (light|dark) default/i })
+    ).toBeInTheDocument();
   });
 
   it('previews unsaved dialog colors next to the dialog settings', async () => {
@@ -166,41 +262,34 @@ describe('Widget settings pages', () => {
     expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
   });
 
-  it('opens the preview in the console theme and still allows switching', async () => {
+  it('opens the colors and preview in the console theme and switches them together', async () => {
     const user = userEvent.setup();
     localStorage.setItem('bugpin-theme', 'dark');
 
     renderWithQueryAndRouter(<Dialog />);
 
     await screen.findByRole('button', { name: /change widget colors/i });
-    expect(screen.getByRole('tab', { name: 'Dark' })).toHaveAttribute('data-state', 'active');
+    expect(screen.getByText('Editing dark colors')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Dark' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Dialog preview').style.getPropertyValue('--wp-background')).toBe(
       '#0a0a0a'
     );
 
-    await user.click(screen.getByRole('tab', { name: 'Light' }));
-    expect(screen.getByRole('tab', { name: 'Light' })).toHaveAttribute('data-state', 'active');
+    await user.click(screen.getByRole('button', { name: 'Edit light colors' }));
+    expect(screen.getByText('Editing light colors')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dialog preview').style.getPropertyValue('--wp-background')).toBe(
+      '#ffffff'
+    );
     localStorage.removeItem('bugpin-theme');
   });
 
-  it('shows the dialog colors first and lets the preview below collapse', async () => {
-    const user = userEvent.setup();
-    const { unmount, queryClient } = renderWithQueryAndRouter(<Dialog />);
+  it('shows the dialog colors first and the preview without a collapse toggle', async () => {
+    renderWithQueryAndRouter(<Dialog />);
 
     const colors = await screen.findByRole('button', { name: /change widget colors/i });
-    const previewToggle = screen.getByRole('button', { name: /live preview/i });
-    expect(
-      colors.compareDocumentPosition(previewToggle) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(screen.getByLabelText('Dialog preview')).toBeInTheDocument();
-
-    await user.click(previewToggle);
-    expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Dark' })).not.toBeInTheDocument();
-
-    unmount();
-    renderWithQueryAndRouter(<Dialog />, { queryClient });
-    await screen.findByRole('button', { name: /change widget colors/i });
-    expect(screen.queryByLabelText('Dialog preview')).not.toBeInTheDocument();
+    const preview = screen.getByLabelText('Dialog preview');
+    expect(colors.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Live Preview')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /live preview/i })).not.toBeInTheDocument();
   });
 });

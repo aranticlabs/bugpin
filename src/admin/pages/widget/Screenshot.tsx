@@ -1,66 +1,36 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
 import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import { ScreenshotSettingsForm } from '../../components/ScreenshotSettingsForm';
 import type { AppSettings, ScreenshotSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useDraft, useSettings, useUpdateSettings } from '../../hooks/useSettings';
+import { changedFields } from '../../lib/changedFields';
 
-const fromSettings = (stored: AppSettings['screenshot']): ScreenshotSettings => ({
+const fromSettings = (stored: Partial<AppSettings['screenshot']> = {}): ScreenshotSettings => ({
   maxScreenshotSize: stored.maxScreenshotSize || 10,
   maxImageUploadSizeMb: stored.maxImageUploadSizeMb || 10,
   useScreenCaptureAPI: stored.useScreenCaptureAPI || false,
 });
 
 export function Screenshot() {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<ScreenshotSettings>({
-    maxScreenshotSize: 10,
-    maxImageUploadSizeMb: 10,
-    useScreenCaptureAPI: false,
+  const { data: settings, isLoading } = useSettings();
+  const draft = useDraft<ScreenshotSettings>(settings && fromSettings(settings.screenshot));
+  const mutation = useUpdateSettings({
+    successMessage: 'Screenshot settings saved successfully',
   });
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+  // Screenshot and recording settings share one stored object, so only the changed screenshot
+  // fields are sent and the server merges them into it.
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({ screenshot: draft.changes });
+      draft.reset();
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-  useEffect(() => {
-    if (settings) setFormData(fromSettings(settings.screenshot));
-  }, [settings]);
-
-  const isDirty =
-    !!settings && JSON.stringify(formData) !== JSON.stringify(fromSettings(settings.screenshot));
-
-  const mutation = useMutation({
-    mutationFn: async (data: Partial<AppSettings>) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Screenshot settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
-
-  const buildPayload = (current: AppSettings): Partial<AppSettings> => ({
-    // Screenshot and recording settings share one stored object that is replaced on save.
-    screenshot: {
-      ...current.screenshot,
-      maxScreenshotSize: formData.maxScreenshotSize || 10,
-      maxImageUploadSizeMb: formData.maxImageUploadSizeMb || 10,
-      useScreenCaptureAPI: formData.useScreenCaptureAPI || false,
-    },
-  });
-
-  if (isLoading) {
+  if (isLoading || !draft.value) {
     return (
       <SectionCard section="screenshot">
         <SectionLoading />
@@ -68,21 +38,15 @@ export function Screenshot() {
     );
   }
 
+  const value = draft.value;
+
   return (
     <SectionCard section="screenshot">
-      <UnsavedChangesGuard
-        isDirty={isDirty}
-        onSave={() =>
-          settings ? mutation.mutateAsync(buildPayload(settings)) : Promise.resolve(false)
-        }
-        onDiscard={() => {
-          if (settings) setFormData(fromSettings(settings.screenshot));
-        }}
-      />
+      <UnsavedChangesGuard isDirty={draft.isDirty} onSave={save} onDiscard={draft.reset} />
       <div className="space-y-6">
         <ScreenshotSettingsForm
-          value={formData}
-          onChange={setFormData}
+          value={value}
+          onChange={(next) => draft.patch(changedFields(next, value))}
           disabled={mutation.isPending}
         />
       </div>

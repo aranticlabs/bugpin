@@ -53,7 +53,7 @@ export function LocalizedTextEditor({
   englishRequired = true,
   error,
 }: LocalizedTextEditorProps) {
-  const fieldId = useId();
+  const inputId = useId();
   const switchId = useId();
   const customMode = isCustom(value);
   const [activeLocale, setActiveLocale] = usePreference('editorLocale', 'en', {
@@ -69,7 +69,15 @@ export function LocalizedTextEditor({
 
   const handleToggleCustom = (next: boolean) => {
     if (next) {
-      if (!value || typeof value !== 'object') onChange({ en: '' });
+      // Start from the text currently shown so turning custom on changes nothing until edited.
+      if (!value || typeof value !== 'object') {
+        const current: Record<string, string> = {};
+        for (const code of SUPPORTED_LOCALES) {
+          const text = builtInPreview?.[code];
+          if (text) current[code] = text;
+        }
+        onChange({ ...current, en: builtInPreview?.en ?? '' } as LocalizedString);
+      }
       return;
     }
     // Off: project layer inherits (undefined), global layer falls back to built-in (null).
@@ -93,7 +101,7 @@ export function LocalizedTextEditor({
 
   const isEn = activeLocale === 'en';
   const inheritedForLocale = builtInPreview?.[activeLocale] ?? '';
-  const noTextLabel = '(no text — icon only)';
+  const noTextLabel = '(no text, icon only)';
   const enValue = customValue.en ?? '';
 
   const displayValue = customMode ? (customValue[activeLocale] ?? '') : inheritedForLocale;
@@ -112,17 +120,23 @@ export function LocalizedTextEditor({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <Label className="text-sm font-normal">{label}</Label>
+          <Label htmlFor={inputId} className="text-sm font-normal">
+            {label}
+          </Label>
           {helpText ? <p className="text-xs text-muted-foreground">{helpText}</p> : null}
         </div>
-        <Switch
-          id={switchId}
-          checked={customMode}
-          onCheckedChange={handleToggleCustom}
-          disabled={disabled}
-          aria-label={switchAriaLabel}
-          className="mt-1 flex-shrink-0"
-        />
+        <div className="mt-1 flex flex-shrink-0 items-center gap-2">
+          <Label htmlFor={switchId} className="text-xs font-normal text-muted-foreground">
+            Custom
+          </Label>
+          <Switch
+            id={switchId}
+            checked={customMode}
+            onCheckedChange={handleToggleCustom}
+            disabled={disabled}
+            aria-label={switchAriaLabel}
+          />
+        </div>
       </div>
 
       <div className="flex items-start gap-2">
@@ -161,7 +175,7 @@ export function LocalizedTextEditor({
         </Select>
         <div className="flex-1 space-y-1">
           <Input
-            id={`${fieldId}-${activeLocale}`}
+            id={inputId}
             value={displayValue}
             placeholder={placeholder}
             disabled={disabled || !customMode}

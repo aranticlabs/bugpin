@@ -1,29 +1,16 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
 import { LanguageSettingsForm } from '../../components/LanguageSettingsForm';
 import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
-import type { AppSettings, ProjectLanguageSettings } from '@shared/types';
+import type { ProjectLanguageSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
 
 export function Language() {
-  const {
-    data: settings,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+  const { data: settings, isLoading, isFetching, refetch } = useSettings();
 
   if (isLoading) {
     return (
@@ -68,29 +55,25 @@ export function Language() {
 // its first render. Changing its value programmatically after mount (e.g. syncing state in a
 // useEffect) makes its hidden native <select> emit onValueChange('') and clears the selection.
 function LanguageForm({ savedLanguage }: { savedLanguage: ProjectLanguageSettings }) {
-  const queryClient = useQueryClient();
   const [language, setLanguage] = useState<ProjectLanguageSettings>(savedLanguage);
   const isDirty = JSON.stringify(language) !== JSON.stringify(savedLanguage);
+  const mutation = useUpdateSettings({ successMessage: 'Language settings saved successfully' });
 
-  const mutation = useMutation({
-    mutationFn: async (data: Partial<AppSettings>) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Language settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
+  // The stored language settings are replaced as a whole, so the save sends both fields.
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({ language });
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   return (
     <SectionCard section="language" showHeader={false}>
       <UnsavedChangesGuard
         isDirty={isDirty}
-        onSave={() => mutation.mutateAsync({ language })}
+        onSave={save}
         onDiscard={() => setLanguage(savedLanguage)}
       />
       <div className="space-y-6">

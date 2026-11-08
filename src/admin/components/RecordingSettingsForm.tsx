@@ -9,7 +9,7 @@ import {
 import { cn } from '../lib/utils';
 import { Alert, AlertDescription } from './ui/alert';
 import { Switch } from './ui/switch';
-import { SettingRow, SettingRowPair, SettingRows } from './ui/setting-row';
+import { SettingRow, SettingRows } from './ui/setting-row';
 import { SettingsNumberInput } from './SettingsNumberInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
@@ -117,74 +117,68 @@ export function RecordingSettingsForm({
           </Select>
         </SettingRow>
 
-        <SettingRowPair>
-          <SettingRow
-            label="Max. Recording Duration (seconds)"
-            htmlFor="max-recording-duration"
-            description="Recording stops after 10 to 600 seconds."
-            className={cn(dimmed)}
-            controlClassName="@sm:w-28"
-          >
-            <SettingsNumberInput
-              id="max-recording-duration"
-              min={10}
-              max={600}
-              value={effective.maxRecordingDurationSeconds}
-              onChange={(seconds) => onChange({ ...value, maxRecordingDurationSeconds: seconds })}
-              disabled={fieldsDisabled}
-            />
-          </SettingRow>
-          <SettingRow
-            label="Allow Microphone Recording"
-            htmlFor="allow-recording-microphone"
-            description="Reporters still choose for each recording."
-            className={cn(dimmed)}
-          >
-            <Switch
-              id="allow-recording-microphone"
-              checked={effective.allowRecordingMicrophone}
-              onCheckedChange={(checked) =>
-                onChange({ ...value, allowRecordingMicrophone: checked })
-              }
-              disabled={fieldsDisabled}
-            />
-          </SettingRow>
-        </SettingRowPair>
+        <SettingRow
+          label="Maximum Recording Duration"
+          htmlFor="max-recording-duration"
+          description="Recordings stop after this many seconds. Between 10 and 600 seconds."
+          className={cn(dimmed)}
+          controlClassName="@sm:w-28"
+        >
+          <SettingsNumberInput
+            id="max-recording-duration"
+            min={10}
+            max={600}
+            value={effective.maxRecordingDurationSeconds}
+            onChange={(seconds) => onChange({ ...value, maxRecordingDurationSeconds: seconds })}
+            disabled={fieldsDisabled}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Allow Microphone Recording"
+          htmlFor="allow-recording-microphone"
+          description="Reporters still choose for each recording."
+          className={cn(dimmed)}
+        >
+          <Switch
+            id="allow-recording-microphone"
+            checked={effective.allowRecordingMicrophone}
+            onCheckedChange={(checked) => onChange({ ...value, allowRecordingMicrophone: checked })}
+            disabled={fieldsDisabled}
+          />
+        </SettingRow>
 
-        <SettingRowPair>
-          <SettingRow
-            label="Max. Video Upload Size (MB)"
-            htmlFor="max-video-upload-size"
-            description="1 to 100 MB per video."
-            className={cn(dimmed)}
-            controlClassName="@sm:w-28"
-          >
-            <SettingsNumberInput
-              id="max-video-upload-size"
-              min={1}
-              max={100}
-              value={effective.maxVideoUploadSizeMb}
-              onChange={(sizeMb) => onChange({ ...value, maxVideoUploadSizeMb: sizeMb })}
-              disabled={fieldsDisabled}
-            />
-          </SettingRow>
-          <SettingRow
-            label="Daily Video Upload Limit (MB)"
-            htmlFor="max-video-upload-per-day"
-            description="Per project in 24 hours. 0 disables the limit."
-            className={cn(dimmed)}
-            controlClassName="@sm:w-28"
-          >
-            <SettingsNumberInput
-              id="max-video-upload-per-day"
-              min={0}
-              max={1048576}
-              value={effective.maxVideoUploadMbPerDay}
-              onChange={(limitMb) => onChange({ ...value, maxVideoUploadMbPerDay: limitMb })}
-              disabled={fieldsDisabled}
-            />
-          </SettingRow>
-        </SettingRowPair>
+        <SettingRow
+          label="Maximum Video Upload Size"
+          htmlFor="max-video-upload-size"
+          description="Per video. Between 1 and 100 MB."
+          className={cn(dimmed)}
+          controlClassName="@sm:w-28"
+        >
+          <SettingsNumberInput
+            id="max-video-upload-size"
+            min={1}
+            max={100}
+            value={effective.maxVideoUploadSizeMb}
+            onChange={(sizeMb) => onChange({ ...value, maxVideoUploadSizeMb: sizeMb })}
+            disabled={fieldsDisabled}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Daily Video Upload Limit"
+          htmlFor="max-video-upload-per-day"
+          description="MB per project in 24 hours. 0 disables the limit."
+          className={cn(dimmed)}
+          controlClassName="@sm:w-28"
+        >
+          <SettingsNumberInput
+            id="max-video-upload-per-day"
+            min={0}
+            max={1048576}
+            value={effective.maxVideoUploadMbPerDay}
+            onChange={(limitMb) => onChange({ ...value, maxVideoUploadMbPerDay: limitMb })}
+            disabled={fieldsDisabled}
+          />
+        </SettingRow>
       </SettingRows>
 
       {effective.enableScreenRecording && estimatedSizeMb > effective.maxVideoUploadSizeMb && (

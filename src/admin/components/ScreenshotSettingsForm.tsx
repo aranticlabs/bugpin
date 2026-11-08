@@ -1,7 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import { SettingsNumberInput } from './SettingsNumberInput';
 import { Switch } from './ui/switch';
-import { SettingRow, SettingRowPair, SettingRows } from './ui/setting-row';
+import { SettingRow, SettingRows } from './ui/setting-row';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
 interface ScreenshotSettingsFormProps {
@@ -37,38 +37,36 @@ export function ScreenshotSettingsForm({
 
   return (
     <SettingRows>
-      <SettingRowPair>
-        <SettingRow
-          label="Max. Screenshot Size (MB)"
-          htmlFor="max-screenshot-size"
-          description="1 to 50 MB per captured screenshot."
-          controlClassName="@sm:w-28"
-        >
-          <SettingsNumberInput
-            id="max-screenshot-size"
-            min={1}
-            max={50}
-            value={effective.maxScreenshotSize}
-            onChange={(sizeMb) => onChange({ ...value, maxScreenshotSize: sizeMb })}
-            disabled={disabled}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Max. Image Upload Size (MB)"
-          htmlFor="max-image-upload-size"
-          description="1 to 50 MB per uploaded image."
-          controlClassName="@sm:w-28"
-        >
-          <SettingsNumberInput
-            id="max-image-upload-size"
-            min={1}
-            max={50}
-            value={effective.maxImageUploadSizeMb}
-            onChange={(sizeMb) => onChange({ ...value, maxImageUploadSizeMb: sizeMb })}
-            disabled={disabled}
-          />
-        </SettingRow>
-      </SettingRowPair>
+      <SettingRow
+        label="Maximum Screenshot Size"
+        htmlFor="max-screenshot-size"
+        description="Per captured screenshot. Between 1 and 50 MB."
+        controlClassName="@sm:w-28"
+      >
+        <SettingsNumberInput
+          id="max-screenshot-size"
+          min={1}
+          max={50}
+          value={effective.maxScreenshotSize}
+          onChange={(sizeMb) => onChange({ ...value, maxScreenshotSize: sizeMb })}
+          disabled={disabled}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Maximum Image Upload Size"
+        htmlFor="max-image-upload-size"
+        description="Per uploaded image. Between 1 and 50 MB."
+        controlClassName="@sm:w-28"
+      >
+        <SettingsNumberInput
+          id="max-image-upload-size"
+          min={1}
+          max={50}
+          value={effective.maxImageUploadSizeMb}
+          onChange={(sizeMb) => onChange({ ...value, maxImageUploadSizeMb: sizeMb })}
+          disabled={disabled}
+        />
+      </SettingRow>
       <SettingRow
         label="Use Screen Capture API"
         htmlFor="use-screen-capture-api"

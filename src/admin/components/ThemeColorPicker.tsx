@@ -1,10 +1,17 @@
 import { useState } from 'react';
-import { cn } from '../lib/utils';
-import { Label } from './ui/label';
+import { Moon, Sparkles, Sun } from 'lucide-react';
 import { Button } from './ui/button';
 import { ColorPicker } from './ui/color-picker';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import type { ThemeColors } from '@shared/types';
+
+export type ColorMode = 'light' | 'dark';
+type Mode = ColorMode;
+type ColorKey = keyof ThemeColors;
+type ColorField = { key: ColorKey; fallback?: string };
+type ColorRow = { label: string; hint?: string; base: ColorField; hover?: ColorField };
+type ColorGroup = { title?: string; rows: ColorRow[] };
 
 interface ThemeColorPickerProps {
   value: ThemeColors;
@@ -16,19 +23,28 @@ interface ThemeColorPickerProps {
   textColorLabel?: string;
   showGenerateButton?: boolean;
   showSurfaceColors?: boolean;
+  mode?: ColorMode;
+  onModeChange?: (mode: ColorMode) => void;
 }
 
 // Utility function to generate dark mode colors from light mode colors
-function generateDarkModeColors(lightColors: {
-  buttonColor: string;
-  textColor: string;
-  buttonHoverColor: string;
-  textHoverColor: string;
-  backgroundColor?: string;
-  secondaryColor?: string;
-  inputColor?: string;
-  foregroundColor?: string;
-}) {
+const INVERTED_DIALOG_COLORS = [
+  ['lightBackgroundColor', 'darkBackgroundColor'],
+  ['lightSecondaryColor', 'darkSecondaryColor'],
+  ['lightInputColor', 'darkInputColor'],
+  ['lightForegroundColor', 'darkForegroundColor'],
+  ['lightSecondaryButtonColor', 'darkSecondaryButtonColor'],
+  ['lightSecondaryButtonTextColor', 'darkSecondaryButtonTextColor'],
+  ['lightSecondaryButtonHoverColor', 'darkSecondaryButtonHoverColor'],
+  ['lightSecondaryButtonTextHoverColor', 'darkSecondaryButtonTextHoverColor'],
+  ['lightTabBarColor', 'darkTabBarColor'],
+  ['lightActiveTabColor', 'darkActiveTabColor'],
+  ['lightActiveTabTextColor', 'darkActiveTabTextColor'],
+  ['lightTabTextColor', 'darkTabTextColor'],
+  ['lightTabTextHoverColor', 'darkTabTextHoverColor'],
+] as const satisfies ReadonlyArray<readonly [keyof ThemeColors, keyof ThemeColors]>;
+
+function generateDarkModeColors(lightColors: ThemeColors) {
   // Helper to parse hex color to RGB
   const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -66,24 +82,15 @@ function generateDarkModeColors(lightColors: {
   };
 
   const result: Partial<ThemeColors> = {
-    darkButtonColor: adjustColor(lightColors.buttonColor, 80),
-    darkTextColor: adjustColor(lightColors.textColor, -200),
-    darkButtonHoverColor: adjustColor(lightColors.buttonHoverColor, 100),
-    darkTextHoverColor: adjustColor(lightColors.textHoverColor, -200),
+    darkButtonColor: adjustColor(lightColors.lightButtonColor, 80),
+    darkTextColor: adjustColor(lightColors.lightTextColor, -200),
+    darkButtonHoverColor: adjustColor(lightColors.lightButtonHoverColor, 100),
+    darkTextHoverColor: adjustColor(lightColors.lightTextHoverColor, -200),
   };
 
-  // Generate surface colors if light mode values are provided
-  if (lightColors.backgroundColor) {
-    result.darkBackgroundColor = invertColor(lightColors.backgroundColor);
-  }
-  if (lightColors.secondaryColor) {
-    result.darkSecondaryColor = invertColor(lightColors.secondaryColor);
-  }
-  if (lightColors.inputColor) {
-    result.darkInputColor = invertColor(lightColors.inputColor);
-  }
-  if (lightColors.foregroundColor) {
-    result.darkForegroundColor = invertColor(lightColors.foregroundColor);
+  for (const [lightKey, darkKey] of INVERTED_DIALOG_COLORS) {
+    const lightValue = lightColors[lightKey];
+    if (lightValue) result[darkKey] = invertColor(lightValue);
   }
 
   return result;
@@ -93,98 +100,191 @@ export function ThemeColorPicker({
   value,
   onChange,
   disabled = false,
-  lightModeTitle = 'Light Mode Colors',
-  darkModeTitle = 'Dark Mode Colors',
+  lightModeTitle = 'Light',
+  darkModeTitle = 'Dark',
   buttonColorLabel = 'Primary Color',
   textColorLabel = 'Button Text Color',
   showGenerateButton = true,
   showSurfaceColors = false,
+  mode,
+  onModeChange,
 }: ThemeColorPickerProps) {
-  const [activeMode, setActiveMode] = useState<'light' | 'dark'>('light');
-
-  const handleGenerateDarkColors = () => {
-    const generated = generateDarkModeColors({
-      buttonColor: value.lightButtonColor,
-      textColor: value.lightTextColor,
-      buttonHoverColor: value.lightButtonHoverColor,
-      textHoverColor: value.lightTextHoverColor,
-      backgroundColor: value.lightBackgroundColor,
-      secondaryColor: value.lightSecondaryColor,
-      inputColor: value.lightInputColor,
-      foregroundColor: value.lightForegroundColor,
-    });
-    onChange(generated);
+  const [localMode, setLocalMode] = useState<Mode>('light');
+  const activeMode = mode ?? localMode;
+  const setActiveMode = (next: Mode) => {
+    setLocalMode(next);
+    onModeChange?.(next);
   };
 
-  type ColorKey = keyof ThemeColors;
-  const field = (key: ColorKey, label: string, fallback?: string) => ({ key, label, fallback });
+  const handleGenerateDarkColors = () => {
+    onChange(generateDarkModeColors(value));
+  };
 
-  // Ordered row by row so each hover color sits under its base color.
-  const fieldsFor = (mode: 'light' | 'dark') => {
-    const light = mode === 'light';
-    const button = field(light ? 'lightButtonColor' : 'darkButtonColor', buttonColorLabel);
-    const text = field(light ? 'lightTextColor' : 'darkTextColor', textColorLabel);
-    const buttonHover = field(
-      light ? 'lightButtonHoverColor' : 'darkButtonHoverColor',
-      `${buttonColorLabel} (Hover)`
-    );
-    const textHover = field(
-      light ? 'lightTextHoverColor' : 'darkTextHoverColor',
-      `${textColorLabel} (Hover)`
-    );
-    if (!showSurfaceColors) return [button, text, buttonHover, textHover];
+  const groupsFor = (groupMode: Mode): ColorGroup[] => {
+    const light = groupMode === 'light';
+    const pick = (
+      lightKey: ColorKey,
+      darkKey: ColorKey,
+      lightFallback?: string,
+      darkFallback?: string
+    ) => ({ key: light ? lightKey : darkKey, fallback: light ? lightFallback : darkFallback });
+    const primaryButtonRows = (backgroundLabel: string, textLabel: string): ColorRow[] => [
+      {
+        label: backgroundLabel,
+        base: pick('lightButtonColor', 'darkButtonColor'),
+        hover: pick('lightButtonHoverColor', 'darkButtonHoverColor'),
+      },
+      {
+        label: textLabel,
+        base: pick('lightTextColor', 'darkTextColor'),
+        hover: pick('lightTextHoverColor', 'darkTextHoverColor'),
+      },
+    ];
+    if (!showSurfaceColors) {
+      return [{ rows: primaryButtonRows(buttonColorLabel, textColorLabel) }];
+    }
     return [
-      button,
-      text,
-      field(
-        light ? 'lightBackgroundColor' : 'darkBackgroundColor',
-        'Background Color',
-        light ? '#ffffff' : '#0a0a0a'
-      ),
-      buttonHover,
-      textHover,
-      field(
-        light ? 'lightSecondaryColor' : 'darkSecondaryColor',
-        'Secondary Color',
-        light ? '#f5f5f5' : '#262626'
-      ),
-      field(
-        light ? 'lightInputColor' : 'darkInputColor',
-        'Input Field Color',
-        light ? '#ffffff' : '#1a1a1a'
-      ),
-      field(
-        light ? 'lightForegroundColor' : 'darkForegroundColor',
-        'Text Color',
-        light ? '#0a0a0a' : '#fafafa'
-      ),
+      {
+        title: 'Dialog',
+        rows: [
+          {
+            label: 'Background',
+            base: pick('lightBackgroundColor', 'darkBackgroundColor', '#ffffff', '#0a0a0a'),
+          },
+          {
+            label: 'Secondary',
+            hint: 'Footer area',
+            base: pick('lightSecondaryColor', 'darkSecondaryColor', '#f5f5f5', '#262626'),
+          },
+          {
+            label: 'Input field',
+            base: pick('lightInputColor', 'darkInputColor', '#ffffff', '#1a1a1a'),
+          },
+          {
+            label: 'Text',
+            base: pick('lightForegroundColor', 'darkForegroundColor', '#0a0a0a', '#fafafa'),
+          },
+        ],
+      },
+      { title: 'Primary Button', rows: primaryButtonRows('Background', 'Text') },
+      {
+        title: 'Secondary Button',
+        rows: [
+          {
+            label: 'Background',
+            base: pick(
+              'lightSecondaryButtonColor',
+              'darkSecondaryButtonColor',
+              '#ffffff',
+              '#0a0a0a'
+            ),
+            hover: pick(
+              'lightSecondaryButtonHoverColor',
+              'darkSecondaryButtonHoverColor',
+              '#e5e5e5',
+              '#404040'
+            ),
+          },
+          {
+            label: 'Text',
+            base: pick(
+              'lightSecondaryButtonTextColor',
+              'darkSecondaryButtonTextColor',
+              '#0a0a0a',
+              '#fafafa'
+            ),
+            hover: pick(
+              'lightSecondaryButtonTextHoverColor',
+              'darkSecondaryButtonTextHoverColor',
+              '#0a0a0a',
+              '#fafafa'
+            ),
+          },
+        ],
+      },
+      {
+        title: 'Tabs',
+        rows: [
+          {
+            label: 'Tab bar',
+            base: pick('lightTabBarColor', 'darkTabBarColor', '#f5f5f5', '#262626'),
+          },
+          {
+            label: 'Active tab',
+            base: pick('lightActiveTabColor', 'darkActiveTabColor', '#ffffff', '#0a0a0a'),
+          },
+          {
+            label: 'Active text',
+            base: pick('lightActiveTabTextColor', 'darkActiveTabTextColor', '#0a0a0a', '#fafafa'),
+          },
+          {
+            label: 'Inactive text',
+            base: pick('lightTabTextColor', 'darkTabTextColor', '#737373', '#a3a3a3'),
+            hover: pick('lightTabTextHoverColor', 'darkTabTextHoverColor', '#0a0a0a', '#fafafa'),
+          },
+        ],
+      },
     ];
   };
 
-  const colorGrid = (mode: 'light' | 'dark') => (
-    <div
-      className={cn('grid grid-cols-2 gap-x-4 gap-y-3', showSurfaceColors ? 'md:grid-cols-3' : '')}
-    >
-      {fieldsFor(mode).map(({ key, label, fallback }) => (
-        <div key={key} className="space-y-2">
-          <Label>{label}</Label>
-          <ColorPicker
-            value={value[key] ?? fallback ?? ''}
-            onChange={(color) => onChange({ [key]: color })}
-            disabled={disabled}
-          />
-        </div>
-      ))}
-    </div>
+  const colorControl = (field: ColorField, label: string) => (
+    <ColorPicker
+      value={value[field.key] ?? field.fallback ?? ''}
+      onChange={(color) => onChange({ [field.key]: color })}
+      disabled={disabled}
+      label={label}
+    />
   );
 
+  const colorTable = ({ title, rows }: ColorGroup) => {
+    const hasHover = rows.some((row) => row.hover);
+    const fieldLabel = (row: ColorRow) => (title ? `${title} ${row.label}` : row.label);
+    return (
+      <div key={title ?? 'colors'} className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-44">{title}</TableHead>
+              <TableHead className="w-44">Default</TableHead>
+              <TableHead className="w-44">{hasHover && 'Hover'}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.base.key} className="hover:bg-transparent">
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{row.label}</span>
+                    {row.hint && <span className="text-xs text-muted-foreground">{row.hint}</span>}
+                  </div>
+                </TableCell>
+                <TableCell>{colorControl(row.base, fieldLabel(row))}</TableCell>
+                <TableCell>
+                  {row.hover && colorControl(row.hover, `${fieldLabel(row)} (Hover)`)}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
   return (
-    <Tabs value={activeMode} onValueChange={(mode) => setActiveMode(mode as 'light' | 'dark')}>
+    <Tabs value={activeMode} onValueChange={(next) => setActiveMode(next as Mode)}>
       {/* The button shares the tab row so switching modes does not move the color fields. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TabsList>
-          <TabsTrigger value="light">{lightModeTitle}</TabsTrigger>
-          <TabsTrigger value="dark">{darkModeTitle}</TabsTrigger>
+          <TabsTrigger value="light" className="gap-1.5">
+            <Sun className="size-4" />
+            {lightModeTitle}
+          </TabsTrigger>
+          <TabsTrigger value="dark" className="gap-1.5">
+            <Moon className="size-4" />
+            {darkModeTitle}
+          </TabsTrigger>
         </TabsList>
         {showGenerateButton && activeMode === 'dark' && (
           <Button
@@ -194,17 +294,18 @@ export function ThemeColorPicker({
             disabled={disabled}
             type="button"
           >
+            <Sparkles />
             Generate from Light Mode
           </Button>
         )}
       </div>
 
-      <TabsContent value="light" className="space-y-3 pt-2">
-        {colorGrid('light')}
+      <TabsContent value="light" className="space-y-4 pt-2">
+        {groupsFor('light').map(colorTable)}
       </TabsContent>
 
-      <TabsContent value="dark" className="space-y-3 pt-2">
-        {colorGrid('dark')}
+      <TabsContent value="dark" className="space-y-4 pt-2">
+        {groupsFor('dark').map(colorTable)}
       </TabsContent>
     </Tabs>
   );

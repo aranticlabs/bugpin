@@ -50,6 +50,23 @@ describe('LocalizedTextEditor', () => {
     expect(onChange).toHaveBeenCalledWith({ en: '' });
   });
 
+  it('seeds the custom value with the text currently shown when toggling on', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <LocalizedTextEditor
+        layer="global"
+        value={null}
+        onChange={onChange}
+        label="Dialog Title"
+        builtInPreview={{ en: 'Report a Bug', de: 'Bug melden' }}
+      />
+    );
+
+    await user.click(screen.getByRole('switch', { name: /use custom dialog title/i }));
+    expect(onChange).toHaveBeenCalledWith({ en: 'Report a Bug', de: 'Bug melden' });
+  });
+
   it('emits undefined when toggling the project switch off from a custom value', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -118,5 +135,18 @@ describe('LocalizedTextEditor', () => {
     const input = screen.getByRole('textbox');
     expect(input).toBeDisabled();
     expect(input).toHaveValue('Found a bug?');
+  });
+
+  it('labels the text input with the field label', () => {
+    render(
+      <LocalizedTextEditor
+        layer="global"
+        value={{ en: 'Report' }}
+        onChange={vi.fn()}
+        label="Button Text"
+      />
+    );
+
+    expect(screen.getByLabelText('Button Text')).toHaveValue('Report');
   });
 });

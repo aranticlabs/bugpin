@@ -29,7 +29,7 @@ type ApiError = Error & { response?: { data?: { message?: string } } };
 const SETTINGS_TABS: { value: ProjectSettingsSection; label: string }[] = [
   { value: 'general', label: 'General' },
   { value: 'launcher', label: 'Launcher Button' },
-  { value: 'dialog', label: 'Dialog Colors' },
+  { value: 'dialog', label: 'Dialog' },
   { value: 'language', label: 'Language' },
   { value: 'capture', label: 'Capture' },
   { value: 'notifications', label: 'Notifications' },

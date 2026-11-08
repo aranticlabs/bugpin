@@ -32,14 +32,7 @@ describe('Diagnostics defaults page', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() =>
-      expect(putSpy).toHaveBeenCalledWith('/settings', {
-        diagnostics: {
-          activityCapture: true,
-          consoleCapture: true,
-          networkCapture: false,
-          storageKeysCapture: false,
-        },
-      })
+      expect(putSpy).toHaveBeenCalledWith('/settings', { diagnostics: { networkCapture: false } })
     );
   });
 

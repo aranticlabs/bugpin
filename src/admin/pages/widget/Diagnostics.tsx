@@ -1,25 +1,23 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
 import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
 import {
   DiagnosticsSettingsForm,
   resolveDiagnosticSettings,
 } from '../../components/DiagnosticsSettingsForm';
-import type { AppSettings, DiagnosticSettings } from '@shared/types';
+import type { DiagnosticSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useDraft, useSettings, useUpdateSettings } from '../../hooks/useSettings';
+import { changedFields } from '../../lib/changedFields';
 
 export function Diagnostics() {
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
+  const { data: settings, isLoading } = useSettings();
+  const draft = useDraft<DiagnosticSettings>(
+    settings && resolveDiagnosticSettings(settings.diagnostics ?? {})
+  );
+  const mutation = useUpdateSettings({
+    successMessage: 'Diagnostics settings saved successfully',
   });
 
-  if (isLoading || !settings) {
+  if (isLoading || !settings || !draft.value) {
     return (
       <SectionCard section="diagnostics">
         <SectionLoading />
@@ -27,43 +25,25 @@ export function Diagnostics() {
     );
   }
 
-  return <DiagnosticsDefaultsForm settings={settings} />;
-}
+  const value = draft.value;
 
-function DiagnosticsDefaultsForm({ settings }: { settings: AppSettings }) {
-  const queryClient = useQueryClient();
-  const [value, setValue] = useState<DiagnosticSettings>(() =>
-    resolveDiagnosticSettings(settings.diagnostics ?? {})
-  );
-
-  const isDirty =
-    JSON.stringify(value) !== JSON.stringify(resolveDiagnosticSettings(settings.diagnostics ?? {}));
-
-  const mutation = useMutation({
-    mutationFn: async (diagnostics: DiagnosticSettings) => {
-      const response = await api.put('/settings', { diagnostics });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Diagnostics settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({ diagnostics: draft.changes });
+      draft.reset();
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   return (
     <SectionCard section="diagnostics">
-      <UnsavedChangesGuard
-        isDirty={isDirty}
-        onSave={() => mutation.mutateAsync(value)}
-        onDiscard={() => setValue(resolveDiagnosticSettings(settings.diagnostics ?? {}))}
-      />
+      <UnsavedChangesGuard isDirty={draft.isDirty} onSave={save} onDiscard={draft.reset} />
       <div className="space-y-4">
         <DiagnosticsSettingsForm
           value={value}
-          onChange={(next) => setValue(resolveDiagnosticSettings(next))}
+          onChange={(next) => draft.patch(changedFields(resolveDiagnosticSettings(next), value))}
           euPrivacyMode={settings.privacy?.euPrivacyMode}
           disabled={mutation.isPending}
         />

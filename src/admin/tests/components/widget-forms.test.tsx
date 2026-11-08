@@ -38,8 +38,8 @@ describe('ScreenshotSettingsForm', () => {
   it('leaves video and recording settings to the recording form', () => {
     render(<ScreenshotSettingsForm value={{}} onChange={vi.fn()} />);
 
-    expect(screen.getByLabelText(/max\. screenshot size/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/max\. video upload size/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/maximum screenshot size/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/maximum video upload size/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: /enable screen recording/i })).toBeNull();
   });
 });
@@ -88,7 +88,7 @@ describe('RecordingSettingsForm', () => {
       />
     );
 
-    const input = screen.getByLabelText(/max\. video upload size/i);
+    const input = screen.getByLabelText(/maximum video upload size/i);
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '500' } });
     expect(onChange).not.toHaveBeenCalled();
@@ -141,11 +141,11 @@ describe('RecordingSettingsForm', () => {
 
     const controls = () => [
       screen.getByRole('combobox', { name: /video quality/i }),
-      screen.getByLabelText(/max\. recording duration/i),
+      screen.getByLabelText(/maximum recording duration/i),
       screen.getByRole('switch', { name: /allow microphone recording/i }),
     ];
     const videoLimits = () => [
-      screen.getByLabelText(/max\. video upload size/i),
+      screen.getByLabelText(/maximum video upload size/i),
       screen.getByLabelText(/daily video upload limit/i),
     ];
     controls().forEach((control) => expect(control).toBeDisabled());
@@ -164,7 +164,7 @@ describe('RecordingSettingsForm', () => {
     );
     controls().forEach((control) => expect(control).toBeEnabled());
     videoLimits().forEach((control) => expect(control).toBeEnabled());
-    expect(screen.getByLabelText(/max\. recording duration/i)).toHaveAttribute('max', '600');
+    expect(screen.getByLabelText(/maximum recording duration/i)).toHaveAttribute('max', '600');
     expect(screen.getByRole('link', { name: /reverse proxy guide/i })).toBeInTheDocument();
   });
 
@@ -277,7 +277,7 @@ describe('WidgetLauncherButtonSettingsForm', () => {
     },
   };
 
-  it('shows buttons and colors together and resets project overrides inline', async () => {
+  it('shows the colors on their own and resets project overrides inline', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const value = {
@@ -285,7 +285,7 @@ describe('WidgetLauncherButtonSettingsForm', () => {
       tooltipText: { en: 'Hello' },
       enableHoverScaleEffect: true,
     };
-    render(
+    const { rerender } = render(
       <WidgetLauncherButtonSettingsForm
         value={value}
         onChange={onChange}
@@ -293,9 +293,7 @@ describe('WidgetLauncherButtonSettingsForm', () => {
       />
     );
 
-    expect(screen.queryByRole('tab', { name: /^button$/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /pick color/i }));
-    expect(onChange).toHaveBeenLastCalledWith({ ...value, lightButtonColor: '#ff0000' });
+    expect(screen.queryByRole('button', { name: /pick color/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /reset tooltip to the project default/i }));
     expect(onChange).toHaveBeenLastCalledWith({
@@ -308,6 +306,18 @@ describe('WidgetLauncherButtonSettingsForm', () => {
       screen.getByRole('button', { name: /reset hover scale effect to the project default/i })
     );
     expect(onChange).toHaveBeenLastCalledWith({ ...value, enableHoverScaleEffect: undefined });
+
+    rerender(
+      <WidgetLauncherButtonSettingsForm
+        part="colors"
+        value={value}
+        onChange={onChange}
+        globalSettings={globalSettings}
+      />
+    );
+    expect(screen.queryByLabelText('Button Position')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /pick color/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, lightButtonColor: '#ff0000' });
   });
 
   it('offers no reset buttons on the instance defaults', () => {

@@ -70,7 +70,7 @@ describe('ProjectDetail', () => {
       'Reports',
       'General',
       'Launcher Button',
-      'Dialog Colors',
+      'Dialog',
       'Language',
       'Capture',
       'Notifications',
