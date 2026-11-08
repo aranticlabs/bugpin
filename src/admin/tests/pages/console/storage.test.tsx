@@ -5,6 +5,7 @@ import { server } from '../../mocks/server';
 import { http, HttpResponse } from 'msw';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
+import { mockSettingsServer } from './settingsServer';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -76,7 +77,7 @@ describe('Storage', () => {
               bucket: 'bugpin-bucket',
               region: 'us-east-1',
               accessKeyId: 'AKIA123',
-              secretAccessKey: 'secret',
+              secretAccessKeySet: true,
               endpoint: '',
             },
           },
@@ -106,6 +107,7 @@ describe('Storage', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     global.EventSource = originalEventSource;
   });
@@ -209,5 +211,64 @@ describe('Storage', () => {
       expect(await screen.findByText(/All files are already stored in S3/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Start Migration/ })).not.toBeInTheDocument();
     }
+  });
+
+  it('keeps the stored secret access key unless a new one is typed', async () => {
+    const user = userEvent.setup();
+    const settingsServer = mockSettingsServer({
+      s3Enabled: true,
+      s3Config: {
+        bucket: 'bugpin-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'AKIA123',
+        endpoint: '',
+        secretAccessKeySet: true,
+      },
+    });
+    renderWithQueryAndRouter(<Storage />);
+
+    const secret = await screen.findByLabelText('Secret Access Key');
+    expect(secret).toHaveValue('');
+    expect(secret).toHaveAttribute('placeholder', 'Saved (leave empty to keep)');
+
+    await user.clear(screen.getByLabelText('Region'));
+    await user.type(screen.getByLabelText('Region'), 'eu-west-1');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ s3Config: { region: 'eu-west-1' } }])
+    );
+  });
+
+  it('tests only the saved configuration', async () => {
+    const user = userEvent.setup();
+    renderWithQueryAndRouter(<Storage />);
+
+    const testButton = await screen.findByRole('button', { name: /test connection/i });
+    expect(testButton).toBeEnabled();
+    expect(screen.queryByText('Save your changes to test them.')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Bucket Name'), '-new');
+
+    expect(testButton).toBeDisabled();
+    expect(screen.getByText('Save your changes to test them.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(testButton).toBeEnabled();
+  });
+
+  it('starts with an unknown connection status when browser storage is unavailable', async () => {
+    const getItem = window.Storage.prototype.getItem;
+    vi.spyOn(window.Storage.prototype, 'getItem').mockImplementation(function (
+      this: Storage,
+      key: string
+    ) {
+      if (key === 's3ConnectionStatus') throw new Error('Storage disabled');
+      return getItem.call(this, key);
+    });
+    server.use(http.post('/api/storage/s3/test', () => new Promise<never>(() => {})));
+    renderWithQueryAndRouter(<Storage />);
+
+    expect(await screen.findByText('Unknown')).toBeInTheDocument();
   });
 });

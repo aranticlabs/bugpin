@@ -4,13 +4,8 @@ import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { licenseApi } from '../../api/license';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -29,6 +24,7 @@ import {
 } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { useConfirmUnsavedChanges } from '../../hooks/useConfirmUnsavedChanges';
+import { useSettings } from '../../hooks/useSettings';
 
 const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: string }[] = [
   {
@@ -276,13 +272,8 @@ export function EmailTemplates() {
     enabled: isLicensed,
   });
 
-  const { data: smtpEnabled } = useQuery({
-    queryKey: ['settings', 'smtp-enabled'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return Boolean(response.data.settings?.smtpEnabled);
-    },
-  });
+  const { data: settings } = useSettings();
+  const smtpEnabled = Boolean(settings?.smtpEnabled);
 
   const { data: defaults } = useQuery({
     queryKey: ['email-template-defaults', selectedType],
@@ -453,14 +444,11 @@ export function EmailTemplates() {
   const isLocaleEmpty = subject.trim() === '' && html.trim() === '';
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Email Templates</CardTitle>
-        <CardDescription>
-          Customize the email templates sent to users for notifications
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SettingsCard
+      title="Email Templates"
+      description="Customize the email templates sent to users for notifications"
+    >
+      <div className="space-y-6">
         <div className="flex flex-wrap gap-2">
           {TEMPLATE_TYPES.map((template) => (
             <Button
@@ -628,7 +616,7 @@ export function EmailTemplates() {
             Test email will be sent to: <strong>{user.email}</strong>
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsCard>
   );
 }

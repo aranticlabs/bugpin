@@ -1,71 +1,37 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ExternalLink, Info, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Button } from '../../components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
 import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
 import { Switch } from '../../components/ui/switch';
-import type { AppSettings, PrivacySettings } from '@shared/types';
+import type { PrivacySettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useDraft, useSettings, useUpdateSettings } from '../../hooks/useSettings';
 
 const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   euPrivacyMode: false,
 };
 
 export function Privacy() {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<PrivacySettings>(DEFAULT_PRIVACY_SETTINGS);
-
-  const {
-    data: settings,
-    isLoading,
-    isError,
-    isFetching,
-    refetch,
-  } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
+  const { data: settings, isLoading, isError, isFetching, refetch } = useSettings();
+  const draft = useDraft<PrivacySettings>(
+    settings && (settings.privacy ?? DEFAULT_PRIVACY_SETTINGS)
+  );
+  const mutation = useUpdateSettings({
+    successMessage: 'Privacy settings saved successfully',
+    errorMessage: 'Failed to save privacy settings',
   });
 
-  useEffect(() => {
-    if (settings) {
-      setFormData(settings.privacy ?? DEFAULT_PRIVACY_SETTINGS);
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({ privacy: draft.changes });
+      draft.reset();
+      return true;
+    } catch {
+      return false;
     }
-  }, [settings]);
-
-  const isDirty =
-    !!settings &&
-    JSON.stringify(formData) !== JSON.stringify(settings.privacy ?? DEFAULT_PRIVACY_SETTINGS);
-
-  const mutation = useMutation({
-    mutationFn: async (privacy: PrivacySettings) => {
-      const response = await api.put('/settings', { privacy });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Privacy settings saved successfully');
-    },
-    onError: (error: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(error.response?.data?.message || 'Failed to save privacy settings');
-    },
-  });
-
-  const handleEuPrivacyModeChange = (enabled: boolean) => {
-    setFormData({ euPrivacyMode: enabled });
   };
 
   if (isLoading) {
@@ -78,16 +44,14 @@ export function Privacy() {
     );
   }
 
-  if (isError) {
+  if (isError || !draft.value) {
     return (
-      <Card className="max-w-4xl">
-        <CardHeader>
-          <CardTitle>EU Privacy Mode</CardTitle>
-          <CardDescription>
-            Control user activity trails across this BugPin instance.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsCard
+        title="EU Privacy Mode"
+        description="Control user activity trails across this BugPin instance."
+        className="max-w-4xl"
+      >
+        <div className="space-y-4">
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -105,21 +69,20 @@ export function Privacy() {
               'Retry'
             )}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsCard>
     );
   }
 
+  const formData = draft.value;
+
   return (
     <div className="max-w-4xl space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>EU Privacy Mode</CardTitle>
-          <CardDescription>
-            Control user activity trails across this BugPin instance.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <SettingsCard
+        title="EU Privacy Mode"
+        description="Control user activity trails across this BugPin instance."
+      >
+        <div className="space-y-6">
           <div className="flex items-start justify-between gap-6">
             <div className="space-y-1">
               <Label htmlFor="eu-privacy-mode">Enable EU Privacy Mode</Label>
@@ -130,7 +93,7 @@ export function Privacy() {
             <Switch
               id="eu-privacy-mode"
               checked={formData.euPrivacyMode}
-              onCheckedChange={handleEuPrivacyModeChange}
+              onCheckedChange={(enabled) => draft.set('euPrivacyMode', enabled)}
             />
           </div>
 
@@ -149,11 +112,7 @@ export function Privacy() {
             </Alert>
           )}
 
-          <UnsavedChangesGuard
-            isDirty={isDirty}
-            onSave={() => mutation.mutateAsync(formData)}
-            onDiscard={() => setFormData(settings?.privacy ?? DEFAULT_PRIVACY_SETTINGS)}
-          />
+          <UnsavedChangesGuard isDirty={draft.isDirty} onSave={save} onDiscard={draft.reset} />
           <div className="flex flex-wrap items-center gap-4">
             <a
               href="https://docs.bugpin.io/privacy/eu-privacy-mode"
@@ -165,8 +124,8 @@ export function Privacy() {
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsCard>
     </div>
   );
 }

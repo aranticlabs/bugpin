@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
+import { renderWithQuery, screen, userEvent, waitFor, within } from '../../utils';
 import { DeleteAllData } from '../../../pages/console/DeleteAllData';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
@@ -15,11 +15,7 @@ async function confirmDeletion(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Delete All Data' }));
   const dialog = await screen.findByRole('alertdialog');
   await user.type(screen.getByLabelText(/to confirm/i), 'delete');
-  await user.click(
-    [...dialog.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Delete All Data'
-    ) as HTMLElement
-  );
+  await user.click(within(dialog).getByRole('button', { name: 'Delete All Data' }));
 }
 
 describe('DeleteAllData', () => {
@@ -28,16 +24,22 @@ describe('DeleteAllData', () => {
   });
 
   it('closes the dialog after the data was deleted', async () => {
-    // A real request resolves after the dialog re-rendered in its deleting state.
-    const deleteSpy = vi
-      .spyOn(api, 'delete')
-      .mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({ data: { deleted: 3 } }), 50))
-      );
+    // The request resolves only after the dialog re-rendered in its deleting state.
+    let finishDelete!: (response: { data: { deleted: number } }) => void;
+    const deleteSpy = vi.spyOn(api, 'delete').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = resolve;
+        })
+    );
     const user = userEvent.setup();
     renderWithQuery(<DeleteAllData />);
 
     await confirmDeletion(user);
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(await within(dialog).findByRole('button', { name: /deleting/i })).toBeDisabled();
+    finishDelete({ data: { deleted: 3 } });
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(deleteSpy).toHaveBeenCalledWith('/settings/data', {

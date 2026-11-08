@@ -21,6 +21,7 @@ import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
+import { mockSettingsServer } from './settingsServer';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -31,6 +32,7 @@ vi.mock('sonner', () => ({
 }));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -64,7 +66,7 @@ describe('Settings sections', () => {
 
     renderWithQueryAndRouter(<DataRetention />);
 
-    const retentionInput = await screen.findByLabelText(/data retention/i);
+    const retentionInput = await screen.findByLabelText(/retention period/i);
     fireEvent.change(retentionInput, { target: { value: '120' } });
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -118,8 +120,8 @@ describe('Settings sections', () => {
 
     renderWithQueryAndRouter(<Screenshot />);
 
-    await screen.findByLabelText(/max\.? screenshot size/i);
-    expect(screen.queryByLabelText(/max\.? video upload size/i)).not.toBeInTheDocument();
+    await screen.findByLabelText(/maximum screenshot size/i);
+    expect(screen.queryByLabelText(/maximum video upload size/i)).not.toBeInTheDocument();
 
     const screenCaptureSwitch = screen.getByRole('switch', { name: /use screen capture api/i });
     await user.click(screenCaptureSwitch);
@@ -128,50 +130,31 @@ describe('Settings sections', () => {
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith('/settings', {
-        screenshot: {
-          maxScreenshotSize: 5,
-          maxImageUploadSizeMb: 10,
-          maxVideoUploadSizeMb: 50,
-          maxVideoUploadMbPerDay: 2048,
-          enableScreenRecording: false,
-          allowRecordingMicrophone: false,
-          maxRecordingDurationSeconds: 180,
-          recordingQuality: 'standard',
-          useScreenCaptureAPI: true,
-        },
+        screenshot: { useScreenCaptureAPI: true },
       });
     });
   });
 
   it('submits recording settings without touching screenshot settings', async () => {
     const user = userEvent.setup();
-    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+    const settingsServer = mockSettingsServer();
 
     renderWithQueryAndRouter(<Recording />);
 
-    const uploadSizeInput = await screen.findByLabelText(/max\.? video upload size/i);
+    const uploadSizeInput = await screen.findByLabelText(/maximum video upload size/i);
     expect(uploadSizeInput).toHaveAttribute('max', '100');
-    expect(screen.queryByLabelText(/max\.? screenshot size/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/maximum screenshot size/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
+    await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
     await user.click(screen.getByRole('switch', { name: /allow microphone recording/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith('/settings', {
-        screenshot: {
-          useScreenCaptureAPI: false,
-          maxScreenshotSize: 5,
-          maxImageUploadSizeMb: 10,
-          maxVideoUploadSizeMb: 50,
-          maxVideoUploadMbPerDay: 2048,
-          enableScreenRecording: true,
-          allowRecordingMicrophone: true,
-          maxRecordingDurationSeconds: 180,
-          recordingQuality: 'standard',
-        },
-      });
-    });
+    await waitFor(() => expect(settingsServer.puts).toHaveLength(2));
+    expect(settingsServer.puts).toEqual([
+      { screenshot: { enableScreenRecording: true } },
+      { screenshot: { allowRecordingMicrophone: true } },
+    ]);
     expect(toast.success).toHaveBeenCalledWith('Recording settings saved successfully');
   });
 
@@ -186,10 +169,7 @@ describe('Settings sections', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith('/settings', {
-        enforceHttps: false,
-        rateLimitPerMinute: 120,
-      });
+      expect(putSpy).toHaveBeenCalledWith('/settings', { rateLimitPerMinute: 120 });
     });
   });
 
@@ -233,6 +213,11 @@ describe('Settings sections', () => {
     await waitFor(() => expect(minLength).toHaveValue(12));
     fireEvent.change(minLength, { target: { value: '16' } });
     await user.click(screen.getByLabelText(/special character/i));
+    expect(
+      screen.getByText(
+        'New passwords need at least 16 characters, including an uppercase letter, a number and a special character.'
+      )
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
@@ -254,10 +239,10 @@ describe('Settings sections', () => {
 
     renderWithQueryAndRouter(<TwoFactorPolicyCard />);
 
-    await screen.findAllByText('Admins only');
+    await screen.findAllByText('Admins Only');
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole('combobox'));
-    await user.click(await screen.findByRole('option', { name: 'All users' }));
+    await user.click(await screen.findByRole('option', { name: 'All Users' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
@@ -318,47 +303,76 @@ describe('Settings sections', () => {
 
   it('submits SMTP settings and sends test email', async () => {
     const user = userEvent.setup();
-    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+    const settingsServer = mockSettingsServer();
     const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } } as unknown);
 
     renderWithProviders(<SMTP />);
 
     const hostInput = await screen.findByLabelText(/smtp host/i);
-    const fromInput = screen.getByLabelText(/from email address/i);
-
+    await user.click(screen.getByRole('switch', { name: /enable email/i }));
     await user.type(hostInput, 'smtp.example.com');
-    await user.type(fromInput, 'bugs@example.com');
+    await user.type(screen.getByLabelText(/from email address/i), 'bugs@example.com');
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => {
-      expect(putSpy).toHaveBeenCalledWith(
-        '/settings',
-        expect.objectContaining({
-          smtpEnabled: true,
-          smtpConfig: expect.objectContaining({
-            host: 'smtp.example.com',
-            from: 'bugs@example.com',
-          }),
-        })
-      );
+    await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
+    expect(settingsServer.puts[0]).toEqual({
+      smtpEnabled: true,
+      smtpConfig: { host: 'smtp.example.com', from: 'bugs@example.com' },
     });
 
-    const testButton = screen.getByRole('button', { name: /send test email/i });
-    await user.click(testButton);
+    await user.click(screen.getByRole('button', { name: /send test email/i }));
 
     await waitFor(() => {
-      expect(postSpy).toHaveBeenCalledWith(
-        '/settings/test-email',
-        expect.objectContaining({
-          smtpConfig: expect.objectContaining({
-            host: 'smtp.example.com',
-            from: 'bugs@example.com',
-          }),
-          testEmail: expect.stringMatching(/@/),
-        })
-      );
+      expect(postSpy).toHaveBeenCalledWith('/settings/test-email', {
+        smtpConfig: { host: 'smtp.example.com', port: 587, user: '', from: 'bugs@example.com' },
+        testEmail: expect.stringMatching(/@/),
+        appName: 'BugPin',
+      });
       expect(toast.success).toHaveBeenCalled();
     });
+  });
+
+  it('rejects an application name made of whitespace', async () => {
+    const user = userEvent.setup();
+    const settingsServer = mockSettingsServer();
+
+    renderWithProviders(<Settings />);
+
+    const appNameInput = await screen.findByDisplayValue('BugPin');
+    await user.clear(appNameInput);
+    await user.type(appNameInput, '   ');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText('Application name is required')).toBeInTheDocument();
+    expect(settingsServer.puts).toHaveLength(0);
+  });
+
+  it('sends the trimmed application name and only the changed fields', async () => {
+    const user = userEvent.setup();
+    const settingsServer = mockSettingsServer();
+
+    renderWithProviders(<Settings />);
+
+    const appNameInput = await screen.findByDisplayValue('BugPin');
+    await user.clear(appNameInput);
+    await user.type(appNameInput, '  Bug Tracker  ');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(settingsServer.puts).toEqual([{ appName: 'Bug Tracker' }]));
+  });
+
+  it('rejects a retention period that is not a whole number', async () => {
+    const user = userEvent.setup();
+    const settingsServer = mockSettingsServer();
+
+    renderWithQueryAndRouter(<DataRetention />);
+
+    const retentionInput = await screen.findByLabelText(/retention period/i);
+    fireEvent.change(retentionInput, { target: { value: '12.5' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText('Enter a whole number of days')).toBeInTheDocument();
+    expect(settingsServer.puts).toHaveLength(0);
   });
 });

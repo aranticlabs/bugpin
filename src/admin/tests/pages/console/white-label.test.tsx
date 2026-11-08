@@ -100,3 +100,39 @@ it('keeps the saved widget branding choice when updating it fails', async () => 
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update widget branding'));
   expect(toggle).toBeChecked();
 });
+
+it('keeps an unsaved copyright edit when the widget branding switch saves', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async () => ({
+    data: {
+      config: {
+        hideFooterBranding: true,
+        hideEmailBranding: false,
+        hidePoweredBy,
+        customCopyright: 'Old Ltd',
+      },
+    },
+  }));
+  const put = vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {
+    const changes = body as { hidePoweredBy?: boolean };
+    if (changes.hidePoweredBy !== undefined) hidePoweredBy = changes.hidePoweredBy;
+    return { data: { success: true } };
+  });
+  const user = userEvent.setup();
+  renderWithQueryAndRouter(<WhiteLabel />);
+
+  const copyright = await screen.findByLabelText('Copyright text');
+  await user.clear(copyright);
+  await user.type(copyright, 'New Ltd');
+
+  const toggle = screen.getByRole('switch', { name: 'Show BugPin branding' });
+  await user.click(toggle);
+  await waitFor(() => expect(toggle).not.toBeChecked());
+  await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+  expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: true });
+  expect(screen.getByLabelText('Copyright text')).toHaveValue('New Ltd');
+
+  await user.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() =>
+    expect(put).toHaveBeenLastCalledWith('/white-label/config', { customCopyright: 'New Ltd' })
+  );
+});

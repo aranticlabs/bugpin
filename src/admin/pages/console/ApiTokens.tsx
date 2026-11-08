@@ -6,13 +6,8 @@ import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { licenseApi } from '../../api/license';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
+import { formatShortDate, formatTokenScope } from '../../lib/format';
 import { Button } from '../../components/ui/button';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
 import { Input } from '../../components/ui/input';
@@ -70,16 +65,6 @@ const DEFAULT_FORM: TokenForm = { name: '', scope: 'read', days: '30' };
 
 function errorMessage(error: Error): string {
   return axios.isAxiosError(error) ? error.response?.data?.message || error.message : error.message;
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-US', { dateStyle: 'medium' });
-}
-
-function scopeLabel(scopes: ApiTokenScope[]): string {
-  if (scopes.includes('admin')) return 'Admin';
-  if (scopes.includes('write')) return 'Read and write';
-  return 'Read';
 }
 
 export function ApiTokens() {
@@ -187,101 +172,96 @@ export function ApiTokens() {
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex-row flex-wrap items-start justify-between gap-4 space-y-0">
-          <div className="min-w-0 space-y-1.5">
-            <CardTitle>API tokens</CardTitle>
-            <CardDescription>
-              Manage access for scripts and integrations connected to your account.
-            </CardDescription>
-          </div>
+      <SettingsCard
+        title="API tokens"
+        description="Manage access for scripts and integrations connected to your account."
+        action={
           <Button onClick={() => handleCreateOpenChange(true)}>
             <Plus className="h-4 w-4" />
             Create token
           </Button>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : error ? (
-            <div className="space-y-3">
-              <p role="alert" className="text-sm text-destructive">
-                Unable to load your API tokens. {errorMessage(error)}
-              </p>
-              <Button variant="outline" onClick={() => void refetch()}>
-                Retry
-              </Button>
-            </div>
-          ) : !tokens?.length ? (
-            <div className="space-y-1 py-8 text-center">
-              <p className="text-sm font-medium">No API tokens yet</p>
-              <p className="text-sm text-muted-foreground">
-                Create a token to connect a script or integration.
-              </p>
-            </div>
-          ) : (
-            <Table aria-label="API tokens">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Scope</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tokens.map((token) => {
-                  const expired =
-                    !!token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now();
-                  return (
-                    <TableRow key={token.id}>
-                      <TableCell>
-                        <p className="max-w-48 break-words font-medium">{token.name}</p>
-                        <p className="mt-1 font-mono text-xs text-muted-foreground">
-                          {token.tokenPrefix}…
-                        </p>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {scopeLabel(token.scopes)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {token.lastUsedAt ? formatDate(token.lastUsedAt) : 'Never'}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {token.expiresAt ? formatDate(token.expiresAt) : 'No expiration'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={expired ? 'secondary' : 'outline'}>
-                          {expired ? 'Expired' : 'Active'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline-destructive"
-                          size="sm"
-                          aria-label={`Revoke ${token.name}`}
-                          onClick={() => {
-                            revoke.reset();
-                            setTokenToRevoke(token);
-                          }}
-                        >
-                          Revoke
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        }
+      >
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        ) : error ? (
+          <div className="space-y-3">
+            <p role="alert" className="text-sm text-destructive">
+              Unable to load your API tokens. {errorMessage(error)}
+            </p>
+            <Button variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : !tokens?.length ? (
+          <div className="space-y-1 py-8 text-center">
+            <p className="text-sm font-medium">No API tokens yet</p>
+            <p className="text-sm text-muted-foreground">
+              Create a token to connect a script or integration.
+            </p>
+          </div>
+        ) : (
+          <Table aria-label="API tokens">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tokens.map((token) => {
+                const expired =
+                  !!token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now();
+                return (
+                  <TableRow key={token.id}>
+                    <TableCell>
+                      <p className="max-w-48 break-words font-medium">{token.name}</p>
+                      <p className="mt-1 font-mono text-xs text-muted-foreground">
+                        {token.tokenPrefix}…
+                      </p>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {formatTokenScope(token.scopes)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {token.lastUsedAt ? formatShortDate(token.lastUsedAt) : 'Never'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {token.expiresAt ? formatShortDate(token.expiresAt) : 'No expiration'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={expired ? 'secondary' : 'outline'}>
+                        {expired ? 'Expired' : 'Active'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline-destructive"
+                        size="sm"
+                        aria-label={`Revoke ${token.name}`}
+                        onClick={() => {
+                          revoke.reset();
+                          setTokenToRevoke(token);
+                        }}
+                      >
+                        Revoke
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </SettingsCard>
 
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent

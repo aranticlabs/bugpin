@@ -1,57 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
 import { NotificationTabs } from '../../components/NotificationTabs';
 import { SectionCard, SectionLoading } from '../../components/settings/SectionCard';
-import type {
-  AppSettings,
-  NotificationDefaultSettings,
-  ReporterNotificationSettings,
-} from '@shared/types';
+import type { NotificationDefaultSettings, ReporterNotificationSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
-
-interface NotificationForm {
-  notifications: Partial<NotificationDefaultSettings>;
-  reporterNotifications: Partial<ReporterNotificationSettings>;
-}
-
-const toForm = (settings: AppSettings): NotificationForm => ({
-  notifications: settings.notifications ?? {},
-  reporterNotifications: settings.reporterNotifications ?? {},
-});
+import {
+  useDraft,
+  useSettings,
+  useUpdateSettings,
+  type SettingsUpdate,
+} from '../../hooks/useSettings';
+import { changedFields } from '../../lib/changedFields';
 
 export function NotificationDefaults() {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<NotificationForm | null>(null);
-
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
+  const { data: settings, isLoading } = useSettings();
+  const team = useDraft<Partial<NotificationDefaultSettings>>(
+    settings && (settings.notifications ?? {})
+  );
+  const reporter = useDraft<Partial<ReporterNotificationSettings>>(
+    settings && (settings.reporterNotifications ?? {})
+  );
+  const mutation = useUpdateSettings({
+    successMessage: 'Notification defaults saved successfully',
   });
 
-  useEffect(() => {
-    if (settings) setFormData(toForm(settings));
-  }, [settings]);
-
-  const mutation = useMutation({
-    mutationFn: async (data: NotificationForm) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Notification defaults saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
-
-  if (isLoading || !settings || !formData) {
+  if (isLoading || !team.value || !reporter.value) {
     return (
       <SectionCard section="notifications" showHeader={false}>
         <SectionLoading />
@@ -59,42 +30,62 @@ export function NotificationDefaults() {
     );
   }
 
-  const emailOn = (form: NotificationForm, which: 'team' | 'reporter') =>
-    which === 'team'
-      ? (form.notifications.emailEnabled ?? true)
-      : (form.reporterNotifications.emailEnabled ?? true);
-  // The email switches save by themselves: the tab is locked while its emails are off.
-  const applyChange = (next: NotificationForm, which: 'team' | 'reporter') => {
-    const before = emailOn(formData, which);
-    setFormData(next);
-    if (before !== emailOn(next, which)) {
-      mutation.mutate(
-        which === 'team'
-          ? { ...toForm(settings), notifications: next.notifications }
-          : { ...toForm(settings), reporterNotifications: next.reporterNotifications }
-      );
+  const teamValue = team.value;
+  const reporterValue = reporter.value;
+
+  const save = async () => {
+    const update: SettingsUpdate = {
+      ...(team.isDirty && { notifications: team.changes }),
+      ...(reporter.isDirty && { reporterNotifications: reporter.changes }),
+    };
+    try {
+      await mutation.mutateAsync(update);
+      team.reset();
+      reporter.reset();
+      return true;
+    } catch {
+      return false;
     }
   };
 
-  const isDirty = JSON.stringify(formData) !== JSON.stringify(toForm(settings));
+  // The email switches save by themselves: the tab is locked while its emails are off. Only the
+  // switch is sent, so unsaved edits on either tab stay in their drafts.
+  const handleTeamChange = (next: Partial<NotificationDefaultSettings>) => {
+    const changes = changedFields(next, teamValue);
+    team.patch(changes);
+    if (changes.emailEnabled !== undefined && next.emailEnabled !== undefined) {
+      mutation.mutate({ notifications: { emailEnabled: next.emailEnabled } });
+    }
+  };
+  const handleReporterChange = (next: Partial<ReporterNotificationSettings>) => {
+    const changes = changedFields(next, reporterValue);
+    reporter.patch(changes);
+    if (changes.emailEnabled !== undefined && next.emailEnabled !== undefined) {
+      mutation.mutate({ reporterNotifications: { emailEnabled: next.emailEnabled } });
+    }
+  };
 
   return (
-    <SectionCard section="notifications" showHeader={false}>
+    <>
       <UnsavedChangesGuard
-        isDirty={isDirty}
-        onSave={() => mutation.mutateAsync(formData)}
-        onDiscard={() => setFormData(toForm(settings))}
+        isDirty={team.isDirty || reporter.isDirty}
+        onSave={save}
+        onDiscard={() => {
+          team.reset();
+          reporter.reset();
+        }}
       />
-      <div className="space-y-6">
-        <NotificationTabs
-          team={formData.notifications}
-          onTeamChange={(notifications) => applyChange({ ...formData, notifications }, 'team')}
-          reporter={formData.reporterNotifications}
-          onReporterChange={(reporterNotifications) =>
-            applyChange({ ...formData, reporterNotifications }, 'reporter')
-          }
-        />
-      </div>
-    </SectionCard>
+      <NotificationTabs
+        team={teamValue}
+        onTeamChange={handleTeamChange}
+        reporter={reporterValue}
+        onReporterChange={handleReporterChange}
+        renderPanel={(form) => (
+          <SectionCard section="notifications" showHeader={false}>
+            {form}
+          </SectionCard>
+        )}
+      />
+    </>
   );
 }

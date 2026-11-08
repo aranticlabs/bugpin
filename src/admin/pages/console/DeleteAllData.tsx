@@ -12,16 +12,11 @@ import {
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 import { Button } from '../../components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
+import { apiErrorMessage } from '../../lib/apiError';
 
 const CONFIRMATION_WORD = 'delete';
 
@@ -45,8 +40,8 @@ export function DeleteAllData() {
       setOpen(false);
       setConfirmation('');
     },
-    onError: (error: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(error.response?.data?.message || 'Failed to delete data');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to delete data'));
     },
   });
 
@@ -60,15 +55,12 @@ export function DeleteAllData() {
 
   return (
     <>
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle>Delete All Data</CardTitle>
-          <CardDescription>
-            Permanently delete every report and its files, such as screenshots, recordings and
-            attachments, from all projects.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsCard
+        title="Delete All Data"
+        description="Permanently delete every report and its files, such as screenshots, recordings and attachments, from all projects."
+        className="border-destructive/50"
+      >
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Deletion takes effect immediately and cannot be undone. Projects, users and settings are
             kept.
@@ -76,8 +68,8 @@ export function DeleteAllData() {
           <Button variant="destructive" onClick={() => setOpen(true)}>
             Delete All Data
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsCard>
 
       <AlertDialog open={open} onOpenChange={handleOpenChange}>
         <AlertDialogContent>

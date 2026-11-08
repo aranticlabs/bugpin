@@ -1,45 +1,32 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { brandingApi } from '../../api/branding';
 import { licenseApi } from '../../api/license';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
 import { Input } from '../../components/ui/input';
 import { Spinner } from '../../components/ui/spinner';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
-
-function showError(error: Error) {
-  toast.error(
-    axios.isAxiosError(error) ? error.response?.data?.message || error.message : error.message
-  );
-}
+import { useDraft } from '../../hooks/useSettings';
+import { apiErrorMessage } from '../../lib/apiError';
 
 interface WhiteLabelConfig {
   hideFooterBranding: boolean;
   hideEmailBranding: boolean;
+  hidePoweredBy: boolean;
   customCopyright: string;
 }
+
+type WhiteLabelResponse = Omit<WhiteLabelConfig, 'customCopyright'> & { customCopyright?: string };
 
 function WhiteLabelSettings() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['white-label'],
-    queryFn: async () =>
-      (await api.get('/white-label/config')).data.config as {
-        hideFooterBranding: boolean;
-        hideEmailBranding: boolean;
-        customCopyright?: string;
-      },
+    queryFn: async () => (await api.get('/white-label/config')).data.config as WhiteLabelResponse,
   });
   return (
     <Card>
@@ -54,10 +41,7 @@ function WhiteLabelSettings() {
           </p>
         </CardContent>
       ) : (
-        <WhiteLabelForm
-          key={JSON.stringify(data)}
-          saved={{ ...data, customCopyright: data.customCopyright || '' }}
-        />
+        <WhiteLabelForm saved={{ ...data, customCopyright: data.customCopyright || '' }} />
       )}
     </Card>
   );
@@ -65,23 +49,24 @@ function WhiteLabelSettings() {
 
 function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
   const client = useQueryClient();
-  const [form, setForm] = useState(saved);
-  const isDirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const draft = useDraft<WhiteLabelConfig>(saved);
+  const form = draft.value ?? saved;
   const save = useMutation({
-    mutationFn: (config: WhiteLabelConfig) => api.put('/white-label/config', config),
+    mutationFn: (changes: Partial<WhiteLabelConfig>) => api.put('/white-label/config', changes),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['white-label'] });
       await client.invalidateQueries({ queryKey: ['branding-config'] });
+      draft.reset();
       toast.success('White-label settings saved');
     },
-    onError: showError,
+    onError: (error) => toast.error(apiErrorMessage(error, error.message)),
   });
   return (
     <>
       <UnsavedChangesGuard
-        isDirty={isDirty}
-        onSave={() => save.mutateAsync(form)}
-        onDiscard={() => setForm(saved)}
+        isDirty={draft.isDirty}
+        onSave={() => save.mutateAsync(draft.changes)}
+        onDiscard={draft.reset}
       />
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between gap-4">
@@ -89,7 +74,7 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
           <Switch
             id="hide-footer-branding"
             checked={form.hideFooterBranding}
-            onCheckedChange={(checked) => setForm({ ...form, hideFooterBranding: checked })}
+            onCheckedChange={(checked) => draft.set('hideFooterBranding', checked)}
           />
         </div>
         <div className="flex items-center justify-between gap-4">
@@ -97,7 +82,7 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
           <Switch
             id="hide-email-branding"
             checked={form.hideEmailBranding}
-            onCheckedChange={(checked) => setForm({ ...form, hideEmailBranding: checked })}
+            onCheckedChange={(checked) => draft.set('hideEmailBranding', checked)}
           />
         </div>
         <div className="space-y-2">
@@ -106,7 +91,7 @@ function WhiteLabelForm({ saved }: { saved: WhiteLabelConfig }) {
             id="white-label-copyright"
             maxLength={500}
             value={form.customCopyright}
-            onChange={(event) => setForm({ ...form, customCopyright: event.target.value })}
+            onChange={(event) => draft.set('customCopyright', event.target.value)}
           />
         </div>
       </CardContent>
@@ -134,32 +119,29 @@ function WidgetBrandingSettings() {
   if (!isLoading && !config?.whiteLabel) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Widget Branding</CardTitle>
-        <CardDescription>The branding line in the widget dialog footer.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading || !config ? (
-          <Spinner className="mx-auto text-primary" />
-        ) : (
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="show-widget-branding">Show BugPin branding</Label>
-              <p className="text-sm text-muted-foreground">
-                Display “Powered by BugPin” in the widget footer. Changes save automatically.
-              </p>
-            </div>
-            <Switch
-              id="show-widget-branding"
-              checked={!config.whiteLabel?.hidePoweredBy}
-              onCheckedChange={(checked) => save.mutate(checked)}
-              disabled={save.isPending}
-            />
+    <SettingsCard
+      title="Widget Branding"
+      description="The branding line in the widget dialog footer."
+    >
+      {isLoading || !config ? (
+        <Spinner className="mx-auto text-primary" />
+      ) : (
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="show-widget-branding">Show BugPin branding</Label>
+            <p className="text-sm text-muted-foreground">
+              Display “Powered by BugPin” in the widget footer. Changes save automatically.
+            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <Switch
+            id="show-widget-branding"
+            checked={!config.whiteLabel?.hidePoweredBy}
+            onCheckedChange={(checked) => save.mutate(checked)}
+            disabled={save.isPending}
+          />
+        </div>
+      )}
+    </SettingsCard>
   );
 }
 

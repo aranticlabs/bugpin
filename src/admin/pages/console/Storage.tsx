@@ -1,15 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
 import { licenseApi } from '../../api/license';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
+import { SettingsCard } from '../../components/ui/settings-card';
 import { UpgradePrompt } from '../../components/UpgradePrompt';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -22,6 +17,13 @@ import { Badge } from '../../components/ui/badge';
 import { cn } from '../../lib/utils';
 import type { AppSettings } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import {
+  useDraft,
+  useSettings,
+  useUpdateSettings,
+  type SettingsUpdate,
+} from '../../hooks/useSettings';
+import { apiErrorMessage } from '../../lib/apiError';
 
 interface StorageStats {
   totalFiles: number;
@@ -78,75 +80,101 @@ export function Storage() {
   );
 }
 
-function StorageSettingsSection() {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
-    s3Enabled: false,
-    s3Config: {
-      bucket: '',
-      region: '',
-      accessKeyId: '',
-      secretAccessKey: '',
-      endpoint: '',
-    },
-  });
-  const [testing, setTesting] = useState(false);
+type ConnectionStatus = 'online' | 'offline' | 'unknown';
 
-  // Initialize connection status from localStorage to prevent flicker
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'unknown'>(() => {
-    const stored = localStorage.getItem('s3ConnectionStatus');
-    return (stored as 'online' | 'offline' | 'unknown') || 'unknown';
-  });
+const CONNECTION_STATUS_KEY = 's3ConnectionStatus';
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+function readConnectionStatus(): ConnectionStatus {
+  try {
+    const stored = localStorage.getItem(CONNECTION_STATUS_KEY);
+    return stored === 'online' || stored === 'offline' ? stored : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
-  useEffect(() => {
-    if (settings) {
-      setFormData({
-        s3Enabled: settings.s3Enabled || false,
-        s3Config: {
-          bucket: settings.s3Config?.bucket || '',
-          region: settings.s3Config?.region || '',
-          accessKeyId: settings.s3Config?.accessKeyId || '',
-          secretAccessKey: settings.s3Config?.secretAccessKey || '',
-          endpoint: settings.s3Config?.endpoint || '',
-        },
-      });
-    }
-  }, [settings]);
+function storeConnectionStatus(status: ConnectionStatus) {
+  try {
+    localStorage.setItem(CONNECTION_STATUS_KEY, status);
+  } catch {
+    // The status is only a hint to avoid flicker, so it is fine when storage is unavailable.
+  }
+}
 
-  const savedS3 = {
-    s3Enabled: settings?.s3Enabled || false,
-    s3Config: {
-      bucket: settings?.s3Config?.bucket || '',
-      region: settings?.s3Config?.region || '',
-      accessKeyId: settings?.s3Config?.accessKeyId || '',
-      secretAccessKey: settings?.s3Config?.secretAccessKey || '',
-      endpoint: settings?.s3Config?.endpoint || '',
-    },
+interface StorageForm {
+  s3Enabled: boolean;
+  bucket: string;
+  region: string;
+  accessKeyId: string;
+  /** Empty unless the admin types a new key. The stored key is never loaded. */
+  secretAccessKey: string;
+  endpoint: string;
+}
+
+function toStorageForm(settings: AppSettings): StorageForm {
+  return {
+    s3Enabled: settings.s3Enabled || false,
+    bucket: settings.s3Config?.bucket || '',
+    region: settings.s3Config?.region || '',
+    accessKeyId: settings.s3Config?.accessKeyId || '',
+    secretAccessKey: '',
+    endpoint: settings.s3Config?.endpoint || '',
   };
-  const isDirty = !!settings && JSON.stringify(formData) !== JSON.stringify(savedS3);
+}
 
-  const mutation = useMutation({
-    mutationFn: async (data: Partial<AppSettings>) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      queryClient.invalidateQueries({ queryKey: ['storage-stats'] });
-      toast.success('Storage settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
+function toUpdate({ s3Enabled, ...s3Config }: Partial<StorageForm>): SettingsUpdate {
+  return {
+    ...(s3Enabled !== undefined && { s3Enabled }),
+    ...(Object.keys(s3Config).length > 0 && { s3Config }),
+  };
+}
+
+const CONFIG_FIELDS: {
+  key: Exclude<keyof StorageForm, 's3Enabled'>;
+  id: string;
+  label: string;
+  placeholder: string;
+  help: string;
+  required: boolean;
+}[] = [
+  {
+    key: 'bucket',
+    id: 's3-bucket',
+    label: 'Bucket Name',
+    placeholder: 'my-bugpin-bucket',
+    help: 'The name of your S3 bucket',
+    required: true,
+  },
+  {
+    key: 'region',
+    id: 's3-region',
+    label: 'Region',
+    placeholder: 'us-east-1',
+    help: 'AWS region or S3-compatible service region',
+    required: true,
+  },
+  {
+    key: 'accessKeyId',
+    id: 's3-access-key',
+    label: 'Access Key ID',
+    placeholder: 'AKIAIOSFODNN7EXAMPLE',
+    help: 'Your AWS access key ID or equivalent',
+    required: true,
+  },
+];
+
+function StorageSettingsSection() {
+  const { data: settings, isLoading } = useSettings();
+  const queryClient = useQueryClient();
+  const draft = useDraft(settings && toStorageForm(settings));
+  const mutation = useUpdateSettings({ successMessage: 'Storage settings saved successfully' });
+  const [testing, setTesting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(readConnectionStatus);
+
+  const updateConnectionStatus = (status: ConnectionStatus) => {
+    setConnectionStatus(status);
+    storeConnectionStatus(status);
+  };
 
   const testConnection = async (silent = false) => {
     if (!silent) setTesting(true);
@@ -154,14 +182,11 @@ function StorageSettingsSection() {
       const response = await api.post('/storage/s3/test');
       if (response.data.success) {
         if (!silent) toast.success('S3 connection successful!');
-        setConnectionStatus('online');
-        localStorage.setItem('s3ConnectionStatus', 'online');
+        updateConnectionStatus('online');
       }
-    } catch (err: unknown) {
-      const error = err as Error & { response?: { data?: { message?: string } } };
-      if (!silent) toast.error(error.response?.data?.message || 'Failed to connect to S3');
-      setConnectionStatus('offline');
-      localStorage.setItem('s3ConnectionStatus', 'offline');
+    } catch (error: unknown) {
+      if (!silent) toast.error(apiErrorMessage(error, 'Failed to connect to S3'));
+      updateConnectionStatus('offline');
     } finally {
       if (!silent) setTesting(false);
     }
@@ -174,7 +199,7 @@ function StorageSettingsSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.s3Enabled]);
 
-  if (isLoading) {
+  if (isLoading || !draft.value) {
     return (
       <Card>
         <CardContent className="py-12">
@@ -184,41 +209,55 @@ function StorageSettingsSection() {
     );
   }
 
+  const form = draft.value;
+  const secretSet = settings?.s3Config?.secretAccessKeySet ?? false;
+
+  const saveChanges = async (update: SettingsUpdate) => {
+    try {
+      await mutation.mutateAsync(update);
+      void queryClient.invalidateQueries({ queryKey: ['storage-stats'] });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const save = async () => {
+    const saved = await saveChanges(toUpdate(draft.changes));
+    if (saved) draft.reset();
+    return saved;
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-1.5">
-            <CardTitle>Storage Settings</CardTitle>
-            <CardDescription>
-              Configure S3-compatible storage for screenshots and attachments
-            </CardDescription>
-          </div>
-          {settings?.s3Enabled &&
-            (connectionStatus === 'online' ? (
-              <Badge variant="outline" className="gap-1 status-online">
-                <Cloud className="h-3 w-3" />
-                Online
-              </Badge>
-            ) : connectionStatus === 'offline' ? (
-              <Badge variant="outline" className="gap-1 status-offline">
-                <CloudOff className="h-3 w-3" />
-                Offline
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1 status-unknown">
-                <CloudOff className="h-3 w-3" />
-                Unknown
-              </Badge>
-            ))}
-        </div>
-      </CardHeader>
+    <SettingsCard
+      title="Storage Settings"
+      description="Configure S3-compatible storage for screenshots and attachments"
+      action={
+        settings?.s3Enabled &&
+        (connectionStatus === 'online' ? (
+          <Badge variant="outline" className="gap-1 status-online">
+            <Cloud className="h-3 w-3" />
+            Online
+          </Badge>
+        ) : connectionStatus === 'offline' ? (
+          <Badge variant="outline" className="gap-1 status-offline">
+            <CloudOff className="h-3 w-3" />
+            Offline
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 status-unknown">
+            <CloudOff className="h-3 w-3" />
+            Unknown
+          </Badge>
+        ))
+      }
+    >
       <UnsavedChangesGuard
-        isDirty={isDirty && formData.s3Enabled}
-        onSave={() => mutation.mutateAsync(formData)}
-        onDiscard={() => setFormData(savedS3)}
+        isDirty={draft.isDirty && form.s3Enabled}
+        onSave={save}
+        onDiscard={draft.reset}
       />
-      <CardContent className="space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
           <div className="space-y-0.5">
             <Label htmlFor="s3-enabled" className="text-base">
@@ -230,87 +269,44 @@ function StorageSettingsSection() {
           </div>
           <Switch
             id="s3-enabled"
-            checked={formData.s3Enabled}
+            checked={form.s3Enabled}
             onCheckedChange={(checked) => {
-              setFormData({ ...formData, s3Enabled: checked });
+              draft.set('s3Enabled', checked);
               // Switching off saves by itself: the form is locked while S3 is off.
-              if (!checked && settings?.s3Enabled) mutation.mutate({ s3Enabled: false });
+              if (!checked && settings?.s3Enabled) void saveChanges({ s3Enabled: false });
             }}
           />
         </div>
 
         <div
-          aria-disabled={!formData.s3Enabled || undefined}
-          inert={!formData.s3Enabled}
-          className={cn('space-y-4', !formData.s3Enabled && 'section-disabled')}
+          aria-disabled={!form.s3Enabled || undefined}
+          inert={!form.s3Enabled}
+          className={cn('space-y-4', !form.s3Enabled && 'section-disabled')}
         >
-          <div className="space-y-2">
-            <Label htmlFor="s3-bucket">Bucket Name</Label>
-            <Input
-              id="s3-bucket"
-              value={formData.s3Config.bucket}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  s3Config: { ...formData.s3Config, bucket: e.target.value },
-                })
-              }
-              placeholder="my-bugpin-bucket"
-              required={formData.s3Enabled}
-            />
-            <p className="text-sm text-muted-foreground">The name of your S3 bucket</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="s3-region">Region</Label>
-            <Input
-              id="s3-region"
-              value={formData.s3Config.region}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  s3Config: { ...formData.s3Config, region: e.target.value },
-                })
-              }
-              placeholder="us-east-1"
-              required={formData.s3Enabled}
-            />
-            <p className="text-sm text-muted-foreground">
-              AWS region or S3-compatible service region
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="s3-access-key">Access Key ID</Label>
-            <Input
-              id="s3-access-key"
-              value={formData.s3Config.accessKeyId}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  s3Config: { ...formData.s3Config, accessKeyId: e.target.value },
-                })
-              }
-              placeholder="AKIAIOSFODNN7EXAMPLE"
-              required={formData.s3Enabled}
-            />
-            <p className="text-sm text-muted-foreground">Your AWS access key ID or equivalent</p>
-          </div>
+          {CONFIG_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-2">
+              <Label htmlFor={field.id}>{field.label}</Label>
+              <Input
+                id={field.id}
+                value={form[field.key]}
+                onChange={(e) => draft.set(field.key, e.target.value)}
+                placeholder={field.placeholder}
+                required={field.required && form.s3Enabled}
+              />
+              <p className="text-sm text-muted-foreground">{field.help}</p>
+            </div>
+          ))}
 
           <div className="space-y-2">
             <Label htmlFor="s3-secret-key">Secret Access Key</Label>
             <Input
               id="s3-secret-key"
               type="password"
-              value={formData.s3Config.secretAccessKey}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  s3Config: { ...formData.s3Config, secretAccessKey: e.target.value },
-                })
-              }
-              placeholder="Enter secret access key"
-              required={formData.s3Enabled}
+              autoComplete="new-password"
+              value={form.secretAccessKey}
+              onChange={(e) => draft.set('secretAccessKey', e.target.value)}
+              placeholder={secretSet ? 'Saved (leave empty to keep)' : 'Enter secret access key'}
+              required={form.s3Enabled && !secretSet}
             />
             <p className="text-sm text-muted-foreground">
               Your AWS secret access key or equivalent
@@ -321,13 +317,8 @@ function StorageSettingsSection() {
             <Label htmlFor="s3-endpoint">Custom Endpoint (Optional)</Label>
             <Input
               id="s3-endpoint"
-              value={formData.s3Config.endpoint}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  s3Config: { ...formData.s3Config, endpoint: e.target.value },
-                })
-              }
+              value={form.endpoint}
+              onChange={(e) => draft.set('endpoint', e.target.value)}
               placeholder="https://s3.example.com"
             />
             <p className="text-sm text-muted-foreground">
@@ -336,12 +327,13 @@ function StorageSettingsSection() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <Button
             type="button"
             variant="outline"
             onClick={() => testConnection()}
-            disabled={testing || !formData.s3Enabled}
+            disabled={testing || !form.s3Enabled || draft.isDirty}
+            aria-describedby={draft.isDirty ? 's3-test-hint' : undefined}
           >
             {testing ? (
               <>
@@ -352,9 +344,14 @@ function StorageSettingsSection() {
               'Test Connection'
             )}
           </Button>
+          {draft.isDirty && (
+            <p id="s3-test-hint" className="text-sm text-muted-foreground">
+              Save your changes to test them.
+            </p>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsCard>
   );
 }
 
@@ -372,13 +369,7 @@ function MigrationSection() {
     },
   });
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+  const { data: settings } = useSettings();
 
   const s3Enabled = settings?.s3Enabled || false;
   const hasLocalFiles = (stats?.localFiles || 0) > 0;
@@ -415,9 +406,8 @@ function MigrationSection() {
         toast.success('Migration started');
         queryClient.invalidateQueries({ queryKey: ['storage-stats'] });
       }
-    } catch (err: unknown) {
-      const error = err as Error & { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || 'Failed to start migration');
+    } catch (error: unknown) {
+      toast.error(apiErrorMessage(error, 'Failed to start migration'));
     }
   };
 
@@ -427,9 +417,8 @@ function MigrationSection() {
       if (response.data.success) {
         toast.info('Migration cancelled');
       }
-    } catch (err: unknown) {
-      const error = err as Error & { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || 'Failed to cancel migration');
+    } catch (error: unknown) {
+      toast.error(apiErrorMessage(error, 'Failed to cancel migration'));
     }
   };
 
@@ -455,12 +444,11 @@ function MigrationSection() {
   const isRunning = progress?.status === 'running';
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Storage Migration</CardTitle>
-        <CardDescription>Migrate existing files from local storage to S3</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SettingsCard
+      title="Storage Migration"
+      description="Migrate existing files from local storage to S3"
+    >
+      <div className="space-y-6">
         {/* Storage Statistics */}
         <div className="grid grid-cols-3 gap-4">
           <div className="rounded-lg border p-4">
@@ -570,7 +558,7 @@ function MigrationSection() {
             cd src/server && bun run scripts/migrate-to-s3.ts
           </pre>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsCard>
   );
 }
