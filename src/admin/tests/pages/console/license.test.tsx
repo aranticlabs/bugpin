@@ -128,22 +128,55 @@ it('shows a synced inactive license with its details and allows sync to restore 
 });
 
 it.each([
-  ['License has expired', 'Expired'],
-  ['License inactive', 'Inactive'],
-  ['License verification required', 'Verification required'],
-  [
-    'License verification required. Make sure your BugPin server is connected to the internet. Verification will retry automatically.',
-    'Verification required',
-  ],
-])('shows the correct badge and allows syncing when the status is %s', async (message, badge) => {
-  const status = { eeAvailable: true, licensed: false, installed: true, message };
-  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
-  const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
+  ['License has expired', '2020-01-01T00:00:00.000Z', 'Expired'],
+  ['License inactive', '2099-01-01T00:00:00.000Z', 'Inactive'],
+  ['License verification required', '2099-01-01T00:00:00.000Z', 'Inactive'],
+  ['Any other explanation', undefined, 'Inactive'],
+])(
+  'shows the badge from the status fields and allows syncing when the status is %s',
+  async (message, expiresAt, badge) => {
+    const status = { eeAvailable: true, licensed: false, installed: true, message, expiresAt };
+    vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
+    const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
+    const user = userEvent.setup();
+    renderWithQueryAndRouter(<License />);
+    expect(await screen.findByText(badge, { exact: true })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Sync license' }));
+    await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+  }
+);
+
+it('treats a project selection that was changed back as unchanged', async () => {
+  const { api } = await import('../../../api/client');
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      projects: [
+        { id: 'proj_one', name: 'Project One' },
+        { id: 'proj_two', name: 'Project Two' },
+      ],
+    },
+  });
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    installed: true,
+    licensed: true,
+    projectLimit: 2,
+    usedProjects: 1,
+    licensedProjectIds: ['proj_one'],
+  });
+  const select = vi.spyOn(licenseApi, 'selectProjects');
   const user = userEvent.setup();
   renderWithQueryAndRouter(<License />);
-  expect(await screen.findByText(badge, { exact: true })).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Sync license' }));
-  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+
+  const projectTwo = await screen.findByRole('checkbox', { name: 'Project Two' });
+  await user.click(projectTwo);
+  expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+
+  await user.click(projectTwo);
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  );
+  expect(select).not.toHaveBeenCalled();
 });
 
 it('warns on an active license that is also running on another server', async () => {

@@ -133,7 +133,7 @@ export async function initializeEE(options: { refresh?: boolean } = {}): Promise
     return;
   }
 
-  // License restore is best-effort — errors here should not disable EE
+  // License restore is best-effort: errors here should not disable EE
   try {
     if (!plugin.isLicensed()) {
       const storedKey = await settingsRepo.get<string>('ee:license_key');
@@ -220,6 +220,16 @@ export function hasEEFeature(feature: EEFeature): boolean {
   return licenseService.hasFeature(feature);
 }
 
+type InactiveLicenseReason = 'expired' | 'inactive' | 'verification_required';
+
+function inactiveLicenseReason(
+  license: { expiresAt?: string | null },
+  error: string | undefined
+): InactiveLicenseReason {
+  if (license.expiresAt && new Date(license.expiresAt).getTime() <= Date.now()) return 'expired';
+  return !error || error === 'License inactive' ? 'inactive' : 'verification_required';
+}
+
 /**
  * Get license status for API responses
  */
@@ -243,12 +253,14 @@ export function getLicenseStatus() {
   }
 
   const valid = licenseService.isValid();
-  const warning = licenseService.getStatus().warning;
+  const { error, warning } = licenseService.getStatus();
   return {
     eeAvailable: true,
     installed: true,
     licensed: valid,
-    ...(!valid ? { message: licenseService.getStatus().error ?? 'License inactive' } : {}),
+    ...(!valid
+      ? { message: error ?? 'License inactive', reason: inactiveLicenseReason(license, error) }
+      : {}),
     ...(warning ? { warning } : {}),
     ...getEEProjectLicenseService()?.getStatus(),
     plan: license.plan,

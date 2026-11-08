@@ -5,6 +5,8 @@ export interface LicenseStatus {
   licensed: boolean;
   installed?: boolean;
   message?: string;
+  /** Set when an installed license is not valid. */
+  reason?: 'expired' | 'inactive' | 'verification_required';
   warning?: string;
   plan?: string;
   customerName?: string;

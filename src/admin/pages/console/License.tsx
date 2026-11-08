@@ -151,7 +151,7 @@ export function License() {
     onSuccess: (synced) => {
       invalidateLicense();
       setSelectedIds(null);
-      if (synced.message === 'License inactive') {
+      if (!synced.licensed) {
         toast.info('License is inactive. Enterprise features are disabled.');
       } else {
         toast.success('License synced');
@@ -234,6 +234,12 @@ export function License() {
     expiresDate && !neverExpires
       ? Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
       : 0;
+  const isExpired = !!expiresDate && !neverExpires && expiresDate.getTime() <= Date.now();
+  const savedProjectIds = status?.licensedProjectIds ?? [];
+  const selectionChanged =
+    selectedIds !== null &&
+    (selectedIds.length !== savedProjectIds.length ||
+      selectedIds.some((id) => !savedProjectIds.includes(id)));
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -276,11 +282,11 @@ export function License() {
                   {isLicensed && <Check className="h-3 w-3 mr-1" />}
                   {isLicensed
                     ? 'Licensed'
-                    : status?.message === 'License inactive'
-                      ? 'Inactive'
-                      : status?.message === 'License has expired'
-                        ? 'Expired'
-                        : 'Verification required'}
+                    : status?.reason === 'expired' || isExpired
+                      ? 'Expired'
+                      : status?.reason === 'verification_required'
+                        ? 'Verification required'
+                        : 'Inactive'}
                 </Badge>
               </div>
               {isLicensed && status?.warning && (
@@ -386,8 +392,13 @@ export function License() {
                         disabled={selectionMutation.isPending || syncMutation.isPending}
                       />
                       <UnsavedChangesGuard
-                        isDirty={selectedIds !== null}
-                        onSave={() => selectionMutation.mutateAsync(selectedIds ?? [])}
+                        isDirty={selectionChanged}
+                        onSave={() =>
+                          selectionMutation
+                            .mutateAsync(selectedIds ?? [])
+                            .then(() => true)
+                            .catch(() => false)
+                        }
                         onDiscard={() => setSelectedIds(null)}
                       />
                     </>
