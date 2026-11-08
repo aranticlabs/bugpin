@@ -1,7 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api } from '../api/client';
+import { api, getApiErrorMessage } from '../api/client';
+import { dashboardKeys } from './useDashboard';
+import { gamificationKeys } from './useGamification';
 import type { ReporterMessage } from '@shared/types';
+
+export interface SendReporterMessageInput {
+  message: string;
+  ccSender?: boolean;
+  files?: File[];
+}
 
 export function useReporterMessages(reportId: string) {
   const queryClient = useQueryClient();
@@ -16,25 +24,63 @@ export function useReporterMessages(reportId: string) {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (data: { message: string; ccSender?: boolean }) => {
-      const response = await api.post(`/reports/${reportId}/reporter-messages`, data);
+    mutationFn: async (data: SendReporterMessageInput) => {
+      let body: FormData | { message: string; ccSender?: boolean } = {
+        message: data.message,
+        ccSender: data.ccSender,
+      };
+      if (data.files?.length) {
+        body = new FormData();
+        body.set('message', data.message);
+        body.set('ccSender', String(data.ccSender ?? false));
+        for (const file of data.files) body.append('files[]', file);
+      }
+      const response = await api.post(
+        `/reports/${reportId}/reporter-messages`,
+        body,
+        body instanceof FormData
+          ? { headers: { 'Content-Type': 'multipart/form-data' } }
+          : undefined
+      );
       return response.data.reporterMessage as ReporterMessage;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reporterMessages', reportId] });
+      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: gamificationKeys.self() });
       toast.success('Message sent to reporter');
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to send message');
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Failed to send message')),
+  });
+
+  const moderation = useMutation({
+    mutationFn: async ({ messageId, hidden }: { messageId: string; hidden: boolean }) => {
+      const response = await api.post(
+        `/reports/${reportId}/reporter-messages/${messageId}/${hidden ? 'hide' : 'unhide'}`
+      );
+      return response.data.message as ReporterMessage;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporterMessages', reportId] });
+      queryClient.invalidateQueries({ queryKey: ['report-history', reportId] });
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, 'Failed to change message visibility')),
   });
 
   return {
     messages: query.data ?? [],
     isLoading: query.isLoading,
     error: query.error,
-    sendMessage: sendMutation.mutate,
+    refetch: query.refetch,
     sendMessageAsync: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
+    sendError: sendMutation.error,
+    setHidden: moderation.mutateAsync,
+    isModerating: moderation.isPending,
+    moderationError: moderation.error,
+    moderatingMessageId: moderation.isPending ? moderation.variables?.messageId : undefined,
   };
 }
