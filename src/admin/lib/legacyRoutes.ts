@@ -2,7 +2,6 @@ const SETTINGS_TABS: Record<string, string> = {
   general: '/settings/general',
   smtp: '/settings/email',
   storage: '/settings/storage',
-  privacy: '/settings/data-privacy',
   'api-tokens': '/settings/account/api-tokens',
   webhooks: '/projects',
 };

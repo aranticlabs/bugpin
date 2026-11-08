@@ -7,7 +7,6 @@ describe('legacySettingsPath', () => {
     ['/settings', '#general', '/settings/general'],
     ['/settings', '#smtp', '/settings/email'],
     ['/settings', '#storage', '/settings/storage'],
-    ['/settings', '#privacy', '/settings/data-privacy'],
     ['/settings', '#api-tokens', '/settings/account/api-tokens'],
     ['/settings', '#webhooks', '/projects'],
     ['/notifications', '', '/settings/project-defaults/notifications'],

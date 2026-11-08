@@ -145,10 +145,6 @@ export function SettingsRouter() {
         }
       />
       <Route
-        path="account/security"
-        element={<Navigate to="/settings/account/profile?tab=security" replace />}
-      />
-      <Route
         path="account/notifications"
         element={
           <SettingsPage>
@@ -266,10 +262,6 @@ export function SettingsRouter() {
         }
       />
       <Route
-        path="project-defaults/dialog-colors"
-        element={<Navigate to="/settings/project-defaults/dialog" replace />}
-      />
-      <Route
         path="project-defaults/language"
         element={
           <SettingsPage adminOnly>
@@ -309,7 +301,6 @@ export function SettingsRouter() {
           </SettingsPage>
         }
       />
-      <Route path="webhooks" element={<Navigate to="/projects" replace />} />
       <Route path="*" element={<Navigate to="/settings" replace />} />
     </Routes>
   );

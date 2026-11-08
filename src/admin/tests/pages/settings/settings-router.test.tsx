@@ -65,8 +65,8 @@ describe('SettingsRouter', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows Account and Security tabs on the profile and redirects the old security path', async () => {
-    renderSettings('/settings/account/security');
+  it('shows Account and Security tabs on the profile and opens the tab from the query', async () => {
+    renderSettings('/settings/account/profile?tab=security');
 
     const tabs = await screen.findAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual(['Account', 'Security']);
@@ -189,13 +189,6 @@ describe('SettingsRouter', () => {
 
     expect(await screen.findByRole('heading', { name: 'Viewer User' })).toBeInTheDocument();
     expect(screen.getByText('Sign-in and Security')).toBeInTheDocument();
-  });
-
-  it('sends the former webhooks page to Projects', async () => {
-    renderSettings('/settings/webhooks');
-
-    expect(await screen.findByText('Projects list')).toBeInTheDocument();
-    expect(screen.getByLabelText('Current path')).toHaveTextContent('/projects');
   });
 
   it('falls back to the settings start page for unknown paths', async () => {
