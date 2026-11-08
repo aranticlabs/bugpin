@@ -539,6 +539,8 @@ widget.get('/config/:apiKey', async (c) => {
   const projLanguage = project.settings?.language ?? appSettings.language;
   const globalButton = appSettings.widgetLauncherButton;
   const globalDialog = appSettings.widgetDialog;
+  const projDialogContent = project.settings?.widgetDialogContent;
+  const globalDialogContent = appSettings.widgetDialogContent;
   const globalScreenshot = appSettings.screenshot;
   const diagnosticPolicy = privacyPolicyService.resolveDiagnosticPolicy(
     appSettings.privacy,
@@ -590,6 +592,15 @@ widget.get('/config/:apiKey', async (c) => {
     builtin: tooltipLauncherDefaults,
   };
 
+  const dialogTextBundle = (
+    key: 'title' | 'titlePlaceholder' | 'descriptionPlaceholder' | 'submitButtonText'
+  ): LauncherTextBundle => ({
+    project: projDialogContent && key in projDialogContent ? projDialogContent[key] : undefined,
+    global: globalDialogContent[key],
+    builtin: null,
+  });
+  const dialogShowPriority = projDialogContent?.showPriority ?? globalDialogContent.showPriority;
+
   // Widget Button light mode colors
   const lightButtonColor = projButton?.lightButtonColor ?? globalButton.lightButtonColor;
   const lightTextColor = projButton?.lightTextColor ?? globalButton.lightTextColor;
@@ -618,6 +629,23 @@ widget.get('/config/:apiKey', async (c) => {
   const dialogLightInputColor = projDialog?.lightInputColor ?? globalDialog.lightInputColor;
   const dialogLightForegroundColor =
     projDialog?.lightForegroundColor ?? globalDialog.lightForegroundColor;
+  const dialogLightSecondaryButtonColor =
+    projDialog?.lightSecondaryButtonColor ?? globalDialog.lightSecondaryButtonColor;
+  const dialogLightSecondaryButtonTextColor =
+    projDialog?.lightSecondaryButtonTextColor ?? globalDialog.lightSecondaryButtonTextColor;
+  const dialogLightSecondaryButtonHoverColor =
+    projDialog?.lightSecondaryButtonHoverColor ?? globalDialog.lightSecondaryButtonHoverColor;
+  const dialogLightSecondaryButtonTextHoverColor =
+    projDialog?.lightSecondaryButtonTextHoverColor ??
+    globalDialog.lightSecondaryButtonTextHoverColor;
+  const dialogLightTabBarColor = projDialog?.lightTabBarColor ?? globalDialog.lightTabBarColor;
+  const dialogLightActiveTabColor =
+    projDialog?.lightActiveTabColor ?? globalDialog.lightActiveTabColor;
+  const dialogLightActiveTabTextColor =
+    projDialog?.lightActiveTabTextColor ?? globalDialog.lightActiveTabTextColor;
+  const dialogLightTabTextColor = projDialog?.lightTabTextColor ?? globalDialog.lightTabTextColor;
+  const dialogLightTabTextHoverColor =
+    projDialog?.lightTabTextHoverColor ?? globalDialog.lightTabTextHoverColor;
   const dialogDarkButtonColor = projDialog?.darkButtonColor ?? globalDialog.darkButtonColor;
   const dialogDarkTextColor = projDialog?.darkTextColor ?? globalDialog.darkTextColor;
   const dialogDarkButtonHoverColor =
@@ -631,6 +659,22 @@ widget.get('/config/:apiKey', async (c) => {
   const dialogDarkInputColor = projDialog?.darkInputColor ?? globalDialog.darkInputColor;
   const dialogDarkForegroundColor =
     projDialog?.darkForegroundColor ?? globalDialog.darkForegroundColor;
+  const dialogDarkSecondaryButtonColor =
+    projDialog?.darkSecondaryButtonColor ?? globalDialog.darkSecondaryButtonColor;
+  const dialogDarkSecondaryButtonTextColor =
+    projDialog?.darkSecondaryButtonTextColor ?? globalDialog.darkSecondaryButtonTextColor;
+  const dialogDarkSecondaryButtonHoverColor =
+    projDialog?.darkSecondaryButtonHoverColor ?? globalDialog.darkSecondaryButtonHoverColor;
+  const dialogDarkSecondaryButtonTextHoverColor =
+    projDialog?.darkSecondaryButtonTextHoverColor ?? globalDialog.darkSecondaryButtonTextHoverColor;
+  const dialogDarkTabBarColor = projDialog?.darkTabBarColor ?? globalDialog.darkTabBarColor;
+  const dialogDarkActiveTabColor =
+    projDialog?.darkActiveTabColor ?? globalDialog.darkActiveTabColor;
+  const dialogDarkActiveTabTextColor =
+    projDialog?.darkActiveTabTextColor ?? globalDialog.darkActiveTabTextColor;
+  const dialogDarkTabTextColor = projDialog?.darkTabTextColor ?? globalDialog.darkTabTextColor;
+  const dialogDarkTabTextHoverColor =
+    projDialog?.darkTabTextHoverColor ?? globalDialog.darkTabTextHoverColor;
 
   const whiteLabel = await getEEHooks().getWhiteLabelService()?.getConfig();
   // Return widget configuration
@@ -681,6 +725,15 @@ widget.get('/config/:apiKey', async (c) => {
       dialogLightSecondaryColor,
       dialogLightInputColor,
       dialogLightForegroundColor,
+      dialogLightSecondaryButtonColor,
+      dialogLightSecondaryButtonTextColor,
+      dialogLightSecondaryButtonHoverColor,
+      dialogLightSecondaryButtonTextHoverColor,
+      dialogLightTabBarColor,
+      dialogLightActiveTabColor,
+      dialogLightActiveTabTextColor,
+      dialogLightTabTextColor,
+      dialogLightTabTextHoverColor,
       // Dialog colors (dark mode)
       dialogDarkButtonColor,
       dialogDarkTextColor,
@@ -690,9 +743,23 @@ widget.get('/config/:apiKey', async (c) => {
       dialogDarkSecondaryColor,
       dialogDarkInputColor,
       dialogDarkForegroundColor,
+      dialogDarkSecondaryButtonColor,
+      dialogDarkSecondaryButtonTextColor,
+      dialogDarkSecondaryButtonHoverColor,
+      dialogDarkSecondaryButtonTextHoverColor,
+      dialogDarkTabBarColor,
+      dialogDarkActiveTabColor,
+      dialogDarkActiveTabTextColor,
+      dialogDarkTabTextColor,
+      dialogDarkTabTextHoverColor,
       enableHoverScaleEffect,
       tooltipEnabled,
       tooltipText: tooltipTextBundle,
+      dialogTitle: dialogTextBundle('title'),
+      dialogTitlePlaceholder: dialogTextBundle('titlePlaceholder'),
+      dialogDescriptionPlaceholder: dialogTextBundle('descriptionPlaceholder'),
+      dialogSubmitButtonText: dialogTextBundle('submitButtonText'),
+      dialogShowPriority,
       captureMethod: 'visible', // Default capture method
       useScreenCaptureAPI,
       maxScreenshotSizeMb,

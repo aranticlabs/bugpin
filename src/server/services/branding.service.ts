@@ -2,6 +2,8 @@ import { withEffectiveBranding } from '../utils/effective-branding.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import type { WhiteLabelConfig } from '../types/ee-plugin.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
+import { settingsCacheService } from './settings-cache.service.js';
+import { isValidHexColor } from '../utils/validators.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type { ThemeColors, AdminButtonColors } from '@shared/types';
@@ -69,10 +71,8 @@ export const brandingService = {
    */
   async updateWidgetPrimaryColors(colors: Partial<ThemeColors>): Promise<Result<void>> {
     try {
-      // Validate hex color format for all provided colors
-      const hexColorRegex = /^#[0-9A-Fa-f]{6}$/;
       for (const [key, value] of Object.entries(colors)) {
-        if (value && !hexColorRegex.test(value)) {
+        if (value !== undefined && !isValidHexColor(value)) {
           return Result.fail(
             `Invalid hex color format for ${key}. Must be #RRGGBB`,
             'INVALID_COLOR'
@@ -80,8 +80,8 @@ export const brandingService = {
         }
       }
 
-      // Update nested widgetDialog settings directly
       await settingsRepo.updateNested('widgetDialog', colors);
+      settingsCacheService.invalidate();
 
       logger.info('Widget dialog colors updated', { colors });
       return Result.ok(undefined);

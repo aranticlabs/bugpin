@@ -29,6 +29,7 @@ import {
   projectNotificationDefaultsRepo,
 } from '../../src/server/database/repositories/notification-preferences.repo';
 import { widgetVersionObservationsRepo } from '../../src/server/database/repositories/widget-version-observations.repo';
+import type { ReportMetadata } from '../../src/shared/types';
 
 const originalConfig = { ...config };
 let tempDir = '';
@@ -90,7 +91,7 @@ async function createUser(email = 'user@example.com') {
   });
 }
 
-const baseMetadata = {
+const baseMetadata: ReportMetadata = {
   url: 'https://example.com',
   browser: { name: 'Chrome', version: '1', userAgent: 'UA' },
   device: { type: 'desktop', os: 'macOS' },
@@ -299,7 +300,7 @@ describe('usersRepo', () => {
       name: 'Admin',
       isActive: false,
       email: 'Updated@Example.com',
-      avatarUrl: null,
+      avatarUrl: '',
       role: 'viewer',
     });
     expect(updated?.isActive).toBe(false);
@@ -416,6 +417,37 @@ describe('settingsRepo', () => {
 
     const merged = await settingsRepo.updateNested('branding', { primaryColor: '#123456' });
     expect(merged.branding.primaryColor).toBe('#123456');
+  });
+
+  it('writes every key of updateAll in one transaction', async () => {
+    await settingsRepo.updateAll({ appName: 'Before', retentionDays: 30 });
+    const unserializable = {
+      euPrivacyMode: true,
+      toJSON: () => {
+        throw new Error('cannot serialize');
+      },
+    };
+
+    await expect(
+      settingsRepo.updateAll({
+        appName: 'After',
+        retentionDays: 60,
+        privacy: unserializable,
+      })
+    ).rejects.toThrow('cannot serialize');
+
+    const settings = await settingsRepo.getAll();
+    expect(settings.appName).toBe('Before');
+    expect(settings.retentionDays).toBe(30);
+  });
+
+  it('merges updateNested into the stored value', async () => {
+    await settingsRepo.updateNested('widgetDialog', { lightButtonColor: '#111111' });
+    const settings = await settingsRepo.updateNested('widgetDialog', {
+      darkButtonColor: '#222222',
+    });
+    expect(settings.widgetDialog.lightButtonColor).toBe('#111111');
+    expect(settings.widgetDialog.darkButtonColor).toBe('#222222');
   });
 
   it('clamps legacy video upload limits on read', async () => {
@@ -876,7 +908,7 @@ describe('webhooksRepo', () => {
 
     const updated = await webhooksRepo.update(secondary.id, {
       isActive: false,
-      secret: null,
+      secret: '',
       events: ['report.created'],
     });
     expect(updated?.isActive).toBe(false);

@@ -3,7 +3,6 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { settingsService } from '../../services/settings.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
-import { cleanupService } from '../../services/cleanup.service.js';
 import { emailService } from '../../services/email.service.js';
 import { templateService } from '../../services/template.service.js';
 import {
@@ -13,8 +12,9 @@ import {
   DEFAULT_BRAND_COLOR,
 } from '../../constants/email-templates.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
-import { validate, schemas } from '../../middleware/validate.js';
+import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 import { requireEEFeature, hasEEFeature } from '../../utils/ee.js';
+import { errorStatus } from '../../utils/http-status.js';
 import type { EmailTemplateType } from '@shared/types';
 
 // Email template routes require 'custom-templates' EE feature
@@ -28,10 +28,13 @@ settings.use('*', authMiddleware);
 // Get Settings (Admin only)
 
 settings.get('/', authorize(['admin']), async (c) => {
-  const result = await settingsService.getAll();
+  const result = await settingsService.getAllRedacted();
 
   if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 400);
+    return c.json(
+      { success: false, error: result.code, message: result.error },
+      errorStatus(result.code)
+    );
   }
 
   return c.json({
@@ -43,7 +46,7 @@ settings.get('/', authorize(['admin']), async (c) => {
 // Update Settings
 
 settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings }), async (c) => {
-  const body = schemas.updateSettings.parse(c.get('validatedBody' as never));
+  const body = validatedBody(c, schemas.updateSettings);
 
   // Check if S3 storage is being enabled without EE license
   if (
@@ -77,7 +80,10 @@ settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings 
   const result = await settingsService.update(body);
 
   if (!result.success) {
-    return c.json({ success: false, error: result.code, message: result.error }, 400);
+    return c.json(
+      { success: false, error: result.code, message: result.error },
+      result.code === 'FEATURE_NOT_LICENSED' ? 402 : errorStatus(result.code)
+    );
   }
 
   return c.json({
@@ -122,14 +128,18 @@ settings.post('/test-email', authorize(['admin']), async (c) => {
 
     const { smtpConfig, testEmail, appName } = validation.data;
 
-    const result = await emailService.sendTestEmail(smtpConfig, testEmail, appName || 'BugPin');
+    const result = await settingsService.sendTestEmail({
+      smtpConfig,
+      testEmail,
+      appName: appName || 'BugPin',
+    });
 
     if (!result.success) {
       return c.json(
         {
           success: false,
-          error: 'SMTP_ERROR',
-          message: result.error || 'Failed to send test email',
+          error: result.code,
+          message: result.error,
         },
         400
       );
@@ -188,7 +198,10 @@ settings.post(
       const result = await settingsService.getAll();
 
       if (!result.success) {
-        return c.json({ success: false, error: result.code, message: result.error }, 400);
+        return c.json(
+          { success: false, error: result.code, message: result.error },
+          errorStatus(result.code)
+        );
       }
 
       const settings = withEffectiveBranding(result.value);
@@ -264,7 +277,10 @@ settings.post(
       const result = await settingsService.getAll();
 
       if (!result.success) {
-        return c.json({ success: false, error: result.code, message: result.error }, 400);
+        return c.json(
+          { success: false, error: result.code, message: result.error },
+          errorStatus(result.code)
+        );
       }
 
       const appSettings = withEffectiveBranding(result.value);
@@ -366,8 +382,16 @@ settings.delete(
   authorize(['admin']),
   validate({ body: z.object({ confirmation: z.literal('delete') }) }),
   async (c) => {
-    const { deleted, errors } = await cleanupService.deleteAllReports();
+    const result = await settingsService.deleteAllReports();
 
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        errorStatus(result.code)
+      );
+    }
+
+    const { deleted, errors } = result.value;
     if (errors > 0) {
       return c.json(
         {

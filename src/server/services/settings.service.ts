@@ -1,6 +1,8 @@
 import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
+import { cleanupService } from './cleanup.service.js';
+import { emailService } from './email.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -12,6 +14,7 @@ import {
 import type {
   AppSettings,
   GlobalWidgetLauncherButtonSettings,
+  GlobalWidgetDialogContentSettings,
   GlobalScreenshotSettings,
   NotificationDefaultSettings,
   BrandingSettings,
@@ -66,6 +69,7 @@ export interface UpdateSettingsInput {
   // Nested widget settings
   widgetLauncherButton?: Partial<GlobalWidgetLauncherButtonSettings>;
   widgetDialog?: Partial<ThemeColors>;
+  widgetDialogContent?: Partial<GlobalWidgetDialogContentSettings>;
   screenshot?: Partial<GlobalScreenshotSettings>;
   // Notification defaults
   notifications?: Partial<NotificationDefaultSettings>;
@@ -75,15 +79,88 @@ export interface UpdateSettingsInput {
   adminButton?: Partial<AdminButtonColors>;
 }
 
+export interface TestEmailInput {
+  smtpConfig: {
+    host: string;
+    port: number;
+    user?: string;
+    password?: string;
+    from: string;
+  };
+  testEmail: string;
+  appName: string;
+}
+
+export interface DeleteAllReportsOutcome {
+  deleted: number;
+  errors: number;
+}
+
+type SmtpConfig = AppSettings['smtpConfig'];
+type S3Config = AppSettings['s3Config'];
+
+// Helpers
+
+/** Shallow merge that ignores keys whose patch value is undefined; null is kept as a value */
+function mergeDefined<T extends object>(current: T, patch: Partial<T> | undefined): T {
+  const merged: T = { ...current };
+  if (!patch) return merged;
+  for (const key of Object.keys(patch) as Array<keyof T>) {
+    const value = patch[key];
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged;
+}
+
+/** An empty or missing password keeps the stored one; the read-only flag is never stored */
+function mergeSmtpConfig(
+  current: SmtpConfig,
+  patch: UpdateSettingsInput['smtpConfig']
+): SmtpConfig {
+  const { passwordSet: _passwordSet, ...stored } = current;
+  const { password, ...rest } = patch ?? {};
+  return { ...mergeDefined(stored, rest), ...(password ? { password } : {}) };
+}
+
+/** An empty or missing secret keeps the stored one; the read-only flag is never stored */
+function mergeS3Config(current: S3Config, patch: UpdateSettingsInput['s3Config']): S3Config {
+  const { secretAccessKeySet: _secretAccessKeySet, ...stored } = current;
+  const { secretAccessKey, ...rest } = patch ?? {};
+  return { ...mergeDefined(stored, rest), ...(secretAccessKey ? { secretAccessKey } : {}) };
+}
+
+/** Settings as sent to clients: secrets are replaced by flags saying whether one is stored */
+function redactSecrets(settings: AppSettings): AppSettings {
+  const { password, passwordSet: _passwordSet, ...smtpConfig } = settings.smtpConfig;
+  const {
+    secretAccessKey,
+    secretAccessKeySet: _secretAccessKeySet,
+    ...s3Config
+  } = settings.s3Config;
+  return {
+    ...settings,
+    smtpConfig: { ...smtpConfig, passwordSet: Boolean(password) },
+    s3Config: { ...s3Config, secretAccessKeySet: Boolean(secretAccessKey) },
+  };
+}
+
 // Service
 
 export const settingsService = {
   /**
-   * Get all application settings
+   * Get all application settings, including stored secrets (server-side use only)
    */
   async getAll(): Promise<Result<AppSettings>> {
     const settings = await settingsRepo.getAll();
     return Result.ok(settings);
+  },
+
+  /**
+   * Get all application settings with secrets redacted, for API responses
+   */
+  async getAllRedacted(): Promise<Result<AppSettings>> {
+    const settings = await settingsRepo.getAll();
+    return Result.ok(redactSecrets(settings));
   },
 
   /**
@@ -186,32 +263,36 @@ export const settingsService = {
       }
     }
 
-    // Validate SMTP config if SMTP is being enabled
-    if (input.smtpEnabled === true) {
-      const currentSettings = await settingsRepo.getAll();
-      const smtpConfig = input.smtpConfig ?? currentSettings.smtpConfig;
+    // Validate branding primary color if provided
+    if (input.branding?.primaryColor !== undefined) {
+      if (!isValidHexColor(input.branding.primaryColor)) {
+        return Result.fail('Invalid hex color format. Must be #RRGGBB', 'INVALID_COLOR');
+      }
+    }
 
+    const current = await settingsRepo.getAll();
+
+    const smtpConfig =
+      input.smtpConfig !== undefined
+        ? mergeSmtpConfig(current.smtpConfig, input.smtpConfig)
+        : current.smtpConfig;
+    const smtpEnabled = input.smtpEnabled ?? current.smtpEnabled;
+    if (smtpEnabled && (input.smtpEnabled !== undefined || input.smtpConfig !== undefined)) {
       const smtpValidation = validateSmtpConfig(smtpConfig);
       if (!smtpValidation.success) {
         return smtpValidation;
       }
     }
 
-    // Validate S3 config if S3 is being enabled
-    if (input.s3Enabled === true) {
-      const currentSettings = await settingsRepo.getAll();
-      const s3Config = input.s3Config ?? currentSettings.s3Config;
-
+    const s3Config =
+      input.s3Config !== undefined
+        ? mergeS3Config(current.s3Config, input.s3Config)
+        : current.s3Config;
+    const s3Enabled = input.s3Enabled ?? current.s3Enabled;
+    if (s3Enabled && (input.s3Enabled !== undefined || input.s3Config !== undefined)) {
       const s3Validation = validateS3Config(s3Config);
       if (!s3Validation.success) {
         return s3Validation;
-      }
-    }
-
-    // Validate branding primary color if provided
-    if (input.branding?.primaryColor !== undefined) {
-      if (!isValidHexColor(input.branding.primaryColor)) {
-        return Result.fail('Invalid hex color format. Must be #RRGGBB', 'INVALID_COLOR');
       }
     }
 
@@ -226,103 +307,61 @@ export const settingsService = {
     )
       return Result.fail('S3 storage requires Enterprise license', 'FEATURE_NOT_LICENSED');
 
-    // Build updates object with nested structure
     const updates: Partial<AppSettings> = {};
 
+    // System settings
     if (input.invitationExpirationDays !== undefined)
       updates.invitationExpirationDays = input.invitationExpirationDays;
     if (input.language !== undefined) updates.language = input.language;
-    if (input.reporterNotifications !== undefined)
-      updates.reporterNotifications = {
-        ...(await settingsRepo.getAll()).reporterNotifications,
-        ...input.reporterNotifications,
-      };
-    // System settings
-    if (input.appName !== undefined) {
-      updates.appName = input.appName.trim();
-    }
-    if (input.appUrl !== undefined) {
-      updates.appUrl = input.appUrl.trim();
-    }
-    if (input.retentionDays !== undefined) {
-      updates.retentionDays = input.retentionDays;
-    }
-    if (input.rateLimitPerMinute !== undefined) {
+    if (input.appName !== undefined) updates.appName = input.appName.trim();
+    if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
+    if (input.retentionDays !== undefined) updates.retentionDays = input.retentionDays;
+    if (input.rateLimitPerMinute !== undefined)
       updates.rateLimitPerMinute = input.rateLimitPerMinute;
-    }
-    if (input.sessionMaxAgeDays !== undefined) {
-      updates.sessionMaxAgeDays = input.sessionMaxAgeDays;
-    }
-    if (input.updateCheckEnabled !== undefined) {
+    if (input.sessionMaxAgeDays !== undefined) updates.sessionMaxAgeDays = input.sessionMaxAgeDays;
+    if (input.updateCheckEnabled !== undefined)
       updates.updateCheckEnabled = input.updateCheckEnabled;
-    }
 
     // Security settings
-    if (input.enforceHttps !== undefined) {
-      updates.enforceHttps = input.enforceHttps;
-    }
-    if (input.twoFactorPolicy !== undefined) {
-      updates.twoFactorPolicy = input.twoFactorPolicy;
-    }
-    if (input.passwordPolicy !== undefined) {
-      updates.passwordPolicy = input.passwordPolicy;
-    }
-    if (input.privacy !== undefined) {
-      const currentSettings = await settingsRepo.getAll();
-      updates.privacy = {
-        ...currentSettings.privacy,
-        ...input.privacy,
-      };
-    }
-    if (input.diagnostics !== undefined) {
-      updates.diagnostics = {
-        ...(await settingsRepo.getAll()).diagnostics,
-        ...input.diagnostics,
-      };
-    }
+    if (input.enforceHttps !== undefined) updates.enforceHttps = input.enforceHttps;
+    if (input.twoFactorPolicy !== undefined) updates.twoFactorPolicy = input.twoFactorPolicy;
+    if (input.passwordPolicy !== undefined) updates.passwordPolicy = input.passwordPolicy;
 
-    // SMTP settings
-    if (input.smtpEnabled !== undefined) {
-      updates.smtpEnabled = input.smtpEnabled;
-    }
-    if (input.smtpConfig !== undefined) {
-      updates.smtpConfig = input.smtpConfig;
-    }
+    // Nested settings: a partial payload only changes the fields it contains
+    if (input.privacy !== undefined) updates.privacy = mergeDefined(current.privacy, input.privacy);
+    if (input.diagnostics !== undefined)
+      updates.diagnostics = mergeDefined(current.diagnostics, input.diagnostics);
+    if (input.reporterNotifications !== undefined)
+      updates.reporterNotifications = mergeDefined(
+        current.reporterNotifications,
+        input.reporterNotifications
+      );
+    if (input.widgetLauncherButton !== undefined)
+      updates.widgetLauncherButton = mergeDefined(
+        current.widgetLauncherButton,
+        input.widgetLauncherButton
+      );
+    if (input.widgetDialogContent !== undefined)
+      updates.widgetDialogContent = mergeDefined(
+        current.widgetDialogContent,
+        input.widgetDialogContent
+      );
+    if (input.widgetDialog !== undefined)
+      updates.widgetDialog = mergeDefined(current.widgetDialog, input.widgetDialog);
+    if (input.screenshot !== undefined)
+      updates.screenshot = mergeDefined(current.screenshot, input.screenshot);
+    if (input.notifications !== undefined)
+      updates.notifications = mergeDefined(current.notifications, input.notifications);
+    if (input.branding !== undefined)
+      updates.branding = mergeDefined(current.branding, input.branding);
+    if (input.adminButton !== undefined)
+      updates.adminButton = mergeDefined(current.adminButton, input.adminButton);
 
-    // S3 settings
-    if (input.s3Enabled !== undefined) {
-      updates.s3Enabled = input.s3Enabled;
-    }
-    if (input.s3Config !== undefined) {
-      updates.s3Config = { ...(await settingsRepo.getAll()).s3Config, ...input.s3Config };
-    }
-
-    // Nested widget settings
-    if (input.widgetLauncherButton !== undefined) {
-      updates.widgetLauncherButton =
-        input.widgetLauncherButton as GlobalWidgetLauncherButtonSettings;
-    }
-    if (input.widgetDialog !== undefined) {
-      updates.widgetDialog = input.widgetDialog as ThemeColors;
-    }
-    if (input.screenshot !== undefined) {
-      updates.screenshot = input.screenshot as GlobalScreenshotSettings;
-    }
-
-    // Notification defaults
-    if (input.notifications !== undefined) {
-      updates.notifications = input.notifications as NotificationDefaultSettings;
-    }
-
-    // Branding settings
-    if (input.branding !== undefined) {
-      updates.branding = { ...(await settingsRepo.getAll()).branding, ...input.branding };
-    }
-
-    // Admin Console settings
-    if (input.adminButton !== undefined) {
-      updates.adminButton = { ...(await settingsRepo.getAll()).adminButton, ...input.adminButton };
-    }
+    // SMTP and S3 settings
+    if (input.smtpEnabled !== undefined) updates.smtpEnabled = input.smtpEnabled;
+    if (input.smtpConfig !== undefined) updates.smtpConfig = smtpConfig;
+    if (input.s3Enabled !== undefined) updates.s3Enabled = input.s3Enabled;
+    if (input.s3Config !== undefined) updates.s3Config = s3Config;
 
     const settings = await settingsRepo.updateAll(updates);
 
@@ -330,7 +369,34 @@ export const settingsService = {
     settingsCacheService.invalidate();
 
     logger.info('Settings updated', { updates: Object.keys(updates) });
-    return Result.ok(settings);
+    return Result.ok(redactSecrets(settings));
+  },
+
+  /**
+   * Send a test email; an empty password falls back to the stored SMTP password
+   */
+  async sendTestEmail(input: TestEmailInput): Promise<Result<void>> {
+    const smtpConfig = input.smtpConfig.password
+      ? input.smtpConfig
+      : { ...input.smtpConfig, password: (await settingsRepo.getAll()).smtpConfig.password };
+
+    const sent = await emailService.sendTestEmail(smtpConfig, input.testEmail, input.appName);
+    if (!sent.success) {
+      return Result.fail(sent.error || 'Failed to send test email', 'SMTP_ERROR');
+    }
+    return Result.ok(undefined);
+  },
+
+  /**
+   * Delete every report and its files immediately
+   */
+  async deleteAllReports(): Promise<Result<DeleteAllReportsOutcome>> {
+    try {
+      return Result.ok(await cleanupService.deleteAllReports());
+    } catch (error) {
+      logger.error('Failed to delete all reports', error);
+      return Result.fail('Failed to delete reports', 'DELETE_DATA_FAILED');
+    }
   },
 
   /**

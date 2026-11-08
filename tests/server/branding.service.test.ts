@@ -3,6 +3,7 @@ const licenseService = getEELicenseService()!;
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'bun:test';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
+import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 
 let brandingService: typeof import('../../src/server/services/branding.service').brandingService;
 
@@ -23,7 +24,7 @@ beforeEach(() => {
 
   settingsRepo.updateNested = async (key, payload) => {
     updateNestedCalls.push({ key, payload });
-    return true;
+    return settingsRepo.getAll();
   };
   settingsRepo.getAll = async () =>
     ({
@@ -82,8 +83,7 @@ describe('brandingService.getBrandingConfig', () => {
       throw new Error('boom');
     };
     const result = await brandingService.getBrandingConfig();
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('GET_FAILED');
+    expect(result).toMatchObject({ success: false, code: 'GET_FAILED' });
   });
 });
 
@@ -93,10 +93,33 @@ describe('brandingService.updateWidgetPrimaryColors', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects an empty color', async () => {
+    const result = await brandingService.updateWidgetPrimaryColors({ lightButtonColor: '' });
+    expect(result.success).toBe(false);
+    expect(updateNestedCalls).toHaveLength(0);
+  });
+
   it('updates colors when valid', async () => {
     const result = await brandingService.updateWidgetPrimaryColors({ lightButtonColor: '#112233' });
     expect(result.success).toBe(true);
     expect(updateNestedCalls[0]).toMatchObject({ key: 'widgetDialog' });
+  });
+
+  it('invalidates the settings cache after the write', async () => {
+    const originalInvalidate = settingsCacheService.invalidate;
+    let invalidations = 0;
+    settingsCacheService.invalidate = () => {
+      invalidations++;
+    };
+    try {
+      const result = await brandingService.updateWidgetPrimaryColors({
+        lightButtonColor: '#112233',
+      });
+      expect(result.success).toBe(true);
+      expect(invalidations).toBe(1);
+    } finally {
+      settingsCacheService.invalidate = originalInvalidate;
+    }
   });
 
   it('returns UPDATE_FAILED when update throws', async () => {
@@ -104,7 +127,6 @@ describe('brandingService.updateWidgetPrimaryColors', () => {
       throw new Error('boom');
     };
     const result = await brandingService.updateWidgetPrimaryColors({ lightButtonColor: '#112233' });
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('UPDATE_FAILED');
+    expect(result).toMatchObject({ success: false, code: 'UPDATE_FAILED' });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { brandingService } from '../../../src/server/services/branding.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
@@ -114,14 +114,62 @@ describe('branding routes - CE features (should work)', () => {
           cookie: 'session=sess_1',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ primary: '#123456', hover: '#654321' }),
+        body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
       });
       expect(res.status).toBe(200);
     });
 
-    it('returns 400 when widget primary colors update fails', async () => {
+    it('rejects unknown keys, null and empty or malformed colors', async () => {
+      let calls = 0;
+      brandingService.updateWidgetPrimaryColors = async () => {
+        calls++;
+        return Result.ok(undefined);
+      };
+      const app = createApp();
+      for (const body of [
+        { primary: '#123456' },
+        { lightButtonColor: null },
+        { lightButtonColor: '' },
+        { lightButtonColor: '#12345' },
+        { lightButtonColor: 'transparent' },
+      ]) {
+        const res = await app.request('http://localhost/branding/widget-primary-colors', {
+          method: 'PUT',
+          headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        expect(res.status).toBe(400);
+      }
+      expect(calls).toBe(0);
+    });
+
+    it('rejects viewers', async () => {
+      authService.validateSession = async () =>
+        Result.ok({ user: { ...baseUser, role: 'viewer' }, session: baseSession });
+      const app = createApp();
+      const res = await app.request('http://localhost/branding/widget-primary-colors', {
+        method: 'PUT',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify({ lightButtonColor: '#123456' }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 500 when the widget primary colors write fails', async () => {
       brandingService.updateWidgetPrimaryColors = async () =>
-        Result.fail('UPDATE_FAILED', 'UPDATE_FAILED');
+        Result.fail('Failed to update widget dialog colors', 'UPDATE_FAILED');
+      const app = createApp();
+      const res = await app.request('http://localhost/branding/widget-primary-colors', {
+        method: 'PUT',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify({ lightButtonColor: '#123456' }),
+      });
+      expect(res.status).toBe(500);
+    });
+
+    it('returns 400 when the service rejects the colors', async () => {
+      brandingService.updateWidgetPrimaryColors = async () =>
+        Result.fail('Invalid hex color format', 'INVALID_COLOR');
       const app = createApp();
       const res = await app.request('http://localhost/branding/widget-primary-colors', {
         method: 'PUT',
@@ -129,7 +177,7 @@ describe('branding routes - CE features (should work)', () => {
           cookie: 'session=sess_1',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ primary: '#123456', hover: '#654321' }),
+        body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
       });
       expect(res.status).toBe(400);
     });
@@ -145,7 +193,7 @@ describe('branding routes - CE features (should work)', () => {
           cookie: 'session=sess_1',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ primary: '#123456', hover: '#654321' }),
+        body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
       });
       expect(res.status).toBe(500);
     });
@@ -164,7 +212,7 @@ describe('branding routes - EE features (returns 402)', () => {
         body: formData,
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -180,7 +228,7 @@ describe('branding routes - EE features (returns 402)', () => {
         body: formData,
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -196,7 +244,7 @@ describe('branding routes - EE features (returns 402)', () => {
         body: formData,
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -213,7 +261,7 @@ describe('branding routes - EE features (returns 402)', () => {
         body: JSON.stringify({ color: '#123456' }),
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -227,10 +275,10 @@ describe('branding routes - EE features (returns 402)', () => {
           cookie: 'session=sess_1',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ primary: '#123456', hover: '#654321' }),
+        body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -243,7 +291,7 @@ describe('branding routes - EE features (returns 402)', () => {
         headers: { cookie: 'session=sess_1' },
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -256,7 +304,7 @@ describe('branding routes - EE features (returns 402)', () => {
         headers: { cookie: 'session=sess_1' },
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -269,7 +317,7 @@ describe('branding routes - EE features (returns 402)', () => {
         headers: { cookie: 'session=sess_1' },
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });
@@ -282,7 +330,7 @@ describe('branding routes - EE features (returns 402)', () => {
         headers: { cookie: 'session=sess_1' },
       });
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
   });

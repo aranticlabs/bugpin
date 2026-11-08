@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { widgetRoutes } from '../../../src/server/routes/widget/submit';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
-import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
+import {
+  DEFAULT_BRANDING,
+  settingsRepo,
+} from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { settingsService } from '../../../src/server/services/settings.service';
@@ -39,6 +42,8 @@ const baseProject: Project = {
 const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
+  source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug Report',
   status: 'open',
   priority: 'medium',
@@ -56,19 +61,23 @@ const baseReport: Report = {
 const baseSettings: Partial<AppSettings> = {
   rateLimitPerMinute: 60,
   branding: {
+    ...DEFAULT_BRANDING,
     primaryColor: '#000000',
   },
   widgetLauncherButton: {
-    theme: 'system',
+    theme: 'auto',
     position: 'bottom-right',
-    buttonText: 'Report Bug',
-    buttonShape: 'pill',
+    buttonText: { en: 'Report Bug' },
+    buttonShape: 'round',
     buttonIcon: 'bug',
     buttonIconSize: 20,
     buttonIconStroke: 2,
+    buttonOffsetX: 0,
+    buttonOffsetY: 0,
+    buttonSizeUnit: 'px',
     enableHoverScaleEffect: true,
     tooltipEnabled: true,
-    tooltipText: 'Report a bug',
+    tooltipText: { en: 'Report a bug' },
     lightButtonColor: '#000000',
     lightTextColor: '#ffffff',
     lightButtonHoverColor: '#333333',
@@ -88,6 +97,13 @@ const baseSettings: Partial<AppSettings> = {
     darkButtonHoverColor: '#cccccc',
     darkTextHoverColor: '#000000',
   },
+  widgetDialogContent: {
+    title: null,
+    titlePlaceholder: null,
+    descriptionPlaceholder: null,
+    submitButtonText: null,
+    showPriority: true,
+  },
   screenshot: {
     useScreenCaptureAPI: false,
     maxScreenshotSize: 10,
@@ -97,6 +113,7 @@ const baseSettings: Partial<AppSettings> = {
     enableScreenRecording: false,
     allowRecordingMicrophone: false,
     maxRecordingDurationSeconds: 180,
+    recordingQuality: 'standard',
   },
   language: {
     mode: 'auto',
@@ -259,7 +276,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('UNAUTHORIZED');
     });
 
@@ -277,7 +294,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = (await res.json()) as { message: string };
       expect(body.message).toBe('Invalid API key');
     });
 
@@ -304,7 +321,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('DEPRECATED');
     });
 
@@ -331,7 +348,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('ORIGIN_NOT_ALLOWED');
     });
 
@@ -400,7 +417,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('VALIDATION_ERROR');
     });
 
@@ -416,7 +433,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean; reportId: string };
       expect(body.success).toBe(true);
       expect(body.reportId).toBe('rpt_1');
     });
@@ -617,7 +634,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(429);
-      expect((await res.json()).error).toBe('VIDEO_QUOTA_EXCEEDED');
+      expect(((await res.json()) as { error: string }).error).toBe('VIDEO_QUOTA_EXCEEDED');
       expect(createCalled).toBe(false);
     });
 
@@ -1016,7 +1033,7 @@ describe('widget routes', () => {
       const res = await app.request(
         'http://localhost/widget/config/test_api_key_123?widgetVersion=1.1.3&integration=npm'
       );
-      const body = await res.json();
+      const body = (await res.json()) as { config: { projectName: string } };
       await Promise.resolve();
 
       expect(res.status).toBe(200);
@@ -1035,7 +1052,9 @@ describe('widget routes', () => {
 
       const app = createApp();
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
-      const body = await res.json();
+      const body = (await res.json()) as {
+        config: { features: { userActivityCapture: string; storageKeysCapture: boolean } };
+      };
 
       expect(res.status).toBe(200);
       expect(body.config.features.userActivityCapture).toBe('automatic');
@@ -1053,7 +1072,9 @@ describe('widget routes', () => {
 
       const app = createApp();
       const disabledResponse = await app.request('http://localhost/widget/config/test_api_key_123');
-      const disabledBody = await disabledResponse.json();
+      const disabledBody = (await disabledResponse.json()) as {
+        config: { features: { userActivityCapture: string } };
+      };
       expect(disabledBody.config.features.userActivityCapture).toBe('disabled');
     });
 
@@ -1064,7 +1085,7 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/invalid_key');
 
       expect(res.status).toBe(404);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('INVALID_API_KEY');
     });
 
@@ -1073,7 +1094,16 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        success: boolean;
+        config: {
+          projectName: string;
+          features: { screenRecording: boolean; recordingMicrophone: boolean };
+          theme: unknown;
+          position: unknown;
+          maxRecordingDurationSeconds: number;
+        };
+      };
       expect(body.success).toBe(true);
       expect(body.config.projectName).toBe('Test Project');
       expect(body.config.features).toBeDefined();
@@ -1098,7 +1128,12 @@ describe('widget routes', () => {
       };
 
       const res = await createApp().request('http://localhost/widget/config/test_api_key_123');
-      const body = await res.json();
+      const body = (await res.json()) as {
+        config: {
+          features: { screenRecording: boolean; recordingMicrophone: boolean };
+          maxRecordingDurationSeconds: number;
+        };
+      };
 
       expect(res.status).toBe(200);
       expect(body.config.features.screenRecording).toBe(true);
@@ -1123,7 +1158,9 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        config: { theme: string; position: string; buttonText: { project: unknown } };
+      };
       expect(body.config.theme).toBe('dark');
       expect(body.config.position).toBe('bottom-left');
       expect(body.config.buttonText.project).toEqual({ en: 'Custom Text' });
@@ -1146,7 +1183,13 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        config: {
+          buttonIcon: unknown;
+          buttonText: { project: unknown };
+          tooltipText: { project: unknown };
+        };
+      };
       expect(body.config.buttonIcon).toBeNull();
       expect(body.config.buttonText.project).toBeNull();
       expect(body.config.tooltipText.project).toBeNull();
@@ -1172,12 +1215,61 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.config.theme).toBe('system');
+      const body = (await res.json()) as {
+        config: {
+          theme: string;
+          position: string;
+          features: { screenRecording: boolean; recordingMicrophone: boolean };
+          maxRecordingDurationSeconds: number;
+        };
+      };
+      expect(body.config.theme).toBe('auto');
       expect(body.config.position).toBe('bottom-right');
       expect(body.config.features.screenRecording).toBe(true);
       expect(body.config.features.recordingMicrophone).toBe(true);
       expect(body.config.maxRecordingDurationSeconds).toBe(240);
+    });
+
+    it('sends dialog texts as bundles and lets the project hide the priority field', async () => {
+      projectResult = {
+        ...baseProject,
+        settings: {
+          widgetDialogContent: { title: { en: 'Send Feedback' }, showPriority: false },
+        },
+      };
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          widgetDialogContent: {
+            title: { en: 'Global Title' },
+            titlePlaceholder: null,
+            descriptionPlaceholder: { en: 'What happened?' },
+            submitButtonText: null,
+            showPriority: true,
+          },
+        }) as AppSettings;
+
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/config/test_api_key_123');
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        config: {
+          dialogTitle: unknown;
+          dialogDescriptionPlaceholder: unknown;
+          dialogShowPriority: boolean;
+        };
+      };
+      expect(body.config.dialogTitle).toEqual({
+        project: { en: 'Send Feedback' },
+        global: { en: 'Global Title' },
+        builtin: null,
+      });
+      expect(body.config.dialogDescriptionPlaceholder).toEqual({
+        global: { en: 'What happened?' },
+        builtin: null,
+      });
+      expect(body.config.dialogShowPriority).toBe(false);
     });
 
     it('exposes the global language block when project has no override', async () => {
@@ -1192,7 +1284,7 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { config: { language: unknown } };
       expect(body.config.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
     });
 
@@ -1208,7 +1300,7 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { config: { language: unknown } };
       expect(body.config.language).toEqual({ mode: 'auto', defaultLanguage: 'fr' });
     });
 
@@ -1225,7 +1317,7 @@ describe('widget routes', () => {
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { config: { language: unknown } };
       expect(body.config.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
     });
   });

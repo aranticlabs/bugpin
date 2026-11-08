@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
+import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 import { brandingService } from '../../services/branding.service.js';
+import { errorStatus } from '../../utils/http-status.js';
 import { requireEEFeature } from '../../utils/ee.js';
 
 const app = new Hono();
@@ -39,28 +41,37 @@ app.get('/config', async (c) => {
  * PUT /api/branding/widget-primary-colors - Update widget primary colors (admin only)
  * This is a CE feature - no EE license required
  */
-app.put('/widget-primary-colors', authMiddleware, authorize(['admin']), async (c) => {
-  try {
-    const colors = await c.req.json();
+app.put(
+  '/widget-primary-colors',
+  authMiddleware,
+  authorize(['admin']),
+  validate({ body: schemas.widgetDialogColors }),
+  async (c) => {
+    try {
+      const colors = validatedBody(c, schemas.widgetDialogColors);
 
-    const result = await brandingService.updateWidgetPrimaryColors(colors);
+      const result = await brandingService.updateWidgetPrimaryColors(colors);
 
-    if (!result.success) {
-      return c.json({ success: false, error: result.error, message: result.error }, 400);
+      if (!result.success) {
+        return c.json(
+          { success: false, error: result.code, message: result.error },
+          errorStatus(result.code)
+        );
+      }
+
+      return c.json({ success: true });
+    } catch (error) {
+      return c.json(
+        {
+          success: false,
+          error: 'UPDATE_FAILED',
+          message: 'Failed to update widget primary colors',
+        },
+        500
+      );
     }
-
-    return c.json({ success: true });
-  } catch (error) {
-    return c.json(
-      {
-        success: false,
-        error: 'UPDATE_FAILED',
-        message: 'Failed to update widget primary colors',
-      },
-      500
-    );
   }
-});
+);
 
 // ============================================================================
 // Admin Branding Routes (EE Feature)
