@@ -1,6 +1,6 @@
 import { getDb } from '../database.js';
 
-const enabledProject = `SELECT id FROM projects WHERE deleted_at IS NULL AND is_active = 1
+const enabledProject = `SELECT id FROM projects WHERE deleted_at IS NULL
   AND json_extract(settings, '$.reporterPortal.enabled') = 1`;
 
 export const reporterOwnershipRepo = {

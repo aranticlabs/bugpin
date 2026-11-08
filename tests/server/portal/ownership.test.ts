@@ -235,3 +235,16 @@ it('does not return an unauthorized token navigation target', async () => {
   });
   expect(login('jane@example.com', report.id).targetReportId).toBeUndefined();
 });
+
+it('uses the portal setting independently of widget project activation', async () => {
+  const report = await reportsRepo.create({
+    projectId: project.id,
+    title: 'Claimable report',
+    metadata,
+    claimableEmail: 'jane@example.com',
+  });
+  await projectsRepo.update(project.id, { isActive: false });
+  const session = login();
+  expect(session.attachedReportCount).toBe(1);
+  expect(reporterOwnershipRepo.canAccess(report.id, session.reporter.id)).toBe(true);
+});
