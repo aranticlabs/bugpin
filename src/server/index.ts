@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   // Database Initialization
   logger.info('Initializing database...');
   try {
-    initDatabase();
+    await initDatabase();
     logger.info('Database initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize database', error);

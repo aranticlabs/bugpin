@@ -3,8 +3,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { hasColumn, MigrationRunner } from './migration-runner.js';
 
 let db: Database | null = null;
+let migrationRunner: MigrationRunner | null = null;
 
 export function getDb(): Database {
   if (!db) {
@@ -51,6 +53,7 @@ export async function initDatabase(): Promise<void> {
     PRAGMA temp_store = MEMORY;
   `);
 
+  migrationRunner = new MigrationRunner(db, config.migrationsDir);
   logger.info('Database initialized', { path: config.dbPath });
 }
 
@@ -63,6 +66,7 @@ export async function initSchema(): Promise<void> {
     throw new Error('Database not initialized');
   }
 
+  migrationRunner!.prepare();
   logger.info('Initializing database schema');
 
   // Projects table
@@ -94,10 +98,8 @@ export async function initSchema(): Promise<void> {
   );
 
   // Add api_key column to existing databases (stores full key for display in admin)
-  try {
+  if (!hasColumn(db, 'projects', 'api_key')) {
     db.exec(`ALTER TABLE projects ADD COLUMN api_key TEXT NOT NULL DEFAULT ''`);
-  } catch {
-    // Column already exists
   }
 
   // Users table
@@ -227,22 +229,16 @@ export async function initSchema(): Promise<void> {
   `);
 
   // Add source column to existing databases before creating indexes that depend on it.
-  try {
+  if (!hasColumn(db, 'reports', 'source')) {
     db.exec(`ALTER TABLE reports ADD COLUMN source TEXT NOT NULL DEFAULT 'widget'`);
-  } catch {
-    // Column already exists
   }
 
-  try {
+  if (!hasColumn(db, 'reports', 'reporter_locale')) {
     db.exec(`ALTER TABLE reports ADD COLUMN reporter_locale TEXT NOT NULL DEFAULT 'en'`);
-  } catch {
-    // Column already exists
   }
 
-  try {
+  if (!hasColumn(db, 'reports', 'submission_id')) {
     db.exec(`ALTER TABLE reports ADD COLUMN submission_id TEXT`);
-  } catch {
-    // Column already exists
   }
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id)`);
@@ -389,12 +385,10 @@ export async function initSchema(): Promise<void> {
   );
 
   // Add notify_on_deletion column to existing databases
-  try {
+  if (!hasColumn(db, 'notification_preferences', 'notify_on_deletion')) {
     db.exec(
       `ALTER TABLE notification_preferences ADD COLUMN notify_on_deletion INTEGER DEFAULT 1 NOT NULL`
     );
-  } catch {
-    // Column already exists
   }
 
   // Project notification defaults table
@@ -414,12 +408,10 @@ export async function initSchema(): Promise<void> {
   `);
 
   // Add default_notify_on_deletion column to existing databases
-  try {
+  if (!hasColumn(db, 'project_notification_defaults', 'default_notify_on_deletion')) {
     db.exec(
       `ALTER TABLE project_notification_defaults ADD COLUMN default_notify_on_deletion INTEGER DEFAULT 1 NOT NULL`
     );
-  } catch {
-    // Column already exists
   }
 
   db.exec(`
@@ -526,78 +518,11 @@ export async function initSchema(): Promise<void> {
   logger.info('Database schema initialized');
 }
 
-/**
- * Run database migrations
- * Applies all pending migrations from the migrations directory
- */
 export async function runMigrations(): Promise<void> {
-  if (!db) {
+  if (!migrationRunner) {
     throw new Error('Database not initialized');
   }
-
-  // Create migrations table if it doesn't exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      applied_at TEXT DEFAULT (datetime('now')) NOT NULL
-    )
-  `);
-
-  // Get applied migrations
-  const applied = db.query('SELECT name FROM migrations').all() as { name: string }[];
-  const appliedNames = new Set(applied.map((m) => m.name));
-
-  // Get migration files
-  const migrationsDir = path.join(import.meta.dir, 'migrations');
-  if (!fs.existsSync(migrationsDir)) {
-    logger.info('No migrations directory found, skipping migrations');
-    return;
-  }
-
-  const files = fs
-    .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  if (files.length === 0) {
-    logger.info('No migration files found');
-    return;
-  }
-
-  // Apply pending migrations
-  for (const file of files) {
-    if (!appliedNames.has(file)) {
-      logger.info('Applying migration', { file });
-
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-
-      try {
-        db.exec(sql);
-        db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
-        logger.info('Migration applied successfully', { file });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const isBootstrapSchemaConflict =
-          (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
-          (file === '006_add_user_password_fields.sql' &&
-            message.includes('duplicate column name')) ||
-          (file === '008_add_user_api_access.sql' && message.includes('duplicate column name')) ||
-          (file === '004_add_report_history.sql' && message.includes('already exists'));
-        if (isBootstrapSchemaConflict) {
-          db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
-          logger.info('Migration already applied by schema bootstrap, recorded as applied', {
-            file,
-          });
-          continue;
-        }
-        logger.error('Migration failed', error, { file });
-        throw error;
-      }
-    }
-  }
-
-  logger.info('All migrations applied');
+  migrationRunner.run();
 }
 
 /**
@@ -607,6 +532,7 @@ export function closeDatabase(): void {
   if (db) {
     db.close();
     db = null;
+    migrationRunner = null;
     logger.info('Database connection closed');
   }
 }
