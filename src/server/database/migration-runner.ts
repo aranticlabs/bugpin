@@ -3,6 +3,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
 
+// SQLite retains this formatting in sqlite_schema, so keep it stable across upgrades.
+const MIGRATIONS_SCHEMA = `
+    CREATE TABLE IF NOT EXISTS migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      applied_at TEXT DEFAULT (datetime('now')) NOT NULL
+    )
+  `;
+
 interface Migration {
   isSatisfied(db: Database): boolean;
   apply(db: Database, sql: string): void;
@@ -151,13 +160,7 @@ export class MigrationRunner {
 
   run(): void {
     this.prepare();
-    this.db.exec(`
-    CREATE TABLE IF NOT EXISTS migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      applied_at TEXT DEFAULT (datetime('now')) NOT NULL
-    )
-    `);
+    this.db.exec(MIGRATIONS_SCHEMA);
 
     for (const file of this.pendingFiles()) {
       logger.info('Applying migration', { file });
