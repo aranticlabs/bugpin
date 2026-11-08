@@ -366,6 +366,7 @@ describe('withCaptureClone with XML cleanup', () => {
   });
 
   it('leaves invalid host calls to the native serializer during capture', async () => {
+    /** Captures the serializer's error message for a null node without interrupting the test. */
     const serializeNull = (): string => {
       try {
         new XMLSerializer().serializeToString(null as unknown as Node);

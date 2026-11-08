@@ -61,6 +61,7 @@ function scopeFor(element: Element, inherited: ReadonlySet<string>): ReadonlySet
   return added.length === 0 ? inherited : new Set([...inherited, ...added]);
 }
 
+/** Removes XML-unsafe attributes recursively, carrying namespace declarations into descendants. */
 function removeUnsafeAttributesIn(element: Element, inherited: ReadonlySet<string>): void {
   const scope = scopeFor(element, inherited);
   for (const attribute of Array.from(element.attributes)) {

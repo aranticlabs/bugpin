@@ -1,3 +1,7 @@
+/**
+ * Decodes a base64 data URL to a Blob, preserving matched MIME types, including
+ * an empty type. PNG is used only when the header has no MIME match.
+ */
 export function dataUrlToBlob(dataUrl: string): Blob {
   const parts = dataUrl.split(',');
   const mimeMatch = parts[0].match(/:(.*?);/);
@@ -12,6 +16,7 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+/** Returns the extension for a supported image data URL, falling back to PNG. */
 export function getExtensionFromDataUrl(dataUrl: string): string {
   if (dataUrl.startsWith('data:image/webp')) {
     return 'webp';
