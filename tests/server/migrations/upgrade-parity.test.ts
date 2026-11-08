@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'bun:test';
+import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -83,6 +83,101 @@ it('produces identical sqlite_schema for a fresh bootstrap and an existing insta
   await initSchema();
   await runMigrations();
   expect(schema(getDb())).toEqual(fresh);
+});
+
+it('repairs a missing board-position index without reranking existing positions', async () => {
+  await initDatabase();
+  const db = getDb();
+  db.exec(fixture);
+  db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+    INSERT INTO reports (rowid, id, project_id, title, metadata, board_position) VALUES
+      (7, 'first', 'project', 'First report', '{}', 44.5), (42, 'second', 'project', 'Second report', '{}', -3.25);
+    DROP INDEX idx_reports_status_board_position;
+    DELETE FROM migrations WHERE name = '014_add_report_board_position.sql';`);
+  const rows = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
+  const before = schema(db);
+  const custom = path.join(directory, 'migrations');
+  fs.mkdirSync(custom);
+  const name = '014_add_report_board_position.sql';
+  fs.copyFileSync(path.join(config.migrationsDir, name), path.join(custom, name));
+  const statements = spyOn(db, 'exec');
+  try {
+    new MigrationRunner(db, custom).run();
+    expect(db.query('SELECT rowid, * FROM reports ORDER BY rowid').all()).toEqual(rows);
+    expect(
+      db
+        .query(
+          "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name != 'idx_reports_status_board_position' ORDER BY type, name"
+        )
+        .all()
+    ).toEqual(before);
+    expect(
+      db
+        .query("SELECT sql FROM sqlite_schema WHERE name = 'idx_reports_status_board_position'")
+        .get()
+    ).toEqual({
+      sql: 'CREATE INDEX idx_reports_status_board_position ON reports(status, board_position)',
+    });
+    expect(
+      statements.mock.calls.some(([sql]) => /(?:ALTER|DROP)\s+TABLE|UPDATE\s+reports/i.test(sql))
+    ).toBe(false);
+    expect(db.query('SELECT name FROM migrations WHERE name = ?').get(name)).toEqual({ name });
+  } finally {
+    statements.mockRestore();
+  }
+});
+
+it('repairs missing portal indexes without rebuilding an already matching reports table', async () => {
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  const db = getDb();
+  db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+    INSERT INTO reports (rowid, id, project_id, source, title, description, original_description, board_position, claimable_email, metadata)
+      VALUES (37, 'report', 'project', 'portal', 'Portal report', 'Staff edit', 'As submitted', 42.5, 'reporter@example.com', '{}');
+    DROP INDEX idx_reports_reporter;
+    DROP INDEX idx_reports_claimable;
+    DROP INDEX idx_reports_reporter_activity;
+    DELETE FROM migrations WHERE name = '019_rebuild_reports_for_portal.sql';`);
+  const rows = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
+  const before = schema(db);
+  const search = db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Portal'").all();
+  const custom = path.join(directory, 'migrations');
+  fs.mkdirSync(custom);
+  const name = '019_rebuild_reports_for_portal.sql';
+  fs.copyFileSync(path.join(config.migrationsDir, name), path.join(custom, name));
+  const statements = spyOn(db, 'exec');
+  try {
+    new MigrationRunner(db, custom).run();
+    expect(db.query('SELECT rowid, * FROM reports ORDER BY rowid').all()).toEqual(rows);
+    expect(
+      db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Portal'").all()
+    ).toEqual(search);
+    expect(
+      db
+        .query(
+          "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT IN ('idx_reports_reporter', 'idx_reports_claimable', 'idx_reports_reporter_activity') ORDER BY type, name"
+        )
+        .all()
+    ).toEqual(before);
+    expect(
+      db
+        .query(
+          "SELECT name FROM sqlite_schema WHERE name IN ('idx_reports_reporter', 'idx_reports_claimable', 'idx_reports_reporter_activity') ORDER BY name"
+        )
+        .all()
+    ).toEqual([
+      { name: 'idx_reports_claimable' },
+      { name: 'idx_reports_reporter' },
+      { name: 'idx_reports_reporter_activity' },
+    ]);
+    expect(
+      statements.mock.calls.some(([sql]) => /(?:ALTER|DROP)\s+TABLE|UPDATE\s+reports/i.test(sql))
+    ).toBe(false);
+    expect(db.query('SELECT name FROM migrations WHERE name = ?').get(name)).toEqual({ name });
+  } finally {
+    statements.mockRestore();
+  }
 });
 
 it('takes its snapshot before bootstrap writes and leaves existing rows and FTS results unchanged', async () => {
