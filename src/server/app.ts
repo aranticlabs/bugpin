@@ -1,8 +1,7 @@
 import { Hono, Context, Next } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
-import { bodyLimit } from 'hono/body-limit';
-import { MAX_SUBMISSION_REQUEST_BODY_SIZE } from './utils/request-limits.js';
+import { requestBodyLimit } from './middleware/body-limit.js';
 import { createApiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
@@ -64,20 +63,7 @@ export function createApp(): Hono {
   // CORS applies to the public widget API only; every other route stays same-origin
   app.use('/api/widget/*', widgetCors);
 
-  app.use('*', async (c, next) => {
-    // Message uploads enforce their project limit after staff authentication.
-    if (c.req.method === 'POST' && /^\/api\/reports\/[^/]+\/reporter-messages$/.test(c.req.path)) {
-      return next();
-    }
-    return bodyLimit({
-      maxSize: MAX_SUBMISSION_REQUEST_BODY_SIZE,
-      onError: (context) =>
-        context.json(
-          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large' },
-          413
-        ),
-    })(c, next);
-  });
+  app.use('*', requestBodyLimit);
 
   // Routes
 

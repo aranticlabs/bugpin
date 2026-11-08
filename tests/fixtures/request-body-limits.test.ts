@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test';
 import { createApp } from '../../src/server/app';
+import { projectsService } from '../../src/server/services/projects.service';
 import { authService } from '../../src/server/services/auth.service';
 import { reportMessagesService } from '../../src/server/services/report-messages.service';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
@@ -8,19 +9,22 @@ import {
   MAX_SUBMISSION_REQUEST_BODY_SIZE,
 } from '../../src/server/utils/request-limits';
 import { Result } from '../../src/server/utils/result';
-import type { AppSettings } from '../../src/shared/types';
+import type { AppSettings, Project } from '../../src/shared/types';
 
 const originalSettings = settingsCacheService.getAll;
 const originalAuth = authService.validateSession;
+const originalWidgetAccess = projectsService.validateWidgetAccess;
 const originalMessages = { ...reportMessagesService };
 
 beforeEach(() => {
-  settingsCacheService.getAll = async () => ({ enforceHttps: false }) as AppSettings;
+  settingsCacheService.getAll = async () =>
+    ({ enforceHttps: false, rateLimitPerMinute: 10 }) as AppSettings;
 });
 
 afterEach(() => {
   settingsCacheService.getAll = originalSettings;
   authService.validateSession = originalAuth;
+  projectsService.validateWidgetAccess = originalWidgetAccess;
   Object.assign(reportMessagesService, originalMessages);
 });
 
@@ -49,6 +53,8 @@ for (const [path, method, contentType] of [
 }
 
 it('rejects a streamed public widget request above the old budget without Content-Length', async () => {
+  projectsService.validateWidgetAccess = async () =>
+    Result.ok({ id: 'project', settings: {} } as Project);
   const chunk = new Uint8Array(1024 * 1024);
   let produced = 0;
   const body = new ReadableStream<Uint8Array>({
@@ -60,11 +66,42 @@ it('rejects a streamed public widget request above the old budget without Conten
   const response = await createApp().request('/api/widget/submit', {
     method: 'POST',
     body,
-    headers: { 'content-type': 'multipart/form-data' },
+    headers: { 'content-type': 'application/json', 'x-api-key': 'widget' },
   });
   expect(response.status).toBe(413);
   expect(await response.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
 });
+
+for (const path of [
+  '/api/reports',
+  '/api/users/me/avatar',
+  '/api/reports/report/reporter-messages/message/hide',
+]) {
+  it(`rejects an unauthenticated streamed request to ${path} before consuming it`, async () => {
+    let reads = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          reads++;
+          controller.enqueue(new Uint8Array(1024 * 1024));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 }
+    );
+    const response = await createApp().request(path, {
+      method: 'POST',
+      body,
+      headers: { 'content-type': 'multipart/form-data' },
+    });
+    expect(response.status).toBe(401);
+    expect(reads).toBe(0);
+    expect(cancelled).toBe(true);
+  });
+}
 
 it('reserves the larger allowance for the authenticated staff message POST', async () => {
   authService.validateSession = async () =>
