@@ -48,9 +48,7 @@ describe('SettingsRouter', () => {
   it('opens General for admins at /settings', async () => {
     renderSettings('/settings');
 
-    expect(
-      await screen.findByRole('heading', { name: 'General' }, { timeout: 5000 })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'General' })).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/general');
   });
 
@@ -61,7 +59,7 @@ describe('SettingsRouter', () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(['Privacy', 'Data']);
     await userEvent.click(screen.getByRole('tab', { name: 'Data' }));
 
-    expect(await screen.findByText('Data Retention', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Data Retention')).toBeInTheDocument();
     expect(
       screen.getByText('Delete All Data', { selector: '[class*="font-semibold"]' })
     ).toBeInTheDocument();
@@ -79,21 +77,28 @@ describe('SettingsRouter', () => {
   it('maps a former Settings tab hash to its new page', async () => {
     renderSettings('/settings#smtp');
 
-    expect(await screen.findByText('SMTP Server', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('SMTP Server')).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/email');
   });
 
   it.each([
     ['/settings/authentication', ['Sessions', 'Two-Factor Authentication', 'Password Policy']],
     ['/settings/network', ['Network']],
-    ['/settings/project-defaults/capture', ['Screenshot', 'Recording', 'Diagnostics']],
   ])('stacks the sections of %s on one page', async (path, titles) => {
     renderSettings(path);
 
     for (const title of titles) {
-      expect(await screen.findByText(title, {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(await screen.findByText(title)).toBeInTheDocument();
     }
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('splits /settings/project-defaults/capture into Screenshot, Recording and Diagnostics tabs', async () => {
+    renderSettings('/settings/project-defaults/capture');
+
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Screenshot', 'Recording', 'Diagnostics']);
+    expect(screen.getByRole('tab', { name: 'Screenshot' })).toHaveAttribute('data-state', 'active');
   });
 
   it.each([
@@ -112,11 +117,7 @@ describe('SettingsRouter', () => {
     for (const path of ['/settings/storage', '/settings/account/api-tokens']) {
       const view = renderSettings(path);
       expect(
-        await screen.findByText(
-          'This feature requires an Enterprise license.',
-          {},
-          { timeout: 5000 }
-        )
+        await screen.findByText('This feature requires an Enterprise license.')
       ).toBeInTheDocument();
       view.unmount();
     }
@@ -132,25 +133,20 @@ describe('SettingsRouter', () => {
       signInAs(user);
       renderSettings('/settings');
 
-      expect(
-        await screen.findByText(
-          'Your profile picture, name and email address',
-          {},
-          { timeout: 5000 }
-        )
-      ).toBeInTheDocument();
+      expect(await screen.findByRole('tab', { name: 'Account' })).toBeInTheDocument();
       expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
     }
   );
 
   it.each(['/settings/general', '/settings/users', '/settings/users/user-3'])(
-    'sends viewers away from the admin-only page %s',
+    'sends viewers from the admin-only page %s to their profile',
     async (path) => {
       signInAs(mockUsers.viewer);
       renderSettings(path);
 
-      expect(await screen.findByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByLabelText('Current path')).toHaveTextContent(/^\/$/);
+      expect(await screen.findByRole('tab', { name: 'Account' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
+      expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
     }
   );
 
@@ -158,9 +154,24 @@ describe('SettingsRouter', () => {
     signInAs({ ...mockUsers.viewer, apiAccessEnabled: false });
     renderSettings('/settings/account/api-tokens');
 
-    expect(
-      await screen.findByText('Your profile picture, name and email address', {}, { timeout: 5000 })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
+  });
+
+  it('follows the API tokens hash for users an admin allowed API access', async () => {
+    signInAs({ ...mockUsers.viewer, apiAccessEnabled: true });
+    server.use(http.get('/api/tokens', () => HttpResponse.json({ success: true, tokens: [] })));
+    renderSettings('/settings#api-tokens');
+
+    expect(await screen.findByRole('button', { name: 'Create token' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/api-tokens');
+  });
+
+  it('sends non-admins following the hash of an admin page to their profile', async () => {
+    signInAs({ ...mockUsers.viewer, apiAccessEnabled: true });
+    renderSettings('/settings#smtp');
+
+    expect(await screen.findByRole('tab', { name: 'Account' })).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
   });
 
@@ -169,33 +180,27 @@ describe('SettingsRouter', () => {
     server.use(http.get('/api/tokens', () => HttpResponse.json({ success: true, tokens: [] })));
     renderSettings('/settings/account/api-tokens');
 
-    expect(
-      await screen.findByRole('button', { name: 'Create token' }, { timeout: 5000 })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Create token' })).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/api-tokens');
   });
 
   it('opens the detail page of a user', async () => {
     renderSettings('/settings/users/user-3');
 
-    expect(
-      await screen.findByRole('heading', { name: 'Viewer User' }, { timeout: 5000 })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Viewer User' })).toBeInTheDocument();
     expect(screen.getByText('Sign-in and Security')).toBeInTheDocument();
   });
 
   it('sends the former webhooks page to Projects', async () => {
     renderSettings('/settings/webhooks');
 
-    expect(await screen.findByText('Projects list', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Projects list')).toBeInTheDocument();
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/projects');
   });
 
   it('falls back to the settings start page for unknown paths', async () => {
     renderSettings('/settings/does-not-exist');
 
-    expect(
-      await screen.findByRole('heading', { name: 'General' }, { timeout: 5000 })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'General' })).toBeInTheDocument();
   });
 });

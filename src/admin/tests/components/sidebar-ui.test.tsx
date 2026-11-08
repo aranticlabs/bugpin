@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, userEvent, waitFor } from '../utils';
+import { act, fireEvent, render, screen, userEvent, waitFor } from '../utils';
 import {
   Sidebar,
   SidebarContent,
@@ -131,7 +131,8 @@ describe('sidebar ui', () => {
     expect(onWidthChange).toHaveBeenLastCalledWith(480);
   });
 
-  it('keeps the dragged width when the stored width updates after release', async () => {
+  it('keeps the dragged width when the stored width updates after release', () => {
+    vi.useFakeTimers();
     function AsyncStore() {
       const [stored, setStored] = useState(256);
       return (
@@ -149,12 +150,20 @@ describe('sidebar ui', () => {
     fireEvent.pointerMove(rail, { clientX: 340, pointerId: 1 });
     fireEvent.pointerUp(rail, { clientX: 340, pointerId: 1 });
 
-    // Before the stored width catches up, the sidebar must not snap back to the old width.
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(wrapper.style.getPropertyValue('--sidebar-width')).toBe('340px');
+    try {
+      // Before the stored width catches up, the sidebar must not snap back to the old width.
+      act(() => {
+        vi.advanceTimersByTime(5);
+      });
+      expect(wrapper.style.getPropertyValue('--sidebar-width')).toBe('340px');
 
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    expect(wrapper.style.getPropertyValue('--sidebar-width')).toBe('340px');
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(wrapper.style.getPropertyValue('--sidebar-width')).toBe('340px');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('collapses the sidebar when the rail is clicked without dragging', () => {

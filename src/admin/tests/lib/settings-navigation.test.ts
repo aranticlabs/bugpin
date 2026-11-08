@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   SETTINGS_HOME_PATH,
   SETTINGS_NAVIGATION,
+  canOpenSettingsPage,
   findSettingsNavItem,
+  isSettingsPath,
   settingsNavigationFor,
 } from '../../lib/settingsNavigation';
 
@@ -44,5 +46,22 @@ describe('settings navigation', () => {
   it('uses unique paths', () => {
     const paths = SETTINGS_NAVIGATION.flatMap((group) => group.items.map((item) => item.path));
     expect(new Set(paths).size).toBe(paths.length);
+  });
+
+  it('lets non-admins open only the pages of their navigation', () => {
+    const viewer = { role: 'viewer', apiAccessEnabled: true } as const;
+    expect(canOpenSettingsPage(viewer, '/settings/account/api-tokens')).toBe(true);
+    expect(
+      canOpenSettingsPage({ ...viewer, apiAccessEnabled: false }, '/settings/account/api-tokens')
+    ).toBe(false);
+    expect(canOpenSettingsPage(viewer, '/settings/email')).toBe(false);
+    expect(canOpenSettingsPage({ role: 'admin' }, '/settings/email')).toBe(true);
+  });
+
+  it('recognizes paths inside settings', () => {
+    expect(isSettingsPath('/settings')).toBe(true);
+    expect(isSettingsPath('/settings/users/user-3')).toBe(true);
+    expect(isSettingsPath('/settingsfoo')).toBe(false);
+    expect(isSettingsPath('/')).toBe(false);
   });
 });

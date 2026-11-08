@@ -50,7 +50,7 @@ describe('AppSidebar', () => {
   it('switches to the settings navigation inside /settings', async () => {
     renderSidebar('/settings/general');
 
-    expect(await screen.findByRole('link', { name: 'Back to BugPin' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Back to Console' })).toHaveAttribute(
       'href',
       '/'
     );

@@ -3,7 +3,6 @@ import {
   AppWindow,
   Bell,
   Camera,
-  Database,
   Globe,
   HardDrive,
   Key,
@@ -13,6 +12,7 @@ import {
   MousePointerClick,
   Paintbrush,
   Palette,
+  Shield,
   ShieldCheck,
   SlidersHorizontal,
   Trophy,
@@ -79,7 +79,7 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         title: 'Privacy & Data',
         description: 'Manage data retention, deletion and privacy controls',
         path: '/settings/data-privacy',
-        icon: Database,
+        icon: Shield,
       },
       {
         title: 'Email',
@@ -120,9 +120,9 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         icon: MousePointerClick,
       },
       {
-        title: 'Dialog Colors',
-        description: 'Default colors of the report dialog',
-        path: '/settings/project-defaults/dialog-colors',
+        title: 'Dialog',
+        description: 'Default texts, fields and colors of the report dialog',
+        path: '/settings/project-defaults/dialog',
         icon: AppWindow,
       },
       {
@@ -204,6 +204,17 @@ export function settingsNavigationFor(user: NavigationUser): SettingsNavGroup[] 
   return SETTINGS_NAVIGATION.filter((group) => isAdmin || !group.adminOnly)
     .map((group) => ({ ...group, items: group.items.filter(isVisible) }))
     .filter((group) => group.items.length > 0);
+}
+
+export function isSettingsPath(pathname: string): boolean {
+  return pathname === '/settings' || pathname.startsWith('/settings/');
+}
+
+/** Whether the settings navigation of this user contains the page at `path` */
+export function canOpenSettingsPage(user: NavigationUser, path: string): boolean {
+  return settingsNavigationFor(user).some((group) =>
+    group.items.some((item) => item.path === path)
+  );
 }
 
 export function findSettingsNavItem(

@@ -6,6 +6,12 @@ import { Routes, Route } from 'react-router-dom';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '../utils';
 import { Layout } from '../../components/Layout';
 import { BrandingProvider } from '../../contexts/BrandingContext';
+import { useUsers } from '../../components/users/useUsers';
+
+function UserDetailStub() {
+  const { data } = useUsers();
+  return <div>{data ? 'Detail Content' : 'Loading'}</div>;
+}
 
 describe('Layout', () => {
   beforeEach(() => {
@@ -120,7 +126,7 @@ describe('Layout', () => {
     ['/settings/authentication', 'Access', 'Authentication'],
     ['/settings/data-privacy', 'System', 'Privacy & Data'],
     ['/settings/account/profile', 'Account', 'Profile'],
-    ['/settings/project-defaults/dialog-colors', 'Project Defaults', 'Dialog Colors'],
+    ['/settings/project-defaults/dialog', 'Project Defaults', 'Dialog'],
   ])('renders the settings breadcrumb on %s', async (path, group, page) => {
     renderWithProviders(
       <BrandingProvider>
@@ -156,6 +162,32 @@ describe('Layout', () => {
       'href',
       '/settings/users'
     );
+  });
+
+  it('names the user on a user detail page from the list the page loads', async () => {
+    let userListRequests = 0;
+    server.use(
+      http.get('/api/users', () => {
+        userListRequests += 1;
+        return HttpResponse.json({ success: true, users: [mockUsers.viewer] });
+      })
+    );
+    renderWithProviders(
+      <BrandingProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route path="settings/users/:id" element={<UserDetailStub />} />
+          </Route>
+        </Routes>
+      </BrandingProvider>,
+      { initialEntries: ['/settings/users/user-3'] }
+    );
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(
+      await within(breadcrumb).findByRole('heading', { name: 'Viewer User' })
+    ).toBeInTheDocument();
+    expect(userListRequests).toBe(1);
   });
 
   it('names the open project in the breadcrumb', async () => {

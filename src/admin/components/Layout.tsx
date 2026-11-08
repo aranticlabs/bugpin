@@ -18,6 +18,9 @@ import { ThemePreferenceSync } from './ThemePreferenceSync';
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
 import { UnsavedChangesBar, UnsavedChangesBarSpacer } from './UnsavedChangesGuard';
 import { FloatingBarArea } from './FloatingBar';
+import { useUsers } from './users/useUsers';
+
+const USERS_SETTINGS_PATH = '/settings/users';
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
@@ -43,6 +46,15 @@ export function Layout() {
   );
   const location = useLocation();
   const settingsMatch = findSettingsNavItem(location.pathname);
+  const detailUserId =
+    settingsMatch?.item.path === USERS_SETTINGS_PATH
+      ? location.pathname.slice(USERS_SETTINGS_PATH.length + 1)
+      : '';
+  // Reads only the list the user detail page loads; this never sends a request of its own.
+  const { data: users } = useUsers({ enabled: false });
+  const detailUserName = detailUserId
+    ? users?.find((candidate) => candidate.id === detailUserId)?.name
+    : undefined;
 
   return (
     <SidebarProvider
@@ -78,7 +90,7 @@ export function Layout() {
                     {settingsMatch.item.title}
                   </Link>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  <h1 className="font-medium">Details</h1>
+                  <h1 className="font-medium">{detailUserName ?? 'Details'}</h1>
                 </>
               )}
             </nav>

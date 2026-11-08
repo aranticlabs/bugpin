@@ -7,6 +7,7 @@ import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import { legacySettingsPath } from '../../lib/legacyRoutes';
 import {
   SETTINGS_HOME_PATH,
+  canOpenSettingsPage,
   canUseApiTokens,
   findSettingsNavItem,
 } from '../../lib/settingsNavigation';
@@ -68,14 +69,8 @@ const WidgetDialog = lazyWithRetry(() =>
 const WidgetLanguage = lazyWithRetry(() =>
   import('../widget/Language').then((m) => ({ default: m.Language }))
 );
-const Screenshot = lazyWithRetry(() =>
-  import('../widget/Screenshot').then((m) => ({ default: m.Screenshot }))
-);
-const Recording = lazyWithRetry(() =>
-  import('../widget/Recording').then((m) => ({ default: m.Recording }))
-);
-const Diagnostics = lazyWithRetry(() =>
-  import('../widget/Diagnostics').then((m) => ({ default: m.Diagnostics }))
+const Capture = lazyWithRetry(() =>
+  import('../widget/Capture').then((m) => ({ default: m.Capture }))
 );
 const NotificationDefaults = lazyWithRetry(() =>
   import('../console/NotificationDefaults').then((m) => ({ default: m.NotificationDefaults }))
@@ -130,8 +125,11 @@ function ApiTokensRoute({ children }: { children: ReactNode }) {
 function SettingsIndex() {
   const { user } = useAuth();
   const { hash } = useLocation();
-  if (user?.role !== 'admin') return <Navigate to={SETTINGS_HOME_PATH} replace />;
-  return <Navigate to={legacySettingsPath('/settings', hash) ?? '/settings/general'} replace />;
+  const target = legacySettingsPath('/settings', hash) ?? '/settings/general';
+  if (user?.role === 'admin' || canOpenSettingsPage(user, target)) {
+    return <Navigate to={target} replace />;
+  }
+  return <Navigate to={SETTINGS_HOME_PATH} replace />;
 }
 
 export function SettingsRouter() {
@@ -260,12 +258,16 @@ export function SettingsRouter() {
         }
       />
       <Route
-        path="project-defaults/dialog-colors"
+        path="project-defaults/dialog"
         element={
           <SettingsPage adminOnly wide>
             <WidgetDialog />
           </SettingsPage>
         }
+      />
+      <Route
+        path="project-defaults/dialog-colors"
+        element={<Navigate to="/settings/project-defaults/dialog" replace />}
       />
       <Route
         path="project-defaults/language"
@@ -279,9 +281,7 @@ export function SettingsRouter() {
         path="project-defaults/capture"
         element={
           <SettingsPage adminOnly>
-            <Screenshot />
-            <Recording />
-            <Diagnostics />
+            <Capture />
           </SettingsPage>
         }
       />

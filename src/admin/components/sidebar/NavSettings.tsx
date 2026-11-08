@@ -26,10 +26,10 @@ export function NavSettings() {
       <SidebarGroup className="sticky top-0 z-10 bg-sidebar">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Back to BugPin">
+            <SidebarMenuButton asChild tooltip="Back to Console">
               <Link to="/" onClick={closeSidebarOnMobile}>
                 <ArrowLeft />
-                <span>Back to BugPin</span>
+                <span>Back to Console</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
