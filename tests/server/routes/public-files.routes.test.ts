@@ -112,7 +112,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('serves ranged videos while an active GitHub integration allows public links', async () => {
@@ -169,7 +169,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(integrationsLoaded).toBe(false);
   });
 
@@ -183,7 +183,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('refuses public video links enabled by a non-boolean config value', async () => {
@@ -198,7 +198,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('revokes video access when the toggle is disabled or the integration is inactive', async () => {
@@ -211,11 +211,11 @@ describe('public file routes', () => {
     expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(200);
 
     integration.config = { ...integration.config, publicVideoLinks: false };
-    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(403);
+    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(404);
 
     integration.config = { ...integration.config, publicVideoLinks: true };
     integration.isActive = false;
-    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(403);
+    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(404);
   });
 
   for (const type of ['avatar', 'branding'] as const) {
@@ -225,7 +225,7 @@ describe('public file routes', () => {
 
       const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
   }
 });
@@ -246,7 +246,7 @@ for (const method of ['GET', 'HEAD']) {
         method,
         headers: range ? { range } : {},
       });
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
   }
 }
@@ -257,4 +257,33 @@ it('serves forwarded originals with one-day caching and safe media headers', asy
   expect(response.headers.get('Cache-Control')).toBe('public, max-age=86400');
   expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
   expect(response.headers.get('Content-Disposition')).toBe('inline; filename="file.png"');
+});
+
+it('returns the same not-found response for every inaccessible file', async () => {
+  const app = createApp();
+  const url = 'http://localhost/public/files/rpt_1/file.png';
+  const responses: Response[] = [];
+  filesRepo.findOriginalByReportId = async () => [];
+  responses.push(await app.request(url));
+  filesRepo.findOriginalByReportId = async () => [fileRecord];
+  fileRecord = { ...fileRecord, messageId: 'chat' };
+  responses.push(await app.request(url));
+  fileRecord = { ...fileRecord, messageId: null };
+  const forwarded = report;
+  report = { ...report, githubIssueUrl: null, forwardedTo: [] };
+  responses.push(await app.request(url));
+  report = forwarded;
+  fileRecord = { ...fileRecord, type: 'video', mimeType: 'video/mp4' };
+  responses.push(await app.request(url));
+  fileRecord = {
+    ...fileRecord,
+    type: 'screenshot',
+    mimeType: 'image/png',
+    path: join(tempDir, 'missing.png'),
+  };
+  responses.push(await app.request(url));
+  for (const response of responses) {
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'File not found' });
+  }
 });

@@ -212,9 +212,10 @@ describe('message uploads and moderation', () => {
     });
     expect(response.status).toBe(200);
     expect(received?.slice(0, 4)).toEqual(['rpt_1', 'usr_1', 'A reply', false]);
-    expect(received?.[4]).toEqual([
-      { filename: 'picture.png', mimeType: 'image/png', data: Buffer.from('image') },
-    ]);
+    expect(received?.[4]).toHaveLength(1);
+    expect(received?.[4]?.[0]).toBeInstanceOf(File);
+    expect(received?.[4]?.[0]).toMatchObject({ name: 'picture.png', type: 'image/png', size: 5 });
+    expect(received?.[4]?.[0]).not.toHaveProperty('data');
   });
 
   it('accepts a multipart file without text', async () => {

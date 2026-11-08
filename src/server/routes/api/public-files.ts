@@ -15,11 +15,8 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
   try {
     const result = await publicFilesService.get(reportId, filename);
     if (!result.success) {
-      if (result.code === 'FORBIDDEN') {
-        return c.json({ error: result.error }, 403);
-      }
       logger.warn('File not found', { reportId, filename });
-      return c.json({ error: result.error }, 404);
+      return c.json({ error: 'File not found' }, 404);
     }
 
     const { file, handle } = result.value;
@@ -39,7 +36,7 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
         filename,
         path: file.path,
       });
-      return c.json({ error: 'File not found in storage' }, 404);
+      return c.json({ error: 'File not found' }, 404);
     }
 
     return response;

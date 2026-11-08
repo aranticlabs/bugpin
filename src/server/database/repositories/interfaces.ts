@@ -208,9 +208,20 @@ export interface CreateFileData {
 }
 
 export interface IFilesRepository {
+  insert(data: CreateFileData): FileRecord;
   create(data: CreateFileData): Promise<FileRecord>;
   findById(id: string): Promise<FileRecord | null>;
   findByReportId(reportId: string): Promise<FileRecord[]>;
+  findOriginalByReportId(reportId: string): Promise<FileRecord[]>;
+  findByReportMessages(reportId: string, visibleOnly?: boolean): Promise<FileRecord[]>;
+  findByMessageId(messageId: string): Promise<FileRecord[]>;
+  findByReportIdAndType(reportId: string, type: FileType): Promise<FileRecord[]>;
+  getSizeByReporterSince(reporterId: string, since: string): number;
+  getTotalSize(): Promise<number>;
+  getSizeByReportId(reportId: string): Promise<number>;
+  findAll(): Promise<FileRecord[]>;
+  updatePath(id: string, newPath: string): Promise<boolean>;
+  countByStorageType(): Promise<{ local: number; s3: number }>;
   delete(id: string): Promise<boolean>;
   deleteByReportId(reportId: string): Promise<number>;
   // Synchronous so callers can check usage and reserve capacity without yielding in between
@@ -333,6 +344,7 @@ export interface MessageWriteContext {
   reporterId: string | null;
   reporterEmail: string | null;
   settings: ProjectSettings;
+  projectIsActive: boolean;
 }
 
 export interface IReportMessagesRepository {

@@ -625,3 +625,73 @@ it('inherits the global messaging switch and permits an explicit project overrid
   });
   expect((await reportMessagesService.send('report', 'staff', 'Reply')).success).toBe(true);
 });
+
+it('materializes and stages five multipart files sequentially', async () => {
+  const bytes = Buffer.alloc(4 * 1024 * 1024);
+  png.copy(bytes);
+  const uploads = Array.from(
+    { length: 5 },
+    (_, index) => new File([bytes], `${index}.png`, { type: 'image/png' })
+  );
+  let read = 0;
+  let saved = 0;
+  for (const [index, file] of uploads.entries()) {
+    const arrayBuffer = file.arrayBuffer.bind(file);
+    file.arrayBuffer = async () => {
+      expect(saved).toBe(index);
+      read++;
+      return arrayBuffer();
+    };
+  }
+  const save = storage.saveFile;
+  const sequential = spyOn(storage, 'saveFile').mockImplementation(async (data) => {
+    expect(read).toBe(saved + 1);
+    const result = await save(data);
+    saved++;
+    return result;
+  });
+  try {
+    const result = await reportMessagesService.send('report', 'staff', 'Reply', false, uploads);
+    expect(result.success).toBe(true);
+    expect(read).toBe(5);
+    expect(saved).toBe(5);
+    expect(counts()).toEqual({ messages: 1, files: 5 });
+  } finally {
+    sequential.mockRestore();
+  }
+});
+
+it('cleans up staged files if a later multipart file cannot be read', async () => {
+  const first = new File([png], 'first.png', { type: 'image/png' });
+  const second = new File([png], 'second.png', { type: 'image/png' });
+  second.arrayBuffer = async () => {
+    throw new Error('Read failed');
+  };
+  expect(
+    await reportMessagesService.send('report', 'staff', 'Reply', false, [first, second])
+  ).toMatchObject({ success: false, code: 'INVALID_FILE' });
+  expect(counts()).toEqual({ messages: 0, files: 0 });
+  expect(stagedFiles()).toEqual([]);
+});
+
+it('allows inactive-project staff replies and moderation while denying reporter access', async () => {
+  getDb().run("UPDATE projects SET is_active = 0 WHERE id = 'project'");
+  expect((await reportMessagesService.uploadBodyLimit('report')).success).toBe(true);
+  const sent = await reportMessagesService.send('report', 'staff', 'Reply');
+  if (!sent.success) throw new Error(sent.error);
+  expect((await reportMessagesService.listByReport('report')).success).toBe(true);
+  expect(
+    (await reportMessagesService.setHidden('report', sent.value.id, 'staff', true)).success
+  ).toBe(true);
+  expect(
+    (await reportMessagesService.setHidden('report', sent.value.id, 'staff', false)).success
+  ).toBe(true);
+  expect(await reportMessagesService.sendReporter('report', 'reporter', 'Reply')).toMatchObject({
+    success: false,
+    code: 'NOT_FOUND',
+  });
+  expect(await reportMessagesService.listForReporter('report', 'reporter')).toMatchObject({
+    success: false,
+    code: 'NOT_FOUND',
+  });
+});

@@ -54,7 +54,7 @@ export async function createFileResponse(options: {
     'X-Content-Type-Options': 'nosniff',
   };
   if (options.filename) {
-    const inline = /^(image\/(png|jpeg|gif|webp)|video\/(mp4|webm|quicktime))$/.test(
+    const inline = /^(image\/(png|jpeg|jpg|gif|webp)|video\/(mp4|webm|quicktime))$/.test(
       options.mimeType
     );
     const filename = (options.filename.split(/[\\/]/).pop() || 'file').replace(

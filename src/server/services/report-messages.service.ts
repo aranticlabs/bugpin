@@ -22,6 +22,8 @@ import type {
 } from '../database/repositories/interfaces.js';
 import type { MediaFile } from './reports.service.js';
 
+export type MessageUpload = MediaFile | File;
+
 function toLegacyMessage(message: ReportMessage): ReporterMessage {
   return {
     id: message.id,
@@ -64,7 +66,9 @@ function checkAccess(
   if (
     !context ||
     (author.kind === 'reporter' &&
-      (context.reporterId !== author.reporterId || !context.settings.reporterPortal?.enabled))
+      (!context.projectIsActive ||
+        context.reporterId !== author.reporterId ||
+        !context.settings.reporterPortal?.enabled))
   ) {
     return Result.fail('Report not found', 'NOT_FOUND');
   }
@@ -90,7 +94,7 @@ async function writeMessage(
   reportId: string,
   author: MessageAuthor,
   body: string,
-  files: MediaFile[]
+  files: MessageUpload[]
 ): Promise<Result<ReportMessage>> {
   const text = body.trim();
   if (text.length > 5000 || (!text && files.length === 0))
@@ -111,30 +115,29 @@ async function writeMessage(
     const maxImageMb = screenshot?.maxImageUploadSizeMb ?? settings.screenshot.maxImageUploadSizeMb;
     const maxVideoMb = screenshot?.maxVideoUploadSizeMb ?? settings.screenshot.maxVideoUploadSizeMb;
     const normalized = files.map((file) => ({
-      ...file,
-      mimeType: normalizeMimeType(file.mimeType),
+      source: file,
+      filename: 'data' in file ? file.filename : file.name,
+      mimeType: normalizeMimeType('data' in file ? file.mimeType : file.type),
+      sizeBytes: 'data' in file ? file.data.byteLength : file.size,
     }));
     for (const file of normalized) {
       if (!(ALLOWED_MEDIA_MIME_TYPES as readonly string[]).includes(file.mimeType))
         return Result.fail('Unsupported file type', 'INVALID_FILE');
-      const valid = validateFile({
-        ...file,
-        type: file.mimeType.startsWith('video/') ? 'video' : 'screenshot',
-        maxSizeMb: file.mimeType.startsWith('video/') ? maxVideoMb : maxImageMb,
-      });
-      if (!valid.success) return Result.fail(valid.error, 'INVALID_FILE');
+      const limit = file.mimeType.startsWith('video/') ? maxVideoMb : maxImageMb;
+      if (file.sizeBytes > limit * 1024 * 1024)
+        return Result.fail('File exceeds the project size limit', 'INVALID_FILE');
     }
     if (author.kind === 'reporter') {
       const quota = uploadQuotaService.check(
         author.reporterId,
-        normalized.reduce((sum, file) => sum + file.data.length, 0),
+        normalized.reduce((sum, file) => sum + file.sizeBytes, 0),
         settings.reporterPortalLimits.uploadMbPerReporterPerDay
       );
       if (!quota.success) return quota;
       const reservation = videoQuotaService.reserve(
         access.value.projectId,
         normalized.reduce(
-          (sum, file) => sum + (file.mimeType.startsWith('video/') ? file.data.length : 0),
+          (sum, file) => sum + (file.mimeType.startsWith('video/') ? file.sizeBytes : 0),
           0
         ),
         (screenshot?.maxVideoUploadMbPerDay ?? settings.screenshot.maxVideoUploadMbPerDay) *
@@ -146,7 +149,29 @@ async function writeMessage(
     }
     for (const file of normalized) {
       const type = file.mimeType.startsWith('video/') ? 'video' : 'screenshot';
-      const saved = await saveFile({ ...file, reportId, type });
+      let data: Buffer | Uint8Array;
+      try {
+        data =
+          'data' in file.source
+            ? file.source.data
+            : new Uint8Array(await file.source.arrayBuffer());
+      } catch {
+        return Result.fail('Failed to read attached file', 'INVALID_FILE');
+      }
+      const valid = validateFile({
+        data,
+        mimeType: file.mimeType,
+        type,
+        maxSizeMb: type === 'video' ? maxVideoMb : maxImageMb,
+      });
+      if (!valid.success) return Result.fail(valid.error, 'INVALID_FILE');
+      const saved = await saveFile({
+        reportId,
+        type,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        data,
+      });
       staged.push({
         ...saved,
         reportId,
@@ -159,11 +184,11 @@ async function writeMessage(
       const current = checkAccess(reportId, author, settings);
       if (!current.success) return current;
       const currentScreenshot = current.value.settings.screenshot;
-      for (const file of normalized) {
+      for (const file of staged) {
         const limit = file.mimeType.startsWith('video/')
           ? (currentScreenshot?.maxVideoUploadSizeMb ?? settings.screenshot.maxVideoUploadSizeMb)
           : (currentScreenshot?.maxImageUploadSizeMb ?? settings.screenshot.maxImageUploadSizeMb);
-        if (file.data.length > limit * 1024 * 1024)
+        if (file.sizeBytes > limit * 1024 * 1024)
           return Result.fail('File exceeds the project size limit', 'INVALID_FILE');
       }
       if (author.kind === 'reporter') {
@@ -227,7 +252,7 @@ export const reportMessagesService = {
     userId: string,
     message: string,
     ccSender?: boolean,
-    files: MediaFile[] = []
+    files: MessageUpload[] = []
   ): Promise<Result<ReporterMessage>> {
     const saved = await writeMessage(reportId, { kind: 'staff', userId }, message, files);
     if (!saved.success) return saved;
@@ -249,7 +274,7 @@ export const reportMessagesService = {
     reportId: string,
     reporterId: string,
     body: string,
-    files: MediaFile[] = []
+    files: MessageUpload[] = []
   ): Promise<Result<ReportMessage>> {
     return writeMessage(reportId, { kind: 'reporter', reporterId }, body, files);
   },

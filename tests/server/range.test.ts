@@ -167,3 +167,20 @@ it('sanitizes filenames and uses attachment disposition for non-media files', as
   );
   expect(response?.headers.get('X-Content-Type-Options')).toBe('nosniff');
 });
+
+it('serves the accepted image/jpg alias inline', async () => {
+  const response = await createFileResponse({
+    handle: {
+      kind: 'local',
+      read: async () => new Uint8Array([1]),
+      readRange: async () => new Uint8Array([1]),
+    },
+    rangeHeader: undefined,
+    size: 1,
+    mimeType: 'image/jpg',
+    cacheControl: 'private, no-store',
+    filename: 'picture.jpg',
+    headOnly: true,
+  });
+  expect(response?.headers.get('Content-Disposition')).toBe('inline; filename="picture.jpg"');
+});

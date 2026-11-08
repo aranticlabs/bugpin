@@ -1,6 +1,6 @@
 import { getDb } from '../database.js';
 import { generateFileId } from '../../utils/id.js';
-import type { CreateFileData } from './interfaces.js';
+import type { CreateFileData, IFilesRepository } from './interfaces.js';
 import type { FileRecord, FileType } from '@shared/types';
 
 // Database Row Type
@@ -131,11 +131,13 @@ export const filesRepo = {
   },
 
   getSizeByReporterSince(reporterId: string, since: string): number {
-    return getDb()
-      .query<{ total: number }, [string, string]>(
-        'SELECT COALESCE(SUM(size_bytes), 0) AS total FROM files WHERE uploaded_by_reporter_id = ? AND julianday(created_at) >= julianday(?)'
-      )
-      .get(reporterId, since)!.total;
+    return (
+      getDb()
+        .query<{ total: number }, [string, string]>(
+          'SELECT COALESCE(SUM(size_bytes), 0) AS total FROM files WHERE uploaded_by_reporter_id = ? AND julianday(created_at) >= julianday(?)'
+        )
+        .get(reporterId, since)?.total ?? 0
+    );
   },
 
   async findByMessageId(messageId: string): Promise<FileRecord[]> {
@@ -243,4 +245,4 @@ export const filesRepo = {
 
     return { local, s3 };
   },
-};
+} satisfies IFilesRepository;

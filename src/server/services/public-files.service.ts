@@ -69,7 +69,7 @@ export const publicFilesService = {
     const report = await reportsRepo.findById(reportId);
     if (!report) return Result.fail('File not found', 'NOT_FOUND');
     if (!report.githubIssueUrl && !report.forwardedTo?.length) {
-      return Result.fail('File type not accessible publicly', 'FORBIDDEN');
+      return Result.fail('File not found', 'NOT_FOUND');
     }
 
     if (file.type === 'video' || file.mimeType.startsWith('video/')) {
@@ -83,10 +83,10 @@ export const publicFilesService = {
       );
 
       if (!publicVideoEnabled) {
-        return Result.fail('File type not accessible publicly', 'FORBIDDEN');
+        return Result.fail('File not found', 'NOT_FOUND');
       }
     } else if (file.type !== 'screenshot' && file.type !== 'attachment') {
-      return Result.fail('File type not accessible publicly', 'FORBIDDEN');
+      return Result.fail('File not found', 'NOT_FOUND');
     }
 
     return Result.ok({ file, handle: createStoredFileHandle(file.path) });

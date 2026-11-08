@@ -5,7 +5,6 @@ import { reportMessagesService } from '../../services/report-messages.service.js
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { MAX_MESSAGE_FILES } from '../../utils/request-limits.js';
-import type { MediaFile } from '../../services/reports.service.js';
 
 const reporterMessages = new Hono();
 reporterMessages.use('*', authMiddleware);
@@ -97,27 +96,13 @@ reporterMessages.post(
         },
         400
       );
-    const files: MediaFile[] = [];
-    try {
-      for (const file of uploads)
-        files.push({
-          data: Buffer.from(await file.arrayBuffer()),
-          filename: file.name,
-          mimeType: file.type,
-        });
-    } catch {
-      return c.json(
-        { success: false, error: 'INVALID_FILE', message: 'Failed to read attached file' },
-        400
-      );
-    }
     const user = c.get('user');
     const result = await reportMessagesService.send(
       c.req.param('id'),
       user.id,
       parsed.data.message,
       parsed.data.ccSender,
-      files
+      uploads
     );
     if (!result.success)
       return c.json(
