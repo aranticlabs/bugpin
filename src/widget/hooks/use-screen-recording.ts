@@ -4,6 +4,7 @@ import {
   type RecordingResult,
   type RecordingSession,
   isDisplayCaptureAllowed,
+  isWholeScreenCapture,
   requestMicrophoneTrack,
   requestRecordingStream,
   restrictCaptureToPage,
@@ -288,7 +289,7 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
       setElapsedMs(0);
       setIsPaused(false);
       setHasMicrophone(microphone?.readyState === 'live');
-      setIsWholeScreen(videoTrack?.getSettings().displaySurface === 'monitor');
+      setIsWholeScreen(isWholeScreenCapture(videoTrack));
       updateStatus('ready');
       optionsRef.current.onEnter();
     },
