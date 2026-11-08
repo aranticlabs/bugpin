@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidHexColor, isValidUrl, normalizeUrl } from '../utils/validators.js';
 import { RECORDING_QUALITIES } from '@shared/recording-quality';
+import { reporterPortalLimitsSchema } from '../utils/reporter-portal-limits.js';
 import {
   ACHIEVEMENT_IDS,
   DASHBOARD_RANGES,
@@ -712,6 +713,7 @@ export const schemas = {
         .optional(),
       appName: z.string().min(1).max(100).optional(),
       appUrl: z.string().optional(),
+      reporterPortalLimits: reporterPortalLimitsSchema.optional(),
       privacy: z
         .object({
           euPrivacyMode: z.boolean().optional(),

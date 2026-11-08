@@ -15,6 +15,7 @@ import {
 } from '../storage/files.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
+import { normalizeEmail } from '../utils/email-normalize.js';
 import { logger } from '../utils/logger.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
@@ -398,6 +399,12 @@ async function createForProject(
     reporterEmail: normalizeOptionalText(input.reporterEmail),
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
+    claimableEmail:
+      options.source === 'widget' &&
+      project.settings.reporterPortal?.enabled &&
+      input.reporterEmail?.trim()
+        ? normalizeEmail(input.reporterEmail)
+        : undefined,
     submissionId: input.submissionId,
   };
 

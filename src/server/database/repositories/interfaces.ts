@@ -43,6 +43,7 @@ export interface CreateReportData {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  claimableEmail?: string;
   submissionId?: string;
 }
 

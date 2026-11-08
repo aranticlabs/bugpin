@@ -65,6 +65,22 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
   return peer !== undefined && isPrivateAddress(peer);
 }
 
+export function getEffectiveOrigin(c: Context): string | null {
+  try {
+    const url = new URL(c.req.url);
+    if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
+      const host = c.req.header('x-forwarded-host');
+      const protocol = c.req.header('x-forwarded-proto');
+      if (host && !/^[a-z0-9.:[\]-]+$/i.test(host)) return null;
+      if (protocol && protocol !== 'http' && protocol !== 'https') return null;
+      return new URL(`${protocol ? `${protocol}:` : url.protocol}//${host || url.host}`).origin;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The client address used for rate limiting and session records.
  *

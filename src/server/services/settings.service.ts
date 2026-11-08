@@ -5,6 +5,7 @@ import { cleanupService } from './cleanup.service.js';
 import { emailService } from './email.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
+import { reporterPortalLimitsSchema } from '../utils/reporter-portal-limits.js';
 import {
   isValidUrl,
   isValidHexColor,
@@ -37,6 +38,7 @@ export interface UpdateSettingsInput {
   language?: ProjectLanguageSettings;
   appName?: string;
   appUrl?: string;
+  reporterPortalLimits?: Partial<AppSettings['reporterPortalLimits']>;
   retentionDays?: number;
   rateLimitPerMinute?: number;
   sessionMaxAgeDays?: number;
@@ -167,6 +169,12 @@ export const settingsService = {
    * Update application settings
    */
   async update(input: UpdateSettingsInput): Promise<Result<AppSettings>> {
+    if (
+      input.reporterPortalLimits !== undefined &&
+      !reporterPortalLimitsSchema.safeParse(input.reporterPortalLimits).success
+    ) {
+      return Result.fail('Invalid reporter portal limits', 'VALIDATION_ERROR');
+    }
     // Validate appName if provided
     if (input.appName !== undefined) {
       if (input.appName.trim().length < 1) {
@@ -315,6 +323,12 @@ export const settingsService = {
     if (input.language !== undefined) updates.language = input.language;
     if (input.appName !== undefined) updates.appName = input.appName.trim();
     if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
+    if (input.reporterPortalLimits !== undefined) {
+      updates.reporterPortalLimits = mergeDefined(
+        current.reporterPortalLimits,
+        input.reporterPortalLimits
+      );
+    }
     if (input.retentionDays !== undefined) updates.retentionDays = input.retentionDays;
     if (input.rateLimitPerMinute !== undefined)
       updates.rateLimitPerMinute = input.rateLimitPerMinute;

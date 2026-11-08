@@ -332,8 +332,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        submission_id, created_at, updated_at, original_description, board_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
+        submission_id, created_at, updated_at, original_description, claimable_email, board_position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
       [
         id,
         data.projectId,
@@ -352,6 +352,7 @@ export const reportsRepo = {
         now,
         now,
         data.description ?? null,
+        data.claimableEmail ?? null,
         status,
       ]
     );

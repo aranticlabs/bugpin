@@ -12,9 +12,10 @@ interface RateLimitEntry {
 interface RateLimitOptions {
   /** Gives the limiter its own buckets, so its count is not shared with other limiters */
   name?: string;
-  max?: number;
+  max?: number | (() => Promise<number>);
   window?: number; // in seconds
-  keyGenerator?: (c: Context) => string;
+  keyGenerator?: (c: Context) => string | Promise<string>;
+  onLimit?: (c: Context) => Response;
 }
 
 // Rate Limit Store
@@ -43,14 +44,14 @@ cleanupInterval.unref?.();
  * @returns Middleware function
  */
 export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
-  const max = options.max ?? 10; // Default: 10 requests
   const windowSeconds = options.window ?? 60; // Default: 60 seconds
   const windowMs = windowSeconds * 1000;
 
   const keyGenerator = options.keyGenerator ?? defaultKeyGenerator;
 
   return async (c, next) => {
-    const baseKey = keyGenerator(c);
+    const max = typeof options.max === 'function' ? await options.max() : (options.max ?? 10);
+    const baseKey = await keyGenerator(c);
     const key = options.name ? `${options.name}|${baseKey}` : baseKey;
     const now = Date.now();
 
@@ -80,6 +81,7 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
 
     // Check if over limit
     if (entry.count > max) {
+      if (options.onLimit) return options.onLimit(c);
       c.header('Retry-After', resetSeconds.toString());
       return c.json(
         {
