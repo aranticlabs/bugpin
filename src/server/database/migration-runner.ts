@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
+import {
+  REPORTERS_SCHEMA,
+  REPORTS_SCHEMA,
+  REPORT_HISTORY_SCHEMA,
+  REPORT_PORTAL_INDEXES,
+} from './portal-schema.js';
+import { rebuildTable } from './table-rebuild.js';
 
 // SQLite retains this formatting in sqlite_schema, so keep it stable across upgrades.
 const MIGRATIONS_SCHEMA = `
@@ -32,6 +39,31 @@ function addMissingColumns(db: Database, sql: string): void {
       /ALTER TABLE (\w+) ADD COLUMN (\w+) [^;]+;/g,
       (statement, table: string, column: string) => (hasColumn(db, table, column) ? '' : statement)
     )
+  );
+}
+
+function schemaMatches(db: Database, sql: string): boolean {
+  return sql
+    .split(';')
+    .filter((statement) => statement.trim())
+    .every((statement) => {
+      const canonical = statement.trim().replace(' IF NOT EXISTS', '');
+      const name = /^CREATE (?:TABLE|INDEX) (\w+)/.exec(canonical)?.[1];
+      if (!name) throw new Error('Expected a CREATE TABLE or CREATE INDEX definition');
+      return (
+        db
+          .query<{ sql: string }, [string]>('SELECT sql FROM sqlite_schema WHERE name = ?')
+          .get(name)?.sql === canonical
+      );
+    });
+}
+
+function copyColumns(db: Database, table: string): Record<string, string> {
+  return Object.fromEntries(
+    db
+      .query<{ name: string }, [string]>('SELECT name FROM pragma_table_info(?)')
+      .all(table)
+      .map(({ name }) => [name, `"${name.replaceAll('"', '""')}"`])
   );
 }
 
@@ -71,6 +103,51 @@ const migrations: Record<string, Migration> = {
         )
         .get() === null,
     apply: addMissingColumns,
+  },
+  '014_add_report_board_position.sql': {
+    isSatisfied: (db) =>
+      hasColumn(db, 'reports', 'board_position') &&
+      hasObjects(db, ['idx_reports_status_board_position']),
+    apply: (db, sql) => {
+      if (!hasColumn(db, 'reports', 'board_position')) db.exec(sql);
+      else
+        db.exec(
+          'CREATE INDEX IF NOT EXISTS idx_reports_status_board_position ON reports(status, board_position)'
+        );
+    },
+  },
+  '018_add_reporters.sql': {
+    isSatisfied: (db) => schemaMatches(db, REPORTERS_SCHEMA),
+    apply: (db, sql) => db.exec(sql),
+  },
+  '019_rebuild_reports_for_portal.sql': {
+    isSatisfied: (db) =>
+      schemaMatches(db, REPORTS_SCHEMA) && schemaMatches(db, REPORT_PORTAL_INDEXES),
+    apply: (db, sql) => {
+      if (!schemaMatches(db, REPORTS_SCHEMA)) {
+        rebuildTable(
+          db,
+          'reports',
+          sql,
+          {
+            reporter_id: 'NULL',
+            claimable_email: 'NULL',
+            original_description: 'description',
+            original_description_backfilled: '1',
+            owner_seen_at: 'NULL',
+            last_reporter_activity_at: 'NULL',
+            reporter_activity_seen_at: 'NULL',
+            ...copyColumns(db, 'reports'),
+          },
+          'reports_fts'
+        );
+      }
+      db.exec(REPORT_PORTAL_INDEXES);
+    },
+  },
+  '020_rebuild_report_history_actions.sql': {
+    isSatisfied: (db) => schemaMatches(db, REPORT_HISTORY_SCHEMA),
+    apply: (db, sql) => rebuildTable(db, 'report_history', sql, copyColumns(db, 'report_history')),
   },
 };
 
@@ -218,6 +295,9 @@ export class MigrationRunner {
         if (!migration?.isSatisfied(this.db)) {
           if (migration) migration.apply(this.db, sql);
           else this.db.exec(sql);
+        }
+        if (migration && !migration.isSatisfied(this.db)) {
+          throw new Error(`Migration did not produce the expected schema: ${file}`);
         }
         checkForeignKeys(this.db);
         this.db.run('INSERT INTO migrations (name) VALUES (?)', [file]);

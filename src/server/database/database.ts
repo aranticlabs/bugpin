@@ -4,6 +4,12 @@ import * as path from 'path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { hasColumn, MigrationRunner } from './migration-runner.js';
+import {
+  REPORTERS_SCHEMA,
+  REPORTS_SCHEMA,
+  REPORT_HISTORY_SCHEMA,
+  REPORT_PORTAL_INDEXES,
+} from './portal-schema.js';
 
 let db: Database | null = null;
 let migrationRunner: MigrationRunner | null = null;
@@ -196,37 +202,8 @@ export async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_user_passkeys_user ON user_passkeys(user_id);
   `);
 
-  // Reports table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reports (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      source TEXT DEFAULT 'widget' NOT NULL CHECK(source IN ('widget', 'manual')),
-      title TEXT NOT NULL,
-      description TEXT,
-      status TEXT DEFAULT 'open' NOT NULL CHECK(status IN ('open', 'in_progress', 'resolved', 'closed')),
-      priority TEXT DEFAULT 'medium' NOT NULL CHECK(priority IN ('lowest', 'low', 'medium', 'high', 'highest')),
-      annotations JSON,
-      metadata JSON NOT NULL,
-      reporter_email TEXT,
-      reporter_name TEXT,
-      assigned_to TEXT REFERENCES users(id) ON DELETE SET NULL,
-      custom_fields JSON DEFAULT '{}',
-      created_at TEXT DEFAULT (datetime('now')) NOT NULL,
-      updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
-      resolved_at TEXT,
-      resolved_by TEXT REFERENCES users(id) ON DELETE SET NULL,
-      closed_at TEXT,
-      forwarded_to JSON DEFAULT '[]',
-      github_sync_status TEXT NULL CHECK(github_sync_status IN ('pending', 'synced', 'error')),
-      github_sync_error TEXT NULL,
-      github_issue_number INTEGER NULL,
-      github_issue_url TEXT NULL,
-      github_synced_at TEXT NULL,
-      reporter_locale TEXT NOT NULL DEFAULT 'en',
-      submission_id TEXT
-    )
-  `);
+  db.exec(REPORTERS_SCHEMA);
+  db.exec(REPORTS_SCHEMA);
 
   // Add source column to existing databases before creating indexes that depend on it.
   if (!hasColumn(db, 'reports', 'source')) {
@@ -241,6 +218,12 @@ export async function initSchema(): Promise<void> {
     db.exec(`ALTER TABLE reports ADD COLUMN submission_id TEXT`);
   }
 
+  if (hasColumn(db, 'reports', 'reporter_id')) db.exec(REPORT_PORTAL_INDEXES);
+  if (hasColumn(db, 'reports', 'board_position')) {
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_reports_status_board_position ON reports(status, board_position)'
+    );
+  }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_priority ON reports(priority)`);
@@ -267,18 +250,7 @@ export async function initSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_reports_closed_at ON reports(closed_at) WHERE closed_at IS NOT NULL`
   );
 
-  // Report history table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS report_history (
-      id TEXT PRIMARY KEY,
-      report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-      action TEXT NOT NULL CHECK(action IN ('created', 'status_changed', 'priority_changed', 'assignee_changed')),
-      old_value TEXT,
-      new_value TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
+  db.exec(REPORT_HISTORY_SCHEMA);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_report_history_report_id ON report_history(report_id)`);
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_report_history_created_at ON report_history(report_id, created_at DESC)`

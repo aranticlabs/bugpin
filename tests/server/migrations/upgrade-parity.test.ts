@@ -11,6 +11,14 @@ import {
   initSchema,
   runMigrations,
 } from '../../../src/server/database/database';
+import { MigrationRunner } from '../../../src/server/database/migration-runner';
+import { REPORTERS_SCHEMA } from '../../../src/server/database/portal-schema';
+import { gamificationRepo } from '../../../src/server/database/repositories/gamification.repo';
+import { reportsRepo } from '../../../src/server/database/repositories/reports.repo';
+import { usersRepo } from '../../../src/server/database/repositories/users.repo';
+import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
+import { gamificationService } from '../../../src/server/services/gamification.service';
+import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../../src/shared/types';
 
 const originalConfig = { ...config };
 let directory: string;
@@ -82,7 +90,7 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
   const db = getDb();
   db.exec(fixture);
   db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
-    INSERT INTO users (id, email, password_hash, name) VALUES ('staff', 'staff@example.com', 'hash', 'Staff');
+    INSERT INTO users (id, email, password_hash, name, role) VALUES ('staff', 'staff@example.com', 'hash', 'Staff', 'editor');
     INSERT INTO reports (rowid, id, project_id, title, description, metadata, board_position, resolved_by, resolved_at)
       VALUES (7, 'first', 'project', 'Searchable report', 'Original text', '{}', 2.5, 'staff', '2026-01-02');
     INSERT INTO reports (rowid, id, project_id, title, metadata, board_position)
@@ -95,6 +103,10 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
     INSERT INTO user_pinned_projects (user_id, project_id, position) VALUES ('staff', 'project', 3);
     DELETE FROM migrations WHERE name = '004_add_report_history.sql';
     DROP INDEX idx_report_history_report_id;`);
+  db.exec(`UPDATE reports SET created_at = '2026-01-01', updated_at = '2026-01-02';
+    INSERT INTO settings (key, value) VALUES ('gamification_enabled', 'true');
+    CREATE VIEW report_view AS SELECT id, title FROM reports;
+    CREATE VIEW history_view AS SELECT report_id, action FROM report_history;`);
   const tables = [
     'reports',
     'report_history',
@@ -105,22 +117,87 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
     'projects',
     'users',
   ];
-  const rows = tables.map((table) =>
-    db.query(`SELECT rowid, * FROM ${table} ORDER BY rowid`).all()
+  const queries = tables.map((table) => {
+    const columns = db
+      .query<{ name: string }, [string]>('SELECT name FROM pragma_table_info(?)')
+      .all(table)
+      .map(({ name }) => `"${name}"`);
+    return `SELECT rowid, ${columns.join(', ')} FROM ${table} ORDER BY rowid`;
+  });
+  const rows = queries.map((sql) => db.query(sql).all());
+  const staff = await usersRepo.findById('staff');
+  if (!staff) throw new Error('Staff fixture missing');
+  const now = Date.parse('2026-02-01');
+  const xp = await gamificationService.getPersonal(
+    staff,
+    gamificationRepo.listUserResolutions(['staff']),
+    now
   );
+  if (!xp.success || !xp.value) throw new Error('XP fixture must be active');
+  expect(xp.value.progress.xp).toBeGreaterThan(0);
   const search = db
     .query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Searchable'")
     .all();
 
   await initSchema();
   await runMigrations();
-  expect(
-    tables.map((table) => db.query(`SELECT rowid, * FROM ${table} ORDER BY rowid`).all())
-  ).toEqual(rows);
+  expect(queries.map((sql) => db.query(sql).all())).toEqual(rows);
   expect(
     db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Searchable'").all()
   ).toEqual(search);
   expect(db.query('PRAGMA foreign_key_check').all()).toEqual([]);
+  expect(
+    await gamificationService.getPersonal(
+      staff,
+      gamificationRepo.listUserResolutions(['staff']),
+      now
+    )
+  ).toEqual(xp);
+  expect(db.query('SELECT * FROM report_view').all()).toHaveLength(2);
+  expect(db.query('SELECT * FROM history_view').all()).toHaveLength(1);
+  expect(
+    db
+      .query(
+        'SELECT original_description, original_description_backfilled, reporter_id, claimable_email FROM reports ORDER BY rowid'
+      )
+      .all()
+  ).toEqual([
+    {
+      original_description: 'Original text',
+      original_description_backfilled: 1,
+      reporter_id: null,
+      claimable_email: null,
+    },
+    {
+      original_description: null,
+      original_description_backfilled: 1,
+      reporter_id: null,
+      claimable_email: null,
+    },
+  ]);
+  for (const table of [
+    'reporters',
+    'reporter_sessions',
+    'reporter_auth_tokens',
+    'reporter_email_suppressions',
+  ]) {
+    expect(db.query(`SELECT * FROM ${table}`).all()).toEqual([]);
+  }
+  expect((await reportsRepo.findById('first'))?.originalDescriptionBackfilled).toBe(true);
+  const upgraded = schema(db);
+  await initSchema();
+  await runMigrations();
+  expect(schema(db)).toEqual(upgraded);
+  db.exec(
+    "UPDATE reports SET title = 'Updated search', description = 'Staff edit' WHERE id = 'first';"
+  );
+  expect(db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Updated'").all()).toEqual(
+    [{ rowid: 7 }]
+  );
+  expect(
+    db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Searchable'").all()
+  ).toEqual([]);
+  expect((await reportsRepo.findById('first'))?.originalDescription).toBe('Original text');
 
   const [name] = fs.readdirSync(directory).filter((name) => name.endsWith('.bak'));
   const backup = new Database(path.join(directory, name), { readonly: true });
@@ -140,4 +217,162 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
   } finally {
     backup.close();
   }
+  closeDatabase();
+  config.dbPath = path.join(directory, 'fresh.db');
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  getDb().exec(`CREATE VIEW report_view AS SELECT id, title FROM reports;
+    CREATE VIEW history_view AS SELECT report_id, action FROM report_history;`);
+  expect(schema(getDb())).toEqual(upgraded);
+});
+
+it('rolls back a failing reports rebuild and leaves a verified restorable backup', async () => {
+  await initDatabase();
+  const db = getDb();
+  db.exec(fixture);
+  db.exec(REPORTERS_SCHEMA);
+  db.exec("INSERT INTO migrations (name) VALUES ('018_add_reporters.sql');");
+  db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+    INSERT INTO reports (rowid, id, project_id, title, description, metadata) VALUES (13, 'report', 'project', 'Searchable report', 'Original', '{}');`);
+  const before = schema(db);
+  const custom = path.join(directory, 'migrations');
+  fs.mkdirSync(custom);
+  const name = '019_rebuild_reports_for_portal.sql';
+  fs.writeFileSync(
+    path.join(custom, name),
+    fs.readFileSync(path.join(config.migrationsDir, name), 'utf8') + '\nINVALID SQL;'
+  );
+  expect(() => new MigrationRunner(db, custom).run()).toThrow();
+  expect(schema(db)).toEqual(before);
+  expect(
+    db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Searchable'").all()
+  ).toEqual([{ rowid: 13 }]);
+  expect(db.query('SELECT name FROM migrations WHERE name = ?').get(name)).toBeNull();
+  const [backupName] = fs.readdirSync(directory).filter((name) => name.endsWith('.bak'));
+  const restored = path.join(directory, 'restored.db');
+  fs.copyFileSync(path.join(directory, backupName), restored);
+  const backup = new Database(restored);
+  try {
+    expect(backup.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+    expect(backup.query('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(schema(backup)).toEqual(before);
+    expect(backup.query('SELECT rowid, description FROM reports').all()).toEqual([
+      { rowid: 13, description: 'Original' },
+    ]);
+    expect(
+      backup.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Searchable'").all()
+    ).toEqual([{ rowid: 13 }]);
+  } finally {
+    backup.close();
+  }
+});
+
+it('preserves a newly submitted original description through staff edits', async () => {
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  getDb().exec(
+    "INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');"
+  );
+  const report = await reportsRepo.create({
+    projectId: 'project',
+    title: 'New report',
+    description: 'As submitted',
+    metadata: { timestamp: '2026-01-01' },
+  });
+  expect(report.originalDescription).toBe('As submitted');
+  expect(report.originalDescriptionBackfilled).toBe(false);
+  expect(report.reporterId).toBeUndefined();
+  expect(report.claimableEmail).toBeUndefined();
+  await reportsRepo.update(report.id, { description: 'Staff edit' });
+  expect((await reportsRepo.findById(report.id))?.originalDescription).toBe('As submitted');
+  const settings = await settingsRepo.getAll();
+  expect(settings.portalBaseUrl).toBe('');
+  expect(settings.reporterPortalLimits).toEqual(DEFAULT_REPORTER_PORTAL_LIMITS);
+  const limits = { ...DEFAULT_REPORTER_PORTAL_LIMITS, uploadMbPerReporterPerDay: 500 };
+  const saved = await settingsRepo.updateAll({
+    portalBaseUrl: 'https://portal.example.com',
+    reporterPortalLimits: limits,
+  });
+  expect(saved.portalBaseUrl).toBe('https://portal.example.com');
+  expect(saved.reporterPortalLimits).toEqual(limits);
+  expect(await settingsRepo.get('portal_base_url')).toBe('https://portal.example.com');
+});
+
+it('enforces reporter identity, token, and session constraints and deletion relationships', async () => {
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  const db = getDb();
+  db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+    INSERT INTO users (id, email, name, password_hash) VALUES ('staff', 'staff@example.com', 'Staff', 'hash');
+    INSERT INTO reporters (id, email, display_name, suspended_by_user_id, sessions_revoked_by_user_id)
+      VALUES ('reporter', 'reporter@example.com', 'Reporter', 'staff', 'staff');
+    INSERT INTO reports (id, project_id, source, title, metadata, reporter_id)
+      VALUES ('report', 'project', 'portal', 'Portal report', '{}', 'reporter');
+    INSERT INTO reporter_sessions (id, token_hash, reporter_id, expires_at, absolute_expires_at)
+      VALUES ('session', 'session-hash', 'reporter', '2030-01-01', '2030-03-01');
+    INSERT INTO reporter_auth_tokens (id, token_hash, email, purpose, source, report_id, expires_at)
+      VALUES ('token', 'token-hash', 'reporter@example.com', 'login', 'request', 'report', '2030-01-01');
+    INSERT INTO reporter_email_suppressions (email, source) VALUES ('reporter@example.com', 'unsubscribe');`);
+  expect(() =>
+    db.run(
+      "INSERT INTO reporters (id, email, display_name) VALUES ('other', 'reporter@example.com', 'Other')"
+    )
+  ).toThrow();
+  expect(() =>
+    db.run(
+      "INSERT INTO reporter_sessions (id, token_hash, reporter_id, expires_at, absolute_expires_at) VALUES ('other', 'session-hash', 'reporter', '2030-01-01', '2030-03-01')"
+    )
+  ).toThrow();
+  expect(() => db.run("UPDATE reporter_auth_tokens SET purpose = 'update'")).toThrow();
+  expect(() => db.run("UPDATE reporter_auth_tokens SET source = 'staff'")).toThrow();
+  expect(() => db.run("UPDATE reporter_email_suppressions SET source = 'staff'")).toThrow();
+  expect(() => db.run("UPDATE reports SET source = 'unknown'")).toThrow();
+  expect(() => db.run('UPDATE reports SET original_description_backfilled = 2')).toThrow();
+  db.run("DELETE FROM users WHERE id = 'staff'");
+  expect(
+    db.query('SELECT suspended_by_user_id, sessions_revoked_by_user_id FROM reporters').get()
+  ).toEqual({ suspended_by_user_id: null, sessions_revoked_by_user_id: null });
+  db.run("DELETE FROM reporters WHERE id = 'reporter'");
+  expect(db.query('SELECT reporter_id FROM reports').get()).toEqual({ reporter_id: null });
+  expect(db.query('SELECT * FROM reporter_sessions').all()).toEqual([]);
+  expect(db.query('SELECT email FROM reporter_email_suppressions').all()).toEqual([
+    { email: 'reporter@example.com' },
+  ]);
+  db.run("DELETE FROM reports WHERE id = 'report'");
+  expect(db.query('SELECT report_id FROM reporter_auth_tokens').get()).toEqual({ report_id: null });
+  expect(db.query('PRAGMA foreign_key_check').all()).toEqual([]);
+});
+
+it('accepts ownership and moderation history with a nullable staff author', async () => {
+  await initDatabase();
+  await initSchema();
+  await runMigrations();
+  const db = getDb();
+  db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+    INSERT INTO reports (id, project_id, title, metadata) VALUES ('report', 'project', 'Report', '{}');`);
+  const actions = [
+    'owner_assigned',
+    'owner_removed',
+    'claimable_set',
+    'message_hidden',
+    'message_unhidden',
+  ];
+  for (const action of actions) {
+    db.run('INSERT INTO report_history (id, report_id, action, user_id) VALUES (?, ?, ?, NULL)', [
+      action,
+      'report',
+      action,
+    ]);
+  }
+  expect(db.query('SELECT action FROM report_history ORDER BY action').all()).toEqual(
+    [...actions].sort().map((action) => ({ action }))
+  );
+  expect(() =>
+    db.run(
+      "INSERT INTO report_history (id, report_id, action) VALUES ('invalid', 'report', 'invalid')"
+    )
+  ).toThrow();
 });

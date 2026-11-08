@@ -3,6 +3,7 @@ import { generateReportId } from '../../utils/id.js';
 import type { CreateReportData } from './interfaces.js';
 import type {
   Report,
+  ReportSource,
   ReportAssignee,
   ReportBoardScope,
   ReportFilter,
@@ -220,7 +221,7 @@ const TOP_OF_COLUMN = `(SELECT COALESCE(MIN(board_position), 0) - 1 FROM reports
 interface ReportRow {
   id: string;
   project_id: string;
-  source: 'widget' | 'manual';
+  source: ReportSource;
   title: string;
   description: string | null;
   status: ReportStatus;
@@ -230,6 +231,13 @@ interface ReportRow {
   reporter_email: string | null;
   reporter_name: string | null;
   reporter_locale: string;
+  reporter_id: string | null;
+  claimable_email: string | null;
+  original_description: string | null;
+  original_description_backfilled: number;
+  owner_seen_at: string | null;
+  last_reporter_activity_at: string | null;
+  reporter_activity_seen_at: string | null;
   assigned_to: string | null;
   custom_fields: string | null;
   created_at: string;
@@ -280,6 +288,13 @@ function mapRowToReport(row: ReportRow & { project_name?: string }): Report {
     reporterEmail: row.reporter_email ?? undefined,
     reporterName: row.reporter_name ?? undefined,
     reporterLocale: mapRowLocale(row.reporter_locale),
+    reporterId: row.reporter_id ?? undefined,
+    claimableEmail: row.claimable_email ?? undefined,
+    originalDescription: row.original_description ?? undefined,
+    originalDescriptionBackfilled: row.original_description_backfilled === 1,
+    ownerSeenAt: row.owner_seen_at ?? undefined,
+    lastReporterActivityAt: row.last_reporter_activity_at ?? undefined,
+    reporterActivitySeenAt: row.reporter_activity_seen_at ?? undefined,
     assignedTo: row.assigned_to ?? undefined,
     assignee,
     customFields: row.custom_fields ? JSON.parse(row.custom_fields) : undefined,
@@ -317,8 +332,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        submission_id, created_at, updated_at, board_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
+        submission_id, created_at, updated_at, original_description, board_position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
       [
         id,
         data.projectId,
@@ -336,6 +351,7 @@ export const reportsRepo = {
         data.submissionId ?? null,
         now,
         now,
+        data.description ?? null,
         status,
       ]
     );
