@@ -33,6 +33,9 @@ services:
       # without a proxy, so forwarded headers are ignored. Switch to auto behind a reverse
       # proxy such as the Traefik example below.
       - TRUST_PROXY=false
+      # Ignore the "Enforce HTTPS" setting, for example after it locked you out without a TLS
+      # proxy. Remove it again once the setting is turned off.
+      # - DISABLE_HTTPS_ENFORCEMENT=true
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
       interval: 30s

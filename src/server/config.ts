@@ -101,6 +101,8 @@ function loadConfig() {
 
   return {
     ...parsed,
+    // Escape hatch for an instance locked out by the "Enforce HTTPS" setting
+    disableHttpsEnforcement: readEnv('DISABLE_HTTPS_ENFORCEMENT')?.trim().toLowerCase() === 'true',
     // Hardcoded values (port 7301 in dev for Vite proxy, 7300 in production)
     port: isDevelopment ? 7301 : 7300,
     host: '0.0.0.0',

@@ -4,6 +4,7 @@ import { authService } from './services/auth.service.js';
 import { cleanupService } from './services/cleanup.service.js';
 import { syncQueueService } from './services/integrations/sync-queue.service.js';
 import { settingsCacheService } from './services/settings-cache.service.js';
+import { warnIfHttpsEnforcementOverridden } from './middleware/https-enforcement.js';
 import { initDefaultBrandingUrls } from './storage/files.js';
 import { initializeEE } from './utils/ee.js';
 import { config } from './config.js';
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
   try {
     await settingsCacheService.warmup();
     logger.info('Settings cache ready');
+    await warnIfHttpsEnforcementOverridden();
   } catch (error) {
     logger.error('FATAL: Failed to warm up settings cache', error);
     logger.error('Database may not be ready. Exiting...');

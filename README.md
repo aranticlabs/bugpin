@@ -107,6 +107,8 @@ BugPin rate-limits logins and widget submissions per client address. It reads `X
 
 The quick-start `docker-compose.yml` publishes port 7300 directly and sets `TRUST_PROXY=false`, so clients cannot choose their own address with a forged header. Behind a reverse proxy, set `TRUST_PROXY=auto` (or `true` for a proxy with a public address) and make sure the proxy sets or appends `X-Forwarded-For`. IPv6 clients are rate-limited per /64 network.
 
+If **Enforce HTTPS** is turned on without a working TLS proxy, every request redirects to HTTPS and the Admin Console becomes unreachable. Start BugPin with `DISABLE_HTTPS_ENFORCEMENT=true` to ignore the setting, sign in, turn the setting off, then remove the variable and restart. BugPin logs a warning while the variable overrides an enabled setting.
+
 ## Login
 
 On first start, BugPin creates an admin account from these environment variables:
