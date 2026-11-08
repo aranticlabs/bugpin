@@ -143,6 +143,11 @@ export const notificationsService = {
     return Result.ok(preferences);
   },
 
+  /** The instance-wide defaults that apply to every project without stored preferences */
+  async getGlobalDefaults(): Promise<Result<NotificationDefaultSettings>> {
+    return Result.ok(await getGlobalNotificationDefaults());
+  },
+
   /**
    * Get all notification preferences for a user
    */

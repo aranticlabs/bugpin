@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { notificationPreferences } from '../../../src/server/routes/api/notification-preferences';
 import { notificationsService } from '../../../src/server/services/notifications.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type {
+  NotificationDefaultSettings,
   NotificationPreferences as NotificationPreferencesType,
   ProjectNotificationDefaults,
   Session,
@@ -64,6 +65,15 @@ const baseDefaults: ProjectNotificationDefaults = {
   updatedAt: new Date().toISOString(),
 };
 
+const globalDefaults: NotificationDefaultSettings = {
+  emailEnabled: true,
+  notifyOnNewReport: true,
+  notifyOnStatusChange: false,
+  notifyOnPriorityChange: true,
+  notifyOnAssignment: true,
+  notifyOnDeletion: false,
+};
+
 const originalAuthService = { ...authService };
 const originalNotificationsService = { ...notificationsService };
 
@@ -79,6 +89,7 @@ beforeEach(() => {
     });
 
   notificationsService.getAllUserPreferences = async () => Result.ok([basePreferences]);
+  notificationsService.getGlobalDefaults = async () => Result.ok(globalDefaults);
   notificationsService.getUserPreferences = async () => Result.ok(basePreferences);
   notificationsService.updateUserPreferences = async () => Result.ok(basePreferences);
   notificationsService.getProjectDefaults = async () => Result.ok(baseDefaults);
@@ -106,9 +117,14 @@ describe('notification-preferences routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        success: boolean;
+        preferences: unknown[];
+        defaults: unknown;
+      };
       expect(body.success).toBe(true);
       expect(body.preferences).toHaveLength(1);
+      expect(body.defaults).toEqual(globalDefaults);
     });
 
     it('returns 400 when service fails', async () => {
@@ -132,7 +148,7 @@ describe('notification-preferences routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean; preferences: { projectId: string } };
       expect(body.success).toBe(true);
       expect(body.preferences.projectId).toBe('prj_1');
     });
@@ -169,7 +185,7 @@ describe('notification-preferences routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean };
       expect(body.success).toBe(true);
     });
 
@@ -207,7 +223,7 @@ describe('notification-preferences routes', () => {
       );
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean; defaults: { projectId: string } };
       expect(body.success).toBe(true);
       expect(body.defaults.projectId).toBe('prj_1');
     });
@@ -260,7 +276,7 @@ describe('notification-preferences routes', () => {
       );
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean };
       expect(body.success).toBe(true);
     });
 
@@ -298,7 +314,7 @@ describe('notification-preferences routes', () => {
       );
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { success: boolean };
       expect(body.success).toBe(true);
     });
 

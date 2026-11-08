@@ -23,9 +23,15 @@ notificationPreferences.get('/me', async (c) => {
     return c.json({ success: false, error: result.code, message: result.error }, 400);
   }
 
+  const defaults = await notificationsService.getGlobalDefaults();
+  if (!defaults.success) {
+    return c.json({ success: false, error: defaults.code, message: defaults.error }, 500);
+  }
+
   return c.json({
     success: true,
     preferences: result.value,
+    defaults: defaults.value,
   });
 });
 
