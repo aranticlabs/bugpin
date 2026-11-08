@@ -6,6 +6,7 @@ import { usersService } from '../../src/server/services/users.service';
 import { gamificationService } from '../../src/server/services/gamification.service';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
+import { apiTokensRepo } from '../../src/server/database/repositories/api-tokens.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import type { Project, User } from '../../src/shared/types';
 import { passwordPolicyService } from '../../src/server/services/password-policy.service';
@@ -28,8 +29,10 @@ const baseUser: User = {
 const originalUsersRepo = { ...usersRepo };
 const originalGamificationService = { ...gamificationService };
 const originalSessionsRepo = { ...sessionsRepo };
+const originalApiTokensRepo = { ...apiTokensRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalHash = Bun.password.hash;
+const originalVerify = Bun.password.verify;
 const originalCheckAccess = projectLicenseService.checkAccess;
 
 let lastCreateInput: unknown;
@@ -39,11 +42,13 @@ let deletedSessionsFor: string | null;
 let emailExistsValue = false;
 let userById: User | null = baseUser;
 let userByEmail: User | null = baseUser;
-let usersByRole: User[] = [baseUser];
+let otherSignInAdmins = 1;
+let revokedTokensFor: string | null;
+let storedPasswordHash: string | null = 'hash';
 let projects: Project[] = [];
 
 beforeEach(() => {
-  gamificationService.applyNewUserDefault = async () => {};
+  gamificationService.applyNewUserDefault = async () => Result.ok(undefined);
   passwordPolicyService.getPolicy = async () => DEFAULT_PASSWORD_POLICY;
   twoFactorRepo.listUserIdsWithTwoFactor = async () => new Set(['usr_1']);
   projectLicenseService.checkAccess = () => Result.ok(undefined);
@@ -54,14 +59,21 @@ beforeEach(() => {
   emailExistsValue = false;
   userById = baseUser;
   userByEmail = baseUser;
-  usersByRole = [baseUser];
+  otherSignInAdmins = 1;
+  revokedTokensFor = null;
+  storedPasswordHash = 'hash';
   projects = [];
 
   usersRepo.emailExists = async () => emailExistsValue;
   usersRepo.findById = async () => userById;
   usersRepo.findByEmail = async () => userByEmail;
   usersRepo.findAll = async () => [baseUser];
-  usersRepo.findByRole = async () => usersByRole;
+  usersRepo.countSignInAdminsExcept = async () => otherSignInAdmins;
+  usersRepo.findPasswordHash = async () => storedPasswordHash;
+  apiTokensRepo.revokeAllForUser = async (id) => {
+    revokedTokensFor = id;
+    return 2;
+  };
   projectsRepo.findAll = async () => projects;
   usersRepo.create = async (input) => {
     lastCreateInput = input;
@@ -88,6 +100,7 @@ beforeEach(() => {
   };
 
   Bun.password.hash = async () => 'hash';
+  Bun.password.verify = async (password, hash) => hash === 'hash' && password === 'password123';
 });
 
 afterEach(() => {
@@ -96,8 +109,10 @@ afterEach(() => {
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(gamificationService, originalGamificationService);
   Object.assign(sessionsRepo, originalSessionsRepo);
+  Object.assign(apiTokensRepo, originalApiTokensRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Bun.password.hash = originalHash;
+  Bun.password.verify = originalVerify;
   projectLicenseService.checkAccess = originalCheckAccess;
 });
 
@@ -152,6 +167,19 @@ describe('usersService.create', () => {
       role: 'viewer',
     });
   });
+
+  it('removes the new user again when the gamification default cannot be applied', async () => {
+    gamificationService.applyNewUserDefault = async () => {
+      throw new Error('settings unavailable');
+    };
+    const result = await usersService.create({
+      email: 'user@example.com',
+      password: 'password123',
+      name: 'User One',
+    });
+    expect(!result.success && result.code).toBe('CREATE_FAILED');
+    expect(deletedUserId).toBe('usr_new');
+  });
 });
 
 describe('usersService.update', () => {
@@ -167,15 +195,20 @@ describe('usersService.update', () => {
   });
 
   it('prevents demoting the last admin', async () => {
-    usersByRole = [{ ...baseUser, role: 'admin' }];
+    otherSignInAdmins = 0;
     const result = await usersService.update('usr_1', { role: 'viewer' });
-    expect(result.success).toBe(false);
+    expect(!result.success && result.code).toBe('LAST_ADMIN');
   });
 
   it('prevents deactivating the last active admin', async () => {
-    usersByRole = [{ ...baseUser, role: 'admin', isActive: true }];
+    otherSignInAdmins = 0;
     const result = await usersService.update('usr_1', { isActive: false });
-    expect(result.success).toBe(false);
+    expect(!result.success && result.code).toBe('LAST_ADMIN');
+  });
+
+  it('demotes an admin while another admin can sign in', async () => {
+    const result = await usersService.update('usr_1', { role: 'viewer' });
+    expect(result.success).toBe(true);
   });
 
   it('updates user fields', async () => {
@@ -184,14 +217,12 @@ describe('usersService.update', () => {
       name: ' New Name ',
       role: 'editor',
       isActive: false,
-      avatarUrl: 'https://cdn.test/avatar.png',
     });
     expect(result.success).toBe(true);
-    expect(lastUpdateInput).toMatchObject({
+    expect(lastUpdateInput).toEqual({
       name: 'New Name',
       role: 'editor',
       isActive: false,
-      avatarUrl: 'https://cdn.test/avatar.png',
     });
   });
 
@@ -280,9 +311,10 @@ describe('usersService.delete', () => {
   });
 
   it('prevents deleting the last admin', async () => {
-    usersByRole = [{ ...baseUser, role: 'admin' }];
+    otherSignInAdmins = 0;
     const result = await usersService.delete('usr_1');
-    expect(result.success).toBe(false);
+    expect(!result.success && result.code).toBe('LAST_ADMIN');
+    expect(deletedUserId).toBeNull();
   });
 
   it('deletes user and sessions', async () => {
@@ -306,10 +338,11 @@ describe('usersService.resetPassword', () => {
     expect(result.success).toBe(false);
   });
 
-  it('updates password and clears sessions', async () => {
+  it('updates password, clears sessions and revokes API tokens', async () => {
     const result = await usersService.resetPassword('usr_1', 'password123');
     expect(result.success).toBe(true);
     expect(deletedSessionsFor).toBe('usr_1');
+    expect(revokedTokensFor).toBe('usr_1');
   });
 });
 
@@ -334,14 +367,62 @@ describe('usersService.profile and avatar', () => {
 
   it('rejects duplicate profile email', async () => {
     emailExistsValue = true;
-    const result = await usersService.updateProfile('usr_1', { email: 'other@example.com' });
-    expect(result.success).toBe(false);
+    const result = await usersService.updateProfile('usr_1', {
+      email: 'other@example.com',
+      currentPassword: 'password123',
+    });
+    expect(!result.success && result.code).toBe('EMAIL_EXISTS');
+  });
+
+  it('requires the current password to change the email', async () => {
+    const result = await usersService.updateProfile('usr_1', { email: 'new@example.com' });
+    expect(!result.success && result.code).toBe('PASSWORD_REQUIRED');
+    expect(lastUpdateInput).toBeUndefined();
+  });
+
+  it('rejects a wrong current password', async () => {
+    const result = await usersService.updateProfile('usr_1', {
+      email: 'new@example.com',
+      currentPassword: 'wrong-password',
+    });
+    expect(!result.success && result.code).toBe('INVALID_PASSWORD');
+  });
+
+  it('rejects an email change for an account without a password', async () => {
+    storedPasswordHash = '';
+    const result = await usersService.updateProfile('usr_1', {
+      email: 'new@example.com',
+      currentPassword: 'password123',
+    });
+    expect(!result.success && result.code).toBe('INVALID_PASSWORD');
+  });
+
+  it('rejects an email change made with an API token', async () => {
+    const result = await usersService.updateProfile(
+      'usr_1',
+      { email: 'new@example.com', currentPassword: 'password123' },
+      { viaApiToken: true }
+    );
+    expect(!result.success && result.code).toBe('SESSION_REQUIRED');
+  });
+
+  it('needs no password when the email only differs in case', async () => {
+    const result = await usersService.updateProfile('usr_1', { email: 'USER@example.com' });
+    expect(result.success).toBe(true);
+    expect(lastUpdateInput).toBeUndefined();
+  });
+
+  it('changes the name without a password', async () => {
+    const result = await usersService.updateProfile('usr_1', { name: 'Renamed' });
+    expect(result.success).toBe(true);
+    expect(lastUpdateInput).toEqual({ name: 'Renamed' });
   });
 
   it('updates profile fields', async () => {
     const result = await usersService.updateProfile('usr_1', {
       name: ' New Name ',
       email: 'new@example.com',
+      currentPassword: 'password123',
     });
     expect(result.success).toBe(true);
     expect(lastUpdateInput).toMatchObject({

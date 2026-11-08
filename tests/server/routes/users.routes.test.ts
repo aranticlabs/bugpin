@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { usersRoutes } from '../../../src/server/routes/api/users';
 import { usersService } from '../../../src/server/services/users.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -223,6 +223,25 @@ describe('users routes', () => {
     expect(lastUpdateBody).toEqual({ defaultProjectIds: ['prj_1', 'prj_2'] });
   });
 
+  it('passes only validated fields to the update', async () => {
+    const app = createApp();
+    const res = await app.request('http://localhost/users/usr_2', {
+      method: 'PATCH',
+      headers: {
+        cookie: 'session=sess_1',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'New Name',
+        avatarUrl: 'https://attacker.example/avatar.png',
+        email: 'other@example.com',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(lastUpdateBody).toEqual({ name: 'New Name' });
+  });
+
   it('returns 404 when update fails', async () => {
     updateResult = Result.fail('Not found', 'NOT_FOUND');
     const app = createApp();
@@ -291,6 +310,29 @@ describe('users routes', () => {
       body: JSON.stringify({ email: 'user@example.com' }),
     });
     expect(res.status).toBe(409);
+  });
+
+  it('maps profile password errors to 400 and session errors to 403', async () => {
+    const app = createApp();
+    const send = () =>
+      app.request('http://localhost/users/me/profile', {
+        method: 'PATCH',
+        headers: {
+          cookie: 'session=sess_1',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'new@example.com' }),
+      });
+
+    for (const code of ['PASSWORD_REQUIRED', 'INVALID_PASSWORD']) {
+      updateProfileResult = Result.fail('Password problem', code);
+      const res = await send();
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: code });
+    }
+
+    updateProfileResult = Result.fail('Sign in to change your email address', 'SESSION_REQUIRED');
+    expect((await send()).status).toBe(403);
   });
 
   it('updates profile for current user', async () => {

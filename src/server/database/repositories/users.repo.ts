@@ -173,6 +173,34 @@ export const usersRepo = {
   },
 
   /**
+   * Count admins who can sign in (active, not waiting on an invitation), leaving one user out
+   */
+  async countSignInAdminsExcept(excludeId: string): Promise<number> {
+    const db = getDb();
+    const result = db
+      .query(
+        `SELECT COUNT(*) as count FROM users
+         WHERE role = 'admin'
+           AND is_active = 1
+           AND (invitation_sent_at IS NULL OR invitation_accepted_at IS NOT NULL)
+           AND id != ?`
+      )
+      .get(excludeId) as { count: number };
+    return result.count;
+  },
+
+  /**
+   * Find a user's password hash
+   */
+  async findPasswordHash(id: string): Promise<string | null> {
+    const db = getDb();
+    const row = db.query('SELECT password_hash FROM users WHERE id = ?').get(id) as {
+      password_hash: string;
+    } | null;
+    return row ? row.password_hash : null;
+  },
+
+  /**
    * Update a user
    */
   async update(

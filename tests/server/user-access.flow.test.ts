@@ -3,10 +3,11 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { Hono } from '../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../src/server/node_modules/hono';
 import { config } from '../../src/server/config';
 import {
   closeDatabase,
+  getDb,
   initDatabase,
   initSchema,
   runMigrations,
@@ -19,12 +20,16 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { authService } from '../../src/server/services/auth.service';
 import { emailService } from '../../src/server/services/email.service';
 import { userAccessService } from '../../src/server/services/user-access.service';
+import { usersService } from '../../src/server/services/users.service';
 import { passwordResetService } from '../../src/server/services/password-reset.service';
+import { twoFactorService } from '../../src/server/services/two-factor.service';
+import { usersRoutes } from '../../src/server/routes/api/users';
 import {
   hasApiAccess,
   requireApiAccessToCreateTokens,
 } from '../../src/server/middleware/api-access';
 import { logger } from '../../src/server/utils/logger';
+import type { ApiTokenValidationResult } from '../../src/server/types/ee-plugin';
 import type { User } from '../../src/shared/types';
 
 const originalConfig = { ...config };
@@ -35,6 +40,40 @@ const newPassword = 'replacement-password-2';
 let tempDir = '';
 let user: User;
 let sentResetUrls: string[] = [];
+
+async function sessionCookie(target: User): Promise<string> {
+  const session = await sessionsRepo.create({
+    userId: target.id,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  return `session=${session.id}`;
+}
+
+function usersApp(): Hono {
+  const app = new Hono();
+  app.route('/users', usersRoutes);
+  return app;
+}
+
+function sendJson(
+  app: Hono,
+  cookie: string,
+  method: string,
+  url: string,
+  body?: unknown
+): Promise<Response> {
+  return Promise.resolve(
+    app.request(`http://localhost${url}`, {
+      method,
+      headers: { cookie, 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  );
+}
+
+async function activeTokenCount(userId: string): Promise<number> {
+  return (await apiTokensRepo.findByUserId(userId)).length;
+}
 
 async function createUser(overrides: Partial<Pick<User, 'role'>> = {}): Promise<User> {
   return usersRepo.create({
@@ -279,5 +318,261 @@ describe('API access guards', () => {
     expect(await denied.json()).toMatchObject({ error: 'API_ACCESS_DISABLED' });
     expect((await create('on')).status).toBe(200);
     expect((await app.request('http://localhost/tokens')).status).toBe(200);
+  });
+});
+
+describe('last admin protection', () => {
+  let adminA: User;
+  let adminB: User;
+  let cookieA: string;
+
+  beforeEach(async () => {
+    getDb().run("UPDATE users SET role = 'viewer' WHERE role = 'admin'");
+    adminA = await createUser({ role: 'admin' });
+    adminB = await createUser({ role: 'admin' });
+    cookieA = await sessionCookie(adminA);
+  });
+
+  it('demotes an admin while another active admin remains', async () => {
+    const res = await sendJson(usersApp(), cookieA, 'PATCH', `/users/${adminB.id}`, {
+      role: 'editor',
+    });
+    expect(res.status).toBe(200);
+    expect((await usersRepo.findById(adminB.id))?.role).toBe('editor');
+  });
+
+  it('refuses to demote or deactivate the last active admin', async () => {
+    const app = usersApp();
+    getDb().run("UPDATE users SET role = 'viewer' WHERE id = ?", [adminB.id]);
+
+    for (const body of [{ role: 'viewer' }, { isActive: false }]) {
+      const res = await sendJson(app, cookieA, 'PATCH', `/users/${adminA.id}`, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: 'LAST_ADMIN' });
+    }
+    expect(await usersRepo.findById(adminA.id)).toMatchObject({ role: 'admin', isActive: true });
+  });
+
+  it('does not count an admin that was deactivated', async () => {
+    const app = usersApp();
+    const deactivated = await sendJson(app, cookieA, 'PATCH', `/users/${adminB.id}`, {
+      isActive: false,
+    });
+    expect(deactivated.status).toBe(200);
+
+    const demoted = await sendJson(app, cookieA, 'PATCH', `/users/${adminA.id}`, {
+      role: 'viewer',
+    });
+    expect(demoted.status).toBe(400);
+    expect(await demoted.json()).toMatchObject({ error: 'LAST_ADMIN' });
+    expect((await usersRepo.findById(adminA.id))?.role).toBe('admin');
+  });
+
+  it('does not count an admin whose invitation is still pending', async () => {
+    getDb().run("UPDATE users SET role = 'viewer' WHERE id = ?", [adminB.id]);
+    const invited = await usersRepo.createInvited({
+      email: `invited-${crypto.randomUUID()}@example.test`,
+      name: 'Invited Admin',
+      role: 'admin',
+      invitationToken: crypto.randomUUID(),
+      invitationTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    getDb().run('UPDATE users SET is_active = 1 WHERE id = ?', [invited.id]);
+
+    const res = await sendJson(usersApp(), cookieA, 'PATCH', `/users/${adminA.id}`, {
+      isActive: false,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'LAST_ADMIN' });
+  });
+
+  it('refuses to delete the last active admin when the other admin is deactivated', async () => {
+    const deactivated = await sendJson(usersApp(), cookieA, 'PATCH', `/users/${adminB.id}`, {
+      isActive: false,
+    });
+    expect(deactivated.status).toBe(200);
+
+    const removed = await usersService.delete(adminA.id);
+    expect(!removed.success && removed.code).toBe('LAST_ADMIN');
+    expect(await usersRepo.findById(adminA.id)).not.toBeNull();
+  });
+
+  it('still deletes a deactivated admin', async () => {
+    getDb().run('UPDATE users SET is_active = 0 WHERE id = ?', [adminB.id]);
+    const res = await sendJson(usersApp(), cookieA, 'DELETE', `/users/${adminB.id}`);
+    expect(res.status).toBe(200);
+    expect(await usersRepo.findById(adminB.id)).toBeNull();
+  });
+});
+
+describe('users routes accept only validated fields', () => {
+  it('ignores avatarUrl and other unknown keys on an admin update', async () => {
+    getDb().run("UPDATE users SET role = 'viewer' WHERE role = 'admin'");
+    const admin = await createUser({ role: 'admin' });
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(admin),
+      'PATCH',
+      `/users/${user.id}`,
+      {
+        name: 'Renamed User',
+        avatarUrl: 'https://attacker.example/avatar.png',
+        email: 'changed@example.test',
+      }
+    );
+    expect(res.status).toBe(200);
+    const stored = await usersRepo.findById(user.id);
+    expect(stored?.name).toBe('Renamed User');
+    expect(stored?.avatarUrl).toBeUndefined();
+    expect(stored?.email).toBe(user.email);
+  });
+
+  it('ignores unknown keys on a profile update', async () => {
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(user),
+      'PATCH',
+      '/users/me/profile',
+      {
+        name: 'Profile Name',
+        role: 'admin',
+        avatarUrl: 'https://attacker.example/avatar.png',
+      }
+    );
+    expect(res.status).toBe(200);
+    const stored = await usersRepo.findById(user.id);
+    expect(stored?.role).toBe('editor');
+    expect(stored?.avatarUrl).toBeUndefined();
+  });
+});
+
+describe('email change on the profile', () => {
+  const newEmail = () => `changed-${crypto.randomUUID()}@example.test`;
+
+  it('requires the current password', async () => {
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(user),
+      'PATCH',
+      '/users/me/profile',
+      {
+        email: newEmail(),
+      }
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'PASSWORD_REQUIRED',
+      message: 'Enter your current password to change your email address',
+    });
+  });
+
+  it('rejects a wrong current password with 400', async () => {
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(user),
+      'PATCH',
+      '/users/me/profile',
+      {
+        email: newEmail(),
+        currentPassword: 'not-the-password',
+      }
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'INVALID_PASSWORD',
+      message: 'Current password is incorrect',
+    });
+    expect((await usersRepo.findById(user.id))?.email).toBe(user.email);
+  });
+
+  it('changes the email with the correct password', async () => {
+    const email = newEmail();
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(user),
+      'PATCH',
+      '/users/me/profile',
+      {
+        email: email.toUpperCase(),
+        currentPassword: password,
+      }
+    );
+    expect(res.status).toBe(200);
+    expect((await usersRepo.findById(user.id))?.email).toBe(email);
+  });
+
+  it('changes only the name without a password', async () => {
+    const res = await sendJson(
+      usersApp(),
+      await sessionCookie(user),
+      'PATCH',
+      '/users/me/profile',
+      {
+        name: 'Only Name',
+        email: user.email.toUpperCase(),
+      }
+    );
+    expect(res.status).toBe(200);
+    expect((await usersRepo.findById(user.id))?.name).toBe('Only Name');
+  });
+
+  it('rejects an email change made with an API token', async () => {
+    const { token } = await apiTokensRepo.create({
+      userId: user.id,
+      name: 'CI',
+      scopes: ['read', 'write'],
+    });
+    const validated: ApiTokenValidationResult = { ...token, user };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('user', user);
+      c.set('apiToken', validated);
+      return next();
+    });
+    app.route('/users', usersRoutes);
+
+    const res = await sendJson(app, '', 'PATCH', '/users/me/profile', {
+      email: newEmail(),
+      currentPassword: password,
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: 'SESSION_REQUIRED' });
+    expect((await usersRepo.findById(user.id))?.email).toBe(user.email);
+  });
+});
+
+describe('API tokens on account recovery', () => {
+  beforeEach(async () => {
+    await apiTokensRepo.create({ userId: user.id, name: 'CI' });
+    await apiTokensRepo.create({ userId: user.id, name: 'Deploy' });
+  });
+
+  it('revokes them on an admin password reset', async () => {
+    expect((await usersService.resetPassword(user.id, newPassword)).success).toBe(true);
+    expect(await activeTokenCount(user.id)).toBe(0);
+  });
+
+  it('revokes them when a temporary password is set', async () => {
+    const result = await userAccessService.setTemporaryPassword(user.id, 'temporary-pass-3');
+    expect(result.success).toBe(true);
+    expect(await activeTokenCount(user.id)).toBe(0);
+  });
+
+  it('revokes them when a reset link is used', async () => {
+    await passwordResetService.sendResetEmail(user.id);
+    const token = tokenFrom(sentResetUrls[0]);
+    expect((await passwordResetService.completeReset(token, newPassword)).success).toBe(true);
+    expect(await activeTokenCount(user.id)).toBe(0);
+  });
+
+  it('revokes them when an admin resets two-factor authentication', async () => {
+    expect((await twoFactorService.resetForUser(user.id)).success).toBe(true);
+    expect(await activeTokenCount(user.id)).toBe(0);
+  });
+
+  it('keeps them when users change their own password', async () => {
+    const result = await authService.changePassword(user.id, password, newPassword);
+    expect(result.success).toBe(true);
+    expect(await activeTokenCount(user.id)).toBe(2);
   });
 });

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { sessionsRepo } from '../database/repositories/sessions.repo.js';
+import { apiTokensRepo } from '../database/repositories/api-tokens.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { decryptSecret, encryptSecret, sha256Hex } from '../utils/crypto.js';
 import {
@@ -225,9 +226,10 @@ export const twoFactorService = {
     const user = await usersRepo.findById(userId);
     if (!user) return Result.fail('User not found', 'USER_NOT_FOUND');
     await twoFactorRepo.resetUser(userId);
-    // A reset usually follows a lost or stolen device, so existing sign-ins end too
+    // A reset usually follows a lost or stolen device, so existing sign-ins and API tokens end too
     const sessionsEnded = await sessionsRepo.deleteByUserId(userId);
-    logger.warn('Two-factor authentication reset', { userId, sessionsEnded });
+    const tokensRevoked = await apiTokensRepo.revokeAllForUser(userId);
+    logger.warn('Two-factor authentication reset', { userId, sessionsEnded, tokensRevoked });
     return Result.ok(undefined);
   },
 };

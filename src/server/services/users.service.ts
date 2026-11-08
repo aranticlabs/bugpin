@@ -8,6 +8,7 @@ import { isValidEmail } from '../utils/validators.js';
 import type { DefaultProjectReference, User, UserRole } from '@shared/types';
 import { passwordPolicyService } from './password-policy.service.js';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
+import { apiTokensRepo } from '../database/repositories/api-tokens.repo.js';
 import { gamificationService } from './gamification.service.js';
 
 // Types
@@ -23,13 +24,17 @@ export interface UpdateUserInput {
   name?: string;
   role?: UserRole;
   isActive?: boolean;
-  avatarUrl?: string;
   defaultProjectIds?: string[];
 }
 
 export interface UpdateProfileInput {
   name?: string;
   email?: string;
+  currentPassword?: string;
+}
+
+export interface UpdateProfileOptions {
+  viaApiToken?: boolean;
 }
 
 // Password Hashing
@@ -41,6 +46,17 @@ async function hashPassword(password: string): Promise<string> {
     algorithm: 'bcrypt',
     cost: BCRYPT_ROUNDS,
   });
+}
+
+async function verifyPassword(userId: string, password: string): Promise<boolean> {
+  const passwordHash = await usersRepo.findPasswordHash(userId);
+  if (!passwordHash) return false;
+  return await Bun.password.verify(password, passwordHash);
+}
+
+async function ensureAnotherSignInAdmin(id: string, message: string): Promise<Result<void>> {
+  const others = await usersRepo.countSignInAdminsExcept(id);
+  return others > 0 ? Result.ok(undefined) : Result.fail(message, 'LAST_ADMIN');
 }
 
 /**
@@ -230,21 +246,17 @@ export const usersService = {
       return Result.fail('Name must be at least 2 characters', 'INVALID_NAME');
     }
 
-    // Prevent demoting the last admin
     if (input.role && input.role !== 'admin' && existing.role === 'admin') {
-      const admins = await usersRepo.findByRole('admin');
-      if (admins.length === 1) {
-        return Result.fail('Cannot demote the last admin user', 'LAST_ADMIN');
-      }
+      const guard = await ensureAnotherSignInAdmin(id, 'Cannot demote the last admin user');
+      if (!guard.success) return guard;
     }
 
-    // Prevent deactivating the last admin
     if (input.isActive === false && existing.role === 'admin') {
-      const admins = await usersRepo.findByRole('admin');
-      const activeAdmins = admins.filter((u) => u.isActive);
-      if (activeAdmins.length === 1 && activeAdmins[0].id === id) {
-        return Result.fail('Cannot deactivate the last active admin user', 'LAST_ADMIN');
-      }
+      const guard = await ensureAnotherSignInAdmin(
+        id,
+        'Cannot deactivate the last active admin user'
+      );
+      if (!guard.success) return guard;
     }
 
     const updatedIsActive = input.isActive ?? existing.isActive;
@@ -287,7 +299,7 @@ export const usersService = {
       }
     }
 
-    const updates: Partial<Pick<User, 'name' | 'role' | 'isActive' | 'avatarUrl'>> = {};
+    const updates: Partial<Pick<User, 'name' | 'role' | 'isActive'>> = {};
 
     if (input.name !== undefined) {
       updates.name = input.name.trim();
@@ -299,10 +311,6 @@ export const usersService = {
 
     if (input.isActive !== undefined) {
       updates.isActive = input.isActive;
-    }
-
-    if (input.avatarUrl !== undefined) {
-      updates.avatarUrl = input.avatarUrl;
     }
 
     const user = await usersRepo.update(id, updates);
@@ -351,12 +359,9 @@ export const usersService = {
       return Result.fail('Cannot delete your own account', 'SELF_DELETE');
     }
 
-    // Prevent deleting the last admin
     if (existing.role === 'admin') {
-      const admins = await usersRepo.findByRole('admin');
-      if (admins.length === 1) {
-        return Result.fail('Cannot delete the last admin user', 'LAST_ADMIN');
-      }
+      const guard = await ensureAnotherSignInAdmin(id, 'Cannot delete the last admin user');
+      if (!guard.success) return guard;
     }
 
     // Delete all user sessions
@@ -370,7 +375,7 @@ export const usersService = {
   },
 
   /**
-   * Reset user password (admin function)
+   * Reset user password (admin function). Recovery ends every session and API token.
    */
   async resetPassword(id: string, newPassword: string): Promise<Result<void>> {
     const existing = await usersRepo.findById(id);
@@ -387,10 +392,10 @@ export const usersService = {
     const passwordHash = await hashPassword(newPassword);
     await usersRepo.updatePassword(id, passwordHash);
 
-    // Invalidate all sessions for this user
     await sessionsRepo.deleteByUserId(id);
+    const revokedTokens = await apiTokensRepo.revokeAllForUser(id);
 
-    logger.info('User password reset', { userId: id });
+    logger.info('User password reset', { userId: id, revokedTokens });
     return Result.ok(undefined);
   },
 
@@ -438,9 +443,14 @@ export const usersService = {
   },
 
   /**
-   * Update user's own profile (name, email)
+   * Update user's own profile (name, email). Changing the email needs the current password
+   * and a session, not an API token.
    */
-  async updateProfile(userId: string, input: UpdateProfileInput): Promise<Result<User>> {
+  async updateProfile(
+    userId: string,
+    input: UpdateProfileInput,
+    options: UpdateProfileOptions = {}
+  ): Promise<Result<User>> {
     const existing = await usersRepo.findById(userId);
 
     if (!existing) {
@@ -467,9 +477,20 @@ export const usersService = {
         return Result.fail('Invalid email address', 'INVALID_EMAIL');
       }
 
-      // Check if email is different from current
-      if (trimmedEmail !== existing.email) {
-        // Check if email already exists
+      if (trimmedEmail !== existing.email.toLowerCase()) {
+        if (options.viaApiToken) {
+          return Result.fail('Sign in to change your email address', 'SESSION_REQUIRED');
+        }
+        if (!input.currentPassword) {
+          return Result.fail(
+            'Enter your current password to change your email address',
+            'PASSWORD_REQUIRED'
+          );
+        }
+        if (!(await verifyPassword(userId, input.currentPassword))) {
+          return Result.fail('Current password is incorrect', 'INVALID_PASSWORD');
+        }
+
         const emailExists = await usersRepo.emailExists(trimmedEmail);
         if (emailExists) {
           return Result.fail('Email address already in use', 'EMAIL_EXISTS');

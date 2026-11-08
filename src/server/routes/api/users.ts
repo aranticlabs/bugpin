@@ -6,7 +6,7 @@ import { userAccessService } from '../../services/user-access.service.js';
 import { passwordResetService } from '../../services/password-reset.service.js';
 import { requireEEFeature } from '../../utils/ee.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
-import { validate, schemas } from '../../middleware/validate.js';
+import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 import { saveAvatar, deleteAllAvatars } from '../../storage/files.js';
 import { config } from '../../config.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
@@ -69,7 +69,7 @@ users.get('/:id', authorize(['admin']), validate({ params: schemas.id }), async 
 // Create User (Admin only)
 
 users.post('/', authorize(['admin']), validate({ body: schemas.createUser }), async (c) => {
-  const body = await c.req.json();
+  const body = validatedBody(c, schemas.createUser);
 
   const result = await usersService.create(body);
 
@@ -90,7 +90,7 @@ users.post('/', authorize(['admin']), validate({ body: schemas.createUser }), as
 // Invite User (Admin only)
 
 users.post('/invite', authorize(['admin']), validate({ body: schemas.inviteUser }), async (c) => {
-  const body = await c.req.json();
+  const body = validatedBody(c, schemas.inviteUser);
   const currentUser = c.get('user') as User;
 
   const result = await invitationsService.inviteUser(body, currentUser.name);
@@ -156,7 +156,7 @@ users.patch(
   validate({ params: schemas.id, body: schemas.updateUser }),
   async (c) => {
     const id = c.req.param('id');
-    const body = await c.req.json();
+    const body = validatedBody(c, schemas.updateUser);
 
     const result = await usersService.update(id, body);
 
@@ -200,7 +200,7 @@ users.patch(
   requireEEFeature('api-access'),
   validate({ params: schemas.id, body: schemas.apiAccess }),
   async (c) => {
-    const { enabled } = await c.req.json<{ enabled: boolean }>();
+    const { enabled } = validatedBody(c, schemas.apiAccess);
     const result = await userAccessService.setApiAccess(c.req.param('id'), enabled);
     if (!result.success) {
       return c.json(
@@ -253,7 +253,7 @@ users.post(
   authorize(['admin']),
   validate({ params: schemas.id, body: schemas.temporaryPassword }),
   async (c) => {
-    const { password } = await c.req.json<{ password: string }>();
+    const { password } = validatedBody(c, schemas.temporaryPassword);
     const result = await userAccessService.setTemporaryPassword(c.req.param('id'), password);
     if (!result.success) {
       return c.json(
@@ -438,13 +438,16 @@ users.delete('/me/avatar', authMiddleware, async (c) => {
 // Update Profile (for current user)
 
 users.patch('/me/profile', authMiddleware, validate({ body: schemas.updateProfile }), async (c) => {
-  const currentUser = c.get('user') as User;
-  const body = await c.req.json();
+  const currentUser = c.get('user');
+  const body = validatedBody(c, schemas.updateProfile);
 
-  const result = await usersService.updateProfile(currentUser.id, body);
+  const result = await usersService.updateProfile(currentUser.id, body, {
+    viaApiToken: c.get('apiToken') !== undefined,
+  });
 
   if (!result.success) {
-    const status = result.code === 'EMAIL_EXISTS' ? 409 : 400;
+    const status =
+      result.code === 'EMAIL_EXISTS' ? 409 : result.code === 'SESSION_REQUIRED' ? 403 : 400;
     return c.json({ success: false, error: result.code, message: result.error }, status);
   }
 
