@@ -8,7 +8,7 @@ Mandatory architecture principles and coding standards for BugPin.
 ✅ ALWAYS:
 - Follow SOLID principles (SRP, OCP, LSP, ISP, DIP)
 - Maintain strict separation of concerns
-- Use dependency injection via constructor parameters
+- Keep services and repositories as module singletons with a single concern
 - Write testable code with >80% coverage
 - Use Result pattern for error handling
 - Write production-ready TypeScript (must pass strict tsc compilation)
@@ -18,7 +18,7 @@ Mandatory architecture principles and coding standards for BugPin.
 ❌ NEVER:
 - Mix business logic with HTTP handlers
 - Create "god classes" that do everything
-- Use concrete implementations instead of interfaces
+- Bypass the repository layer with ad-hoc queries
 - Skip unit tests
 - Put database queries in controllers/routes
 - Violate module boundaries
@@ -57,8 +57,13 @@ const value = Result.unwrap(result); // Throws if failed
 const value = Result.unwrapOr(result, defaultValue);
 const mapped = Result.map(result, fn); // Transform value
 const chained = Result.flatMap(result, fn); // Chain operations
-const wrapped = await Result.tryAsync(fn); // Wrap async, catch errors
+const chainedAsync = await Result.flatMapAsync(result, asyncFn);
+const wrapped = Result.try(fn); // Wrap sync, catch errors
+const wrappedAsync = await Result.tryAsync(fn); // Wrap async, catch errors
+const combined = Result.all([a, b]); // Fail on the first failure
 ```
+
+Routes turn a failed result into `{ success: false, error: result.code, message: result.error }` with the appropriate status code.
 
 ### Type Guards
 
@@ -95,9 +100,12 @@ function handleStatus(status: ReportStatus): void {
 - **NEVER**: Business logic, database queries, file system operations
 
 ```typescript
-reportsRoutes.patch('/:id', authorize(['admin']), async (c) => {
+reports.patch('/:id', authorize(['admin', 'editor']), async (c) => {
   const result = await reportsService.update(c.req.param('id'), await c.req.json());
-  return result.success ? c.json(result.value) : c.json({ error: result.error }, 400);
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 400);
+  }
+  return c.json({ success: true, report: result.value });
 });
 ```
 
@@ -109,7 +117,8 @@ reportsRoutes.patch('/:id', authorize(['admin']), async (c) => {
 - **NEVER**: Direct database queries, HTTP concerns (status codes, headers)
 
 ```typescript
-import { Result } from '../utils/result';
+import { Result } from '../utils/result.js';
+import { reportsRepo } from '../database/repositories/reports.repo.js';
 
 export const reportsService = {
   async update(id: string, updates: Partial<Report>): Promise<Result<Report>> {
@@ -133,7 +142,7 @@ export const reportsService = {
 - Return domain types
 - **NEVER**: Business logic, validation rules
 
-Interfaces defined in `database/repositories/interfaces.ts`:
+Interfaces in `database/repositories/interfaces.ts` document each repository's contract. Implementations are exported objects in `*.repo.ts`:
 
 ```typescript
 // Interface example (from interfaces.ts)
@@ -145,8 +154,8 @@ export interface IReportsRepository {
   delete(id: string): Promise<boolean>;
 }
 
-// Implementation example
-export const reportsRepo: IReportsRepository = {
+// Implementation example (reports.repo.ts)
+export const reportsRepo = {
   async findById(id: string): Promise<Report | null> {
     const row = getDb().query('SELECT * FROM reports WHERE id = ?').get(id) as Report | undefined;
     return row ?? null;
@@ -169,54 +178,41 @@ export const reportsRepo: IReportsRepository = {
 
 Each class/module has ONE responsibility:
 
-- `ReportService` - report business logic only
-- `ReportsRepository` - report persistence only
-- `WebhookService` - webhook dispatch only
+- `reportsService` - report business logic only
+- `reportsRepo` - report persistence only
+- `notificationsService` - notification dispatch only
 
 ### Open/Closed (OCP)
 
-Extend through new handlers, don't modify existing:
+Extend through new route handlers and service methods instead of growing existing ones with unrelated branches. Enterprise Edition features plug in through `utils/ee-hooks.ts` rather than by editing core services.
 
-- `CreateReportHandler` for single reports
-- `BulkCreateReportsHandler` for batch creation
-- `ForwardReportHandler` for forwarding
+### Dependencies
 
-### Dependency Inversion (DIP)
-
-Depend on abstractions, not concretions:
-
-```typescript
-// ✅ Depend on interface
-class ReportService {
-  constructor(private readonly reportsRepo: IReportsRepository) {}
-}
-
-// ❌ Depend on concrete class
-class ReportService {
-  constructor(private readonly reportsRepo: SQLiteReportsRepository) {}
-}
-```
+Services and repositories are module singletons imported directly (`import { reportsRepo } from '../database/repositories/reports.repo.js'`). Keep the dependency direction one way: routes → services → repositories. Tests replace collaborators with `spyOn` instead of constructor injection.
 
 ## Naming Conventions
 
-| Context                 | Convention         | Example                                        |
-| ----------------------- | ------------------ | ---------------------------------------------- |
-| Files (backend)         | kebab-case         | `reports.service.ts`, `auth.middleware.ts`     |
-| Files (components)      | PascalCase         | `ReportList.tsx`, `Dashboard.tsx`              |
-| Files (hooks)           | camelCase          | `useReports.ts`, `useAuth.ts`                  |
-| Classes/Interfaces      | PascalCase         | `ReportService`, `IReportsRepository`          |
-| Functions/Variables     | camelCase          | `getReports()`, `isLoading`                    |
-| Constants               | UPPER_SNAKE_CASE   | `MAX_FILE_SIZE`, `SESSION_MAX_AGE`             |
-| Database tables/columns | snake_case         | `reports`, `project_id`, `created_at`          |
-| API routes              | kebab-case, plural | `/api/reports`, `/api/projects`                |
-| JSON fields             | snake_case         | `{ "project_id": "...", "created_at": "..." }` |
-| CSS classes             | kebab-case         | `report-list`, `login-form`                    |
+| Context                 | Convention         | Example                                      |
+| ----------------------- | ------------------ | -------------------------------------------- |
+| Files (backend)         | kebab-case         | `reports.service.ts`, `reports.repo.ts`      |
+| Files (components)      | PascalCase         | `ReportList.tsx`, `Dashboard.tsx`            |
+| Files (Admin hooks)     | camelCase          | `useSettings.ts`, `useDashboard.ts`          |
+| Files (widget hooks)    | kebab-case         | `use-locale.ts`, `use-screen-recording.ts`   |
+| Classes/Interfaces      | PascalCase         | `ReportService`, `IReportsRepository`        |
+| Functions/Variables     | camelCase          | `getReports()`, `isLoading`                  |
+| Constants               | UPPER_SNAKE_CASE   | `MAX_FILE_SIZE`, `SESSION_MAX_AGE`           |
+| Database tables/columns | snake_case         | `reports`, `project_id`, `created_at`        |
+| API routes              | kebab-case, plural | `/api/reports`, `/api/projects`              |
+| JSON fields             | camelCase          | `{ "projectId": "...", "createdAt": "..." }` |
+| CSS classes             | kebab-case         | `report-list`, `login-form`                  |
 
 ## Import Order
 
 1. External packages (`import { Hono } from 'hono'`)
-2. Internal modules (`import { reportsService } from '../services'`)
+2. Internal modules (`import { reportsService } from '../services/reports.service.js'`)
 3. Types (`import type { Report } from '@shared/types'`)
+
+Server imports of local files use the `.js` extension.
 
 ## Code Style
 
@@ -243,30 +239,30 @@ export function MyComponent() {}
 
 | Type        | Target       | Approach                                |
 | ----------- | ------------ | --------------------------------------- |
-| Unit        | Services     | Mock all dependencies                   |
+| Unit        | Services     | Stub collaborators with `spyOn`         |
 | Unit        | Utils        | 100% coverage for Result, ID generation |
 | Integration | Repositories | Real SQLite database                    |
 | Integration | API          | Full request/response with test DB      |
-| E2E         | Widget/Admin | User flow tests                         |
+| Component   | Widget/Admin | Rendered components and hooks           |
+
+Test locations: `tests/server/` and `tests/shared/` for the server, `src/admin/tests/` and `src/widget/tests/` for the frontends, `ee/tests/` for Enterprise Edition.
 
 ### Mocking with Bun
 
 ```typescript
-import { describe, it, expect, mock } from 'bun:test';
-import type { IReportsRepository } from '../database/repositories/interfaces';
+import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+import { reportsService } from '../../src/server/services/reports.service';
+import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 
-const mockRepo: IReportsRepository = {
-  findById: mock(() => Promise.resolve(null)),
-  update: mock(() => Promise.resolve(null)),
-  // ... other methods
-};
+describe('reportsService.update', () => {
+  afterEach(() => {
+    spyOn(reportsRepo, 'findById').mockRestore();
+  });
 
-describe('ReportService', () => {
   it('returns error when report not found', async () => {
-    const service = createReportsService(mockRepo);
-    const result = await service.update('invalid-id', { title: 'New' });
+    spyOn(reportsRepo, 'findById').mockResolvedValue(null);
+    const result = await reportsService.update('invalid-id', { title: 'New' });
     expect(result.success).toBe(false);
-    expect(result.error).toBe('Report not found');
   });
 });
 ```
@@ -275,16 +271,17 @@ describe('ReportService', () => {
 
 ### Adding a New Feature
 
-1. **Define types** in `@shared/types` or repository interfaces
+1. **Define types** in `src/shared/types.ts` (`@shared/types`) or repository interfaces
 2. **Create repository method** in `database/repositories/`
 3. **Add service logic** with Result pattern in `services/`
 4. **Add route handler** that delegates to service in `routes/`
 
 ## Pre-Commit Checklist
 
-1. `bun tsc --noEmit` passes (all packages)
-2. `bun test` passes
-3. Routes are thin (no business logic)
-4. Services return `Result<T>`
-5. No `any` types
-6. New code has tests
+1. `make typecheck` and `make typecheck-tests` pass
+2. `make test` passes
+3. `make knip` reports no unused code
+4. Routes are thin (no business logic)
+5. Services return `Result<T>`
+6. No `any` types
+7. New code has tests
