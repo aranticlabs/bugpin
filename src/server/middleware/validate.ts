@@ -1,6 +1,6 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
-import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
+import { isValidHexColor, isValidUrl, normalizeUrl } from '../utils/validators.js';
 import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import {
   ACHIEVEMENT_IDS,
@@ -81,7 +81,7 @@ const tablePageSizeSchema = z.custom<TablePageSize>(
 const positionEnum = z.enum(['bottom-right', 'bottom-left', 'top-right', 'top-left']);
 const buttonShapeEnum = z.enum(['rectangle', 'round']);
 const themeEnum = z.enum(['auto', 'light', 'dark']);
-const hexColor = z.string();
+const hexColor = z.string().refine(isValidHexColor, 'Must be a hex color in #RRGGBB format');
 const nullableString = z.string().nullable();
 
 const launcherButtonCommonFields = {
@@ -124,6 +124,15 @@ const widgetDialogColorsSchema = z
     lightSecondaryColor: hexColor.optional(),
     lightInputColor: hexColor.optional(),
     lightForegroundColor: hexColor.optional(),
+    lightSecondaryButtonColor: hexColor.optional(),
+    lightSecondaryButtonTextColor: hexColor.optional(),
+    lightSecondaryButtonHoverColor: hexColor.optional(),
+    lightSecondaryButtonTextHoverColor: hexColor.optional(),
+    lightTabBarColor: hexColor.optional(),
+    lightActiveTabColor: hexColor.optional(),
+    lightActiveTabTextColor: hexColor.optional(),
+    lightTabTextColor: hexColor.optional(),
+    lightTabTextHoverColor: hexColor.optional(),
     darkButtonColor: hexColor.optional(),
     darkTextColor: hexColor.optional(),
     darkButtonHoverColor: hexColor.optional(),
@@ -132,6 +141,15 @@ const widgetDialogColorsSchema = z
     darkSecondaryColor: hexColor.optional(),
     darkInputColor: hexColor.optional(),
     darkForegroundColor: hexColor.optional(),
+    darkSecondaryButtonColor: hexColor.optional(),
+    darkSecondaryButtonTextColor: hexColor.optional(),
+    darkSecondaryButtonHoverColor: hexColor.optional(),
+    darkSecondaryButtonTextHoverColor: hexColor.optional(),
+    darkTabBarColor: hexColor.optional(),
+    darkActiveTabColor: hexColor.optional(),
+    darkActiveTabTextColor: hexColor.optional(),
+    darkTabTextColor: hexColor.optional(),
+    darkTabTextHoverColor: hexColor.optional(),
   })
   .strict();
 
@@ -209,27 +227,48 @@ const projectLegacyWidgetSchema = z
   })
   .strict();
 
+const widgetDialogContentProjectSchema = z
+  .object({
+    title: projectLocalizedTextField,
+    titlePlaceholder: projectLocalizedTextField,
+    descriptionPlaceholder: projectLocalizedTextField,
+    submitButtonText: projectLocalizedTextField,
+    showPriority: z.boolean().optional(),
+  })
+  .strict();
+
 const projectSettingsSchema = z
   .object({
     defaultAssigneeUserId: z.string().nullable().optional(),
     language: projectLanguageSchema.nullable().optional(),
-    widgetLauncherButton: widgetLauncherButtonProjectSchema.optional(),
-    widgetDialog: widgetDialogColorsSchema.optional(),
-    screenshot: projectScreenshotSchema.optional(),
-    activityCapture: z.boolean().optional(),
-    consoleCapture: z.boolean().optional(),
-    networkCapture: z.boolean().optional(),
-    storageKeysCapture: z.boolean().optional(),
-    security: projectSecuritySchema.optional(),
+    widgetLauncherButton: widgetLauncherButtonProjectSchema.nullable().optional(),
+    widgetDialog: widgetDialogColorsSchema.nullable().optional(),
+    widgetDialogContent: widgetDialogContentProjectSchema.nullable().optional(),
+    screenshot: projectScreenshotSchema.nullable().optional(),
+    activityCapture: z.boolean().nullable().optional(),
+    consoleCapture: z.boolean().nullable().optional(),
+    networkCapture: z.boolean().nullable().optional(),
+    storageKeysCapture: z.boolean().nullable().optional(),
+    security: projectSecuritySchema.nullable().optional(),
     branding: projectBrandingSchema.optional(),
     fields: projectFieldsSchema.optional(),
     notifyReporter: z.boolean().optional(),
-    reporterNotifications: projectReporterNotificationsSchema.optional(),
+    reporterNotifications: projectReporterNotificationsSchema.nullable().optional(),
     widget: projectLegacyWidgetSchema.optional(),
   })
   .strict();
 
 const globalLocalizedTextField = z.union([z.null(), localizedStringSchema]);
+
+const widgetDialogContentGlobalSchema = z
+  .object({
+    title: globalLocalizedTextField.optional(),
+    titlePlaceholder: globalLocalizedTextField.optional(),
+    descriptionPlaceholder: globalLocalizedTextField.optional(),
+    submitButtonText: globalLocalizedTextField.optional(),
+    showPriority: z.boolean().optional(),
+  })
+  .strict();
 
 const widgetLauncherButtonGlobalSchema = z
   .object({
@@ -258,6 +297,16 @@ const integrationConfigSchema = z
       config.publicVideoLinks === undefined || typeof config.publicVideoLinks === 'boolean',
     { message: 'publicVideoLinks must be a boolean', path: ['publicVideoLinks'] }
   );
+
+/** The query `validate` parsed, typed by the schema it was validated with */
+export function validatedQuery<S extends z.ZodType>(c: Context, _schema: S): z.output<S> {
+  return c.get('validatedQuery' as never) as z.output<S>;
+}
+
+/** The body `validate` parsed, typed by the schema it was validated with */
+export function validatedBody<S extends z.ZodType>(c: Context, _schema: S): z.output<S> {
+  return c.get('validatedBody' as never) as z.output<S>;
+}
 
 /**
  * Validation middleware factory
@@ -444,6 +493,7 @@ export const schemas = {
   updateProfile: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').optional(),
     email: z.string().email('Invalid email address').optional(),
+    currentPassword: z.string().max(200).optional(),
   }),
 
   // Create project request
@@ -582,11 +632,15 @@ export const schemas = {
     })
     .strict(),
 
+  // Widget dialog colors; unknown keys, null and empty values are rejected
+  widgetDialogColors: widgetDialogColorsSchema,
+
   // Update settings request
   updateSettings: z
     .object({
       invitationExpirationDays: z.number().int().min(1).max(365).optional(),
-      widgetDialog: themeColorsSchema.strict().optional(),
+      widgetDialog: widgetDialogColorsSchema.optional(),
+      widgetDialogContent: widgetDialogContentGlobalSchema.optional(),
       enforceHttps: z.boolean().optional(),
       twoFactorPolicy: z.enum(['off', 'admins', 'everyone']).optional(),
       passwordPolicy: z
@@ -683,6 +737,7 @@ export const schemas = {
           password: z.string().optional(),
           from: z.string().optional(),
         })
+        .strict()
         .optional(),
       notifications: z
         .object({
@@ -718,9 +773,6 @@ export const schemas = {
           recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
         })
         .optional(),
-      maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),
-      maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-      maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
       rateLimitPerMinute: z.number().int().min(1).max(1000).optional(),
       sessionMaxAgeDays: z.number().int().min(1).max(365).optional(),
       updateCheckEnabled: z.boolean().optional(),
@@ -820,11 +872,7 @@ export const schemas = {
 
   dashboardOverview: z.object({
     projectId: z.string().min(1).max(100).optional(),
-    range: z
-      .enum(DASHBOARD_RANGES.map(String) as [string, ...string[]])
-      .optional()
-      .default('30')
-      .transform(Number),
+    range: z.coerce.number().pipe(z.literal(DASHBOARD_RANGES)).optional().default(30),
     timeZone: z.string().max(100).optional(),
   }),
 

@@ -264,6 +264,15 @@ export interface ThemeColors {
   lightSecondaryColor?: string;
   lightInputColor?: string;
   lightForegroundColor?: string;
+  lightSecondaryButtonColor?: string;
+  lightSecondaryButtonTextColor?: string;
+  lightSecondaryButtonHoverColor?: string;
+  lightSecondaryButtonTextHoverColor?: string;
+  lightTabBarColor?: string;
+  lightActiveTabColor?: string;
+  lightActiveTabTextColor?: string;
+  lightTabTextColor?: string;
+  lightTabTextHoverColor?: string;
   darkButtonColor: string;
   darkTextColor: string;
   darkButtonHoverColor: string;
@@ -272,6 +281,15 @@ export interface ThemeColors {
   darkSecondaryColor?: string;
   darkInputColor?: string;
   darkForegroundColor?: string;
+  darkSecondaryButtonColor?: string;
+  darkSecondaryButtonTextColor?: string;
+  darkSecondaryButtonHoverColor?: string;
+  darkSecondaryButtonTextHoverColor?: string;
+  darkTabBarColor?: string;
+  darkActiveTabColor?: string;
+  darkActiveTabTextColor?: string;
+  darkTabTextColor?: string;
+  darkTabTextHoverColor?: string;
 }
 
 // Widget Launcher Button settings
@@ -300,6 +318,23 @@ export interface WidgetLauncherButtonSettings {
   darkTextHoverColor?: string;
 }
 
+// Texts and fields of the report dialog; a null text uses the widget's built-in translation
+export interface WidgetDialogContentSettings {
+  title?: LocalizedString | null;
+  titlePlaceholder?: LocalizedString | null;
+  descriptionPlaceholder?: LocalizedString | null;
+  submitButtonText?: LocalizedString | null;
+  showPriority?: boolean;
+}
+
+export interface GlobalWidgetDialogContentSettings {
+  title: LocalizedString | null;
+  titlePlaceholder: LocalizedString | null;
+  descriptionPlaceholder: LocalizedString | null;
+  submitButtonText: LocalizedString | null;
+  showPriority: boolean;
+}
+
 // Widget Dialog settings (button colors inside the dialog)
 export interface WidgetDialogSettings {
   lightButtonColor?: string;
@@ -310,6 +345,15 @@ export interface WidgetDialogSettings {
   lightSecondaryColor?: string;
   lightInputColor?: string;
   lightForegroundColor?: string;
+  lightSecondaryButtonColor?: string;
+  lightSecondaryButtonTextColor?: string;
+  lightSecondaryButtonHoverColor?: string;
+  lightSecondaryButtonTextHoverColor?: string;
+  lightTabBarColor?: string;
+  lightActiveTabColor?: string;
+  lightActiveTabTextColor?: string;
+  lightTabTextColor?: string;
+  lightTabTextHoverColor?: string;
   darkButtonColor?: string;
   darkTextColor?: string;
   darkButtonHoverColor?: string;
@@ -318,6 +362,15 @@ export interface WidgetDialogSettings {
   darkSecondaryColor?: string;
   darkInputColor?: string;
   darkForegroundColor?: string;
+  darkSecondaryButtonColor?: string;
+  darkSecondaryButtonTextColor?: string;
+  darkSecondaryButtonHoverColor?: string;
+  darkSecondaryButtonTextHoverColor?: string;
+  darkTabBarColor?: string;
+  darkActiveTabColor?: string;
+  darkActiveTabTextColor?: string;
+  darkTabTextColor?: string;
+  darkTabTextHoverColor?: string;
 }
 
 // Screenshot settings
@@ -347,6 +400,7 @@ export interface ProjectSettings {
   defaultAssigneeUserId?: string | null;
   widgetLauncherButton?: WidgetLauncherButtonSettings;
   widgetDialog?: WidgetDialogSettings;
+  widgetDialogContent?: WidgetDialogContentSettings;
   // Missing or null: inherit the instance-wide language setting. null clears an override on PATCH.
   language?: ProjectLanguageSettings | null;
   screenshot?: ScreenshotSettings;
@@ -385,6 +439,11 @@ export interface ProjectSettings {
     rateLimit?: number;
   };
 }
+
+/** Project settings PATCH body: null removes a project override so the instance default applies. */
+export type ProjectSettingsUpdate = {
+  [K in keyof ProjectSettings]?: ProjectSettings[K] | null;
+};
 
 export interface CustomField {
   id: string;
@@ -533,6 +592,9 @@ export interface Webhook {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A webhook as the API returns it: the signing secret is write-only. */
+export type WebhookResponse = Omit<Webhook, 'secret'> & { secretSet: boolean };
 
 // API Request/Response Types
 
@@ -709,7 +771,10 @@ export interface AppSettings {
     host?: string;
     port?: number;
     user?: string;
+    /** Write-only: never returned by the API. Leave empty on save to keep the stored password. */
     password?: string;
+    /** Read-only: whether a password is stored. */
+    passwordSet?: boolean;
     from?: string;
   };
   // S3 settings
@@ -718,12 +783,16 @@ export interface AppSettings {
     bucket?: string;
     region?: string;
     accessKeyId?: string;
+    /** Write-only: never returned by the API. Leave empty on save to keep the stored key. */
     secretAccessKey?: string;
+    /** Read-only: whether a secret access key is stored. */
+    secretAccessKeySet?: boolean;
     endpoint?: string;
   };
   // Widget settings (nested structure - same as ProjectSettings)
   widgetLauncherButton: GlobalWidgetLauncherButtonSettings;
   widgetDialog: ThemeColors;
+  widgetDialogContent: GlobalWidgetDialogContentSettings;
   screenshot: GlobalScreenshotSettings;
   // Notification defaults
   notifications: NotificationDefaultSettings;
@@ -935,20 +1004,31 @@ export interface DashboardDayCount {
 
 export type AttentionReason = 'reopened' | 'unassigned' | 'stale';
 
+/** A person as the dashboard shows them, without contact details */
+export interface DashboardPerson {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface DashboardAttentionItem {
   id: string;
   title: string;
   projectName: string;
   status: ReportStatus;
   priority: ReportPriority;
-  assignee?: ReportAssignee;
+  assignee?: DashboardPerson;
   reason: AttentionReason;
   /** When the reason started: the reopen, the creation, or the last update */
   since: string;
 }
 
+/** Who made a change: a current user, the widget, or a user who has since been deleted */
+export type DashboardActivityActor = 'user' | 'widget' | 'deleted_user';
+
 export interface DashboardActivityItem extends ReportHistoryEntry {
   reportTitle: string;
+  actor: DashboardActivityActor;
 }
 
 export interface DashboardOverview {
@@ -966,6 +1046,15 @@ export interface DashboardOverview {
   activity: DashboardActivityItem[];
 }
 
+/** Days in the personal resolve time window, and in the window before it for the trend */
+export const RESOLVE_WINDOW_DAYS = 30;
+
+/** Weeks in the personal resolve time trend chart */
+export const RESOLVE_TREND_WEEKS = 12;
+
+/** Days of resolutions behind the personal resolve times by priority */
+export const RESOLVE_HISTORY_DAYS = 90;
+
 export interface ResolveTimeWeek {
   weekStart: string;
   mine: number | null;
@@ -978,7 +1067,11 @@ export interface ResolveTimeByPriority {
   team: number | null;
 }
 
-/** Hours from a report being assigned to someone until that person resolves it */
+/**
+ * Hours from a report being assigned to the person who resolved it until they resolved it,
+ * counted from arrival when it was never assigned to them. Team figures are null when fewer
+ * than three people who take part in team statistics resolved reports in that window.
+ */
 export interface ResolveTimeSummary {
   medianHours: number | null;
   previousMedianHours: number | null;
@@ -1016,8 +1109,32 @@ export const XP_BY_PRIORITY: Record<ReportPriority, number> = {
 /** Experience points for each message sent to a reporter */
 export const XP_PER_REPORTER_MESSAGE = 5;
 
-/** A report resolved this soon after it was assigned (or arrived, if never assigned) earns its XP twice */
+/** A report resolved this soon after its first assignment (or arrival, if never assigned) earns its XP twice */
 export const EARLY_RESOLVE_MINUTES = 60;
+
+/** How many qualifying events unlock each achievement */
+export const ACHIEVEMENT_TARGETS: Record<AchievementId, number> = {
+  hatchling: 1,
+  cocoon: 100,
+  butterfly: 500,
+  firefly: 1,
+  dragonfly: 50,
+  ladybug: 25,
+  web_weaver: 5,
+  amber: 1,
+};
+
+/** Firefly: a highest-priority report resolved this soon after its first assignment or arrival */
+export const FIREFLY_RESOLVE_HOURS = 4;
+
+/** Dragonfly: the priority of a new report set this soon after it arrived */
+export const DRAGONFLY_TRIAGE_MINUTES = 60;
+
+/** Ladybug: a resolved report that is not reopened for this long */
+export const LADYBUG_STAYS_FIXED_DAYS = 14;
+
+/** Amber find: a report that waited longer than this before it was resolved */
+export const AMBER_WAITED_DAYS = 90;
 
 export interface AchievementProgress {
   id: AchievementId;
@@ -1043,6 +1160,11 @@ export interface DashboardPersonal {
   resolveTime: ResolveTimeSummary;
   /** Null when gamification is off for this user */
   gamification: GamificationProgress | null;
+  /**
+   * XP that resolving each of the user's open assigned reports would earn right now, by report id.
+   * Empty when gamification is off; 0 for a report the user has resolved before.
+   */
+  resolveXp: Record<string, number>;
 }
 
 export interface GamificationUser {
@@ -1092,4 +1214,6 @@ export interface GamificationSelf {
   available: boolean;
   canOptOut: boolean;
   optedOut: boolean;
+  /** Available and not opted out: the user sees levels, achievements and the Team tab */
+  active: boolean;
 }

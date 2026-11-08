@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { invitationsService } from '../../services/invitations.service.js';
-import { validate, schemas } from '../../middleware/validate.js';
+import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
 import { getClientIp } from '../../utils/client-ip.js';
@@ -34,7 +34,7 @@ invitations.get('/validate/:token', validate({ params: schemas.token }), async (
 // Accept Invitation (Public)
 
 invitations.post('/accept', validate({ body: schemas.acceptInvitation }), async (c) => {
-  const body = await c.req.json();
+  const body = validatedBody(c, schemas.acceptInvitation);
 
   const ipAddress = getClientIp(c);
   const userAgent = c.req.header('user-agent');
