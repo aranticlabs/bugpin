@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
+import { toast } from 'sonner';
 import { server } from '../../mocks/server';
+import { mockUsers } from '../../mocks/handlers';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
 import { useAuth } from '../../../contexts/AuthContext';
 import { UserDetail } from '../../../pages/settings/UserDetail';
@@ -33,6 +35,10 @@ function renderUser(id: string) {
     </SignedIn>,
     { initialEntries: [`/settings/users/${id}`] }
   );
+}
+
+function listUsers(...users: Record<string, unknown>[]) {
+  server.use(http.get('/api/users', () => HttpResponse.json({ success: true, users })));
 }
 
 async function record(request: Request) {
@@ -332,5 +338,145 @@ describe('UserDetail', () => {
     const toggle = await screen.findByRole('switch', { name: 'Enable gamification' });
     expect(toggle).toBeDisabled();
     expect(toggle).not.toBeChecked();
+  });
+  it('changes the role only after confirmation', async () => {
+    const user = userEvent.setup();
+    renderUser('user-3');
+
+    await user.click(await screen.findByRole('combobox', { name: 'Role' }));
+    await user.click(await screen.findByRole('option', { name: 'Admin' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Viewer User changes from Viewer to Admin.');
+    expect(requests).toEqual([]);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Change Role' }));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/users/user-3',
+        body: { role: 'admin' },
+      })
+    );
+  });
+
+  it('sends nothing when the role change is cancelled', async () => {
+    const user = userEvent.setup();
+    renderUser('user-3');
+
+    await user.click(await screen.findByRole('combobox', { name: 'Role' }));
+    await user.click(await screen.findByRole('option', { name: 'Editor' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' })
+    );
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(requests).toEqual([]);
+    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Viewer');
+  });
+
+  it('deactivates only after confirmation', async () => {
+    const user = userEvent.setup();
+    renderUser('user-3');
+
+    await user.click(await screen.findByRole('switch', { name: 'Active' }));
+    expect(requests).toEqual([]);
+    await confirmDialog(user, 'Deactivate');
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/users/user-3',
+        body: { isActive: false },
+      })
+    );
+  });
+
+  it('reactivates with one click', async () => {
+    const user = userEvent.setup();
+    listUsers({ ...mockUsers.viewer, isActive: false });
+    renderUser('user-3');
+
+    await user.click(await screen.findByRole('switch', { name: 'Active' }));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/users/user-3',
+        body: { isActive: true },
+      })
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the server message when the last admin would be demoted', async () => {
+    const user = userEvent.setup();
+    const message = 'At least one active admin must remain.';
+    listUsers(mockUsers.admin, { ...mockUsers.editor, role: 'admin' });
+    server.use(
+      http.patch('/api/users/:id', () =>
+        HttpResponse.json({ success: false, error: 'LAST_ADMIN', message }, { status: 400 })
+      )
+    );
+    renderUser('user-2');
+
+    await user.click(await screen.findByRole('combobox', { name: 'Role' }));
+    await user.click(await screen.findByRole('option', { name: 'Viewer' }));
+    await confirmDialog(user, 'Change Role');
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+  });
+
+  it('keeps both default projects when they are checked in quick succession', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.patch('/api/users/:id', async ({ request }) => {
+        const response = await record(request);
+        await delay(50);
+        return response;
+      })
+    );
+    renderUser('user-3');
+
+    const group = await screen.findByRole('group', { name: 'Default Projects' });
+    await user.click(await within(group).findByRole('checkbox', { name: 'Test Project' }));
+    await user.click(within(group).getByRole('checkbox', { name: 'Another Project' }));
+
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1].body).toEqual({ defaultProjectIds: ['project-1', 'project-2'] });
+  });
+
+  it('explains that a name needs at least two characters', async () => {
+    const user = userEvent.setup();
+    renderUser('user-3');
+
+    const name = await screen.findByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'V');
+
+    expect(screen.getByText('Name must be at least 2 characters')).toBeInTheDocument();
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
+    expect(requests).toEqual([]);
+  });
+
+  it('offers a retry when the user fails to load', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    server.use(
+      http.get('/api/users', () =>
+        fail
+          ? HttpResponse.json({ success: false }, { status: 403 })
+          : HttpResponse.json({ success: true, users: [mockUsers.viewer] })
+      )
+    );
+    renderUser('user-3');
+
+    expect(await screen.findByText("Couldn't load this user")).toBeInTheDocument();
+    expect(screen.queryByText('This user does not exist or was deleted.')).not.toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByRole('heading', { name: 'Viewer User' })).toBeInTheDocument();
   });
 });
