@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { UserAvatar } from './UserAvatar';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CircleCheck, UserPlus } from 'lucide-react';
 import { api } from '../../api/client';
 import { Card, CardContent, CardHeader } from '../ui/card';
@@ -19,17 +19,23 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Spinner } from '../ui/spinner';
 import { ReportPriorityLabel, ReportStatusLabel } from '../report/ReportStatusPriority';
-import { DASHBOARD_ORIGIN } from './OverviewCards';
+import { LoadError } from './LoadError';
 import { reportOriginState } from '../../lib/reportOrigin';
-import { daysSince, formatTimeAgo } from '../../lib/dashboard';
+import {
+  DASHBOARD_ORIGIN,
+  OPEN_STATUS_FILTER,
+  daysSince,
+  formatTimeAgo,
+} from '../../lib/dashboard';
 import { useUpdateDashboardReport, type DashboardReportList } from '../../hooks/useDashboard';
 import {
   ASSIGNED_TO_ME_FILTER,
-  XP_BY_PRIORITY,
   type DashboardAttentionItem,
   type Report,
   type User,
 } from '@shared/types';
+
+type ReportListQuery = Pick<UseQueryResult<DashboardReportList>, 'data' | 'isError' | 'refetch'>;
 
 function ReportRow({
   id,
@@ -153,8 +159,19 @@ function NeedsAttentionList({
   );
 }
 
-function AssignedList({ reports, showXp }: { reports: Report[] | undefined; showXp: boolean }) {
+function AssignedList({
+  query,
+  resolveXp,
+}: {
+  query: ReportListQuery;
+  /** XP each report would earn when resolved now; null when gamification is off */
+  resolveXp: Record<string, number> | null;
+}) {
   const update = useUpdateDashboardReport();
+  const reports = query.data?.reports;
+  if (!reports && query.isError) {
+    return <LoadError what="your assigned reports" onRetry={() => void query.refetch()} />;
+  }
   if (!reports) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
   if (reports.length === 0) {
     return (
@@ -163,37 +180,40 @@ function AssignedList({ reports, showXp }: { reports: Report[] | undefined; show
   }
   return (
     <div className="divide-y">
-      {reports.map((report) => (
-        <ReportRow
-          key={report.id}
-          id={report.id}
-          title={report.title}
-          priority={report.priority}
-          detail={`${report.projectName ?? 'Project'} · received ${formatTimeAgo(report.createdAt)}`}
-          trailing={
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7"
-              disabled={update.isPending}
-              onClick={() => update.mutate({ id: report.id, status: 'resolved' })}
-            >
-              <Check />
-              Resolve
-              {showXp && (
-                <span className="text-xs text-muted-foreground">
-                  +{XP_BY_PRIORITY[report.priority]} XP
-                </span>
-              )}
-            </Button>
-          }
-        />
-      ))}
+      {reports.map((report) => {
+        const xp = resolveXp?.[report.id] ?? 0;
+        return (
+          <ReportRow
+            key={report.id}
+            id={report.id}
+            title={report.title}
+            priority={report.priority}
+            detail={`${report.projectName ?? 'Project'} · received ${formatTimeAgo(report.createdAt)}`}
+            trailing={
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                disabled={update.isPending && update.variables?.id === report.id}
+                onClick={() => update.mutate({ id: report.id, status: 'resolved' })}
+              >
+                <Check />
+                Resolve
+                {xp > 0 && <span className="text-xs text-muted-foreground">+{xp} XP</span>}
+              </Button>
+            }
+          />
+        );
+      })}
     </div>
   );
 }
 
-function RecentReportsTable({ reports }: { reports: Report[] | undefined }) {
+function RecentReportsTable({ query }: { query: ReportListQuery }) {
+  const reports = query.data?.reports;
+  if (!reports && query.isError) {
+    return <LoadError what="recent reports" onRetry={() => void query.refetch()} />;
+  }
   if (!reports) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
   if (reports.length === 0) {
     return (
@@ -294,8 +314,6 @@ function ListFooter({
   );
 }
 
-const ACTIVE_STATUSES = 'open,in_progress';
-
 export function ReportListsCard({
   needsAttention,
   needsAttentionTotal,
@@ -303,16 +321,16 @@ export function ReportListsCard({
   recent,
   projectId,
   canEdit,
-  showXp,
+  resolveXp,
   currentUserId,
 }: {
   needsAttention: DashboardAttentionItem[];
   needsAttentionTotal: number;
-  assigned: DashboardReportList | undefined;
-  recent: DashboardReportList | undefined;
+  assigned: ReportListQuery;
+  recent: ReportListQuery;
   projectId?: string;
   canEdit: boolean;
-  showXp: boolean;
+  resolveXp: Record<string, number> | null;
   currentUserId: string;
 }) {
   return (
@@ -330,7 +348,7 @@ export function ReportListsCard({
               <TabsTrigger value="mine">
                 Assigned to you
                 <Badge variant="secondary" size="sm" className="ml-1">
-                  {assigned?.total ?? 0}
+                  {assigned.data?.total ?? 0}
                 </Badge>
               </TabsTrigger>
             )}
@@ -347,19 +365,24 @@ export function ReportListsCard({
             <ListFooter
               shown={needsAttention.length}
               total={needsAttentionTotal}
-              to={reportsUrl({ status: ACTIVE_STATUSES, sort: 'priority', dir: 'desc', projectId })}
+              to={reportsUrl({
+                status: OPEN_STATUS_FILTER,
+                sort: 'priority',
+                dir: 'desc',
+                projectId,
+              })}
               label="View open reports"
             />
           </TabsContent>
           {canEdit && (
             <TabsContent value="mine" className="mt-0">
-              <AssignedList reports={assigned?.reports} showXp={showXp} />
+              <AssignedList query={assigned} resolveXp={resolveXp} />
               <ListFooter
-                shown={assigned?.reports.length ?? 0}
-                total={assigned?.total ?? 0}
+                shown={assigned.data?.reports.length ?? 0}
+                total={assigned.data?.total ?? 0}
                 to={reportsUrl({
                   assignedTo: ASSIGNED_TO_ME_FILTER,
-                  status: ACTIVE_STATUSES,
+                  status: OPEN_STATUS_FILTER,
                   projectId,
                 })}
                 label="View all assigned to you"
@@ -367,10 +390,10 @@ export function ReportListsCard({
             </TabsContent>
           )}
           <TabsContent value="recent" className="mt-0">
-            <RecentReportsTable reports={recent?.reports} />
+            <RecentReportsTable query={recent} />
             <ListFooter
-              shown={recent?.reports.length ?? 0}
-              total={recent?.total ?? 0}
+              shown={recent.data?.reports.length ?? 0}
+              total={recent.data?.total ?? 0}
               to={reportsUrl({ projectId })}
               label="View all reports"
             />

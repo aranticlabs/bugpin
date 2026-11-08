@@ -19,7 +19,7 @@ describe('GamificationPreferenceCard', () => {
       http.get('/api/gamification/me', () =>
         HttpResponse.json({
           success: true,
-          gamification: { available: true, canOptOut: true, optedOut: false },
+          gamification: { available: true, canOptOut: true, optedOut: false, active: true },
         })
       ),
       http.patch('/api/gamification/me', async ({ request }) => {
@@ -27,7 +27,12 @@ describe('GamificationPreferenceCard', () => {
         saved.push(body);
         return HttpResponse.json({
           success: true,
-          gamification: { available: true, canOptOut: true, optedOut: body.optedOut },
+          gamification: {
+            available: true,
+            canOptOut: true,
+            optedOut: body.optedOut,
+            active: !body.optedOut,
+          },
         });
       })
     );

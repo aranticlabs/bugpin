@@ -1,3 +1,11 @@
+import type { GamificationProgress } from '@shared/types';
+
+/** Where the report page's back link leads when a report is opened from the dashboard */
+export const DASHBOARD_ORIGIN = { path: '/', label: 'Dashboard' };
+
+/** Reports filter for Open and In Progress, the reports that still need work */
+export const OPEN_STATUS_FILTER = 'open,in_progress';
+
 export type DayPart = 'morning' | 'day' | 'evening' | 'night';
 
 export const GREETINGS: Record<DayPart, string> = {
@@ -54,4 +62,14 @@ export function initials(name: string): string {
     .join('')
     .slice(0, 2)
     .toUpperCase();
+}
+
+/** Progress from the start of the current level to the next one, 0 to 100 */
+export function levelProgressPercent(game: GamificationProgress): number {
+  if (game.nextLevelXp === null) return 100;
+  return ((game.xp - game.levelStartXp) / (game.nextLevelXp - game.levelStartXp)) * 100;
+}
+
+export function unlockedCount(game: GamificationProgress): number {
+  return game.achievements.filter((item) => item.unlockedAt).length;
 }

@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AccountCard } from './AccountCard';
 import { HuntersLogTab } from './HuntersLogTab';
 import { SecurityTab } from './SecurityTab';
-import { useGamificationSelf } from '../../hooks/useDashboard';
+import { useGamificationSelf } from '../../hooks/useGamification';
 
 const TAB_PARAM = 'tab';
 const ACCOUNT_TAB = 'account';

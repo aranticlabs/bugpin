@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowDownRight, ArrowUpRight, Bug, Info } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Bug, Info, UserX } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { ScrollArea } from '../ui/scroll-area';
@@ -10,11 +10,17 @@ import {
   ReportPriorityLabel,
   reportPriorityBarClass,
 } from '../report/ReportStatusPriority';
-import { MiniChart, SeriesLegend, TrendChart, type ChartSeries } from './charts';
+import { MiniChart, SeriesLegend, TrendChart, type ChartSeries } from './DashboardCharts';
 import { TrendBadge } from './TrendBadge';
 import { cn } from '../../lib/utils';
 import { reportOriginState } from '../../lib/reportOrigin';
-import { formatDay, formatHours, formatTimeAgo, initials } from '../../lib/dashboard';
+import {
+  DASHBOARD_ORIGIN,
+  formatDay,
+  formatHours,
+  formatTimeAgo,
+  initials,
+} from '../../lib/dashboard';
 import {
   REPORT_PRIORITIES,
   type DashboardActivityItem,
@@ -25,8 +31,6 @@ import {
   type ReportPriority,
   type ReportStatus,
 } from '@shared/types';
-
-export const DASHBOARD_ORIGIN = { path: '/', label: 'Dashboard' };
 
 type KpiDelta = 'count' | 'percent' | 'hours';
 
@@ -82,7 +86,7 @@ const KPIS: KpiDefinition[] = [
   {
     key: 'resolveHours',
     label: 'Median time to resolve',
-    hint: 'From report received to resolved or closed, last 30 days, compared with the 30 days before',
+    hint: 'Median time from a report arriving until it was resolved or closed, last 30 days, compared with the 30 days before. Counted from arrival, not from assignment',
     delta: 'hours',
     upIsGood: false,
     format: formatHours,
@@ -184,9 +188,12 @@ export function KpiRow({ kpis }: { kpis: DashboardOverview['kpis'] }) {
   );
 }
 
+/** Seven-day buckets ending today, so only the oldest bucket can be shorter than a week */
 function weeklyBuckets(days: DashboardDayCount[]) {
-  return Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => {
-    const week = days.slice(index * 7, index * 7 + 7);
+  const count = Math.ceil(days.length / 7);
+  return Array.from({ length: count }, (_, index) => {
+    const end = days.length - (count - 1 - index) * 7;
+    const week = days.slice(Math.max(0, end - 7), end);
     return {
       label: formatDay(week[0].date),
       created: week.reduce((total, day) => total + day.created, 0),
@@ -304,6 +311,34 @@ function statusName(value: string | undefined): string {
     : (value ?? 'unknown');
 }
 
+function priorityName(value: string | undefined): string {
+  return value && value in REPORT_PRIORITY_LABELS
+    ? REPORT_PRIORITY_LABELS[value as ReportPriority].toLowerCase()
+    : (value ?? 'unknown');
+}
+
+const ACTOR_NAMES = { widget: 'Widget', deleted_user: 'Deleted user' } as const;
+
+function actorName(item: DashboardActivityItem): string {
+  return item.actor === 'user' ? (item.userName ?? 'Unknown user') : ACTOR_NAMES[item.actor];
+}
+
+function ActorAvatar({ item }: { item: DashboardActivityItem }) {
+  return (
+    <Avatar className="size-7">
+      <AvatarFallback className="text-2xs">
+        {item.actor === 'widget' ? (
+          <Bug className="size-3.5" aria-hidden />
+        ) : item.actor === 'deleted_user' || !item.userName ? (
+          <UserX className="size-3.5" aria-hidden />
+        ) : (
+          initials(item.userName)
+        )}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 function describeActivity(item: DashboardActivityItem): string {
   switch (item.action) {
     case 'created':
@@ -315,7 +350,7 @@ function describeActivity(item: DashboardActivityItem): string {
       if (item.oldValue === 'resolved' || item.oldValue === 'closed') return 'reopened';
       return `moved to ${statusName(item.newValue)}`;
     case 'priority_changed':
-      return `set priority to ${item.newValue ?? 'unknown'} on`;
+      return `set priority to ${priorityName(item.newValue)} on`;
     case 'assignee_changed':
       return item.newValue ? `assigned ${item.newDisplay ?? 'someone'} to` : 'unassigned';
   }
@@ -346,14 +381,10 @@ export function ActivityCard({
               )}
               {activity.map((item) => (
                 <div key={item.id} className="flex gap-3">
-                  <Avatar className="size-7">
-                    <AvatarFallback className="text-2xs">
-                      {item.userName ? initials(item.userName) : <Bug className="size-3.5" />}
-                    </AvatarFallback>
-                  </Avatar>
+                  <ActorAvatar item={item} />
                   <div className="min-w-0 text-sm">
                     <p className="line-clamp-2">
-                      <span className="font-medium">{item.userName ?? 'Widget'}</span>{' '}
+                      <span className="font-medium">{actorName(item)}</span>{' '}
                       <span className="text-muted-foreground">{describeActivity(item)}</span>{' '}
                       <Link
                         to={`/reports/${item.reportId}`}

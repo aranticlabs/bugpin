@@ -1,14 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../api/client';
-import { browserTimeZone } from '../lib/dashboard';
+import { browserTimeZone, OPEN_STATUS_FILTER } from '../lib/dashboard';
 import { ASSIGNED_TO_ME_FILTER } from '@shared/types';
 import type {
   DashboardOverview,
   DashboardPersonal,
   DashboardRange,
-  GamificationSelf,
-  GamificationSettings,
   GamificationTeam,
   Report,
   TeamPeriod,
@@ -17,9 +15,23 @@ import type {
 
 const REFRESH_MS = 30_000;
 
+type ReportListKind = 'mine' | 'recent';
+
+export const dashboardKeys = {
+  all: ['dashboard'] as const,
+  overview: (projectId: string | undefined, range: DashboardRange) =>
+    [...dashboardKeys.all, 'overview', projectId ?? null, range] as const,
+  /** Keyed by user so one account never renders another account's numbers from the cache */
+  personal: (userId: string | undefined) =>
+    [...dashboardKeys.all, 'personal', userId ?? null] as const,
+  team: (period: TeamPeriod) => [...dashboardKeys.all, 'team', period] as const,
+  reports: (projectId: string | undefined, kind: ReportListKind) =>
+    [...dashboardKeys.all, 'reports', projectId ?? null, kind] as const,
+};
+
 export function useDashboardOverview(projectId: string | undefined, range: DashboardRange) {
   return useQuery({
-    queryKey: ['dashboard', 'overview', projectId ?? null, range],
+    queryKey: dashboardKeys.overview(projectId, range),
     queryFn: async () => {
       const response = await api.get('/dashboard/overview', {
         params: { projectId, range, timeZone: browserTimeZone() },
@@ -31,32 +43,24 @@ export function useDashboardOverview(projectId: string | undefined, range: Dashb
   });
 }
 
-export function useDashboardPersonal(enabled: boolean) {
+export function useDashboardPersonal(userId: string | undefined, enabled: boolean) {
   return useQuery({
-    queryKey: ['dashboard', 'personal'],
+    queryKey: dashboardKeys.personal(userId),
     queryFn: async () => {
       const response = await api.get('/dashboard/me', {
         params: { timeZone: browserTimeZone() },
       });
       return response.data.personal as DashboardPersonal;
     },
-    enabled,
+    enabled: enabled && userId !== undefined,
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: false,
   });
 }
 
-/** Whether gamification is available to the signed-in user and whether they opted out */
-export function useGamificationSelf() {
-  return useQuery({
-    queryKey: ['gamification', 'me'],
-    queryFn: async () => (await api.get('/gamification/me')).data.gamification as GamificationSelf,
-  });
-}
-
 export function useDashboardTeam(period: TeamPeriod) {
   return useQuery({
-    queryKey: ['dashboard', 'team', period],
+    queryKey: dashboardKeys.team(period),
     queryFn: async () => {
       const response = await api.get('/dashboard/team', { params: { period } });
       return response.data.team as GamificationTeam;
@@ -83,12 +87,12 @@ export function useDashboardReports({
   enabled = true,
 }: ReportListOptions) {
   return useQuery({
-    queryKey: ['dashboard', 'reports', projectId ?? null, assignedToMe ? 'mine' : 'recent'],
+    queryKey: dashboardKeys.reports(projectId, assignedToMe ? 'mine' : 'recent'),
     queryFn: async () => {
       const params: Record<string, string> = assignedToMe
         ? {
             assignedTo: ASSIGNED_TO_ME_FILTER,
-            status: 'open,in_progress',
+            status: OPEN_STATUS_FILTER,
             sortBy: 'priority',
             sortOrder: 'desc',
             limit: '10',
@@ -120,7 +124,7 @@ export function useUpdateDashboardReport() {
       await api.patch(`/reports/${id}`, changes);
     },
     onSuccess: (_, change) => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['report', change.id] });
       toast.success(change.status === 'resolved' ? 'Report resolved' : 'Report assigned');
@@ -128,12 +132,5 @@ export function useUpdateDashboardReport() {
     onError: (error: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(error.response?.data?.message || 'Failed to update the report');
     },
-  });
-}
-
-export function useGamificationSettings() {
-  return useQuery({
-    queryKey: ['gamification'],
-    queryFn: async () => (await api.get('/gamification')).data.gamification as GamificationSettings,
   });
 }

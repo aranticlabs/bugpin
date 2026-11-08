@@ -50,7 +50,7 @@ describe('ProfileTabs', () => {
   });
 
   it('shows the switch and the stats when gamification is on', async () => {
-    gamificationFor({ available: true, canOptOut: true, optedOut: false });
+    gamificationFor({ available: true, canOptOut: true, optedOut: false, active: true });
     renderWithProviders(<ProfileTabs />, { initialEntries: ['/?tab=hunters-log'] });
 
     expect(await screen.findByRole('switch', { name: 'Enable gamification' })).toBeChecked();
@@ -62,7 +62,7 @@ describe('ProfileTabs', () => {
   });
 
   it('keeps only the switch after opting out', async () => {
-    gamificationFor({ available: true, canOptOut: true, optedOut: true });
+    gamificationFor({ available: true, canOptOut: true, optedOut: true, active: false });
     renderWithProviders(<ProfileTabs />, { initialEntries: ['/?tab=hunters-log'] });
 
     expect(await screen.findByRole('switch', { name: 'Enable gamification' })).not.toBeChecked();

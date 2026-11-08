@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useGamificationSettings } from '../../hooks/useDashboard';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { api } from '../../api/client';
+import { AlertTriangle } from 'lucide-react';
+import {
+  useGamificationSettings,
+  useUpdateGamificationSettings,
+} from '../../hooks/useGamification';
+import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -13,16 +15,8 @@ import { Spinner } from '../../components/ui/spinner';
 import { Switch } from '../../components/ui/switch';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { cn } from '../../lib/utils';
+import { gamificationStatus } from '@shared/gamification';
 import type { GamificationSettings, GamificationUser } from '@shared/types';
-
-type UserStatus = 'on' | 'off' | 'opted-out' | 'viewer' | 'workspace-off';
-
-function statusOf(user: GamificationUser, settings: GamificationSettings): UserStatus {
-  if (user.role === 'viewer') return 'viewer';
-  if (!settings.enabled) return 'workspace-off';
-  if (!user.enabled) return 'off';
-  return settings.allowOptOut && user.optedOut ? 'opted-out' : 'on';
-}
 
 function changedUsers(draft: GamificationSettings, saved: GamificationSettings) {
   const before = new Map(saved.users.map((user) => [user.id, user.enabled]));
@@ -34,30 +28,13 @@ function changedUsers(draft: GamificationSettings, saved: GamificationSettings) 
 }
 
 export function Gamification() {
-  const queryClient = useQueryClient();
   const { data: saved, isLoading } = useGamificationSettings();
-  const [draft, setDraft] = useState<GamificationSettings | null>(null);
+  // Holds only unsaved edits; while null the page shows the saved settings, so a refetch
+  // never overwrites what the admin is changing.
+  const [edits, setDraft] = useState<GamificationSettings | null>(null);
+  const mutation = useUpdateGamificationSettings();
 
-  useEffect(() => {
-    if (saved) setDraft(saved);
-  }, [saved]);
-
-  const mutation = useMutation({
-    mutationFn: async (
-      changes: Partial<Omit<GamificationSettings, 'users'>> & { users?: Record<string, boolean> }
-    ) => (await api.put('/gamification', changes)).data.gamification as GamificationSettings,
-    onSuccess: (next) => {
-      queryClient.setQueryData(['gamification'], next);
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('Gamification settings saved');
-    },
-    onError: (error: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(error.response?.data?.message || 'Failed to save gamification settings');
-    },
-  });
-
-  if (isLoading || !saved || !draft) {
+  if (isLoading || !saved) {
     return (
       <Card>
         <CardContent className="py-12">
@@ -67,6 +44,7 @@ export function Gamification() {
     );
   }
 
+  const draft = edits ?? saved;
   const users = changedUsers(draft, saved);
   const workspaceChanges = (
     ['enabled', 'newUsersDefault', 'allowOptOut', 'showRanking'] as const
@@ -74,17 +52,28 @@ export function Gamification() {
   const isDirty = workspaceChanges.length > 0 || Object.keys(users).length > 0;
   const off = !draft.enabled;
   const eligible = draft.users.filter((user) => user.role !== 'viewer');
-  const activeCount = eligible.filter((user) => statusOf(user, draft) === 'on').length;
+  const statusOf = (user: GamificationUser) => gamificationStatus(user, draft);
+  const activeCount = eligible.filter((user) => statusOf(user) === 'on').length;
   const turnedOff = eligible.filter((user) => !user.enabled).length;
-  const optedOut = eligible.filter((user) => statusOf(user, draft) === 'opted-out').length;
+  const optedOut = eligible.filter((user) => statusOf(user) === 'opted-out').length;
   const viewers = draft.users.length - eligible.length;
+  // People whose own opt-out stops counting once opting out is no longer allowed
+  const returning =
+    saved.allowOptOut && !draft.allowOptOut && draft.enabled
+      ? eligible.filter((user) => user.enabled && user.optedOut).length
+      : 0;
 
   const save = async () => {
-    await mutation.mutateAsync({
-      ...Object.fromEntries(workspaceChanges.map((key) => [key, draft[key]])),
-      ...(Object.keys(users).length > 0 && { users }),
-    });
-    return true;
+    try {
+      await mutation.mutateAsync({
+        ...Object.fromEntries(workspaceChanges.map((key) => [key, draft[key]])),
+        ...(Object.keys(users).length > 0 && { users }),
+      });
+      setDraft(null);
+      return true;
+    } catch {
+      return false;
+    }
   };
   const setAll = (enabled: boolean) =>
     setDraft({
@@ -94,11 +83,11 @@ export function Gamification() {
 
   return (
     <div className="space-y-6">
-      <UnsavedChangesGuard isDirty={isDirty} onSave={save} onDiscard={() => setDraft(saved)} />
+      <UnsavedChangesGuard isDirty={isDirty} onSave={save} onDiscard={() => setDraft(null)} />
 
       <SettingsCard
         title="Gamification"
-        description="Levels and achievements on the dashboard. Time to resolve is always shown and is not affected by these settings."
+        description="Levels and achievements on the dashboard. Time to resolve is always shown. People who are turned off or opted out are left out of the team figures."
         badge={
           <Badge variant="outline" className={draft.enabled ? 'status-active' : 'status-inactive'}>
             {draft.enabled ? 'On' : 'Off'}
@@ -173,6 +162,16 @@ export function Gamification() {
             />
           </SettingRow>
         </SettingRows>
+        {returning > 0 && (
+          <Alert className="mb-4">
+            <AlertTriangle className="size-4" aria-hidden />
+            <AlertDescription>
+              {returning === 1
+                ? '1 person turned gamification off for themselves. Once you save, they take part again and appear in the team ranking.'
+                : `${returning} people turned gamification off for themselves. Once you save, they take part again and appear in the team ranking.`}
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="flex flex-col gap-3 rounded-md border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
             <p className="text-sm font-medium">

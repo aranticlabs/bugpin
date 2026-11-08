@@ -15,9 +15,14 @@ import { ReportPriorityLabel } from '../report/ReportStatusPriority';
 import { AchievementArt } from './AchievementArt';
 import { TeamTab } from './TeamTab';
 import { cn } from '../../lib/utils';
-import { formatDay } from '../../lib/dashboard';
+import { formatDay, levelProgressPercent, unlockedCount } from '../../lib/dashboard';
 import {
+  ACHIEVEMENT_TARGETS,
+  AMBER_WAITED_DAYS,
+  DRAGONFLY_TRIAGE_MINUTES,
   EARLY_RESOLVE_MINUTES,
+  FIREFLY_RESOLVE_HOURS,
+  LADYBUG_STAYS_FIXED_DAYS,
   LEVEL_XP,
   REPORT_PRIORITIES,
   XP_BY_PRIORITY,
@@ -51,39 +56,37 @@ export const ACHIEVEMENTS: Record<AchievementId, { title: string; description: s
   },
   cocoon: {
     title: 'Cocoon',
-    description: 'Resolve 100 bugs. Something is taking shape',
+    description: `Resolve ${ACHIEVEMENT_TARGETS.cocoon} bugs. Something is taking shape`,
   },
   butterfly: {
     title: 'Butterfly',
-    description: 'Resolve 500 bugs. Fully transformed',
+    description: `Resolve ${ACHIEVEMENT_TARGETS.butterfly} bugs. Fully transformed`,
   },
   firefly: {
     title: 'Firefly',
-    description: 'Resolve a highest-priority bug within 4 h of getting it',
+    description: `Resolve a highest-priority bug within ${FIREFLY_RESOLVE_HOURS} h of its first assignment`,
   },
   dragonfly: {
     title: 'Dragonfly',
-    description: 'Set the priority of 50 new bugs within an hour of arrival',
+    description: `Set the priority of ${ACHIEVEMENT_TARGETS.dragonfly} new bugs within ${DRAGONFLY_TRIAGE_MINUTES} minutes of arrival`,
   },
   ladybug: {
     title: 'Ladybug',
-    description: 'Resolve 25 bugs that stay fixed for 14 days',
+    description: `Resolve ${ACHIEVEMENT_TARGETS.ladybug} bugs that stay fixed for ${LADYBUG_STAYS_FIXED_DAYS} days`,
   },
   web_weaver: {
     title: 'Web weaver',
-    description: 'Resolve bugs in 5 different projects',
+    description: `Resolve bugs in ${ACHIEVEMENT_TARGETS.web_weaver} different projects`,
   },
   amber: {
     title: 'Amber find',
-    description: 'Resolve a bug that waited more than 90 days',
+    description: `Resolve a bug that waited more than ${AMBER_WAITED_DAYS} days`,
   },
 };
 
-/** Most recently unlocked first */
-export function unlockedAchievements(achievements: AchievementProgress[]): AchievementProgress[] {
-  return achievements
-    .filter((item) => item.unlockedAt)
-    .sort((a, b) => (b.unlockedAt ?? '').localeCompare(a.unlockedAt ?? ''));
+/** "Level 3 · Tracker · 2 of 8 achievements" */
+export function progressSummary(game: GamificationProgress): string {
+  return `Level ${game.level} · ${levelTitle(game.level)} · ${unlockedCount(game)} of ${game.achievements.length} achievements`;
 }
 
 export function AchievementBadge({
@@ -114,10 +117,7 @@ export type ProgressTab = 'levels' | 'achievements' | 'team';
 const TAB_PANEL = 'mt-4 -mr-3 min-h-0 flex-1 overflow-y-auto pr-3';
 
 function LevelsTab({ game }: { game: GamificationProgress }) {
-  const percent =
-    game.nextLevelXp === null
-      ? 100
-      : ((game.xp - game.levelStartXp) / (game.nextLevelXp - game.levelStartXp)) * 100;
+  const percent = levelProgressPercent(game);
   return (
     <div className="space-y-4">
       <div className="space-y-2 rounded-lg border bg-muted/30 px-4 py-3">
@@ -188,8 +188,8 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
           <p className="text-sm font-medium">How you earn XP</p>
           <p className="text-xs text-muted-foreground">
             Resolve a report to earn XP by its priority. Resolve it within {EARLY_RESOLVE_MINUTES}{' '}
-            minutes of getting it and the XP counts twice. Each report counts once, even when it is
-            reopened.
+            minutes of its first assignment, or of its arrival when nobody was assigned, and the XP
+            counts twice. Each report counts once, even when it is reopened.
           </p>
           <div className="divide-y rounded-md border">
             {REPORT_PRIORITIES.map((priority) => (
@@ -279,7 +279,7 @@ function AchievementGrid({ achievements }: { achievements: AchievementProgress[]
 }
 
 /** Levels, Achievements and Team, shared by the dashboard dialog and the profile */
-export function HunterLogTabs({
+export function HuntersLogTabs({
   game,
   tab,
   onTabChange,
@@ -329,18 +329,14 @@ export function ProgressDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const unlocked = game.achievements.filter((item) => item.unlockedAt).length;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[min(42rem,calc(100dvh-2rem))] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Hunter&apos;s log</DialogTitle>
-          <DialogDescription>
-            Level {game.level} · {levelTitle(game.level)} · {unlocked} of {game.achievements.length}{' '}
-            achievements
-          </DialogDescription>
+          <DialogDescription>{progressSummary(game)}</DialogDescription>
         </DialogHeader>
-        <HunterLogTabs
+        <HuntersLogTabs
           game={game}
           tab={tab}
           onTabChange={onTabChange}

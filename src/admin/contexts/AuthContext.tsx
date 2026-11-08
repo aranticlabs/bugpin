@@ -124,7 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore errors during logout
     }
     setUser(null);
-  }, [setUser]);
+    // The next account signed in on this tab must not see this account's cached data
+    queryClient.clear();
+  }, [setUser, queryClient]);
 
   const refreshUser = useCallback(async () => {
     try {

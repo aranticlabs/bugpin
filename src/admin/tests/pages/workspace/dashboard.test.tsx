@@ -5,8 +5,8 @@ import { delay, http, HttpResponse } from 'msw';
 import { renderWithProviders } from '../../utils';
 import { Dashboard } from '../../../pages/workspace/Dashboard';
 import { server } from '../../mocks/server';
-import { mockDashboardPersonal, mockUsers } from '../../mocks/handlers';
-import type { DashboardPersonal } from '@shared/types';
+import { mockDashboardOverview, mockDashboardPersonal, mockUsers } from '../../mocks/handlers';
+import type { DashboardActivityItem, DashboardPersonal, UserPreferences } from '@shared/types';
 
 const withGamification: DashboardPersonal = {
   ...mockDashboardPersonal,
@@ -239,5 +239,161 @@ describe('Dashboard Page', () => {
     );
     renderWithProviders(<Dashboard />);
     await waitFor(() => expect(ranges).toContain('30'));
+  });
+
+  it('announces achievements unlocked together one after another, saving each once dismissed', async () => {
+    const user = userEvent.setup();
+    const saved: UserPreferences[] = [];
+    const twoNew: DashboardPersonal = {
+      ...withGamification,
+      gamification: {
+        ...(withGamification.gamification as NonNullable<DashboardPersonal['gamification']>),
+        achievements: [
+          { id: 'hatchling', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
+          { id: 'amber', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
+        ],
+      },
+    };
+    server.use(
+      http.get('/api/dashboard/me', () => HttpResponse.json({ success: true, personal: twoNew })),
+      http.get('/api/user-preferences/me', () =>
+        HttpResponse.json({ success: true, preferences: { seenAchievements: [] } })
+      ),
+      http.patch('/api/user-preferences/me', async ({ request }) => {
+        const body = (await request.json()) as UserPreferences;
+        saved.push(body);
+        return HttpResponse.json({ success: true, preferences: body });
+      })
+    );
+    renderWithProviders(<Dashboard />);
+
+    const first = await screen.findByRole('dialog');
+    expect(within(first).getByText('Achievement unlocked: Hatchling')).toBeInTheDocument();
+    expect(saved).toEqual([]);
+    await user.click(within(first).getByRole('button', { name: 'Keep going' }));
+
+    const second = await screen.findByRole('dialog');
+    expect(await within(second).findByText('Achievement unlocked: Amber find')).toBeInTheDocument();
+    await waitFor(() => expect(saved).toEqual([{ seenAchievements: ['hatchling'] }]));
+    await user.click(within(second).getByRole('button', { name: 'Keep going' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(saved[saved.length - 1]).toEqual({ seenAchievements: ['hatchling', 'amber'] });
+  });
+
+  it('records what is already unlocked on the first visit without a dialog', async () => {
+    const saved: UserPreferences[] = [];
+    server.use(
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({ success: true, personal: withGamification })
+      ),
+      http.patch('/api/user-preferences/me', async ({ request }) => {
+        const body = (await request.json()) as UserPreferences;
+        saved.push(body);
+        return HttpResponse.json({ success: true, preferences: body });
+      })
+    );
+    renderWithProviders(<Dashboard />);
+    await waitFor(() => expect(saved).toEqual([{ seenAchievements: ['hatchling'] }]));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the XP a resolution would earn, and nothing for reports that earn none', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/dashboard/me', () =>
+        HttpResponse.json({
+          success: true,
+          personal: { ...withGamification, resolveXp: { rpt_fast: 60, rpt_again: 0 } },
+        })
+      ),
+      http.get('/api/reports', () =>
+        HttpResponse.json({
+          success: true,
+          data: [
+            {
+              id: 'rpt_fast',
+              title: 'Fast one',
+              status: 'open',
+              priority: 'high',
+              createdAt: new Date().toISOString(),
+              projectName: 'Shop',
+            },
+            {
+              id: 'rpt_again',
+              title: 'Seen before',
+              status: 'open',
+              priority: 'high',
+              createdAt: new Date().toISOString(),
+              projectName: 'Shop',
+            },
+          ],
+          total: 2,
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    await user.click(await screen.findByRole('tab', { name: /Assigned to you/ }));
+
+    const fast = (await screen.findByText('Fast one')).closest('.flex-col') as HTMLElement;
+    expect(within(fast).getByRole('button', { name: /Resolve/ })).toHaveTextContent('+60 XP');
+    const again = screen.getByText('Seen before').closest('.flex-col') as HTMLElement;
+    expect(within(again).getByRole('button', { name: /Resolve/ })).not.toHaveTextContent('XP');
+  });
+
+  it('offers a retry when the assigned reports fail to load', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    server.use(
+      http.get('/api/reports', () =>
+        fail
+          ? HttpResponse.json({ success: false }, { status: 400 })
+          : HttpResponse.json({ success: true, data: [], total: 0 })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    await user.click(await screen.findByRole('tab', { name: /Assigned to you/ }));
+
+    expect(await screen.findByText("Couldn't load your assigned reports")).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Your queue is clear')).toBeInTheDocument();
+  });
+
+  it('names the widget and deleted users in the activity feed, with priority labels', async () => {
+    const entry = (overrides: Partial<DashboardActivityItem>): DashboardActivityItem => ({
+      id: `history-${overrides.action}-${overrides.actor}`,
+      reportId: 'report-1',
+      reportTitle: 'Login button broken',
+      action: 'created',
+      createdAt: new Date().toISOString(),
+      actor: 'user',
+      ...overrides,
+    });
+    server.use(
+      http.get('/api/dashboard/overview', () =>
+        HttpResponse.json({
+          success: true,
+          overview: {
+            ...mockDashboardOverview,
+            activity: [
+              entry({ action: 'created', actor: 'widget' }),
+              entry({ action: 'status_changed', newValue: 'closed', actor: 'deleted_user' }),
+              entry({
+                action: 'priority_changed',
+                newValue: 'highest',
+                actor: 'user',
+                userId: 'user-2',
+                userName: 'Editor User',
+              }),
+            ],
+          },
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('Widget')).toBeInTheDocument();
+    expect(screen.getByText('Deleted user')).toBeInTheDocument();
+    expect(screen.getByText('set priority to highest on')).toBeInTheDocument();
   });
 });

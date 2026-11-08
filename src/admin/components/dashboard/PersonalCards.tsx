@@ -19,7 +19,7 @@ import {
   toneBackground,
   trendChartHeightClass,
   type ChartSeries,
-} from './charts';
+} from './DashboardCharts';
 import { TrendBadge } from './TrendBadge';
 import {
   ACHIEVEMENTS,
@@ -27,10 +27,22 @@ import {
   ProgressDialog,
   levelTitle,
   type ProgressTab,
-} from './achievements';
+} from './HuntersLog';
 import { cn } from '../../lib/utils';
-import { daysSince, formatDay, formatHours } from '../../lib/dashboard';
-import type { DashboardPersonal, ResolveTimeSummary } from '@shared/types';
+import {
+  daysSince,
+  formatDay,
+  formatHours,
+  levelProgressPercent,
+  unlockedCount,
+} from '../../lib/dashboard';
+import {
+  RESOLVE_HISTORY_DAYS,
+  RESOLVE_TREND_WEEKS,
+  RESOLVE_WINDOW_DAYS,
+  type DashboardPersonal,
+  type ResolveTimeSummary,
+} from '@shared/types';
 
 const STRIP_COLUMNS: Record<number, string> = {
   1: 'md:grid-cols-1',
@@ -77,7 +89,7 @@ function ResolveTimeTile({ summary }: { summary: ResolveTimeSummary }) {
       </div>
       <p className="truncate text-xs text-muted-foreground">
         {medianHours === null
-          ? 'In the last 30 days'
+          ? `In the last ${RESOLVE_WINDOW_DAYS} days`
           : `Your median · team ${formatHours(summary.teamMedianHours)} · best ${formatHours(summary.bestHours)}`}
       </p>
     </StripTile>
@@ -112,8 +124,6 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
   const tiles: { key: string; node: ReactNode }[] = [];
 
   if (game) {
-    const span = game.nextLevelXp === null ? 1 : game.nextLevelXp - game.levelStartXp;
-    const progress = game.nextLevelXp === null ? 100 : ((game.xp - game.levelStartXp) / span) * 100;
     tiles.push({
       key: 'level',
       node: (
@@ -128,7 +138,7 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
                   {game.xp.toLocaleString()} XP
                 </span>
               </div>
-              <Progress value={progress} className="h-1.5" aria-hidden />
+              <Progress value={levelProgressPercent(game)} className="h-1.5" aria-hidden />
               <p className="truncate text-xs text-muted-foreground">
                 {game.nextLevelXp === null
                   ? 'Top level reached'
@@ -144,7 +154,6 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
   tiles.push({ key: 'ttr', node: <ResolveTimeTile summary={personal.resolveTime} /> });
 
   if (game) {
-    const unlocked = game.achievements.filter((item) => item.unlockedAt).length;
     tiles.push({
       key: 'achievements',
       node: (
@@ -154,7 +163,7 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="font-medium">Achievements</span>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {unlocked} of {game.achievements.length}
+                  {unlockedCount(game)} of {game.achievements.length}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1">
@@ -238,15 +247,18 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
   );
 }
 
+const TREND_BASIS =
+  'Median hours from assignment to resolution, per week. Reports never assigned to you count from arrival.';
+
 function trendSummary(summary: ResolveTimeSummary): string {
   const known = summary.weekly.filter((week) => week.mine !== null);
-  if (known.length < 2) return 'Median hours from assignment to resolution, per week.';
+  if (known.length < 2) return TREND_BASIS;
   const first = known[0].mine as number;
   const latest = known[known.length - 1].mine as number;
   const direction = latest < first ? 'Down' : latest > first ? 'Up' : 'Steady';
   return direction === 'Steady'
-    ? `Median hours from assignment to resolution, per week. Steady at ${formatHours(latest)}.`
-    : `Median hours from assignment to resolution, per week. ${direction} from ${formatHours(first)} to ${formatHours(latest)} in 12 weeks.`;
+    ? `${TREND_BASIS} Steady at ${formatHours(latest)}.`
+    : `${TREND_BASIS} ${direction} from ${formatHours(first)} to ${formatHours(latest)} in ${RESOLVE_TREND_WEEKS} weeks.`;
 }
 
 export function ResolveTimeCard({
@@ -261,7 +273,7 @@ export function ResolveTimeCard({
     { label: 'Your median', value: formatHours(summary.medianHours) },
     { label: 'Team median', value: formatHours(summary.teamMedianHours) },
     { label: 'Your best', value: formatHours(summary.bestHours) },
-    { label: 'Resolved, 30 days', value: String(summary.resolvedLast30Days) },
+    { label: `Resolved, ${RESOLVE_WINDOW_DAYS} days`, value: String(summary.resolvedLast30Days) },
   ];
   const round = (value: number) => Math.round(value * 10) / 10;
   const hasTrend = summary.weekly.some((week) => week.mine !== null || week.team !== null);
@@ -315,12 +327,14 @@ export function ResolveTimeCard({
                 trendChartHeightClass('compact')
               )}
             >
-              No reports were resolved after assignment in the last 12 weeks.
+              You resolved no reports in the last {RESOLVE_TREND_WEEKS} weeks.
             </div>
           )}
         </div>
         <div className="flex h-full flex-col justify-between gap-3">
-          <p className="text-xs font-medium text-muted-foreground">By priority, last 90 days</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            By priority, last {RESOLVE_HISTORY_DAYS} days
+          </p>
           {summary.byPriority.map((row) => (
             <div key={row.priority} className="space-y-1">
               <div className="flex items-baseline justify-between gap-2 text-sm">

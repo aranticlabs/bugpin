@@ -28,7 +28,7 @@ import {
 } from '../../components/dashboard/OverviewCards';
 import { ReportListsCard } from '../../components/dashboard/ReportListsCard';
 import { ImpactStrip, ResolveTimeCard } from '../../components/dashboard/PersonalCards';
-import { UnlockDialog, unlockedAchievements } from '../../components/dashboard/achievements';
+import { UnlockDialog } from '../../components/dashboard/HuntersLog';
 import { GREETINGS, dayPartFor } from '../../lib/dashboard';
 import { formatClockTime } from '../../lib/clock';
 import { useCurrentMinute } from '../../hooks/useCurrentMinute';
@@ -44,12 +44,13 @@ import {
 const ALL_PROJECTS = 'all';
 
 /**
- * Announces each achievement once. The first time preferences are seen, everything already
- * unlocked is recorded silently so existing users are not shown a backlog of dialogs.
+ * Announces each achievement once, oldest unlock first, one dialog at a time. An achievement
+ * counts as seen only once its dialog is dismissed. The first time preferences are seen,
+ * everything already unlocked is recorded silently so existing users are not shown a backlog.
  */
 function useAchievementAnnouncement(game: GamificationProgress | null | undefined) {
   const { preferences, isLoaded, updatePreferences } = useUserPreferences();
-  const [announcing, setAnnouncing] = useState<AchievementId | null>(null);
+  const [queue, setQueue] = useState<AchievementId[]>([]);
   const stored = preferences?.seenAchievements;
   // Ids of achievements that no longer exist are dropped, or saving the list would be rejected
   const seen = useMemo(
@@ -61,18 +62,29 @@ function useAchievementAnnouncement(game: GamificationProgress | null | undefine
 
   useEffect(() => {
     if (!game || !isLoaded) return;
-    const unlocked = unlockedAchievements(game.achievements).map((item) => item.id);
+    // Oldest unlock first; achievements unlocked at the same moment keep their catalog order
+    const unlocked = game.achievements
+      .filter((item) => item.unlockedAt)
+      .sort((a, b) => (a.unlockedAt ?? '').localeCompare(b.unlockedAt ?? ''))
+      .map((item) => item.id);
     if (seen === undefined) {
       save.current({ seenAchievements: unlocked });
       return;
     }
     const fresh = unlocked.filter((id) => !seen.includes(id));
     if (fresh.length === 0) return;
-    setAnnouncing(fresh[0]);
-    save.current({ seenAchievements: [...seen, ...fresh] });
+    setQueue((current) => [...current, ...fresh.filter((id) => !current.includes(id))]);
   }, [game, isLoaded, seen]);
 
-  return { announcing, dismiss: () => setAnnouncing(null) };
+  const dismiss = () => {
+    const [shown, ...rest] = queue;
+    if (shown && seen && !seen.includes(shown)) {
+      save.current({ seenAchievements: [...seen, shown] });
+    }
+    setQueue(rest);
+  };
+
+  return { announcing: queue[0] ?? null, dismiss };
 }
 
 export function Dashboard() {
@@ -91,7 +103,7 @@ export function Dashboard() {
     },
   });
   const overview = useDashboardOverview(selectedProject, range);
-  const personal = useDashboardPersonal(canEdit);
+  const personal = useDashboardPersonal(user?.id, canEdit);
   const assigned = useDashboardReports({
     projectId: selectedProject,
     assignedToMe: true,
@@ -195,11 +207,11 @@ export function Dashboard() {
             <ReportListsCard
               needsAttention={overview.data.needsAttention}
               needsAttentionTotal={overview.data.needsAttentionTotal}
-              assigned={assigned.data}
-              recent={recent.data}
+              assigned={assigned}
+              recent={recent}
               projectId={selectedProject}
               canEdit={canEdit}
-              showXp={!!game}
+              resolveXp={game ? (personal.data?.resolveXp ?? null) : null}
               currentUserId={user.id}
             />
           </div>

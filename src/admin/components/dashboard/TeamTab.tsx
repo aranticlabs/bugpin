@@ -5,8 +5,9 @@ import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDashboardTeam } from '../../hooks/useDashboard';
+import { LoadError } from './LoadError';
 import { cn } from '../../lib/utils';
-import { AchievementBadge, levelTitle } from './achievements';
+import { AchievementBadge, levelTitle } from './HuntersLog';
 import { TEAM_PERIODS, type TeamPeriod } from '@shared/types';
 
 const PERIOD_LABEL: Record<TeamPeriod, string> = {
@@ -24,16 +25,10 @@ const PODIUM = [
 export function TeamTab() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<TeamPeriod>('30d');
-  const { data, isLoading, isError } = useDashboardTeam(period);
+  const { data, isLoading, isError, refetch } = useDashboardTeam(period);
 
   if (isLoading) return <Spinner className="mx-auto my-10 text-primary" label="Loading" />;
-  if (isError || !data) {
-    return (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        The team could not be loaded.
-      </p>
-    );
-  }
+  if (isError || !data) return <LoadError what="the team" onRetry={() => void refetch()} />;
 
   return (
     <div className="space-y-3">
