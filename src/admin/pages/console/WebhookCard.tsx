@@ -21,7 +21,7 @@ import {
   AlertDialogAction,
 } from '../../components/ui/alert-dialog';
 import { webhookEventLabel } from './webhook-events';
-import type { Webhook } from '@shared/types';
+import type { WebhookResponse as Webhook } from '@shared/types';
 
 interface WebhookCardProps {
   webhook: Webhook;
@@ -133,7 +133,7 @@ export function WebhookCard({
           </div>
         </dl>
         <p className="text-xs text-muted-foreground">
-          {webhook.secret ? 'Payloads are signed.' : 'No signing secret configured.'}
+          {webhook.secretSet ? 'Payloads are signed.' : 'No signing secret configured.'}
           {!webhook.isActive && ' Automatic deliveries are paused; tests can still be sent.'}
         </p>
         {change.error && (

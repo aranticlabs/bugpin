@@ -22,7 +22,7 @@ import {
   SelectItem,
 } from '../../components/ui/select';
 import { WEBHOOK_EVENTS } from './webhook-events';
-import type { Project, Webhook, WebhookEvent } from '@shared/types';
+import type { Project, WebhookResponse as Webhook, WebhookEvent } from '@shared/types';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 
 interface WebhookEditorProps {
@@ -46,11 +46,13 @@ export function WebhookEditor({
     projectId: webhook?.projectId ?? initialProjectId,
     name: webhook?.name ?? '',
     url: webhook?.url ?? '',
-    secret: webhook?.secret ?? '',
+    secret: '',
+    removeSecret: false,
     events: webhook?.events ?? (['report.created'] as WebhookEvent[]),
   }));
   const [fields, setFields] = useState(savedFields);
   const isDirty = JSON.stringify(fields) !== JSON.stringify(savedFields);
+  const hasSavedSecret = Boolean(webhook?.secretSet);
   const [validationError, setValidationError] = useState('');
   useEffect(() => {
     nameRef.current?.focus();
@@ -61,7 +63,8 @@ export function WebhookEditor({
         name: fields.name.trim(),
         url: fields.url.trim(),
         events: fields.events,
-        secret: fields.secret || (webhook ? '' : undefined),
+        // An empty field keeps the saved secret; an empty string removes it.
+        secret: fields.secret || (fields.removeSecret ? '' : undefined),
       };
       const response = webhook
         ? await api.patch(`/webhooks/${webhook.id}`, body)
@@ -179,17 +182,40 @@ export function WebhookEditor({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`${formId}-secret`}>
-              Signing secret <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`${formId}-secret`}>
+                Signing secret <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              {hasSavedSecret && !fields.removeSecret && (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  disabled={save.isPending}
+                  onClick={() => setFields({ ...fields, secret: '', removeSecret: true })}
+                >
+                  Remove secret
+                </Button>
+              )}
+            </div>
             <Input
               id={`${formId}-secret`}
               type="password"
               autoComplete="new-password"
               aria-describedby={`${formId}-secret-help`}
+              placeholder={
+                fields.removeSecret
+                  ? 'Removed when you save'
+                  : hasSavedSecret
+                    ? 'Saved (leave empty to keep)'
+                    : undefined
+              }
               value={fields.secret}
               disabled={save.isPending}
-              onChange={(event) => setFields({ ...fields, secret: event.target.value })}
+              onChange={(event) =>
+                setFields({ ...fields, secret: event.target.value, removeSecret: false })
+              }
             />
             <p id={`${formId}-secret-help`} className="text-xs text-muted-foreground">
               Use the same secret in your receiver to verify deliveries. Leave blank for unsigned

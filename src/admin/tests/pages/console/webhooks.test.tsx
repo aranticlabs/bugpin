@@ -3,7 +3,7 @@ import { renderWithQuery, screen, userEvent, waitFor, within } from '../../utils
 import { Webhooks } from '../../../pages/console/Webhooks';
 import { api } from '../../../api/client';
 import { licenseApi } from '../../../api/license';
-import type { Webhook } from '@shared/types';
+import type { WebhookResponse as Webhook } from '@shared/types';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -12,7 +12,7 @@ const endpoint: Webhook = {
   projectId: 'prj_one',
   name: 'Issue tracker',
   url: 'https://example.com/receiver',
-  secret: 'test-signing-secret',
+  secretSet: true,
   events: ['report.created', 'report.status_changed'],
   isActive: true,
   failureCount: 0,
@@ -56,7 +56,7 @@ it('creates a project-specific endpoint with selected events and a signing secre
       name: 'Dashboard receiver',
       projectId: 'prj_two',
       events: ['report.updated'],
-      secret: 'shared-secret',
+      secretSet: true,
     };
     state.webhooks = [saved];
     return { data: { webhook: saved } };
@@ -138,7 +138,7 @@ it('rejects a non-HTTP receiver URL and preserves entries on API failure', async
   expect(screen.getByLabelText('Webhook name')).toHaveValue('Receiver');
 });
 
-it('edits an existing endpoint while preserving its project and signing secret', async () => {
+it('edits an existing endpoint while keeping its project and saved signing secret', async () => {
   const state = setupWebhooks([endpoint]);
   const patch = vi.spyOn(api, 'patch').mockImplementation(async () => {
     const updated = {
@@ -156,7 +156,11 @@ it('edits an existing endpoint while preserving its project and signing secret',
   await user.click(within(card).getByRole('button', { name: 'Edit' }));
   expect(screen.getByLabelText('Project')).toHaveValue('Website');
   expect(screen.getByLabelText('Project')).toHaveAttribute('readonly');
-  expect(screen.getByLabelText(/Signing secret/)).toHaveValue(endpoint.secret);
+  expect(screen.getByLabelText(/Signing secret/)).toHaveValue('');
+  expect(screen.getByLabelText(/Signing secret/)).toHaveAttribute(
+    'placeholder',
+    'Saved (leave empty to keep)'
+  );
   await user.clear(screen.getByLabelText('Webhook name'));
   await user.type(screen.getByLabelText('Webhook name'), 'Updated receiver');
   await user.clear(screen.getByLabelText('Receiver URL'));
@@ -169,7 +173,7 @@ it('edits an existing endpoint while preserving its project and signing secret',
     expect(patch).toHaveBeenCalledWith('/webhooks/wh_primary', {
       name: 'Updated receiver',
       url: 'https://example.com/updated',
-      secret: endpoint.secret,
+      secret: undefined,
       events: ['report.closed'],
     })
   );
@@ -180,14 +184,18 @@ it('edits an existing endpoint while preserving its project and signing secret',
 it('allows explicitly removing the signing secret when editing', async () => {
   const state = setupWebhooks([endpoint]);
   const patch = vi.spyOn(api, 'patch').mockImplementation(async () => {
-    state.webhooks = [{ ...endpoint, secret: '' }];
+    state.webhooks = [{ ...endpoint, secretSet: false }];
     return { data: { webhook: state.webhooks[0] } };
   });
   const user = userEvent.setup();
   renderWithQuery(<Webhooks />);
   const card = await screen.findByRole('article', { name: endpoint.name });
   await user.click(within(card).getByRole('button', { name: 'Edit' }));
-  await user.clear(screen.getByLabelText(/Signing secret/));
+  await user.click(screen.getByRole('button', { name: 'Remove secret' }));
+  expect(screen.getByLabelText(/Signing secret/)).toHaveAttribute(
+    'placeholder',
+    'Removed when you save'
+  );
   await user.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() =>
     expect(patch).toHaveBeenCalledWith(
