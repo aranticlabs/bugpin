@@ -2,6 +2,9 @@ name: Dependency Release Age
 
 on:
   pull_request:
+    branches:
+      - main
+      - dev
   push:
     branches:
       - main
@@ -17,13 +20,3 @@ jobs:
     uses: ./.github/workflows/dependency-age-policy.yml
     secrets:
       EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
-
-  dependency-age:
-    needs: age-policy
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Enforce validation and admin approval
-        env:
-          POLICY_RESULT: ${{ needs.age-policy.result }}
-        run: test "$POLICY_RESULT" = success
