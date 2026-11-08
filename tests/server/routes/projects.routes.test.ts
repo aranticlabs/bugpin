@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { projectsService } from '../../../src/server/services/projects.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -25,6 +25,8 @@ const baseSession: Session = {
 };
 
 const baseProject: Project = {
+  isActive: true,
+  position: 0,
   id: 'prj_1',
   name: 'Project',
   apiKey: 'proj_key',
@@ -42,7 +44,7 @@ let projectResult: Project | null = baseProject;
 let createResult: Result<Project> = Result.ok(baseProject);
 let updateResult: Result<Project> = Result.ok(baseProject);
 let deleteResult: Result<void> = Result.ok(undefined);
-let regenerateResult: Result<string> = Result.ok('proj_new');
+let regenerateResult: Result<Project> = Result.ok({ ...baseProject, apiKey: 'proj_new' });
 let lastUpdateBody: unknown;
 
 beforeEach(() => {
@@ -51,7 +53,7 @@ beforeEach(() => {
   createResult = Result.ok(baseProject);
   updateResult = Result.ok(baseProject);
   deleteResult = Result.ok(undefined);
-  regenerateResult = Result.ok('proj_new');
+  regenerateResult = Result.ok({ ...baseProject, apiKey: 'proj_new' });
   lastUpdateBody = undefined;
 
   authService.validateSession = async () =>
@@ -210,7 +212,7 @@ describe('projects routes', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toBe('VALIDATION_ERROR');
+    expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
   });
 
   it('rejects an invalid language mode on PATCH', async () => {

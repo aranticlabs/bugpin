@@ -8,6 +8,8 @@ import { githubService } from '../../src/server/services/integrations/github.ser
 import type { Integration, Project, Report } from '../../src/shared/types';
 
 const baseProject: Project = {
+  isActive: true,
+  position: 0,
   id: 'prj_1',
   name: 'Project',
   apiKey: 'proj_key',
@@ -34,6 +36,8 @@ const baseIntegration: Integration = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -83,7 +87,6 @@ beforeEach(() => {
   integrationsRepo.delete = async () => true;
   integrationsRepo.updateLastUsed = async (id) => {
     updateLastUsedId = id;
-    return true;
   };
 
   reportsRepo.findById = async () => reportById;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type { Session, User } from '../../../src/shared/types';
@@ -73,8 +73,8 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
-      expect(body.upgradeUrl).toBe('https://bugpin.io/pricing');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
+      expect(body).toHaveProperty('upgradeUrl', 'https://bugpin.io/pricing');
     });
   });
 
@@ -87,7 +87,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -109,7 +109,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -129,7 +129,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -143,7 +143,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -157,7 +157,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
 
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 });

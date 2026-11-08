@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { githubWebhookRoutes } from '../../../src/server/routes/api/github-webhook';
 import { integrationsRepo } from '../../../src/server/database/repositories/integrations.repo';
 import { githubSyncService } from '../../../src/server/services/integrations/github-sync.service';
@@ -11,6 +11,8 @@ const baseIntegration: Integration = {
   id: 'int_1',
   projectId: 'prj_1',
   type: 'github',
+  name: 'GitHub',
+  usageCount: 0,
   config: {
     owner: 'test-owner',
     repo: 'test-repo',
@@ -98,7 +100,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('Invalid integration type');
+      expect(body).toHaveProperty('error', 'Invalid integration type');
     });
 
     it('returns 401 when signature is missing but secret is configured', async () => {
@@ -115,7 +117,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.error).toBe('Missing signature');
+      expect(body).toHaveProperty('error', 'Missing signature');
     });
 
     it('returns 401 when signature is invalid', async () => {
@@ -133,7 +135,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.error).toBe('Invalid signature');
+      expect(body).toHaveProperty('error', 'Invalid signature');
     });
 
     it('returns 400 for invalid JSON', async () => {
@@ -154,7 +156,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('Invalid JSON');
+      expect(body).toHaveProperty('error', 'Invalid JSON');
     });
 
     it('responds to ping event', async () => {
@@ -175,7 +177,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.message).toBe('pong');
+      expect(body).toHaveProperty('message', 'pong');
     });
 
     it('ignores unsupported issue actions', async () => {
@@ -199,7 +201,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.message).toBe('Action ignored');
+      expect(body).toHaveProperty('message', 'Action ignored');
     });
 
     it('processes issues opened event', async () => {
@@ -331,7 +333,7 @@ describe('github-webhook routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.message).toBe('Event ignored');
+      expect(body).toHaveProperty('message', 'Event ignored');
     });
 
     it('works without webhook secret configured', async () => {

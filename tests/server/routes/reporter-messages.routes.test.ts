@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reporterMessagesService } from '../../../src/server/services/reporter-messages.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -77,8 +77,8 @@ describe('reporter-messages routes POST', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.success).toBe(true);
-    expect(body.reporterMessage.id).toBe('msg_1');
+    expect(body).toHaveProperty('success', true);
+    expect(body).toHaveProperty('reporterMessage.id', 'msg_1');
   });
 
   it('returns 400 with empty message', async () => {
@@ -162,9 +162,9 @@ describe('reporter-messages routes GET', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.success).toBe(true);
-    expect(body.messages).toHaveLength(1);
-    expect(body.messages[0].id).toBe('msg_1');
+    expect(body).toHaveProperty('success', true);
+    expect(body).toHaveProperty('messages.length', 1);
+    expect(body).toHaveProperty('messages.0.id', 'msg_1');
   });
 
   it('allows viewer to list messages', async () => {
@@ -184,6 +184,6 @@ describe('reporter-messages routes GET', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.messages).toHaveLength(0);
+    expect(body).toHaveProperty('messages.length', 0);
   });
 });

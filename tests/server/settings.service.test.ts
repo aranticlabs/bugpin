@@ -1,69 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { settingsService } from '../../src/server/services/settings.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { createAppSettings } from '../fixtures/settings';
 import type { AppSettings } from '../../src/shared/types';
-
-function createBaseSettings(): AppSettings {
-  const baseColors = {
-    lightButtonColor: '#111111',
-    lightTextColor: '#ffffff',
-    lightButtonHoverColor: '#222222',
-    lightTextHoverColor: '#ffffff',
-    darkButtonColor: '#111111',
-    darkTextColor: '#ffffff',
-    darkButtonHoverColor: '#222222',
-    darkTextHoverColor: '#ffffff',
-  };
-
-  return {
-    appName: 'BugPin',
-    appUrl: 'https://example.com',
-    retentionDays: 90,
-    rateLimitPerMinute: 10,
-    sessionMaxAgeDays: 7,
-    privacy: { euPrivacyMode: false },
-    smtpEnabled: false,
-    smtpConfig: {},
-    s3Enabled: false,
-    s3Config: {},
-    widgetLauncherButton: {
-      position: 'bottom-right',
-      buttonText: 'Report a bug',
-      buttonShape: 'round',
-      buttonIcon: 'bug',
-      buttonIconSize: 24,
-      buttonIconStroke: 2,
-      theme: 'auto',
-      enableHoverScaleEffect: true,
-      tooltipEnabled: true,
-      tooltipText: 'Found a bug?',
-      ...baseColors,
-    },
-    widgetDialog: baseColors,
-    screenshot: {
-      useScreenCaptureAPI: false,
-      maxScreenshotSize: 10,
-    },
-    notifications: {
-      emailEnabled: true,
-      notifyOnNewReport: true,
-      notifyOnStatusChange: true,
-      notifyOnPriorityChange: true,
-      notifyOnAssignment: true,
-      notifyOnDeletion: true,
-    },
-    branding: {
-      primaryColor: '#02658D',
-      logoLightUrl: null,
-      logoDarkUrl: null,
-      iconLightUrl: null,
-      iconDarkUrl: null,
-      faviconLightVersion: 'default',
-      faviconDarkVersion: 'default',
-    },
-    adminButton: baseColors,
-  };
-}
 
 const originalGetAll = settingsRepo.getAll;
 const originalUpdateAll = settingsRepo.updateAll;
@@ -73,7 +12,7 @@ let baseSettings: AppSettings;
 let lastUpdates: Partial<AppSettings> | null;
 
 beforeEach(() => {
-  baseSettings = createBaseSettings();
+  baseSettings = createAppSettings();
   lastUpdates = null;
 
   settingsRepo.getAll = async () => baseSettings;

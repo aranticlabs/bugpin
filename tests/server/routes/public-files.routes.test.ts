@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import { integrationsRepo } from '../../../src/server/database/repositories/integrations.repo';
 import { reportsRepo } from '../../../src/server/database/repositories/reports.repo';
@@ -212,7 +212,7 @@ describe('public file routes', () => {
 
   for (const type of ['avatar', 'branding'] as const) {
     it(`refuses ${type} files`, async () => {
-      fileRecord = { ...fileRecord, type };
+      fileRecord = { ...fileRecord, type } as unknown as FileRecord;
 
       const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 

@@ -1,10 +1,12 @@
-/// <reference lib="dom" />
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { buildSubmitFormData } from '../../../src/widget/api/submit-form';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { widgetRoutes } from '../../../src/server/routes/widget/submit';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
-import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
+import {
+  DEFAULT_BRANDING,
+  settingsRepo,
+} from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { settingsService } from '../../../src/server/services/settings.service';
@@ -39,6 +41,8 @@ const baseProject: Project = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug Report',
@@ -58,19 +62,20 @@ const baseReport: Report = {
 const baseSettings: Partial<AppSettings> = {
   rateLimitPerMinute: 60,
   branding: {
+    ...DEFAULT_BRANDING,
     primaryColor: '#000000',
   },
   widgetLauncherButton: {
-    theme: 'system',
+    theme: 'auto',
     position: 'bottom-right',
-    buttonText: 'Report Bug',
-    buttonShape: 'pill',
+    buttonText: { en: 'Report Bug' },
+    buttonShape: 'round',
     buttonIcon: 'bug',
     buttonIconSize: 20,
     buttonIconStroke: 2,
     enableHoverScaleEffect: true,
     tooltipEnabled: true,
-    tooltipText: 'Report a bug',
+    tooltipText: { en: 'Report a bug' },
     lightButtonColor: '#000000',
     lightTextColor: '#ffffff',
     lightButtonHoverColor: '#333333',
@@ -99,6 +104,7 @@ const baseSettings: Partial<AppSettings> = {
     enableScreenRecording: false,
     allowRecordingMicrophone: false,
     maxRecordingDurationSeconds: 180,
+    recordingQuality: 'standard',
   },
   language: {
     mode: 'auto',
@@ -337,7 +343,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.error).toBe('UNAUTHORIZED');
+      expect(body).toHaveProperty('error', 'UNAUTHORIZED');
     });
 
     it('returns 401 when API key is invalid', async () => {
@@ -355,7 +361,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.message).toBe('Invalid API key');
+      expect(body).toHaveProperty('message', 'Invalid API key');
     });
 
     it('accepts API key from header', async () => {
@@ -382,7 +388,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('DEPRECATED');
+      expect(body).toHaveProperty('error', 'DEPRECATED');
     });
 
     it('returns 403 when origin is not allowed', async () => {
@@ -409,7 +415,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(403);
       const body = await res.json();
-      expect(body.error).toBe('ORIGIN_NOT_ALLOWED');
+      expect(body).toHaveProperty('error', 'ORIGIN_NOT_ALLOWED');
     });
 
     it('allows request when origin matches allowed domain', async () => {
@@ -478,7 +484,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
     });
 
     it('creates report successfully', async () => {
@@ -494,8 +500,8 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.reportId).toBe('rpt_1');
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('reportId', 'rpt_1');
     });
 
     it('answers a repeated submission with the existing report instead of a new one', async () => {
@@ -796,7 +802,7 @@ describe('widget routes', () => {
       });
 
       expect(res.status).toBe(429);
-      expect((await res.json()).error).toBe('VIDEO_QUOTA_EXCEEDED');
+      expect(await res.json()).toHaveProperty('error', 'VIDEO_QUOTA_EXCEEDED');
       expect(createCalled).toBe(false);
     });
 
@@ -1199,7 +1205,7 @@ describe('widget routes', () => {
       await Promise.resolve();
 
       expect(res.status).toBe(200);
-      expect(body.config.projectName).toBe('Test Project');
+      expect(body).toHaveProperty('config.projectName', 'Test Project');
       expect(warningMessages).toContain('Failed to record widget package version');
     });
 
@@ -1217,8 +1223,8 @@ describe('widget routes', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.config.features.userActivityCapture).toBe('automatic');
-      expect(body.config.features.storageKeysCapture).toBe(false);
+      expect(body).toHaveProperty('config.features.userActivityCapture', 'automatic');
+      expect(body).toHaveProperty('config.features.storageKeysCapture', false);
     });
 
     it('returns disabled activity capture for EU Privacy Mode', async () => {
@@ -1233,7 +1239,7 @@ describe('widget routes', () => {
       const app = createApp();
       const disabledResponse = await app.request('http://localhost/widget/config/test_api_key_123');
       const disabledBody = await disabledResponse.json();
-      expect(disabledBody.config.features.userActivityCapture).toBe('disabled');
+      expect(disabledBody).toHaveProperty('config.features.userActivityCapture', 'disabled');
     });
 
     it('returns 404 when project not found', async () => {
@@ -1244,7 +1250,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('INVALID_API_KEY');
+      expect(body).toHaveProperty('error', 'INVALID_API_KEY');
     });
 
     it('returns widget config', async () => {
@@ -1253,14 +1259,14 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.config.projectName).toBe('Test Project');
-      expect(body.config.features).toBeDefined();
-      expect(body.config.theme).toBeDefined();
-      expect(body.config.position).toBeDefined();
-      expect(body.config.features.screenRecording).toBe(false);
-      expect(body.config.features.recordingMicrophone).toBe(false);
-      expect(body.config.maxRecordingDurationSeconds).toBe(180);
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('config.projectName', 'Test Project');
+      expect(body).toHaveProperty('config.features', expect.any(Object));
+      expect(body).toHaveProperty('config.theme', expect.any(String));
+      expect(body).toHaveProperty('config.position', expect.any(String));
+      expect(body).toHaveProperty('config.features.screenRecording', false);
+      expect(body).toHaveProperty('config.features.recordingMicrophone', false);
+      expect(body).toHaveProperty('config.maxRecordingDurationSeconds', 180);
     });
 
     it('resolves project screen recording settings over global settings', async () => {
@@ -1280,9 +1286,9 @@ describe('widget routes', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.config.features.screenRecording).toBe(true);
-      expect(body.config.features.recordingMicrophone).toBe(true);
-      expect(body.config.maxRecordingDurationSeconds).toBe(90);
+      expect(body).toHaveProperty('config.features.screenRecording', true);
+      expect(body).toHaveProperty('config.features.recordingMicrophone', true);
+      expect(body).toHaveProperty('config.maxRecordingDurationSeconds', 90);
     });
 
     it('returns project-specific settings when available', async () => {
@@ -1303,9 +1309,9 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.theme).toBe('dark');
-      expect(body.config.position).toBe('bottom-left');
-      expect(body.config.buttonText.project).toEqual({ en: 'Custom Text' });
+      expect(body).toHaveProperty('config.theme', 'dark');
+      expect(body).toHaveProperty('config.position', 'bottom-left');
+      expect(body).toHaveProperty('config.buttonText.project', { en: 'Custom Text' });
     });
 
     it('preserves explicit null for nullable fields in project settings', async () => {
@@ -1326,9 +1332,9 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.buttonIcon).toBeNull();
-      expect(body.config.buttonText.project).toBeNull();
-      expect(body.config.tooltipText.project).toBeNull();
+      expect(body).toHaveProperty('config.buttonIcon', null);
+      expect(body).toHaveProperty('config.buttonText.project', null);
+      expect(body).toHaveProperty('config.tooltipText.project', null);
     });
 
     it('falls back to global settings when project settings not set', async () => {
@@ -1352,11 +1358,11 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.theme).toBe('system');
-      expect(body.config.position).toBe('bottom-right');
-      expect(body.config.features.screenRecording).toBe(true);
-      expect(body.config.features.recordingMicrophone).toBe(true);
-      expect(body.config.maxRecordingDurationSeconds).toBe(240);
+      expect(body).toHaveProperty('config.theme', 'auto');
+      expect(body).toHaveProperty('config.position', 'bottom-right');
+      expect(body).toHaveProperty('config.features.screenRecording', true);
+      expect(body).toHaveProperty('config.features.recordingMicrophone', true);
+      expect(body).toHaveProperty('config.maxRecordingDurationSeconds', 240);
     });
 
     it('exposes the global language block when project has no override', async () => {
@@ -1372,7 +1378,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
+      expect(body).toHaveProperty('config.language', { mode: 'manual', defaultLanguage: 'de' });
     });
 
     it('treats a cleared (null) project language as no override', async () => {
@@ -1388,7 +1394,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.language).toEqual({ mode: 'auto', defaultLanguage: 'fr' });
+      expect(body).toHaveProperty('config.language', { mode: 'auto', defaultLanguage: 'fr' });
     });
 
     it('exposes configured language block when project has one', async () => {
@@ -1405,7 +1411,7 @@ describe('widget routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
+      expect(body).toHaveProperty('config.language', { mode: 'manual', defaultLanguage: 'de' });
     });
   });
 });

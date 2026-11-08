@@ -26,7 +26,7 @@ beforeEach(() => {
 
   settingsRepo.updateNested = async (key, payload) => {
     updateNestedCalls.push({ key, payload });
-    return true;
+    return settingsRepo.getAll();
   };
   settingsRepo.getAll = async () =>
     ({
@@ -102,7 +102,7 @@ describe('brandingService.getBrandingConfig', () => {
     };
     const result = await brandingService.getBrandingConfig();
     expect(result.success).toBe(false);
-    expect(result.code).toBe('GET_FAILED');
+    expect(result).toHaveProperty('code', 'GET_FAILED');
   });
 });
 
@@ -124,6 +124,6 @@ describe('brandingService.updateWidgetPrimaryColors', () => {
     };
     const result = await brandingService.updateWidgetPrimaryColors({ lightButtonColor: '#112233' });
     expect(result.success).toBe(false);
-    expect(result.code).toBe('UPDATE_FAILED');
+    expect(result).toHaveProperty('code', 'UPDATE_FAILED');
   });
 });

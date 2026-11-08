@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { brandingService } from '../../../src/server/services/branding.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
@@ -165,7 +165,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -181,7 +181,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -197,7 +197,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -214,7 +214,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -231,7 +231,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -244,7 +244,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -257,7 +257,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -270,7 +270,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 
@@ -283,7 +283,7 @@ describe('branding routes - EE features (returns 402)', () => {
       });
       expect(res.status).toBe(402);
       const body = await res.json();
-      expect(body.code).toBe('EE_REQUIRED');
+      expect(body).toHaveProperty('code', 'EE_REQUIRED');
     });
   });
 });

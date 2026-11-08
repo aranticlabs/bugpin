@@ -8,7 +8,8 @@ import { shouldSkipRecordingConsent, type ConsentMode } from './ScreenCaptureCon
 import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
-import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
+import { captureScreenshot } from '../capture/screenshot.js';
+import { dataUrlToBlob } from '../lib/data-url.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
 import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';

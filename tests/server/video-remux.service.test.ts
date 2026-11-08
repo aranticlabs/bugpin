@@ -185,18 +185,18 @@ describe('remuxRecording', () => {
     it(`preserves every track and packet in ${fixture.filename}`, async () => {
       const data = await Bun.file(join(fixturesDir, fixture.filename)).bytes();
       const sourceTracks = await inspectTracks(data);
-      expect(sourceTracks.map(({ type, packetCount }) => ({ type, packetCount }))).toEqual(
-        fixture.tracks
-      );
+      expect(sourceTracks.map(({ type, packetCount }) => ({ type, packetCount }))).toEqual([
+        ...fixture.tracks,
+      ]);
 
       const result = await remuxRecording({ data, mimeType: fixture.mimeType });
       expect(result.success).toBe(true);
       if (!result.success) return;
 
       const outputTracks = await inspectTracks(result.value);
-      expect(outputTracks.map(({ type, packetCount }) => ({ type, packetCount }))).toEqual(
-        fixture.tracks
-      );
+      expect(outputTracks.map(({ type, packetCount }) => ({ type, packetCount }))).toEqual([
+        ...fixture.tracks,
+      ]);
       expect(outputTracks.every((track) => track.duration > 0)).toBe(true);
 
       if (fixture.mimeType === 'video/mp4') {

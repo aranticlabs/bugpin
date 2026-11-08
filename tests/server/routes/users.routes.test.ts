@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { usersRoutes } from '../../../src/server/routes/api/users';
 import { usersService } from '../../../src/server/services/users.service';
 import { authService } from '../../../src/server/services/auth.service';
