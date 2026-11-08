@@ -18,7 +18,7 @@ import { Result } from '../../src/server/utils/result';
 import { config } from '../../src/server/config';
 import { logger } from '../../src/server/utils/logger';
 import type { Report, ReportMetadata, Project, AppSettings } from '../../src/shared/types';
-import type { EEHooks } from '../../src/server/types/ee-plugin';
+import { createDefaultHooks } from '../../src/server/types/ee-plugin';
 import type { CreateFileData } from '../../src/server/database/repositories/interfaces';
 
 // Valid file buffers with correct magic bytes for validation
@@ -66,6 +66,7 @@ const baseProject: Project = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
   id: 'rpt_1',
   projectId: 'prj_1',
   source: 'widget',
@@ -164,6 +165,7 @@ beforeEach(() => {
 
   // Mock EE hooks for webhook tracking
   registerEEHooks({
+    ...createDefaultHooks(),
     onReportCreated: async () => {
       webhooksCreatedCalls += 1;
     },
@@ -173,7 +175,7 @@ beforeEach(() => {
     onReportDeleted: async () => {
       webhooksDeletedCalls += 1;
     },
-  } as EEHooks);
+  });
 
   notificationsService.notifyNewReport = async () => {
     notifyNewReportCalls += 1;
@@ -208,6 +210,7 @@ beforeEach(() => {
   githubSyncService.getAutoSyncIntegration = async () => null;
   syncQueueService.enqueue = async (reportId, integrationId) => {
     syncQueueCalls.push({ reportId, integrationId });
+    return Result.ok(undefined);
   };
 
   reportHistoryService.record = async () => undefined;

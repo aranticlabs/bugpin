@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'bun:test';
+import type { ReportMetadata } from '../../src/shared/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -86,7 +87,7 @@ async function createUser(email = 'user@example.com') {
   });
 }
 
-const baseMetadata = {
+const baseMetadata: ReportMetadata = {
   url: 'https://example.com',
   browser: { name: 'Chrome', version: '1', userAgent: 'UA' },
   device: { type: 'desktop', os: 'macOS' },
@@ -295,7 +296,6 @@ describe('usersRepo', () => {
       name: 'Admin',
       isActive: false,
       email: 'Updated@Example.com',
-      avatarUrl: null,
       role: 'viewer',
     });
     expect(updated?.isActive).toBe(false);
@@ -910,7 +910,6 @@ describe('webhooksRepo', () => {
 
     const updated = await webhooksRepo.update(secondary.id, {
       isActive: false,
-      secret: null,
       events: ['report.created'],
     });
     expect(updated?.isActive).toBe(false);

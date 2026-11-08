@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { Hono } from '../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../src/server/node_modules/hono';
 import { serveAdmin, serveBranding } from '../../src/server/routes/static';
 import { widgetCors } from '../../src/server/middleware/cors';
 

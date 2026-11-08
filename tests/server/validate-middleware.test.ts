@@ -83,7 +83,7 @@ describe('validate middleware', () => {
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
     const payload = await (response as Response).json();
-    expect(payload.details[0]).toMatchObject({ field: 'name' });
+    expect(payload).toHaveProperty('details.0', expect.objectContaining({ field: 'name' }));
   });
 
   it('parses multipart form bodies', async () => {
@@ -112,7 +112,7 @@ describe('validate middleware', () => {
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
     const payload = await (response as Response).json();
-    expect(payload.details[0]).toMatchObject({ field: 'query.page' });
+    expect(payload).toHaveProperty('details.0', expect.objectContaining({ field: 'query.page' }));
   });
 
   it('stores validated params data', async () => {
@@ -138,7 +138,7 @@ describe('validate middleware', () => {
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
     const payload = await (response as Response).json();
-    expect(payload.details[0]).toMatchObject({ field: 'body' });
+    expect(payload).toHaveProperty('details.0', expect.objectContaining({ field: 'body' }));
   });
 
   it('validates project video upload limits', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { integrationsRoutes } from '../../../src/server/routes/api/integrations';
 import { integrationsService } from '../../../src/server/services/integrations.service';
 import { githubService } from '../../../src/server/services/integrations/github.service';
@@ -520,7 +520,7 @@ describe('integrations routes', () => {
     });
     expect(res.status).toBe(200);
     expect(queuedReports).toHaveLength(2);
-    expect((await res.json()).queued).toBe(2);
+    expect(await res.json()).toHaveProperty('queued', 2);
   });
 
   it('reports a rejected batch without claiming that reports were queued', async () => {
@@ -531,7 +531,7 @@ describe('integrations routes', () => {
       body: JSON.stringify({ reportIds: ['rpt_1', 'missing'] }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).success).toBe(false);
+    expect(await res.json()).toHaveProperty('success', false);
     expect(queuedReports).toEqual([]);
   });
 
@@ -543,7 +543,7 @@ describe('integrations routes', () => {
       body: JSON.stringify({ reportIds: ['rpt_1', 'rpt_1'] }),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).queued).toBe(1);
+    expect(await res.json()).toHaveProperty('queued', 1);
   });
 
   it('returns 400 when sync existing params are invalid', async () => {

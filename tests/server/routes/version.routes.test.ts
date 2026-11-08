@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { versionRoutes } from '../../../src/server/routes/api/version';
 import { authService } from '../../../src/server/services/auth.service';
 import { updateCheckService } from '../../../src/server/services/update-check.service';
@@ -156,8 +156,8 @@ describe('GET /version', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.checkEnabled).toBe(false);
-    expect(body.widgetPackage.incompatible).toBe(true);
+    expect(body).toHaveProperty('checkEnabled', false);
+    expect(body).toHaveProperty('widgetPackage.incompatible', true);
   });
 
   it('returns 500 when the service fails', async () => {

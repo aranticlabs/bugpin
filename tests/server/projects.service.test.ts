@@ -179,7 +179,7 @@ describe('projectsService.update', () => {
     const result = await projectsService.update('prj_1', { settings: { language: null } });
 
     expect(result.success).toBe(true);
-    expect(lastProjectUpdates?.settings?.language).toBeNull();
+    expect(lastProjectUpdates).toMatchObject({ settings: { language: null } });
   });
 
   it('returns UPDATE_FAILED when repo update fails', async () => {

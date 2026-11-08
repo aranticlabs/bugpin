@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
 import { settingsService } from '../../../src/server/services/settings.service';
 import { emailService } from '../../../src/server/services/email.service';

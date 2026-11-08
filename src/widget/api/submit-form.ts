@@ -1,4 +1,4 @@
-import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
+import { dataUrlToBlob, getExtensionFromDataUrl } from '../lib/data-url.js';
 import type { MediaMetadata } from '@shared/media-metadata';
 
 export type MediaData = { dataUrl: string; blob?: undefined } | { blob: Blob; dataUrl?: undefined };

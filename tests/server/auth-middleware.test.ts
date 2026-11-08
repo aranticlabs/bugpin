@@ -65,7 +65,7 @@ function createContext({
 
   return {
     req: {
-      header: (name: string) => headers.get(name),
+      header: (name: string) => headers.get(name) ?? undefined,
       raw: { headers },
       url: `https://example.com${path}`,
       path,
