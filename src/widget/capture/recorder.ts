@@ -81,6 +81,21 @@ export function isDisplayCaptureAllowed(): boolean {
   }
 }
 
+const SCREEN_ASPECT_TOLERANCE = 0.005;
+
+// Firefox reports no displaySurface, so a capture with the screen's aspect ratio counts as the whole
+// screen. Downscaling keeps the ratio, while window frames and the menu bar usually change it.
+export function isWholeScreenCapture(track: MediaStreamTrack | undefined): boolean {
+  if (!track) return false;
+  const { displaySurface, width, height } = track.getSettings();
+  if (displaySurface) return displaySurface === 'monitor';
+  const screenWidth = globalThis.screen?.width;
+  const screenHeight = globalThis.screen?.height;
+  if (!width || !height || !screenWidth || !screenHeight) return false;
+  const ratio = width / height / (screenWidth / screenHeight);
+  return Math.abs(ratio - 1) <= SCREEN_ASPECT_TOLERANCE;
+}
+
 export function isRecordingSupported(): boolean {
   return (
     typeof navigator !== 'undefined' &&
