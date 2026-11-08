@@ -135,6 +135,12 @@ export const invitationsService = {
       return Result.fail('User has already accepted the invitation', 'ALREADY_ACCEPTED');
     }
 
+    // Accepting an invitation sets a new password and signs in without a second factor,
+    // so only accounts that were invited and never activated may receive one.
+    if (!user.invitationSentAt) {
+      return Result.fail('User was not invited', 'NOT_INVITED');
+    }
+
     // Get settings for expiration
     const settings = await settingsRepo.getAll();
     const expirationDays = settings.invitationExpirationDays || 7;

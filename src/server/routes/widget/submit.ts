@@ -45,6 +45,9 @@ function holdSubmission(key: string): () => void {
   };
 }
 
+// The largest idle timeout Bun.serve accepts.
+const PROCESSING_IDLE_TIMEOUT_SECONDS = 255;
+
 interface RequestTimeoutServer {
   timeout(request: Request, seconds: number): void;
 }
@@ -155,10 +158,6 @@ widget.post(
       );
     }
 
-    // Recordings can wait in the remux queue without any bytes flowing, which the
-    // server-wide idle timeout would treat as a dead connection.
-    if (isRequestTimeoutServer(c.env)) c.env.timeout(c.req.raw, 0);
-
     // Get API key from header only
     const apiKey = c.req.header('x-api-key');
 
@@ -262,6 +261,18 @@ widget.post(
     const data = validation.data;
     const projectId = projectResult.value.id;
     const submissionKey = data.submissionId ? `${projectId}:${data.submissionId}` : null;
+
+    // Recordings can wait in the remux queue, and retries wait for the first attempt,
+    // without any bytes flowing. The server-wide idle timeout would treat that as a dead
+    // connection. The body is fully read by now, so a longer bound cannot hold a socket
+    // open for a client that never finishes sending.
+    const waitsWithoutTraffic =
+      mediaFiles.some((media) => media.isRecording) ||
+      (submissionKey !== null && submissionsInFlight.has(submissionKey));
+    if (waitsWithoutTraffic && isRequestTimeoutServer(c.env)) {
+      c.env.timeout(c.req.raw, PROCESSING_IDLE_TIMEOUT_SECONDS);
+    }
+
     if (submissionKey && data.submissionId) {
       for (
         let pending = submissionsInFlight.get(submissionKey);

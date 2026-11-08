@@ -10,6 +10,7 @@ vi.mock('../../api/client', () => ({
     get: vi.fn(),
     post: vi.fn(),
   },
+  onSetupRequired: () => () => undefined,
 }));
 
 vi.mock('sonner', () => ({

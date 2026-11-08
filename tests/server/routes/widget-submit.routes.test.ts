@@ -248,6 +248,81 @@ describe('widget submit request body limit', () => {
   });
 });
 
+describe('widget submit idle timeout', () => {
+  function createTimeoutEnv() {
+    const timeouts: number[] = [];
+    return {
+      timeouts,
+      env: {
+        timeout: (_request: Request, seconds: number) => {
+          timeouts.push(seconds);
+        },
+      },
+    };
+  }
+
+  it('keeps the server idle timeout for requests without a valid API key', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(res.status).toBe(401);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('keeps the server idle timeout for reports without a recording', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify(validSubmitBody),
+      },
+      env
+    );
+
+    expect(res.status).toBe(201);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('extends the idle timeout to a finite bound once a recording has been received', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(timeouts).toEqual([255]);
+  });
+});
+
 describe('widget routes', () => {
   describe('POST /widget/submit', () => {
     it('returns 401 when API key is missing', async () => {

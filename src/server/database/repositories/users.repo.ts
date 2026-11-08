@@ -363,6 +363,7 @@ export const usersRepo = {
       `UPDATE users SET ${sets.join(', ')}
        WHERE id = ?
          AND invitation_token = ?
+         AND invitation_sent_at IS NOT NULL
          AND invitation_accepted_at IS NULL`,
       params
     );
@@ -381,10 +382,17 @@ export const usersRepo = {
     const db = getDb();
     const now = new Date().toISOString();
 
-    db.run(
-      `UPDATE users SET invitation_token = ?, invitation_token_expires_at = ?, invitation_sent_at = ?, updated_at = ? WHERE id = ?`,
+    const result = db.run(
+      `UPDATE users SET invitation_token = ?, invitation_token_expires_at = ?, invitation_sent_at = ?, updated_at = ?
+       WHERE id = ?
+         AND invitation_sent_at IS NOT NULL
+         AND invitation_accepted_at IS NULL`,
       [token, expiresAt, now, now, id]
     );
+
+    if (result.changes === 0) {
+      return null;
+    }
 
     return this.findById(id);
   },
