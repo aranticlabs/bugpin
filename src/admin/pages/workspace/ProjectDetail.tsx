@@ -152,7 +152,7 @@ export function ProjectDetail() {
   }
 
   const tabList = (
-    <TabsList className="h-auto flex-wrap">
+    <TabsList variant="line">
       <TabsTrigger value="reports">Reports</TabsTrigger>
       {SETTINGS_TABS.map((item) => (
         <TabsTrigger key={item.value} value={item.value}>

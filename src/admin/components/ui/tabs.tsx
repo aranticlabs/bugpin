@@ -1,20 +1,35 @@
 import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '../../lib/utils';
 
 const Tabs = TabsPrimitive.Root;
 
+const tabsListVariants = cva('inline-flex items-center text-muted-foreground', {
+  variants: {
+    variant: {
+      default: 'h-9 justify-center rounded-lg bg-muted p-1',
+      line: [
+        'h-auto w-full justify-start gap-4 overflow-x-auto rounded-none bg-transparent p-0 shadow-[inset_0_-1px_0_var(--border)]',
+        '[&>button]:shrink-0 [&>button]:rounded-none [&>button]:border-b-2 [&>button]:border-transparent [&>button]:px-0 [&>button]:py-2',
+        '[&>button]:hover:text-foreground [&>button]:focus-visible:ring-inset [&>button]:focus-visible:ring-offset-0',
+        '[&>button[data-state=active]]:border-primary [&>button[data-state=active]]:bg-transparent [&>button[data-state=active]]:shadow-none',
+      ],
+    },
+  },
+  defaultVariants: {
+    variant: 'default',
+  },
+});
+
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>
+>(({ className, variant, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn(
-      'inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground',
-      className
-    )}
+    className={cn(tabsListVariants({ variant }), className)}
     {...props}
   />
 ));
