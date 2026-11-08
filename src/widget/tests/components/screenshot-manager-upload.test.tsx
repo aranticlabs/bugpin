@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { render } from 'preact';
 import {
   downloadMedia,
-  formatVideoMeta,
+  formatMediaMeta,
   ScreenshotManager,
   type CapturedMedia,
 } from '../../components/ScreenshotManager';
@@ -132,7 +132,7 @@ afterEach(() => {
 describe('ScreenshotManager uploads', () => {
   it('formats video size for the active locale', () => {
     setLocale('fr');
-    const meta = formatVideoMeta({
+    const meta = formatMediaMeta({
       id: 'video',
       blob: new Blob([new Uint8Array(1024 * 1024)]),
       timestamp: new Date(),

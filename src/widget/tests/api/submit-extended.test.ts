@@ -327,6 +327,41 @@ describe('submit API (offline + errors)', () => {
 });
 
 describe('submit API (media + config)', () => {
+  it('pairs metadata with filenames across mixed uploads and recordings', async () => {
+    const { buildSubmitFormData } = await import('../../api/submit-form');
+    const { formData } = buildSubmitFormData({
+      title: 'Mixed media',
+      priority: 'medium',
+      metadata: baseMetadata,
+      media: [
+        {
+          blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+          mimeType: 'video/webm',
+          source: 'recording',
+          recordingQuality: 'high',
+          timestamp: new Date('2026-11-08T14:00:00Z'),
+          width: 1920,
+          height: 1080,
+          durationMs: 24000,
+        },
+        { dataUrl: 'data:image/png;base64,AA==', mimeType: 'image/png', width: 800, height: 600 },
+        { blob: new Blob([new Uint8Array([2])]), mimeType: 'video/mp4', recordingQuality: 'low' },
+      ],
+    });
+    expect(JSON.parse(formData.get('data') as string).mediaMetadata).toEqual([
+      {
+        filename: 'recording-0.webm',
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        width: 1920,
+        height: 1080,
+        durationMs: 24000,
+        recordingQuality: 'high',
+      },
+      { filename: 'screenshot-1.png', width: 800, height: 600 },
+      { filename: 'video-2.mp4' },
+    ]);
+  });
+
   it('uploads media attachments and annotations', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
 

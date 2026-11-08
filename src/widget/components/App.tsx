@@ -142,12 +142,13 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     const item: CapturedMedia = {
       id,
       blob: result.blob,
-      timestamp: new Date(),
+      timestamp: result.capturedAt ? new Date(result.capturedAt) : new Date(),
       annotated: false,
       mimeType: result.mimeType,
       width: result.width,
       height: result.height,
       durationMs: result.durationMs,
+      recordingQuality: result.recordingQuality,
       source: 'recording',
     };
     const nextMedia = [...mediaRef.current, item];
@@ -228,6 +229,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           annotated: false,
           mimeType: recovered.mimeType,
           durationMs: recovered.durationMs,
+          recordingQuality: recovered.recordingQuality,
+          width: recovered.width,
+          height: recovered.height,
           source: 'recording',
           recovered: true,
         };
@@ -806,6 +810,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
           recordingEnabled={recordingEnabled}
+          recordingQuality={config.recordingQuality}
           allowRecordingMicrophone={config.allowRecordingMicrophone}
           includeMicrophone={includeMicrophone}
           onIncludeMicrophoneChange={setIncludeMicrophone}

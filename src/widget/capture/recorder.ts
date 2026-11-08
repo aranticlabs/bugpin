@@ -12,6 +12,8 @@ export interface RecordingResult {
   width: number;
   height: number;
   hasAudio: boolean;
+  recordingQuality?: RecordingQuality;
+  capturedAt?: string;
 }
 
 export type AutoStopReason = 'duration' | 'size' | 'ended' | 'error';
@@ -187,6 +189,7 @@ export function startRecording(
   }
 
   const chunks: Blob[] = [];
+  const capturedAt = new Date().toISOString();
   const videoTrack = stream.getVideoTracks()[0];
   let lastWidth = 0;
   let lastHeight = 0;
@@ -264,6 +267,8 @@ export function startRecording(
       width: lastWidth,
       height: lastHeight,
       hasAudio,
+      recordingQuality: options.quality ?? DEFAULT_RECORDING_QUALITY,
+      capturedAt,
     });
   };
 

@@ -653,7 +653,7 @@ describe('screen recorder', () => {
     expect(microphone.stopCount).toBeGreaterThan(0);
   });
 
-  it('records at the bitrate of the chosen quality', () => {
+  it('records at the bitrate of the chosen quality and preserves the preset', async () => {
     FakeMediaRecorder.supported.add('video/webm');
     const { stream } = makeVideoStream();
 
@@ -665,7 +665,11 @@ describe('screen recorder', () => {
 
     const [recorder] = FakeMediaRecorder.instances.slice(-1);
     expect(recorder.options.videoBitsPerSecond).toBe(4_000_000);
-    session.discard();
+    session.stop();
+    expect(await session.finished).toMatchObject({
+      recordingQuality: 'high',
+      capturedAt: expect.any(String),
+    });
   });
 });
 

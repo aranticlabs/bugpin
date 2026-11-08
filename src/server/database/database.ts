@@ -276,6 +276,9 @@ export async function initSchema(): Promise<void> {
       size_bytes INTEGER NOT NULL,
       width INTEGER,
       height INTEGER,
+      captured_at TEXT,
+      duration_ms INTEGER,
+      recording_quality TEXT CHECK(recording_quality IN ('low', 'standard', 'high')),
       created_at TEXT DEFAULT (datetime('now')) NOT NULL
     )
   `);
@@ -480,6 +483,7 @@ export async function runMigrations(): Promise<void> {
   if (!db) {
     throw new Error('Database not initialized');
   }
+  const database = db;
 
   // Create migrations table if it doesn't exist
   db.exec(`
@@ -519,8 +523,10 @@ export async function runMigrations(): Promise<void> {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
 
       try {
-        db.exec(sql);
-        db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
+        database.transaction(() => {
+          database.exec(sql);
+          database.run('INSERT INTO migrations (name) VALUES (?)', [file]);
+        })();
         logger.info('Migration applied successfully', { file });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -528,6 +534,13 @@ export async function runMigrations(): Promise<void> {
           (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
           (file === '006_add_user_password_fields.sql' &&
             message.includes('duplicate column name')) ||
+          (file === '008_add_media_metadata.sql' &&
+            message.includes('duplicate column name') &&
+            ['captured_at', 'duration_ms', 'recording_quality'].every((column) =>
+              (database.query('PRAGMA table_info(files)').all() as { name: string }[]).some(
+                ({ name }) => name === column
+              )
+            )) ||
           (file === '004_add_report_history.sql' && message.includes('already exists'));
         if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);

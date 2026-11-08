@@ -74,6 +74,10 @@ const ja: WidgetCatalog = {
   'screenshot.action.download': 'ダウンロード',
   'screenshot.action.remove': '削除',
   'screenshot.helperText': '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）',
+  'recording.quality.low': '低',
+  'recording.quality.standard': '標準',
+  'recording.quality.high': '高',
+  'recording.quality.setting': '録画品質：{quality}',
   'recording.helperText': '対応形式：MP4、WebM、MOV（最大{videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '対応していない画像形式です：{type}',

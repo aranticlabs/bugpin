@@ -69,7 +69,9 @@ import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
 import { ActivityDialog } from '../../components/report/ActivityDialog';
 import { useReportHistory } from '../../hooks/useReportHistory';
-import type { AppSettings, Project, Report, ReportSource, User } from '@shared/types';
+import type { AppSettings, FileRecord, Project, Report, ReportSource, User } from '@shared/types';
+import { formatMediaDetails, type MediaMetadata } from '@shared/media-metadata';
+import { RECORDING_QUALITY_LABELS } from '@shared/recording-quality';
 
 const UNASSIGNED_VALUE = '__unassigned__';
 
@@ -100,6 +102,7 @@ export function ReportDetail() {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ url: string; filename: string } | null>(null);
+  const [videoMetadata, setVideoMetadata] = useState<Record<string, MediaMetadata>>({});
   const [composeMessage, setComposeMessage] = useState('');
   const [composeCcSender, setComposeCcSender] = useState(false);
   const [resolveMessage, setResolveMessage] = useState('');
@@ -256,7 +259,7 @@ export function ReportDetail() {
 
   const { report, files } = data as {
     report: Report;
-    files: Array<{ id: string; mimeType: string; filename: string }>;
+    files: FileRecord[];
   };
   const consoleErrors = report.metadata.consoleErrors ?? [];
   const networkErrors = report.metadata.networkErrors ?? [];
@@ -471,19 +474,43 @@ export function ReportDetail() {
               </CardHeader>
               <CardContent>
                 <div className={`grid gap-4 ${files.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  {files.map((file: { id: string; mimeType: string; filename: string }) => {
+                  {files.map((file) => {
                     const fileUrl = `/api/reports/${id}/files/${file.id}`;
                     const isVideo = file.mimeType?.startsWith('video/');
+                    const metadata = { ...file, ...videoMetadata[file.id] };
+                    const timestamp = file.capturedAt ?? file.createdAt;
+                    const details = [
+                      file.recordingQuality && RECORDING_QUALITY_LABELS[file.recordingQuality],
+                      formatMediaDetails(metadata, 'en'),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
 
                     return (
-                      <div key={file.id} className="relative group">
+                      <div
+                        key={file.id}
+                        className="relative group min-w-0 overflow-hidden rounded-lg border bg-background"
+                      >
                         {isVideo ? (
                           <video
                             src={fileUrl}
                             controls
                             preload="metadata"
-                            className="w-full rounded-lg border bg-black object-contain"
+                            className="w-full bg-black object-contain"
                             style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
+                            onLoadedMetadata={(event) => {
+                              const video = event.currentTarget;
+                              setVideoMetadata((current) => ({
+                                ...current,
+                                [file.id]: {
+                                  width: video.videoWidth || file.width,
+                                  height: video.videoHeight || file.height,
+                                  durationMs: Number.isFinite(video.duration)
+                                    ? Math.round(video.duration * 1000)
+                                    : file.durationMs,
+                                },
+                              }));
+                            }}
                           />
                         ) : (
                           <button
@@ -494,12 +521,12 @@ export function ReportDetail() {
                                 filename: file.filename || `screenshot-${file.id}.png`,
                               })
                             }
-                            className="w-full cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-primary rounded-lg"
+                            className="relative block w-full cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary rounded-lg"
                           >
                             <img
                               src={fileUrl}
                               alt={file.filename || 'Screenshot'}
-                              className="w-full rounded-lg border object-contain bg-muted"
+                              className="w-full object-contain bg-muted"
                               style={{ maxHeight: files.length > 1 ? '200px' : '400px' }}
                             />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
@@ -507,6 +534,17 @@ export function ReportDetail() {
                             </div>
                           </button>
                         )}
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
+                          {timestamp && (
+                            <span title={new Date(timestamp).toLocaleString()}>
+                              {new Date(timestamp).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          )}
+                          <span className="min-w-0 break-words tabular-nums">{details}</span>
+                        </div>
                         <a
                           href={fileUrl}
                           download={file.filename || `screenshot-${file.id}`}

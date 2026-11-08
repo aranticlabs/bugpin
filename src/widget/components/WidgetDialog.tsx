@@ -7,6 +7,7 @@ import { ScreenCaptureConsentDialog, type ConsentMode } from './ScreenCaptureCon
 import { ScreenRecordingPanel } from './ScreenRecordingPanel.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import type { RecordingQuality } from '@shared/recording-quality';
 
 export interface FormData {
   title: string;
@@ -46,6 +47,7 @@ interface WidgetDialogProps {
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
   recordingEnabled?: boolean;
+  recordingQuality?: RecordingQuality;
   allowRecordingMicrophone?: boolean;
   includeMicrophone?: boolean;
   onIncludeMicrophoneChange?: (value: boolean) => void;
@@ -92,6 +94,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   oversizedCapture,
   onDismissOversizedCapture,
   recordingEnabled = false,
+  recordingQuality,
   allowRecordingMicrophone = false,
   includeMicrophone = false,
   onIncludeMicrophoneChange = () => undefined,
@@ -335,6 +338,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 <ScreenRecordingPanel
                   clips={videos}
                   recordingEnabled={recordingEnabled}
+                  recordingQuality={recordingQuality}
                   onRecord={onStartRecording}
                   onUpload={onAddMedia}
                   onRemove={onRemoveMedia}

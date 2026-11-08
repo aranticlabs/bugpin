@@ -96,11 +96,24 @@ describe('recording store', () => {
       ownerEmail: ' Owner@Example.com ',
       mimeType: 'video/webm;codecs=vp9',
       hasAudio: true,
+      recordingQuality: 'high',
+      width: 1920,
+      height: 1080,
     });
     expect(sessionId).not.toBeNull();
 
-    await recordingStore.addChunk(sessionId as string, 1, new Blob([new Uint8Array([3, 4])]), 2000);
-    await recordingStore.addChunk(sessionId as string, 0, new Blob([new Uint8Array([1, 2])]), 1000);
+    await recordingStore.addChunk(
+      sessionId as string,
+      1,
+      new Blob([new Uint8Array([3, 4])]),
+      2000.4
+    );
+    await recordingStore.addChunk(
+      sessionId as string,
+      0,
+      new Blob([new Uint8Array([1, 2])]),
+      1000.7
+    );
     localStorage.setItem(`${HEARTBEAT_KEY_PREFIX}${apiKey}`, '1');
 
     // @ts-expect-error - Query params simulate the page after a reload.
@@ -109,10 +122,24 @@ describe('recording store', () => {
     expect(recovered).toMatchObject({
       sessionId,
       mimeType: 'video/webm',
-      durationMs: 2000,
+      durationMs: 2000.4,
       hasAudio: true,
+      recordingQuality: 'high',
+      width: 1920,
+      height: 1080,
     });
     expect([...new Uint8Array(await recovered!.blob.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+    const { buildSubmitFormData } = await import('../../api/submit-form');
+    const { formData } = buildSubmitFormData({
+      title: 'Recovered recording',
+      priority: 'medium',
+      metadata: {},
+      media: [{ ...recovered!, source: 'recording' }],
+    });
+    expect(JSON.parse(formData.get('data') as string).mediaMetadata[0]).toMatchObject({
+      durationMs: 2000,
+      recordingQuality: 'high',
+    });
   });
 
   it('deletes a pending recording owned by another reporter', async () => {

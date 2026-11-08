@@ -70,6 +70,10 @@ const zh: WidgetCatalog = {
   'screenshot.action.download': '下载',
   'screenshot.action.remove': '移除',
   'screenshot.helperText': '支持格式：PNG、JPG、GIF、WebP（最大 {imageSize}MB）',
+  'recording.quality.low': '低',
+  'recording.quality.standard': '标准',
+  'recording.quality.high': '高',
+  'recording.quality.setting': '录制质量：{quality}',
   'recording.helperText': '支持格式：MP4、WebM、MOV（最大 {videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '不支持的图片格式：{type}',

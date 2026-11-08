@@ -433,11 +433,23 @@ describe('reportsService.create', () => {
           mimeType: 'video/mp4',
           data: corruptRecording,
           isRecording: true,
+          recordingQuality: 'high',
+          capturedAt: '2026-11-08T14:00:00.000Z',
+          durationMs: 24000,
+          width: 1920,
+          height: 1080,
         },
       ],
     });
 
     expect(result.success).toBe(true);
+    expect(fileCreateRecords[0]).toMatchObject({
+      recordingQuality: 'high',
+      capturedAt: '2026-11-08T14:00:00.000Z',
+      durationMs: 24000,
+      width: 1920,
+      height: 1080,
+    });
     expect(fileCreateRecords).toHaveLength(1);
     expect(fileCreateRecords[0]?.sizeBytes).toBe(corruptRecording.length);
     expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(corruptRecording);

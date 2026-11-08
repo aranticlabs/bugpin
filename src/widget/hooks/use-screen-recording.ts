@@ -174,6 +174,9 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
         ownerEmail,
         mimeType: session.mimeType,
         hasAudio: session.hasAudio,
+        recordingQuality: quality,
+        width: pending.stream.getVideoTracks()[0]?.getSettings().width,
+        height: pending.stream.getVideoTracks()[0]?.getSettings().height,
       });
     } catch (error) {
       console.error('[BugPin] Failed to start recording:', error);

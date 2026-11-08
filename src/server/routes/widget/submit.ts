@@ -2,7 +2,8 @@ import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { getEEHooks } from '../../utils/ee-hooks.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { reportsService } from '../../services/reports.service.js';
+import { reportsService, type MediaFile } from '../../services/reports.service.js';
+import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import { projectsService } from '../../services/projects.service.js';
 import { settingsService } from '../../services/settings.service.js';
 import { privacyPolicyService } from '../../services/privacy-policy.service.js';
@@ -63,6 +64,18 @@ function isRequestTimeoutServer(value: unknown): value is RequestTimeoutServer {
 // Validation Schemas
 
 const submitReportSchema = z.object({
+  mediaMetadata: z
+    .array(
+      z.object({
+        filename: z.string().min(1).max(255),
+        capturedAt: z.string().datetime().optional(),
+        width: z.number().int().positive().max(65535).optional(),
+        height: z.number().int().positive().max(65535).optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
+      })
+    )
+    .optional(),
   title: z.string().min(4, 'Title must be at least 4 characters').max(200),
   description: z.string().optional(),
   priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).default('medium'),
@@ -326,12 +339,7 @@ widget.post(
       const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
       const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
 
-      const media: Array<{
-        data: Buffer;
-        filename: string;
-        mimeType: string;
-        isRecording: boolean;
-      }> = [];
+      const media: MediaFile[] = [];
       for (const { file, isRecording } of mediaFiles) {
         const mimeType = normalizeMimeType(file.type);
         // Reject unsupported types before copying file contents.
@@ -380,11 +388,14 @@ widget.post(
 
         try {
           const buffer = Buffer.from(await file.arrayBuffer());
+          const metadata = data.mediaMetadata?.find((item) => item.filename === file.name);
           media.push({
+            ...metadata,
             data: buffer,
             filename: file.name,
             mimeType,
             isRecording,
+            recordingQuality: isRecording ? metadata?.recordingQuality : undefined,
           });
         } catch (error) {
           logger.error('Failed to process media file', error, { filename: file.name });

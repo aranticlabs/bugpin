@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { config } from '../../src/server/config';
+import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import {
   closeDatabase,
   getDb,
@@ -154,6 +155,82 @@ describe('database lifecycle', () => {
     }
   });
 
+  it('upgrades file metadata without changing older attachments and persists recording quality', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-media-'));
+    Object.assign(config, { dataDir: baseDir, dbPath: path.join(baseDir, 'bugpin.db') });
+    try {
+      await initDatabase();
+      await initSchema();
+      const db = getDb();
+      db.exec(`
+        ALTER TABLE files DROP COLUMN captured_at;
+        ALTER TABLE files DROP COLUMN duration_ms;
+        ALTER TABLE files DROP COLUMN recording_quality;
+        INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('media-project', 'Media', 'media-hash', 'media-key');
+        INSERT INTO reports (id, project_id, title, metadata) VALUES ('media-report', 'media-project', 'Media report', '{}');
+        INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes) VALUES ('legacy', 'media-report', 'video', 'old.webm', 'old.webm', 'video/webm', 1);
+      `);
+      await runMigrations();
+      expect(await filesRepo.findById('legacy')).toMatchObject({
+        recordingQuality: undefined,
+        durationMs: undefined,
+        capturedAt: undefined,
+      });
+      const metadata = {
+        recordingQuality: 'high' as const,
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        durationMs: 24000,
+        width: 1920,
+        height: 1080,
+      };
+      const file = await filesRepo.create({
+        reportId: 'media-report',
+        type: 'video',
+        filename: 'clip.webm',
+        path: 'clip.webm',
+        mimeType: 'video/webm',
+        sizeBytes: 1024,
+        ...metadata,
+      });
+      expect(await filesRepo.findById(file.id)).toMatchObject(metadata);
+      await runMigrations();
+      expect(await filesRepo.findById(file.id)).toMatchObject(metadata);
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('rolls back a partially applied metadata migration without marking it complete', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-media-partial-'));
+    Object.assign(config, { dataDir: baseDir, dbPath: path.join(baseDir, 'bugpin.db') });
+    try {
+      await initDatabase();
+      await initSchema();
+      const db = getDb();
+      db.exec(`
+        ALTER TABLE files DROP COLUMN captured_at;
+        ALTER TABLE files DROP COLUMN recording_quality;
+      `);
+      await expect(runMigrations()).rejects.toThrow('duplicate column name: duration_ms');
+      const columns = (db.query('PRAGMA table_info(files)').all() as { name: string }[]).map(
+        ({ name }) => name
+      );
+      expect(columns).not.toContain('captured_at');
+      expect(columns).not.toContain('recording_quality');
+      expect(
+        db.query('SELECT name FROM migrations WHERE name = ?').get('008_add_media_metadata.sql')
+      ).toBeNull();
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
   it('runs migrations when none exist', async () => {
     await initDatabase();
     await initSchema();
@@ -187,6 +264,7 @@ describe('database lifecycle', () => {
       db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY);
         CREATE TABLE users (id TEXT PRIMARY KEY);
+        CREATE TABLE files (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,
@@ -233,6 +311,7 @@ describe('database lifecycle', () => {
         CREATE TABLE projects (id TEXT PRIMARY KEY);
         CREATE TABLE users (id TEXT PRIMARY KEY);
         INSERT INTO users (id) VALUES ('usr_existing');
+        CREATE TABLE files (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,

@@ -156,7 +156,10 @@ export interface ISessionsRepository {
 
 // File Repository Interface
 
-export interface CreateFileData {
+export interface CreateFileData extends Pick<
+  FileRecord,
+  'capturedAt' | 'durationMs' | 'recordingQuality'
+> {
   reportId: string;
   type: FileType;
   filename: string;

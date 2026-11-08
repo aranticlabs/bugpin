@@ -1,4 +1,5 @@
 import type { RecordingQuality } from './recording-quality';
+import type { MediaMetadata } from './media-metadata';
 import type { PasswordPolicy } from './password-policy';
 
 // Locale Types
@@ -368,7 +369,7 @@ export interface Session {
 
 // File Types
 
-export interface FileRecord {
+export interface FileRecord extends MediaMetadata {
   id: string;
   reportId: string;
   type: FileType;
@@ -376,8 +377,6 @@ export interface FileRecord {
   path: string;
   mimeType: string;
   sizeBytes: number;
-  width?: number;
-  height?: number;
   createdAt: string;
 }
 
