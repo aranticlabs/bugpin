@@ -353,6 +353,16 @@ function describeActivity(item: DashboardActivityItem): string {
       return `set priority to ${priorityName(item.newValue)} on`;
     case 'assignee_changed':
       return item.newValue ? `assigned ${item.newDisplay ?? 'someone'} to` : 'unassigned';
+    case 'owner_assigned':
+      return 'assigned a reporter to';
+    case 'owner_removed':
+      return 'removed the reporter from';
+    case 'claimable_set':
+      return 'allowed a reporter to claim';
+    case 'message_hidden':
+      return 'hid a message on';
+    case 'message_unhidden':
+      return 'unhid a message on';
   }
 }
 

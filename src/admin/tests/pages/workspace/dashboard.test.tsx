@@ -386,6 +386,15 @@ describe('Dashboard Page', () => {
                 userId: 'user-2',
                 userName: 'Editor User',
               }),
+              ...(
+                [
+                  'owner_assigned',
+                  'owner_removed',
+                  'claimable_set',
+                  'message_hidden',
+                  'message_unhidden',
+                ] as const
+              ).map((action) => entry({ action, userName: 'Editor User' })),
             ],
           },
         })
@@ -395,5 +404,14 @@ describe('Dashboard Page', () => {
     expect(await screen.findByText('Widget')).toBeInTheDocument();
     expect(screen.getByText('Deleted user')).toBeInTheDocument();
     expect(screen.getByText('set priority to highest on')).toBeInTheDocument();
+    for (const label of [
+      'assigned a reporter to',
+      'removed the reporter from',
+      'allowed a reporter to claim',
+      'hid a message on',
+      'unhid a message on',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
   });
 });

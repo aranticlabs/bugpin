@@ -17,7 +17,7 @@ import type {
   PrivacySettings,
   DiagnosticSettings,
 } from '@shared/types';
-import { DEFAULT_DIAGNOSTIC_SETTINGS } from '@shared/types';
+import { DEFAULT_DIAGNOSTIC_SETTINGS, DEFAULT_REPORTER_PORTAL_LIMITS } from '@shared/types';
 import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
@@ -166,6 +166,8 @@ export const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
 const KEY_MAP: Record<string, string> = {
   appName: 'app_name',
   appUrl: 'app_url',
+  portalBaseUrl: 'portal_base_url',
+  reporterPortalLimits: 'reporter_portal_limits',
   retentionDays: 'retention_days',
   rateLimitPerMinute: 'rate_limit_per_minute',
   sessionMaxAgeDays: 'session_max_age_days',
@@ -333,6 +335,11 @@ function readAll(): AppSettings {
     // System settings
     appName: (settings.appName as string) ?? 'BugPin',
     appUrl: (settings.appUrl as string) ?? '',
+    portalBaseUrl: (settings.portalBaseUrl as string) ?? '',
+    reporterPortalLimits: {
+      ...DEFAULT_REPORTER_PORTAL_LIMITS,
+      ...(settings.reporterPortalLimits as Partial<AppSettings['reporterPortalLimits']>),
+    },
     retentionDays: (settings.retentionDays as number) ?? 90,
     rateLimitPerMinute: (settings.rateLimitPerMinute as number) ?? 10,
     sessionMaxAgeDays: (settings.sessionMaxAgeDays as number) ?? 7,

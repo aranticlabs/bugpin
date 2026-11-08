@@ -28,7 +28,7 @@ export interface LauncherTextBundle {
 
 export type ReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type ReportPriority = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
-export type ReportSource = 'widget' | 'manual';
+export type ReportSource = 'widget' | 'manual' | 'portal';
 
 /** URL/query value for filtering reports with no assignee */
 export const UNASSIGNED_FILTER = '__unassigned__';
@@ -114,7 +114,91 @@ export interface UserPreferences {
 }
 
 export type ReportHistoryAction =
-  'created' | 'status_changed' | 'priority_changed' | 'assignee_changed';
+  | 'created'
+  | 'status_changed'
+  | 'priority_changed'
+  | 'assignee_changed'
+  | 'owner_assigned'
+  | 'owner_removed'
+  | 'claimable_set'
+  | 'message_hidden'
+  | 'message_unhidden';
+
+export type ReporterAuthTokenSource = 'request' | 'confirmation' | 'invitation';
+export type ReporterSuppressionSource = 'portal' | 'unsubscribe';
+
+export interface Reporter {
+  id: string;
+  email: string;
+  displayName: string;
+  locale: string;
+  suspendedAt: string | null;
+  suspendedByUserId: string | null;
+  sessionsRevokedAt: string | null;
+  sessionsRevokedByUserId: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReporterSession {
+  id: string;
+  tokenHash: string;
+  reporterId: string;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  absoluteExpiresAt: string;
+  revokedAt: string | null;
+}
+
+export interface ReporterAuthToken {
+  id: string;
+  tokenHash: string;
+  email: string;
+  purpose: 'login';
+  source: ReporterAuthTokenSource;
+  reportId: string | null;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface ReporterEmailSuppression {
+  email: string;
+  source: ReporterSuppressionSource;
+  createdAt: string;
+}
+
+export interface ReporterPortalProjectSettings {
+  enabled: boolean;
+  allowNewFeedback: boolean;
+}
+
+export interface ReporterPortalLimits {
+  loginRequestsPerEmailPer15Min: number;
+  loginRequestsPerIpPer15Min: number;
+  loginExchangesPerIpPer15Min: number;
+  messagesPerReporterPerMinute: number;
+  messagesPerReporterPerDay: number;
+  submissionsPerReporterPerHour: number;
+  submissionsPerReporterPerDay: number;
+  sseStreamsPerSession: number;
+  uploadMbPerReporterPerDay: number;
+}
+
+export const DEFAULT_REPORTER_PORTAL_LIMITS: ReporterPortalLimits = {
+  loginRequestsPerEmailPer15Min: 5,
+  loginRequestsPerIpPer15Min: 20,
+  loginExchangesPerIpPer15Min: 10,
+  messagesPerReporterPerMinute: 10,
+  messagesPerReporterPerDay: 100,
+  submissionsPerReporterPerHour: 5,
+  submissionsPerReporterPerDay: 20,
+  sseStreamsPerSession: 3,
+  uploadMbPerReporterPerDay: 200,
+};
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
@@ -223,6 +307,13 @@ export interface Report {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale: LocaleCode;
+  reporterId?: string;
+  claimableEmail?: string;
+  originalDescription?: string;
+  originalDescriptionBackfilled?: boolean;
+  ownerSeenAt?: string;
+  lastReporterActivityAt?: string;
+  reporterActivitySeenAt?: string;
   assignedTo?: string;
   assignee?: ReportAssignee;
   customFields?: Record<string, unknown>;
@@ -397,6 +488,7 @@ export interface ProjectLanguageSettings {
 // Project Types
 
 export interface ProjectSettings {
+  reporterPortal?: ReporterPortalProjectSettings;
   defaultAssigneeUserId?: string | null;
   widgetLauncherButton?: WidgetLauncherButtonSettings;
   widgetDialog?: WidgetDialogSettings;
@@ -752,6 +844,8 @@ export interface AppSettings {
   // System settings
   appName: string;
   appUrl: string;
+  portalBaseUrl: string;
+  reporterPortalLimits: ReporterPortalLimits;
   retentionDays: number;
   rateLimitPerMinute: number;
   sessionMaxAgeDays: number;
