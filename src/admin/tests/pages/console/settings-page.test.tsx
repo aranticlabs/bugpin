@@ -244,8 +244,8 @@ describe('Settings Page', () => {
       expect(tabs.map((tab) => tab.textContent)).toEqual([
         'General',
         'SMTP',
-        'Storage',
         'Privacy',
+        'Storage',
         'API',
         'Webhooks',
       ]);
