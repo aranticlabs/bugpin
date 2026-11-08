@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { userPreferencesRoutes } from '../../../src/server/routes/api/user-preferences';
 import { authService } from '../../../src/server/services/auth.service';
 import { userPreferencesService } from '../../../src/server/services/user-preferences.service';
@@ -75,7 +75,7 @@ describe('user preferences routes', () => {
   });
 
   it('accepts every known preference', async () => {
-    const changes = {
+    const changes: UserPreferences = {
       theme: 'dark',
       sidebarOpen: false,
       pinnedProjectsOpen: false,

@@ -150,9 +150,10 @@ describe('two-factor login flow', () => {
     await enableTotp(user);
     const login = await authService.login(user.email, password);
     if (!login.success || !('twoFactorRequired' in login.value)) throw new Error('no challenge');
+    const { challengeToken } = login.value;
     const results = await Promise.all(
       Array.from({ length: 8 }, () =>
-        authService.completeTwoFactorLogin(login.value.challengeToken, { code: '000000' })
+        authService.completeTwoFactorLogin(challengeToken, { code: '000000' })
       )
     );
     const codes = results.map((result) => (result.success ? undefined : result.code));

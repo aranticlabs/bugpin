@@ -33,6 +33,8 @@ const baseProject: Project = {
   apiKey: 'proj_key',
   settings: {},
   reportsCount: 0,
+  isActive: true,
+  position: 0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -77,6 +79,8 @@ const baseDefaults: ProjectNotificationDefaults = {
 const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
+  source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'high',
@@ -140,7 +144,7 @@ beforeEach(() => {
 
   projectNotificationDefaultsRepo.findByProject = async () => defaultsByProject;
   projectNotificationDefaultsRepo.upsert = async () => baseDefaults;
-  projectNotificationDefaultsRepo.delete = async () => undefined;
+  projectNotificationDefaultsRepo.delete = async () => true;
 
   usersRepo.findById = async () => userById;
   projectsRepo.findById = async () => projectById;

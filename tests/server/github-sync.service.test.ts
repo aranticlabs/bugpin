@@ -11,9 +11,19 @@ import { logger } from '../../src/server/utils/logger';
 import { Result } from '../../src/server/utils/result';
 import type { Integration, Report } from '../../src/shared/types';
 
+function immediateTimeout(original: typeof setTimeout): typeof setTimeout {
+  const immediate = (handler: () => void) => {
+    handler();
+    return original(() => undefined, 0);
+  };
+  return Object.assign(immediate, original);
+}
+
 const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
+  source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'medium',
@@ -76,9 +86,9 @@ beforeEach(() => {
   reportsRepo.findById = async () => reportById;
   reportsRepo.updateGitHubSyncStatus = async (_id, payload) => {
     updateSyncPayload = payload;
-    return true;
+    return reportById;
   };
-  reportsRepo.markPendingSync = async () => true;
+  reportsRepo.markPendingSync = async () => undefined;
   reportsRepo.findByGitHubIssueNumber = async () => null;
   reportsRepo.update = async (_id, payload) => {
     updateStatusPayload = payload;
@@ -90,7 +100,6 @@ beforeEach(() => {
   integrationsRepo.findByProjectId = async () => [baseIntegration];
   integrationsRepo.updateLastUsed = async (id) => {
     updateLastUsedId = id;
-    return true;
   };
   integrationsRepo.update = async (_id, payload) => {
     updatedIntegrationConfig = payload.config;
@@ -140,8 +149,7 @@ describe('githubSyncService', () => {
   it('returns NOT_FOUND when report missing', async () => {
     reportById = null;
     const result = await githubSyncService.syncReport('rpt_missing', 'int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
   });
 
   it('syncs report by creating issue', async () => {
@@ -154,22 +162,19 @@ describe('githubSyncService', () => {
   it('returns NOT_FOUND when integration missing', async () => {
     integrationById = null;
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
   });
 
   it('rejects sync for invalid integration type', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_TYPE' });
   });
 
   it('rejects sync when integration is inactive', async () => {
     integrationById = { ...baseIntegration, isActive: false };
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INACTIVE');
+    expect(result).toMatchObject({ success: false, code: 'INACTIVE' });
   });
 
   it('marks sync error when create issue fails', async () => {
@@ -224,10 +229,7 @@ describe('githubSyncService', () => {
     const originalTimeout = globalThis.setTimeout;
     let attempts = 0;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    globalThis.setTimeout = immediateTimeout(originalTimeout);
 
     githubSyncService.syncReport = async () => {
       attempts += 1;
@@ -255,10 +257,7 @@ describe('githubSyncService', () => {
     const originalTimeout = globalThis.setTimeout;
     let attempts = 0;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    globalThis.setTimeout = immediateTimeout(originalTimeout);
 
     githubSyncService.syncReport = async () => {
       attempts += 1;
@@ -279,10 +278,7 @@ describe('githubSyncService', () => {
 
   it('syncs reports in batch', async () => {
     const originalTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    globalThis.setTimeout = immediateTimeout(originalTimeout);
 
     const result = await githubSyncService.syncReports(['rpt_1'], 'int_1');
     expect(result.success).toBe(true);
@@ -297,10 +293,7 @@ describe('githubSyncService', () => {
     const originalSyncReport = githubSyncService.syncReport;
     const originalTimeout = globalThis.setTimeout;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    globalThis.setTimeout = immediateTimeout(originalTimeout);
 
     let calls = 0;
     githubSyncService.syncReport = async () => {
@@ -333,29 +326,25 @@ describe('githubSyncService', () => {
   it('returns NOT_FOUND when enabling auto sync for missing integration', async () => {
     integrationById = null;
     const result = await githubSyncService.enableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
   });
 
   it('returns INVALID_TYPE when enabling auto sync for non-github', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.enableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_TYPE' });
   });
 
   it('returns SETTINGS_ERROR when settings lookup fails', async () => {
     settingsService.getAll = async () => Result.fail('fail', 'ERROR');
     const result = await githubSyncService.enableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('SETTINGS_ERROR');
+    expect(result).toMatchObject({ success: false, code: 'SETTINGS_ERROR' });
   });
 
   it('returns error when app url is missing', async () => {
     settingsService.getAll = async () => Result.ok({ appUrl: '' } as never);
     const result = await githubSyncService.enableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('CONFIG_ERROR');
+    expect(result).toMatchObject({ success: false, code: 'CONFIG_ERROR' });
   });
 
   it('strips trailing slash from app url for webhook', async () => {
@@ -384,15 +373,13 @@ describe('githubSyncService', () => {
   it('returns NOT_FOUND when disabling auto sync for missing integration', async () => {
     integrationById = null;
     const result = await githubSyncService.disableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
   });
 
   it('returns INVALID_TYPE when disabling auto sync for non-github', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.disableAutoSync('int_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_TYPE' });
   });
 
   it('deletes webhook when disabling auto sync', async () => {
@@ -436,8 +423,7 @@ describe('githubSyncService', () => {
       number: 123,
       state: 'closed',
     });
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
   });
 
   it('does nothing when no report matches the issue', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { authService } from '../../../src/server/services/auth.service';

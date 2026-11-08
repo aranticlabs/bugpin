@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type { Session, User } from '../../../src/shared/types';
@@ -84,7 +84,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       });
 
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string; upgradeUrl: string };
       expect(body.code).toBe('EE_REQUIRED');
       expect(body.upgradeUrl).toBe('https://bugpin.io/pricing');
     });
@@ -109,7 +109,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       });
 
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
 
@@ -138,7 +138,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       });
 
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
 
@@ -168,7 +168,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       });
 
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
 
@@ -194,7 +194,7 @@ describe('storage routes (CE stub - returns 402)', () => {
       });
 
       expect(res.status).toBe(402);
-      const body = await res.json();
+      const body = (await res.json()) as { code: string };
       expect(body.code).toBe('EE_REQUIRED');
     });
 

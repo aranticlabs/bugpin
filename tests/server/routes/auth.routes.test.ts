@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { authRoutes } from '../../../src/server/routes/api/auth';
 import { authService } from '../../../src/server/services/auth.service';
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { Result } from '../../../src/server/utils/result';
-import type { Session, User } from '../../../src/shared/types';
+import type { AppSettings, Session, User } from '../../../src/shared/types';
 
 const baseUser: User = {
   id: 'usr_1',
@@ -33,23 +33,18 @@ beforeEach(() => {
   authService.changePassword = async () => Result.ok(undefined);
   authService.validateSession = async () => Result.ok({ user: baseUser, session: baseSession });
 
-  settingsRepo.getAll = async () => ({
-    appName: 'BugPin',
-    appUrl: '',
-    retentionDays: 90,
-    rateLimitPerMinute: 10,
-    sessionMaxAgeDays: 7,
-    smtpEnabled: false,
-    smtpConfig: {},
-    s3Enabled: false,
-    s3Config: {},
-    widgetLauncherButton: {} as never,
-    widgetDialog: {} as never,
-    screenshot: {} as never,
-    notifications: {} as never,
-    branding: {} as never,
-    adminButton: {} as never,
-  });
+  settingsRepo.getAll = async () =>
+    ({
+      appName: 'BugPin',
+      appUrl: '',
+      retentionDays: 90,
+      rateLimitPerMinute: 10,
+      sessionMaxAgeDays: 7,
+      smtpEnabled: false,
+      smtpConfig: {},
+      s3Enabled: false,
+      s3Config: {},
+    }) as AppSettings;
 });
 
 afterEach(() => {
@@ -92,7 +87,7 @@ describe('auth routes', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { authenticated: boolean };
     expect(body.authenticated).toBe(true);
   });
 

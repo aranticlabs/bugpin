@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { versionRoutes } from '../../../src/server/routes/api/version';
 import { authService } from '../../../src/server/services/auth.service';
 import { updateCheckService } from '../../../src/server/services/update-check.service';
@@ -155,7 +155,10 @@ describe('GET /version', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      checkEnabled: boolean;
+      widgetPackage: { incompatible: boolean };
+    };
     expect(body.checkEnabled).toBe(false);
     expect(body.widgetPackage.incompatible).toBe(true);
   });

@@ -82,7 +82,7 @@ describe('validate middleware', () => {
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
-    const payload = await (response as Response).json();
+    const payload = (await (response as Response).json()) as { details: unknown[] };
     expect(payload.details[0]).toMatchObject({ field: 'name' });
   });
 
@@ -111,7 +111,7 @@ describe('validate middleware', () => {
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
-    const payload = await (response as Response).json();
+    const payload = (await (response as Response).json()) as { details: unknown[] };
     expect(payload.details[0]).toMatchObject({ field: 'query.page' });
   });
 
@@ -137,7 +137,7 @@ describe('validate middleware', () => {
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
-    const payload = await (response as Response).json();
+    const payload = (await (response as Response).json()) as { details: unknown[] };
     expect(payload.details[0]).toMatchObject({ field: 'body' });
   });
 

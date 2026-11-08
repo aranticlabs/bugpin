@@ -13,6 +13,8 @@ const baseProject: Project = {
   apiKey: 'proj_key',
   settings: {},
   reportsCount: 0,
+  isActive: true,
+  position: 0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -36,6 +38,8 @@ const baseIntegration: Integration = {
 const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
+  source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'medium',
@@ -83,7 +87,6 @@ beforeEach(() => {
   integrationsRepo.delete = async () => true;
   integrationsRepo.updateLastUsed = async (id) => {
     updateLastUsedId = id;
-    return true;
   };
 
   reportsRepo.findById = async () => reportById;

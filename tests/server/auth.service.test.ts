@@ -80,6 +80,7 @@ beforeEach(() => {
   };
   usersRepo.updatePassword = async (id) => {
     updatedPasswordId = id;
+    return true;
   };
   usersRepo.count = async () => 1;
   usersRepo.setMustChangePassword = async (id, value) => {
@@ -101,6 +102,7 @@ beforeEach(() => {
   };
   sessionsRepo.deleteByUserId = async (id) => {
     deletedUserSessionsId = id;
+    return 0;
   };
   sessionsRepo.deleteByUserIdExcept = async (userId, exceptSessionId) => {
     deletedUserSessionsExceptId = { userId, exceptSessionId };
@@ -135,31 +137,26 @@ describe('authService.login', () => {
   it('rejects when user is missing', async () => {
     userWithPassword = null;
     const result = await authService.login('missing@example.com', 'password');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_CREDENTIALS');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_CREDENTIALS' });
   });
 
   it('rejects when user is inactive', async () => {
     userWithPassword = { ...baseUser, isActive: false, passwordHash: validHash };
     const result = await authService.login(baseUser.email, validPassword);
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('ACCOUNT_DISABLED');
+    expect(result).toMatchObject({ success: false, code: 'ACCOUNT_DISABLED' });
   });
 
   it('rejects invalid password', async () => {
     const result = await authService.login(baseUser.email, 'wrong-password');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_CREDENTIALS');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_CREDENTIALS' });
   });
 
   it('creates a session on success', async () => {
     const result = await authService.login(baseUser.email, validPassword, '127.0.0.1', 'UA');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.value.user).toMatchObject({ id: baseUser.id, email: baseUser.email });
-      expect(result.value.user).not.toHaveProperty('passwordHash');
-      expect(result.value.session.id).toBe(baseSession.id);
-    }
+    if (!result.success || !('session' in result.value)) throw new Error('expected a session');
+    expect(result.value.user).toMatchObject({ id: baseUser.id, email: baseUser.email });
+    expect(result.value.user).not.toHaveProperty('passwordHash');
+    expect(result.value.session.id).toBe(baseSession.id);
     expect(updatedLastLoginId).toBe(baseUser.id);
     expect(createdSessionPayload?.userId).toBe(baseUser.id);
     expect(createdSessionPayload?.expiresAt).toBeTruthy();
@@ -170,8 +167,7 @@ describe('authService.logout', () => {
   it('rejects when session is missing', async () => {
     deleteSessionResult = false;
     const result = await authService.logout('sess_missing');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('SESSION_NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'SESSION_NOT_FOUND' });
   });
 
   it('returns ok when session is deleted', async () => {
@@ -184,22 +180,19 @@ describe('authService.validateSession', () => {
   it('rejects invalid sessions', async () => {
     sessionById = null;
     const result = await authService.validateSession('sess_missing');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_SESSION');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_SESSION' });
   });
 
   it('deletes session when user is missing', async () => {
     userById = null;
     const result = await authService.validateSession('sess_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('USER_NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'USER_NOT_FOUND' });
   });
 
   it('rejects inactive users', async () => {
     userById = { ...baseUser, isActive: false };
     const result = await authService.validateSession('sess_1');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('ACCOUNT_DISABLED');
+    expect(result).toMatchObject({ success: false, code: 'ACCOUNT_DISABLED' });
   });
 
   it('updates session activity on success', async () => {
@@ -213,26 +206,22 @@ describe('authService.changePassword', () => {
   it('rejects when user is missing', async () => {
     userById = null;
     const result = await authService.changePassword('usr_missing', 'old', 'newpass123');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('USER_NOT_FOUND');
+    expect(result).toMatchObject({ success: false, code: 'USER_NOT_FOUND' });
   });
 
   it('rejects invalid current password', async () => {
     const result = await authService.changePassword(baseUser.id, 'bad', 'newpass123');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_PASSWORD');
+    expect(result).toMatchObject({ success: false, code: 'INVALID_PASSWORD' });
   });
 
   it('rejects weak passwords', async () => {
     const result = await authService.changePassword(baseUser.id, validPassword, 'short');
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('WEAK_PASSWORD');
+    expect(result).toMatchObject({ success: false, code: 'WEAK_PASSWORD' });
   });
 
   it('rejects a new password equal to the current one', async () => {
     const result = await authService.changePassword(baseUser.id, validPassword, validPassword);
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('PASSWORD_UNCHANGED');
+    expect(result).toMatchObject({ success: false, code: 'PASSWORD_UNCHANGED' });
     expect(updatedPasswordId).toBeNull();
   });
 

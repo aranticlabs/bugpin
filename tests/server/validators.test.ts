@@ -8,7 +8,7 @@ import {
   validateWithSchema,
 } from '../../src/server/utils/validators.js';
 // Import z from the server's node_modules
-import { z } from '../../src/server/node_modules/zod/index.js';
+import { z } from '../../src/server/node_modules/zod';
 
 describe('Validators', () => {
   describe('isValidUrl', () => {

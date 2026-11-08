@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { githubWebhookRoutes } from '../../../src/server/routes/api/github-webhook';
 import { integrationsRepo } from '../../../src/server/database/repositories/integrations.repo';
 import { githubSyncService } from '../../../src/server/services/integrations/github-sync.service';
@@ -11,6 +11,8 @@ const baseIntegration: Integration = {
   id: 'int_1',
   projectId: 'prj_1',
   type: 'github',
+  name: 'GitHub',
+  usageCount: 0,
   config: {
     owner: 'test-owner',
     repo: 'test-repo',
@@ -97,7 +99,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('Invalid integration type');
     });
 
@@ -114,7 +116,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('Missing signature');
     });
 
@@ -132,7 +134,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('Invalid signature');
     });
 
@@ -153,7 +155,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       expect(body.error).toBe('Invalid JSON');
     });
 
@@ -174,7 +176,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { message: string };
       expect(body.message).toBe('pong');
     });
 
@@ -198,7 +200,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { message: string };
       expect(body.message).toBe('Action ignored');
     });
 
@@ -330,7 +332,7 @@ describe('github-webhook routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { message: string };
       expect(body.message).toBe('Event ignored');
     });
 

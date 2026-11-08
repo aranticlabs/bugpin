@@ -4,7 +4,7 @@ import type { ISettingsRepository } from '../../src/server/database/repositories
 import type { AppSettings } from '../../src/shared/types';
 
 // Mock settings data
-const mockSettings: AppSettings = {
+const mockSettings = {
   appName: 'BugPin Test',
   appUrl: 'http://localhost:3000',
   retentionDays: 90,
@@ -16,13 +16,7 @@ const mockSettings: AppSettings = {
   smtpConfig: {},
   s3Enabled: false,
   s3Config: {},
-  widgetLauncherButton: {} as any,
-  widgetDialog: {} as any,
-  screenshot: {} as any,
-  notifications: {} as any,
-  branding: {} as any,
-  adminButton: {} as any,
-};
+} as AppSettings;
 
 describe('SettingsCacheService', () => {
   let mockSettingsRepo: ISettingsRepository;

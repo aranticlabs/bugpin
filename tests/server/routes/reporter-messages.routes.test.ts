@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reporterMessagesService } from '../../../src/server/services/reporter-messages.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -76,7 +76,7 @@ describe('reporter-messages routes POST', () => {
       body: JSON.stringify({ message: 'We are looking into this.' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { success: boolean; reporterMessage: { id: string } };
     expect(body.success).toBe(true);
     expect(body.reporterMessage.id).toBe('msg_1');
   });
@@ -161,7 +161,7 @@ describe('reporter-messages routes GET', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { success: boolean; messages: { id: string }[] };
     expect(body.success).toBe(true);
     expect(body.messages).toHaveLength(1);
     expect(body.messages[0].id).toBe('msg_1');
@@ -183,7 +183,7 @@ describe('reporter-messages routes GET', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { messages: unknown[] };
     expect(body.messages).toHaveLength(0);
   });
 });

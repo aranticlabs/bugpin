@@ -117,7 +117,14 @@ async function buildWebmWithIdLadenPayloads(): Promise<Buffer> {
   return Buffer.concat([fixture.subarray(0, clusterOffset), ...clusters]);
 }
 
-const browserRecordings = [
+interface BrowserRecording {
+  filename: string;
+  mimeType: string;
+  tracks: Pick<TrackSummary, 'type' | 'packetCount'>[];
+  negativeAudioStart?: boolean;
+}
+
+const browserRecordings: BrowserRecording[] = [
   {
     filename: 'chrome-with-audio.mp4',
     mimeType: 'video/mp4',
@@ -169,7 +176,7 @@ const browserRecordings = [
       { type: 'video', packetCount: 46 },
     ],
   },
-] as const;
+];
 
 async function getMetadataDuration(data: Uint8Array): Promise<number | null> {
   const input = new Input({ source: new BufferSource(data), formats: ALL_FORMATS });
@@ -205,7 +212,7 @@ describe('remuxRecording', () => {
         expect(getMovieHeaderDuration(result.value)).toBeGreaterThan(0n);
         expect(output.indexOf('moov')).toBeLessThan(output.indexOf('mdat'));
       } else {
-        if ('negativeAudioStart' in fixture) {
+        if (fixture.negativeAudioStart) {
           const sourceAudio = sourceTracks.find((track) => track.type === 'audio');
           expect(sourceAudio?.firstTimestamp).toBe(-0.001);
         }

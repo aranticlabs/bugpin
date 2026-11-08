@@ -18,12 +18,17 @@ import type { FileRecord, Report } from '../../src/shared/types';
 
 const originalHooks = getEEHooks();
 const originalFetch = globalThis.fetch;
+
+type FetchStub = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+let fetchStub: FetchStub = originalFetch;
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
 
 const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
+  source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'medium',
@@ -39,6 +44,13 @@ const baseReport: Report = {
 };
 
 beforeEach(() => {
+  fetchStub = originalFetch;
+  globalThis.fetch = Object.assign(
+    (input: string | URL | Request, init?: RequestInit) => fetchStub(input, init),
+    {
+      preconnect: originalFetch.preconnect,
+    }
+  );
   registerEEHooks({
     ...originalHooks,
     getStorageProvider: () => ({
@@ -84,7 +96,7 @@ describe('github service', () => {
         }));
         let issueBody = '';
         let uploads = 0;
-        globalThis.fetch = async (input, init) => {
+        fetchStub = async (input, init) => {
           const url = String(input);
           if (url.startsWith('https://storage.example.com/')) return new Response('abc');
           if (url.includes('/contents/')) {
@@ -146,7 +158,7 @@ describe('github service', () => {
 
   it('creates GitHub issue with merged labels', async () => {
     let requestBody: Record<string, unknown> | null = null;
-    globalThis.fetch = async (_url, init) => {
+    fetchStub = async (_url, init) => {
       requestBody = JSON.parse(init?.body as string);
       return new Response(
         JSON.stringify({ number: 123, html_url: 'https://github.com/org/repo/issues/123' }),
@@ -169,7 +181,7 @@ describe('github service', () => {
 
   it('includes stored activity in GitHub issues', async () => {
     let issueBody = '';
-    globalThis.fetch = async (_url, init) => {
+    fetchStub = async (_url, init) => {
       const request = JSON.parse(init?.body as string) as { body: string };
       issueBody = request.body;
       return new Response(
@@ -198,7 +210,7 @@ describe('github service', () => {
   for (const publicVideoLinks of [false, true]) {
     it(`${publicVideoLinks ? 'includes' : 'does not include'} public video links in GitHub issues`, async () => {
       let issueBody = '';
-      globalThis.fetch = async (_url, init) => {
+      fetchStub = async (_url, init) => {
         issueBody = (JSON.parse(init?.body as string) as { body: string }).body;
         return Response.json({
           number: 123,
@@ -255,10 +267,10 @@ describe('github service', () => {
 
   it('treats a non-boolean public video setting as disabled', async () => {
     let issueBody = '';
-    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    fetchStub = async (_url, init) => {
       issueBody = (JSON.parse(init?.body as string) as { body: string }).body;
       return Response.json({ number: 123, html_url: 'https://github.com/org/repo/issues/123' });
-    }) as typeof fetch;
+    };
     const files: FileRecord[] = [
       {
         id: 'video_1',
@@ -284,7 +296,7 @@ describe('github service', () => {
   });
 
   it('returns error when create GitHub issue fails', async () => {
-    globalThis.fetch = async () =>
+    fetchStub = async () =>
       new Response(JSON.stringify({ message: 'Bad request' }), { status: 400 });
 
     const result = await createGitHubIssue(baseReport, {
@@ -298,13 +310,13 @@ describe('github service', () => {
   });
 
   it('returns error for missing repo access', async () => {
-    globalThis.fetch = async () => new Response('', { status: 404 });
+    fetchStub = async () => new Response('', { status: 404 });
     const result = await testGitHubConnection({ owner: 'org', repo: 'repo', accessToken: 'token' });
     expect(result.success).toBe(false);
   });
 
   it('returns error for invalid access token', async () => {
-    globalThis.fetch = async () => new Response('', { status: 401 });
+    fetchStub = async () => new Response('', { status: 401 });
     const result = await testGitHubConnection({ owner: 'org', repo: 'repo', accessToken: 'token' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid access token');
@@ -316,7 +328,7 @@ describe('github service', () => {
   });
 
   it('returns error when repository fetch fails', async () => {
-    globalThis.fetch = async () => new Response('', { status: 401 });
+    fetchStub = async () => new Response('', { status: 401 });
     const result = await fetchGitHubRepositories('token');
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid access token');
@@ -336,7 +348,7 @@ describe('github service', () => {
       new Response(JSON.stringify([]), { status: 200 }),
     ];
 
-    globalThis.fetch = async () => responses.shift() as Response;
+    fetchStub = async () => responses.shift() as Response;
 
     const result = await fetchGitHubRepositories('token');
     expect(result.success).toBe(true);
@@ -347,7 +359,7 @@ describe('github service', () => {
   });
 
   it('fetches labels', async () => {
-    globalThis.fetch = async () =>
+    fetchStub = async () =>
       new Response(JSON.stringify([{ name: 'bug', color: 'ff0000', description: null }]), {
         status: 200,
       });
@@ -357,13 +369,13 @@ describe('github service', () => {
   });
 
   it('returns error when labels fetch fails', async () => {
-    globalThis.fetch = async () => new Response('', { status: 404 });
+    fetchStub = async () => new Response('', { status: 404 });
     const result = await fetchGitHubLabels('token', 'org', 'repo');
     expect(result.success).toBe(false);
   });
 
   it('fetches assignees', async () => {
-    globalThis.fetch = async () =>
+    fetchStub = async () =>
       new Response(
         JSON.stringify([{ login: 'octo', avatar_url: 'https://example.com/octo.png' }]),
         { status: 200 }
@@ -374,13 +386,13 @@ describe('github service', () => {
   });
 
   it('returns error when assignee fetch fails', async () => {
-    globalThis.fetch = async () => new Response('', { status: 404 });
+    fetchStub = async () => new Response('', { status: 404 });
     const result = await fetchGitHubAssignees('token', 'org', 'repo');
     expect(result.success).toBe(false);
   });
 
   it('updates GitHub issue', async () => {
-    globalThis.fetch = async () =>
+    fetchStub = async () =>
       new Response(
         JSON.stringify({ number: 321, html_url: 'https://github.com/org/repo/issues/321' }),
         { status: 200 }
@@ -396,8 +408,7 @@ describe('github service', () => {
   });
 
   it('returns error when update GitHub issue fails', async () => {
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify({ message: 'Nope' }), { status: 500 });
+    fetchStub = async () => new Response(JSON.stringify({ message: 'Nope' }), { status: 500 });
 
     const result = await updateGitHubIssue(321, baseReport, {
       owner: 'org',
@@ -410,7 +421,7 @@ describe('github service', () => {
   });
 
   it('gets GitHub issue', async () => {
-    globalThis.fetch = async () =>
+    fetchStub = async () =>
       new Response(
         JSON.stringify({
           number: 321,
@@ -432,7 +443,7 @@ describe('github service', () => {
   });
 
   it('returns error when issue is missing', async () => {
-    globalThis.fetch = async () => new Response('', { status: 404 });
+    fetchStub = async () => new Response('', { status: 404 });
 
     const result = await getGitHubIssue(321, {
       owner: 'org',
@@ -444,7 +455,7 @@ describe('github service', () => {
   });
 
   it('creates webhook', async () => {
-    globalThis.fetch = async () => new Response(JSON.stringify({ id: 42 }), { status: 201 });
+    fetchStub = async () => new Response(JSON.stringify({ id: 42 }), { status: 201 });
 
     const result = await createGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
@@ -459,8 +470,7 @@ describe('github service', () => {
   });
 
   it('returns error when webhook already exists', async () => {
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify({ message: 'exists' }), { status: 422 });
+    fetchStub = async () => new Response(JSON.stringify({ message: 'exists' }), { status: 422 });
 
     const result = await createGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
@@ -472,7 +482,7 @@ describe('github service', () => {
   });
 
   it('deletes webhook gracefully on 404', async () => {
-    globalThis.fetch = async () => new Response('', { status: 404 });
+    fetchStub = async () => new Response('', { status: 404 });
 
     const result = await deleteGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },
@@ -483,7 +493,7 @@ describe('github service', () => {
   });
 
   it('returns error when webhook delete fails', async () => {
-    globalThis.fetch = async () => new Response('', { status: 500 });
+    fetchStub = async () => new Response('', { status: 500 });
 
     const result = await deleteGitHubWebhook(
       { owner: 'org', repo: 'repo', accessToken: 'token' },

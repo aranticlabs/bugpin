@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
@@ -29,6 +29,7 @@ const baseReport: Report = {
   id: 'rpt_1',
   projectId: 'prj_1',
   source: 'widget',
+  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'medium',
@@ -111,7 +112,13 @@ beforeEach(() => {
   };
   reportsService.createManual = async (body) => {
     createManualPayload = body;
-    return Result.ok({ ...baseReport, ...body, id: 'rpt_new', source: 'manual' });
+    return Result.ok({
+      ...baseReport,
+      id: 'rpt_new',
+      source: 'manual',
+      projectId: body.projectId,
+      title: body.title,
+    });
   };
   reportsService.getStats = async () =>
     Result.ok({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } } as never);
@@ -162,7 +169,7 @@ describe('reports routes', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(rejected.status).toBe(400);
-    expect((await rejected.json()).error).toBe('INVALID_CURSOR');
+    expect(((await rejected.json()) as { error: string }).error).toBe('INVALID_CURSOR');
   });
 
   it('creates a manual report for admin/editor', async () => {
@@ -279,7 +286,7 @@ describe('reports routes', () => {
       nextId: null,
       adoptSort: { sortBy: 'priority', sortOrder: 'desc' },
     });
-    expect((await res.json()).report.status).toBe('resolved');
+    expect(((await res.json()) as { report: { status: string } }).report.status).toBe('resolved');
   });
 
   it('rejects board moves from viewers and with invalid bodies', async () => {
@@ -374,7 +381,7 @@ describe('reports routes', () => {
       status: 'closed',
       previousId: 'rpt_3',
     });
-    expect((await res.json()).reports).toHaveLength(2);
+    expect(((await res.json()) as { reports: unknown[] }).reports).toHaveLength(2);
   });
 
   it('rejects group board moves from viewers and with too many or no reports', async () => {
