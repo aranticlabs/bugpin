@@ -10,6 +10,7 @@ import {
   ACTIVE_REPORT_STATUSES,
   type Project,
   type ProjectSettings,
+  type ProjectSettingsUpdate,
   type ProjectSummary,
 } from '@shared/types';
 
@@ -25,8 +26,26 @@ export interface CreateProjectInput {
 
 export interface UpdateProjectInput {
   name?: string;
-  settings?: ProjectSettings;
+  settings?: ProjectSettingsUpdate;
   isActive?: boolean;
+}
+
+function copyOverride<K extends keyof ProjectSettings>(
+  target: ProjectSettings,
+  source: ProjectSettingsUpdate,
+  key: K
+): void {
+  const value = source[key];
+  if (value !== null && value !== undefined) target[key] = value;
+}
+
+/** Drops every override set to null so the instance default applies again */
+function withoutClearedOverrides(settings: ProjectSettingsUpdate): ProjectSettings {
+  const result: ProjectSettings = {};
+  for (const key of Object.keys(settings) as Array<keyof ProjectSettings>) {
+    copyOverride(result, settings, key);
+  }
+  return result;
 }
 
 // Service
@@ -156,7 +175,7 @@ export const projectsService = {
     }
 
     if (input.settings !== undefined) {
-      const nextSettings = { ...existing.settings, ...input.settings };
+      const nextSettings = withoutClearedOverrides({ ...existing.settings, ...input.settings });
       const defaultAssigneeUserId = nextSettings.defaultAssigneeUserId;
 
       if (defaultAssigneeUserId) {
@@ -166,11 +185,6 @@ export const projectsService = {
         }
       }
 
-      if (defaultAssigneeUserId === null) {
-        delete nextSettings.defaultAssigneeUserId;
-      }
-
-      // Merge settings instead of replacing
       updates.settings = nextSettings;
     }
 

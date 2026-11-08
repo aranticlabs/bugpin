@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { projectsService } from '../../../src/server/services/projects.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -30,6 +30,8 @@ const baseProject: Project = {
   apiKey: 'proj_key',
   settings: {},
   reportsCount: 0,
+  isActive: true,
+  position: 0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -42,7 +44,7 @@ let projectResult: Project | null = baseProject;
 let createResult: Result<Project> = Result.ok(baseProject);
 let updateResult: Result<Project> = Result.ok(baseProject);
 let deleteResult: Result<void> = Result.ok(undefined);
-let regenerateResult: Result<string> = Result.ok('proj_new');
+let regenerateResult: Result<Project> = Result.ok({ ...baseProject, apiKey: 'proj_new' });
 let lastUpdateBody: unknown;
 let lastSummaryOptions: { includeApiKeyPrefix?: boolean } | undefined;
 
@@ -52,7 +54,7 @@ beforeEach(() => {
   createResult = Result.ok(baseProject);
   updateResult = Result.ok(baseProject);
   deleteResult = Result.ok(undefined);
-  regenerateResult = Result.ok('proj_new');
+  regenerateResult = Result.ok({ ...baseProject, apiKey: 'proj_new' });
   lastUpdateBody = undefined;
   lastSummaryOptions = undefined;
 
@@ -113,7 +115,7 @@ describe('projects routes', () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { projects: Record<string, unknown>[] };
-    expect(body.projects).toEqual([{ id: 'prj_1', name: 'Project' }]);
+    expect(body.projects).toEqual([{ id: 'prj_1', name: 'Project', isActive: true }]);
     expect(body.projects[0]).not.toHaveProperty('apiKey');
     expect(lastSummaryOptions).toEqual({ includeApiKeyPrefix: false });
   });
@@ -248,7 +250,7 @@ describe('projects routes', () => {
       }),
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe('VALIDATION_ERROR');
   });
 
@@ -265,5 +267,41 @@ describe('projects routes', () => {
       }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('accepts null on PATCH for every clearable project override', async () => {
+    const settings = {
+      widgetDialog: null,
+      widgetDialogContent: null,
+      widgetLauncherButton: null,
+      screenshot: null,
+      activityCapture: null,
+      consoleCapture: null,
+      networkCapture: null,
+      storageKeysCapture: null,
+      security: null,
+      reporterNotifications: null,
+    };
+    const app = createApp();
+    const res = await app.request('http://localhost/projects/prj_1', {
+      method: 'PATCH',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    });
+    expect(res.status).toBe(200);
+    expect(lastUpdateBody).toEqual({ settings });
+  });
+
+  it('rejects malformed project colors on PATCH', async () => {
+    const app = createApp();
+    for (const color of ['', 'blue', '#123']) {
+      const res = await app.request('http://localhost/projects/prj_1', {
+        method: 'PATCH',
+        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        body: JSON.stringify({ settings: { widgetDialog: { lightButtonColor: color } } }),
+      });
+      expect(res.status).toBe(400);
+    }
+    expect(lastUpdateBody).toBeUndefined();
   });
 });

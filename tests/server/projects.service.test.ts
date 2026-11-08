@@ -32,7 +32,7 @@ const originalUsersService = { ...usersService };
 
 let projectById: Project | null = baseProject;
 let projectByApiKey: Project | null = baseProject;
-let lastProjectUpdates: unknown;
+let lastProjectUpdates: Partial<Project> | undefined;
 let updateReturnsProject: Project | null = baseProject;
 let regenerateApiKeyProject: Project | null = { ...baseProject, apiKey: 'proj_new' };
 let deletedProjectId: string | null = null;
@@ -228,7 +228,58 @@ describe('projectsService.update', () => {
     const result = await projectsService.update('prj_1', { settings: { language: null } });
 
     expect(result.success).toBe(true);
-    expect(lastProjectUpdates?.settings?.language).toBeNull();
+    expect(lastProjectUpdates?.settings).not.toHaveProperty('language');
+  });
+
+  it('removes every project override that is set to null', async () => {
+    projectById = {
+      ...baseProject,
+      settings: {
+        widgetDialog: { lightButtonColor: '#111111' },
+        widgetDialogContent: { showPriority: false },
+        widgetLauncherButton: { position: 'top-left' },
+        screenshot: { maxScreenshotSize: 5 },
+        activityCapture: false,
+        consoleCapture: false,
+        networkCapture: false,
+        storageKeysCapture: true,
+        security: { allowedOrigins: ['example.com'] },
+        reporterNotifications: { emailEnabled: false },
+        fields: { titleRequired: true },
+      },
+    };
+
+    const result = await projectsService.update('prj_1', {
+      settings: {
+        widgetDialog: null,
+        widgetDialogContent: null,
+        widgetLauncherButton: null,
+        screenshot: null,
+        activityCapture: null,
+        consoleCapture: null,
+        networkCapture: null,
+        storageKeysCapture: null,
+        security: null,
+        reporterNotifications: null,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(lastProjectUpdates).toEqual({ settings: { fields: { titleRequired: true } } });
+  });
+
+  it('keeps overrides that the update does not mention', async () => {
+    projectById = {
+      ...baseProject,
+      settings: { widgetDialog: { lightButtonColor: '#111111' }, activityCapture: false },
+    };
+
+    const result = await projectsService.update('prj_1', { settings: { activityCapture: null } });
+
+    expect(result.success).toBe(true);
+    expect(lastProjectUpdates).toEqual({
+      settings: { widgetDialog: { lightButtonColor: '#111111' } },
+    });
   });
 
   it('returns UPDATE_FAILED when repo update fails', async () => {

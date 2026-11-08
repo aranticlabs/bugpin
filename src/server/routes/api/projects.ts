@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { projectsService } from '../../services/projects.service.js';
 import { workspaceViewsService } from '../../services/workspace-views.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
-import { validate, schemas } from '../../middleware/validate.js';
+import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 
 const projects = new Hono();
 
@@ -123,7 +123,7 @@ projects.patch(
   validate({ params: schemas.id, body: schemas.updateProject }),
   async (c) => {
     const id = c.req.param('id');
-    const body = await c.req.json();
+    const body = validatedBody(c, schemas.updateProject);
 
     const result = await projectsService.update(id, body);
 
