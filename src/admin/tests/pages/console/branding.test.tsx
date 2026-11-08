@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { api } from '../../../api/client';
-import { getCroppedImg } from '../../../lib/imageUtils';
+import { cropImageToPng } from '../../../components/branding/cropImage';
 
 const brandingApiMocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -46,8 +46,8 @@ vi.mock('../../../components/ThemeColorPicker', () => ({
   ),
 }));
 
-vi.mock('../../../lib/imageUtils', () => ({
-  getCroppedImg: vi.fn(),
+vi.mock('../../../components/branding/cropImage', () => ({
+  cropImageToPng: vi.fn(),
 }));
 
 vi.mock('react-easy-crop', async () => {
@@ -72,6 +72,7 @@ vi.mock('react-easy-crop', async () => {
 class MockImage {
   static nextWidth = 100;
   static nextHeight = 100;
+  static failNext = false;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   width = MockImage.nextWidth;
@@ -79,6 +80,11 @@ class MockImage {
 
   set src(_value: string) {
     queueMicrotask(() => {
+      if (MockImage.failNext) {
+        MockImage.failNext = false;
+        this.onerror?.();
+        return;
+      }
       this.width = MockImage.nextWidth;
       this.height = MockImage.nextHeight;
       this.onload?.();
@@ -136,7 +142,7 @@ describe('Branding', () => {
     brandingApiMocks.resetLogo.mockResolvedValue(undefined);
     brandingApiMocks.resetFavicon.mockResolvedValue(undefined);
 
-    vi.mocked(getCroppedImg).mockResolvedValue(new Blob(['cropped'], { type: 'image/jpeg' }));
+    vi.mocked(cropImageToPng).mockResolvedValue(new Blob(['cropped'], { type: 'image/png' }));
 
     global.Image = MockImage as unknown as typeof Image;
     URL.createObjectURL = vi.fn(() => 'blob:mock-url');
@@ -151,7 +157,7 @@ describe('Branding', () => {
     URL.revokeObjectURL = originalRevokeObjectUrl;
   });
 
-  it('saves and resets brand colors', async () => {
+  it('saves only the changed brand colors', async () => {
     const user = userEvent.setup();
     renderWithQueryAndRouter(<Branding />);
 
@@ -161,18 +167,55 @@ describe('Branding', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
-      const [colors] = brandingApiMocks.updateAdminThemeColors.mock.calls[0] ?? [];
-      expect(colors).toEqual(expect.objectContaining({ lightButtonColor: '#123456' }));
+      expect(brandingApiMocks.updateAdminThemeColors.mock.calls[0]?.[0]).toEqual({
+        lightButtonColor: '#123456',
+      });
       expect(toast.success).toHaveBeenCalled();
     });
+  });
+
+  it('resets brand colors into the draft and saves them only from the save bar', async () => {
+    const user = userEvent.setup();
+    renderWithQueryAndRouter(<Branding />);
+
+    await screen.findByText('Brand Colors');
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /reset to default/i }));
 
-    await waitFor(() => {
-      const calls = brandingApiMocks.updateAdminThemeColors.mock.calls;
-      const lastCall = calls[calls.length - 1] ?? [];
-      expect(lastCall[0]).toEqual(expect.objectContaining({ lightButtonColor: '#02658D' }));
-    });
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(brandingApiMocks.updateAdminThemeColors).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(brandingApiMocks.updateAdminThemeColors.mock.calls[0]?.[0]).toEqual({
+        lightButtonColor: '#02658D',
+        lightButtonHoverColor: '#024F6F',
+        darkButtonColor: '#02658D',
+        darkTextColor: '#ffffff',
+        darkButtonHoverColor: '#036F9B',
+        darkTextHoverColor: '#ffffff',
+      })
+    );
+  });
+
+  it('shows an error and releases the object URL when an icon cannot be read', async () => {
+    const user = userEvent.setup();
+    renderWithQueryAndRouter(<Branding />);
+
+    await user.click(await screen.findByAltText('Light mode icon'));
+    await screen.findByText(/edit light mode icon/i);
+
+    const iconInput = document.querySelector(
+      'input[type="file"][accept="image/png,image/jpeg,image/webp"]'
+    ) as HTMLInputElement;
+    MockImage.failNext = true;
+    await user.upload(iconInput, new File(['broken'], 'broken.png', { type: 'image/png' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load image'));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+    expect(brandingApiMocks.uploadIcon).not.toHaveBeenCalled();
   });
 
   it('validates icon uploads and supports cropping', async () => {
@@ -218,9 +261,18 @@ describe('Branding', () => {
     await user.click(screen.getByRole('button', { name: /save & upload/i }));
 
     await waitFor(() => {
-      expect(getCroppedImg).toHaveBeenCalled();
-      expect(brandingApiMocks.uploadIcon).toHaveBeenCalled();
+      expect(cropImageToPng).toHaveBeenCalledWith('blob:mock-url', {
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50,
+      });
+      expect(brandingApiMocks.uploadIcon).toHaveBeenCalledTimes(2);
     });
+    const [, croppedFile] = brandingApiMocks.uploadIcon.mock.calls[1] as [string, File];
+    expect(croppedFile.name).toBe('icon2.png');
+    expect(croppedFile.type).toBe('image/png');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
   it('uploads logos and favicons with validation', async () => {
