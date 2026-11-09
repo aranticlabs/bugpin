@@ -252,6 +252,10 @@ it('previews repeatedly without consuming and rejects requested links after 15 m
     hashToken(expired.secret),
   ]);
   expect((await portalPost(app, '/auth/exchange', { token: expired.secret })).status).toBe(400);
+  expect(Result.unwrap(reporterAuthService.preview(expired.secret))).toMatchObject({
+    state: 'expired',
+    canResend: false,
+  });
   expect(count('reporter_sessions')).toBe(1);
 });
 
@@ -266,6 +270,7 @@ it('resends expired email links only to the stored email with a fresh requested 
     success: true,
     state: 'expired',
     maskedEmail: 'j***@example.com',
+    canResend: true,
   });
   expect(await (await portalPost(app, '/auth/resend', { token: secret })).json()).toEqual({
     success: true,

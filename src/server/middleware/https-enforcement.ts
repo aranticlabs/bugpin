@@ -1,7 +1,9 @@
 import type { MiddlewareHandler } from 'hono';
+import { isIP } from 'node:net';
 import { config } from '../config.js';
 import { settingsCacheService } from '../services/settings-cache.service.js';
 import { logger } from '../utils/logger.js';
+import { getEffectiveOrigin } from '../utils/client-ip.js';
 
 let overrideWarningLogged = false;
 
@@ -41,19 +43,27 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
     return next();
   }
 
-  // Check the protocol from the proxy header
-  const proto = c.req.header('x-forwarded-proto');
+  const origin = getEffectiveOrigin(c);
 
-  // If request came via HTTP (as reported by proxy), redirect to HTTPS
-  if (proto === 'http') {
+  // Preserve the trusted external host when redirecting behind a proxy.
+  if (origin?.startsWith('http:')) {
+    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
+    if (
+      c.req.path === '/health' &&
+      (hostname === 'localhost' ||
+        hostname === '::1' ||
+        (isIP(hostname) === 4 && hostname.startsWith('127.')))
+    )
+      return next();
     const url = new URL(c.req.url);
+    url.host = new URL(origin).host;
     url.protocol = 'https:';
     return c.redirect(url.toString(), 301);
   }
 
   // For HTTPS requests, add HSTS header
   // max-age=31536000 = 1 year; includeSubDomains extends to all subdomains
-  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-
-  return next();
+  await next();
+  if (origin?.startsWith('https:'))
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 };

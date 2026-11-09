@@ -24,13 +24,16 @@ function createApp() {
 }
 
 function viaProxy(proto: 'http' | 'https') {
-  return createApp().request('http://bugpin.example.com/health', {
-    headers: { 'x-forwarded-proto': proto },
-  });
+  return createApp().request(
+    'http://bugpin.example.com/health',
+    { headers: { 'x-forwarded-proto': proto } },
+    { requestIP: () => ({ address: '127.0.0.1' }) }
+  );
 }
 
 beforeEach(() => {
   enforceHttps = true;
+  config.trustProxy = 'auto';
   warnings = [];
   settingsCacheService.getAll = async () => ({ enforceHttps }) as AppSettings;
   logger.warn = (message: string) => {
@@ -62,6 +65,14 @@ describe('httpsEnforcement', () => {
     const res = await viaProxy('https');
     expect(res.status).toBe(200);
     expect(res.headers.get('strict-transport-security')).toContain('max-age=31536000');
+  });
+
+  it('keeps loopback health checks available over HTTP when HTTPS is enforced', async () => {
+    for (const host of ['localhost', '127.0.0.1', '127.0.0.2', '[::1]']) {
+      const response = await createApp().request(`http://${host}/health`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Location')).toBeNull();
+    }
   });
 
   it('skips the redirect and HSTS when DISABLE_HTTPS_ENFORCEMENT is set', async () => {

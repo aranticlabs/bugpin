@@ -105,7 +105,7 @@ export const reporterAuthService = {
 
   preview(
     secret: string
-  ): Result<{ state: 'valid' | 'expired' | 'invalid'; maskedEmail?: string }> {
+  ): Result<{ state: 'valid' | 'expired' | 'invalid'; maskedEmail?: string; canResend?: boolean }> {
     const token = reporterAuthTokensRepo.findByHash(hashToken(secret));
     if (
       !token ||
@@ -115,9 +115,11 @@ export const reporterAuthService = {
     ) {
       return Result.ok({ state: 'invalid' });
     }
+    const expired = Date.parse(token.expiresAt) <= Date.now();
     return Result.ok({
-      state: Date.parse(token.expiresAt) <= Date.now() ? 'expired' : 'valid',
+      state: expired ? 'expired' : 'valid',
       maskedEmail: maskEmail(token.email),
+      ...(expired ? { canResend: token.source !== 'request' } : {}),
     });
   },
 

@@ -68,14 +68,17 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
 export function getEffectiveOrigin(c: Context): string | null {
   try {
     const url = new URL(c.req.url);
+    let host = c.req.header('host') || url.host;
+    let protocol = url.protocol;
     if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
-      const host = c.req.header('x-forwarded-host');
-      const protocol = c.req.header('x-forwarded-proto');
-      if (host && !/^[a-z0-9.:[\]-]+$/i.test(host)) return null;
-      if (protocol && protocol !== 'http' && protocol !== 'https') return null;
-      return new URL(`${protocol ? `${protocol}:` : url.protocol}//${host || url.host}`).origin;
+      host = c.req.header('x-forwarded-host') || host;
+      const forwardedProtocol = c.req.header('x-forwarded-proto');
+      if (forwardedProtocol && forwardedProtocol !== 'http' && forwardedProtocol !== 'https')
+        return null;
+      if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
     }
-    return url.origin;
+    if (!/^[a-z0-9.:[\]-]+$/i.test(host)) return null;
+    return new URL(`${protocol}//${host}`).origin;
   } catch {
     return null;
   }
