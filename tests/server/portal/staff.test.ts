@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, mock, spyOn } from 'bun:test';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
 import { reportOwnerRoutes } from '../../../src/server/routes/api/report-owner';
+import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reportersRoutes } from '../../../src/server/routes/api/reporters';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
@@ -290,6 +291,7 @@ it('rejects mixed owner inputs and missing reporters, and rolls back ownership w
 });
 
 it('returns a client error without changing ownership when the project license denies mutations', async () => {
+  app.route('/api/reports', reporterMessagesRoutes);
   const target = login();
   const first = await report();
   Result.unwrap(
@@ -309,6 +311,14 @@ it('returns a client error without changing ownership when the project license d
       success: false,
       error: 'PROJECT_NOT_LICENSED',
     });
+  }
+  for (const [path, method, body] of [
+    ['owner', 'PUT', { claimableEmail: 'invitee@example.com', invitation: { message: 'Reply' } }],
+    ['reporter-messages', 'POST', { message: 'Reply' }],
+  ] as const) {
+    const response = await request(`/api/reports/${first.id}/${path}`, method, body);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'PROJECT_NOT_LICENSED' });
   }
   expect((await reportsRepo.findById(first.id))!.reporterId).toBe(target.reporter.id);
   expect(getDb().query('SELECT COUNT(*) AS count FROM report_history').get()).toEqual({ count: 1 });

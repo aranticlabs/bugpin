@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
+import { reportOwnerRoutes } from '../../../src/server/routes/api/report-owner';
 import { reportMessagesService } from '../../../src/server/services/report-messages.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
@@ -83,10 +84,44 @@ afterEach(() => {
 function createApp() {
   const app = new Hono();
   app.route('/reports', reporterMessagesRoutes);
+  app.route('/reports', reportOwnerRoutes);
   return app;
 }
 
 describe('reporter-messages routes POST', () => {
+  it.each([
+    ['PROJECT_NOT_LICENSED', 403],
+    ['REPORT_CLOSED', 409],
+    ['UPLOAD_QUOTA_EXCEEDED', 413],
+  ] as const)(
+    'returns the same message error status for %s through both write routes',
+    async (code, status) => {
+      reportMessagesService.send = async () => Result.fail('Write refused', code);
+      reportMessagesService.sendInvitation = async () => Result.fail('Write refused', code);
+      const app = createApp();
+      for (const [path, method, body] of [
+        ['reporter-messages', 'POST', { message: 'Reply' }],
+        [
+          'owner',
+          'PUT',
+          { claimableEmail: 'invitee@example.com', invitation: { message: 'Reply' } },
+        ],
+      ] as const) {
+        const response = await app.request(`http://localhost/reports/rpt_1/${path}`, {
+          method,
+          headers: {
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+        expect(response.status).toBe(status);
+        expect(await response.json()).toMatchObject({ error: code });
+      }
+    }
+  );
+
   it('returns 409 for an unconfirmed portal-access grant', async () => {
     reportMessagesService.send = async () =>
       Result.fail('Confirm portal access', 'CONFIRMATION_REQUIRED');

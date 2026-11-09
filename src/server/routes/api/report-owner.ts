@@ -4,7 +4,7 @@ import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, validatedBody } from '../../middleware/validate.js';
 import { reporterOwnershipService } from '../../services/reporter-ownership.service.js';
 import { reportMessagesService } from '../../services/report-messages.service.js';
-import { errorStatus } from '../../utils/http-status.js';
+import { errorStatus, reportMessageErrorStatus } from '../../utils/http-status.js';
 
 const ownerSchema = z.union([
   z.object({ reporterId: z.string().min(1).max(64) }).strict(),
@@ -28,23 +28,19 @@ reportOwnerRoutes.put(
   validate({ body: ownerSchema }),
   async (c) => {
     const body = validatedBody(c, ownerSchema);
-    const result =
-      'invitation' in body && body.invitation
-        ? await reportMessagesService.sendInvitation(
-            c.req.param('id'),
-            c.get('user').id,
-            body.claimableEmail,
-            body.invitation.message
-          )
-        : reporterOwnershipService.set(c.req.param('id'), body, c.get('user').id);
+    const claimable = 'claimableEmail' in body ? body : undefined;
+    const result = claimable?.invitation
+      ? await reportMessagesService.sendInvitation(
+          c.req.param('id'),
+          c.get('user').id,
+          claimable.claimableEmail,
+          claimable.invitation.message
+        )
+      : reporterOwnershipService.set(c.req.param('id'), body, c.get('user').id);
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        result.code === 'MESSAGING_DISABLED'
-          ? 403
-          : result.code === 'UNAUTHORIZED'
-            ? 401
-            : errorStatus(result.code)
+        claimable?.invitation ? reportMessageErrorStatus(result.code) : errorStatus(result.code)
       );
     return c.json({ success: true, owner: result.value });
   }
