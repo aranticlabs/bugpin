@@ -73,7 +73,6 @@ const zh: WidgetCatalog = {
   'recording.quality.low': '低',
   'recording.quality.standard': '标准',
   'recording.quality.high': '高',
-  'recording.quality.setting': '录制质量：{quality}',
   'recording.helperText': '支持格式：MP4、WebM、MOV（最大 {videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '不支持的图片格式：{type}',

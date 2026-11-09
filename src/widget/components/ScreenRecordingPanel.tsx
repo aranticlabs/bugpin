@@ -12,12 +12,10 @@ import {
 } from './ScreenshotManager.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
-import { DEFAULT_RECORDING_QUALITY, type RecordingQuality } from '@shared/recording-quality';
 
 interface ScreenRecordingPanelProps {
   clips: CapturedMedia[];
   recordingEnabled: boolean;
-  recordingQuality?: RecordingQuality;
   onRecord: () => void;
   onUpload: (item: CapturedMedia) => void;
   onRemove: (id: string) => void;
@@ -36,7 +34,6 @@ const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> = ({
   clips,
   recordingEnabled,
-  recordingQuality = DEFAULT_RECORDING_QUALITY,
   onRecord,
   onUpload,
   onRemove,
@@ -141,11 +138,6 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                 </Button>
               </div>
 
-              <p class="text-xs text-muted-foreground">
-                {t('recording.quality.setting', {
-                  quality: t(`recording.quality.${recordingQuality}`),
-                })}
-              </p>
               <p class="text-xs text-muted-foreground">{t('recording.privacyTip')}</p>
             </>
           )}

@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { config } from '../config.js';
 
 export type TrustProxyMode = 'auto' | 'always' | 'never';
+const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -63,6 +64,45 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
   if (mode === 'never') return false;
   if (mode === 'always') return true;
   return peer !== undefined && isPrivateAddress(peer);
+}
+
+export function getEffectiveOrigin(c: Context): string | null {
+  try {
+    const url = new URL(c.req.url);
+    let host = c.req.header('host') ?? url.host;
+    let protocol = url.protocol;
+    if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
+      host = c.req.header('x-forwarded-host') ?? host;
+      const forwardedProtocol = c.req.header('x-forwarded-proto');
+      if (
+        forwardedProtocol !== undefined &&
+        forwardedProtocol !== 'http' &&
+        forwardedProtocol !== 'https'
+      )
+        return null;
+      if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
+    }
+    if (!HOST_PATTERN.test(host)) return null;
+    return new URL(`${protocol}//${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The TRUST_PROXY value that would make BugPin honor this request's forwarded headers, or
+ * null when it already honors them or the request carries none. Ignored forwarded headers
+ * are the usual sign of a reverse proxy in front of an instance that does not trust it: a
+ * proxy on a private network only needs `auto`, one with a public address needs `true`.
+ */
+export function requiredTrustProxy(c: Context): 'auto' | 'true' | null {
+  const peer = getSocketAddress(c);
+  if (peerIsTrustedProxy(peer, config.trustProxy)) return null;
+  const hasForwardedHeaders = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'].some(
+    (header) => c.req.header(header) !== undefined
+  );
+  if (!hasForwardedHeaders) return null;
+  return peer !== undefined && isPrivateAddress(peer) ? 'auto' : 'true';
 }
 
 /**

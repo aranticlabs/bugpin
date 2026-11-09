@@ -79,7 +79,6 @@ const de: WidgetCatalog = {
   'recording.quality.low': 'Niedrig',
   'recording.quality.standard': 'Standard',
   'recording.quality.high': 'Hoch',
-  'recording.quality.setting': 'Aufnahmequalität: {quality}',
   'recording.helperText': 'Unterstützt: MP4, WebM, MOV (max. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Nicht unterstütztes Bildformat: {type}',

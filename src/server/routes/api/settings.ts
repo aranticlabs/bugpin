@@ -14,6 +14,7 @@ import {
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { requireEEFeature, hasEEFeature } from '../../utils/ee.js';
+import { getEffectiveOrigin, requiredTrustProxy } from '../../utils/client-ip.js';
 import type { EmailTemplateType } from '@shared/types';
 
 // Email template routes require 'custom-templates' EE feature
@@ -23,6 +24,19 @@ const settings = new Hono();
 
 // All settings routes require authentication
 settings.use('*', authMiddleware);
+
+// The configured Application URL and the address BugPin derives for this request, for
+// comparison with the address in the browser (Admin only)
+
+settings.get('/address-check', authorize(['admin']), async (c) => {
+  const { appUrl } = await settingsCacheService.getAll();
+  return c.json({
+    success: true,
+    appUrl,
+    requestOrigin: getEffectiveOrigin(c),
+    requiredTrustProxy: requiredTrustProxy(c),
+  });
+});
 
 // Get Settings (Admin only)
 

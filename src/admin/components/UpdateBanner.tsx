@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, ArrowUpCircle, ExternalLink, Rocket, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, ExternalLink, Rocket, Sparkles } from 'lucide-react';
 import { useUpdateCheck, type ReleaseType } from '../hooks/useUpdateCheck';
 import { cn } from '../lib/utils';
-import { Button } from './ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { NoticeControls } from './NoticeControls';
 
 const WIDGET_PACKAGE_URL =
   'https://www.npmjs.com/package/@arantic/bugpin-widget?activeTab=versions';
-const UPGRADE_GUIDE_URL = 'https://docs.bugpin.io/installation/docker#update';
+const UPGRADE_GUIDE_URL = 'https://docs.bugpin.io/upgrading';
+const DISMISS_UPDATE_LABEL = 'Dismiss update notification';
 
 // Update notices use the fixed BugPin palette so custom branding never restyles them.
 const linkClass =
@@ -20,40 +20,6 @@ function ExternalTextLink({ href, children }: { href: string; children: ReactNod
       {children}
       <ExternalLink className="h-3 w-3" aria-hidden="true" />
     </a>
-  );
-}
-
-function NoticeControls({
-  onSnooze,
-  onDismiss,
-  small = false,
-}: {
-  onSnooze: () => void;
-  onDismiss: () => void;
-  small?: boolean;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-1">
-      <TooltipProvider>
-        <Tooltip delayDuration={500}>
-          <TooltipTrigger asChild>
-            <Button variant="outline" size="sm" onClick={onSnooze} className="h-6 px-2 text-xs">
-              Not now
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Remind me tomorrow</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onDismiss}
-        aria-label="Dismiss update notification"
-        className={cn('shrink-0 text-muted-foreground', small ? 'h-5 w-5' : 'h-6 w-6')}
-      >
-        <X />
-      </Button>
-    </div>
   );
 }
 
@@ -100,7 +66,11 @@ function UpdateNotice({
             )}
           </p>
         </div>
-        <NoticeControls onSnooze={onSnooze} onDismiss={onDismiss} />
+        <NoticeControls
+          onSnooze={onSnooze}
+          onDismiss={onDismiss}
+          dismissLabel={DISMISS_UPDATE_LABEL}
+        />
       </div>
     );
   }
@@ -116,7 +86,11 @@ function UpdateNotice({
           <span className="font-medium">BugPin {label} is available.</span>{' '}
           {releaseUrl && <ExternalTextLink href={releaseUrl}>See what&apos;s new</ExternalTextLink>}
         </p>
-        <NoticeControls onSnooze={onSnooze} onDismiss={onDismiss} />
+        <NoticeControls
+          onSnooze={onSnooze}
+          onDismiss={onDismiss}
+          dismissLabel={DISMISS_UPDATE_LABEL}
+        />
       </div>
     );
   }
@@ -131,7 +105,12 @@ function UpdateNotice({
         BugPin {label} is available.{' '}
         {releaseUrl && <ExternalTextLink href={releaseUrl}>Release notes</ExternalTextLink>}
       </p>
-      <NoticeControls onSnooze={onSnooze} onDismiss={onDismiss} small />
+      <NoticeControls
+        onSnooze={onSnooze}
+        onDismiss={onDismiss}
+        dismissLabel={DISMISS_UPDATE_LABEL}
+        small
+      />
     </div>
   );
 }
@@ -151,6 +130,8 @@ export function UpdateBanner() {
     widgetPackage,
     isWidgetWarningDismissed,
     dismissWidgetWarning,
+    isWidgetWarningSnoozed,
+    snoozeWidgetWarning,
   } = useUpdateCheck();
 
   if (!isAdmin) {
@@ -168,7 +149,8 @@ export function UpdateBanner() {
     widgetPackage.incompatible &&
     widgetPackage.warningId !== null &&
     widgetPackage.affectedProjects.length > 0 &&
-    !isWidgetWarningDismissed;
+    !isWidgetWarningDismissed &&
+    !isWidgetWarningSnoozed;
 
   if (!showUpdate && !showWidgetWarning) return null;
 
@@ -227,14 +209,11 @@ export function UpdateBanner() {
               </a>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={dismissWidgetWarning}
-            aria-label="Dismiss widget package compatibility warning"
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-amber-500/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <NoticeControls
+            onSnooze={snoozeWidgetWarning}
+            onDismiss={dismissWidgetWarning}
+            dismissLabel="Dismiss widget package compatibility warning"
+          />
         </div>
       )}
     </>

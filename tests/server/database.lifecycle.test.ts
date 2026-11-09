@@ -231,6 +231,78 @@ describe('database lifecycle', () => {
     }
   });
 
+  describe('database changed by a newer version', () => {
+    const newerMigration = '999_from_a_newer_version.sql';
+
+    async function withNewerDatabase(
+      run: (baseDir: string) => Promise<void>,
+      overrides: Partial<typeof config> = {}
+    ): Promise<void> {
+      const snapshot = { ...config };
+      const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-newer-'));
+      Object.assign(config, {
+        dataDir: baseDir,
+        dbPath: path.join(baseDir, 'bugpin.db'),
+        ...overrides,
+      });
+      try {
+        await initDatabase();
+        await initSchema();
+        await runMigrations();
+        getDb().run('INSERT INTO migrations (name) VALUES (?)', [newerMigration]);
+        await run(baseDir);
+      } finally {
+        closeDatabase();
+        fs.rmSync(baseDir, { recursive: true, force: true });
+        Object.assign(config, snapshot);
+      }
+    }
+
+    it('refuses to initialize the schema or run migrations', async () => {
+      await withNewerDatabase(async () => {
+        const expected = `Migrations unknown to this version: ${newerMigration}.`;
+        await expect(initSchema()).rejects.toThrow(expected);
+        await expect(runMigrations()).rejects.toThrow(expected);
+        await expect(initSchema()).rejects.toThrow(`cannot be used with BugPin ${config.version}`);
+      });
+    });
+
+    it('names the pre-upgrade snapshots stored beside the database', async () => {
+      await withNewerDatabase(async (baseDir) => {
+        const snapshotPath = path.join(baseDir, 'bugpin.db.pre-upgrade-008-example-first.bak');
+        fs.writeFileSync(snapshotPath, '');
+        fs.writeFileSync(path.join(baseDir, 'unrelated.bak'), '');
+
+        const error = await initSchema().then(
+          () => null,
+          (reason: unknown) => reason
+        );
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(`Pre-upgrade snapshots found: ${snapshotPath}.`);
+        expect((error as Error).message).not.toContain('unrelated.bak');
+      });
+    });
+
+    it('leaves the database untouched when it refuses to start', async () => {
+      await withNewerDatabase(async () => {
+        const db = getDb();
+        db.exec("DELETE FROM settings WHERE key = 'app_name'");
+        await expect(initSchema()).rejects.toThrow();
+        expect(db.query("SELECT 1 FROM settings WHERE key = 'app_name'").get()).toBeNull();
+      });
+    });
+
+    it('continues with a warning in development', async () => {
+      await withNewerDatabase(
+        async () => {
+          await initSchema();
+          await runMigrations();
+        },
+        { isDev: true }
+      );
+    });
+  });
+
   it('runs migrations when none exist', async () => {
     await initDatabase();
     await initSchema();
