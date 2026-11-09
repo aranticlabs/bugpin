@@ -414,6 +414,9 @@ it('validates and persists a separate portal URL and rejects a colliding Applica
     'ftp://feedback.example.com',
     'https://user:password@feedback.example.com',
     'https://bugpin.example.test:8443',
+    'https://feedback.example.com/portal',
+    'https://feedback.example.com?project=example',
+    'https://feedback.example.com#portal',
   ]) {
     expect(await settingsService.update({ portalBaseUrl })).toMatchObject({
       success: false,
@@ -421,7 +424,7 @@ it('validates and persists a separate portal URL and rejects a colliding Applica
     });
   }
   expect(
-    (await settingsService.update({ portalBaseUrl: 'https://feedback.example.com' })).success
+    (await settingsService.update({ portalBaseUrl: 'https://feedback.example.com/' })).success
   ).toBe(true);
   expect((await settingsRepo.getAll()).portalBaseUrl).toBe('https://feedback.example.com');
   expect(
@@ -437,23 +440,24 @@ it('renders localized editable staff activity emails with their own footer type 
   await settingsRepo.updateAll({ appUrl: '' });
   settingsCacheService.invalidate();
   for (const locale of SUPPORTED_LOCALES) {
-    await emailService.sendReporterActivityEmail(
-      [{ email: 'editor@example.com' }],
-      await report(),
-      'Project',
-      locale
-    );
-    expect(sent.at(-1)!.html).toContain(`lang="${locale}"`);
-    expect(sent.at(-1)!.html).toContain('http://localhost:3000/admin/reports/report');
+    const template = await emailService.getTemplate('reporterActivity', locale);
+    expect(template.html).toContain(`lang="${locale}"`);
   }
+  await emailService.sendReporterActivityEmail(
+    [{ email: 'editor@example.com' }],
+    await report(),
+    'Project'
+  );
+  expect(sent.at(-1)!.html).toContain('lang="en"');
+  expect(sent.at(-1)!.html).toContain('http://localhost:3000/admin/reports/report');
   expect(footer).toHaveBeenLastCalledWith(expect.any(String), 'reporterActivity');
   await settingsRepo.updateAll({ appUrl: settings.appUrl + '/nested/' });
   settingsCacheService.invalidate();
   const hooks = createDefaultHooks();
   hooks.getCustomEmailTemplates = async () => ({
     reporterActivity: {
-      fr: {
-        subject: 'Personnalisé: {{report.title}}',
+      en: {
+        subject: 'Custom: {{report.title}}',
         html: '<html><body><div><a href="{{report.url}}">Lien</a></div></body></html>',
       },
     },
@@ -462,10 +466,28 @@ it('renders localized editable staff activity emails with their own footer type 
   await emailService.sendReporterActivityEmail(
     [{ email: 'editor@example.com' }],
     await report(),
-    'Project',
-    'fr'
+    'Project'
   );
-  expect(sent.at(-1)!.subject).toBe('Personnalisé: Reporter activity');
+  expect(sent.at(-1)!.subject).toBe('Custom: Reporter activity');
   expect(sent.at(-1)!.html).toContain('https://bugpin.example.test/admin/reports/report');
   expect(sent.at(-1)!.html).not.toContain('/nested/');
+});
+
+it('labels an invalid Application URL separately and allows clearing either URL field', async () => {
+  await settingsRepo.updateAll({ appUrl: 'invalid', portalBaseUrl: '' });
+  expect(
+    await settingsService.update({ portalBaseUrl: 'https://feedback.example.com' })
+  ).toMatchObject({ success: false, code: 'INVALID_APP_URL' });
+  expect(
+    (await settingsService.update({ appUrl: '', portalBaseUrl: 'https://feedback.example.com' }))
+      .success
+  ).toBe(true);
+  expect((await settingsRepo.getAll()).appUrl).toBe('');
+  await settingsRepo.updateAll({ appUrl: 'invalid' });
+  expect((await settingsService.update({ portalBaseUrl: '' })).success).toBe(true);
+  expect((await settingsRepo.getAll()).portalBaseUrl).toBe('');
+  expect(await settingsService.update({ appUrl: 'invalid' })).toMatchObject({
+    success: false,
+    code: 'INVALID_APP_URL',
+  });
 });

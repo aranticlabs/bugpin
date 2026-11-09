@@ -507,8 +507,7 @@ export const emailService = {
   async sendReporterActivityEmail(
     recipients: EmailRecipient[],
     report: Report,
-    projectName: string,
-    locale: LocaleCode = 'en'
+    projectName: string
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const variables = {
@@ -522,7 +521,7 @@ export const emailService = {
         ).href,
       },
     };
-    const template = await this.getTemplate('reporterActivity', locale);
+    const template = await this.getTemplate('reporterActivity');
     const subject = templateService.compileTemplate(template.subject, variables);
     const content = templateService.compileTemplate(template.html, variables);
     const html = applyBrandColor(

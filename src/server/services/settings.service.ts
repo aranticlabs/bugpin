@@ -316,21 +316,32 @@ export const settingsService = {
     )
       return Result.fail('S3 storage requires Enterprise license', 'FEATURE_NOT_LICENSED');
 
-    const portalBaseUrl = input.portalBaseUrl?.trim() ?? current.portalBaseUrl;
+    let portalBaseUrl = input.portalBaseUrl?.trim() ?? current.portalBaseUrl;
     const appUrl = input.appUrl?.trim() ?? current.appUrl;
+    let appHostname: string | undefined;
+    if (portalBaseUrl && appUrl) {
+      if (!isValidUrl(appUrl)) return Result.fail('Invalid app URL format', 'INVALID_APP_URL');
+      appHostname = new URL(appUrl).hostname;
+    }
     if (portalBaseUrl) {
       try {
         const portal = new URL(portalBaseUrl);
+        if (portal.pathname !== '/' || portal.search || portal.hash)
+          return Result.fail(
+            'Portal Base URL must be an origin without a path, query, or fragment',
+            'INVALID_PORTAL_BASE_URL'
+          );
         if (
           !['http:', 'https:'].includes(portal.protocol) ||
           portal.username ||
           portal.password ||
-          (appUrl && portal.hostname === new URL(appUrl).hostname)
+          portal.hostname === appHostname
         )
           return Result.fail(
             'Portal Base URL must use HTTP or HTTPS on a different host from the Application URL',
             'INVALID_PORTAL_BASE_URL'
           );
+        portalBaseUrl = portal.origin;
       } catch {
         return Result.fail('Invalid Portal Base URL', 'INVALID_PORTAL_BASE_URL');
       }
