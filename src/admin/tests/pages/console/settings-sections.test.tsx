@@ -37,6 +37,52 @@ afterEach(() => {
 });
 
 describe('Settings sections', () => {
+  it('saves and clears the separate portal URL without changing other settings and shows retention scope', async () => {
+    const settingsServer = mockSettingsServer();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <Settings />
+        <DataRetention />
+      </>
+    );
+    const portal = await screen.findByLabelText('Portal Base URL');
+    await user.type(portal, 'https://feedback.example.com');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ portalBaseUrl: 'https://feedback.example.com' }])
+    );
+    await user.clear(portal);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(settingsServer.puts[1]).toEqual({ portalBaseUrl: '' }));
+    expect(
+      screen.getByText(/Conversations and their files are deleted with their report/)
+    ).toBeInTheDocument();
+  });
+
+  it('saves only edited portal limits on Network and resets them without changing network settings', async () => {
+    const settingsServer = mockSettingsServer({
+      reporterPortalLimits: { messagesPerReporterPerMinute: 20, sseStreamsPerSession: 5 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<NetworkSettingsCard />);
+    const streams = await screen.findByLabelText('Event streams per session');
+    fireEvent.change(streams, { target: { value: '11' } });
+    expect(streams).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.change(streams, { target: { value: '6' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ reporterPortalLimits: { sseStreamsPerSession: 6 } }])
+    );
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts[1]).toEqual({
+        reporterPortalLimits: { messagesPerReporterPerMinute: 10, sseStreamsPerSession: 3 },
+      })
+    );
+  });
+
   it('submits general settings updates', async () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);

@@ -27,11 +27,18 @@ describe('ReportDetail', () => {
       http.get('/api/reports/report-1', () =>
         HttpResponse.json({
           success: true,
-          report: { ...mockReports[0], hasNewReporterActivity: active },
+          report: {
+            ...mockReports[0],
+            hasNewReporterActivity: active,
+            lastReporterActivityAt: '2026-11-09T10:00:00.000Z',
+          },
           files: [],
         })
       ),
-      http.post('/api/reports/report-1/reporter-activity/seen', () => {
+      http.post('/api/reports/report-1/reporter-activity/seen', async ({ request }) => {
+        expect(await request.json()).toEqual({
+          lastReporterActivityAt: '2026-11-09T10:00:00.000Z',
+        });
         acknowledgements++;
         active = false;
         return HttpResponse.json({ success: true });

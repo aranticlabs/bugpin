@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import { SettingsNumberInput } from '../../components/SettingsNumberInput';
+import { DEFAULT_REPORTER_PORTAL_LIMITS, type ReporterPortalLimits } from '@shared/types';
+import { Button } from '../../components/ui/button';
 import type { AppSettings, TwoFactorPolicy } from '@shared/types';
 import {
   DEFAULT_PASSWORD_POLICY,
@@ -139,13 +141,31 @@ export function InvitationSettingsCard() {
   );
 }
 
+const PORTAL_LIMIT_FIELDS: [keyof ReporterPortalLimits, string][] = [
+  ['loginRequestsPerEmailPer15Min', 'Login requests per email per 15 minutes'],
+  ['loginRequestsPerIpPer15Min', 'Login requests per IP per 15 minutes'],
+  ['loginExchangesPerIpPer15Min', 'Login exchanges per IP per 15 minutes'],
+  ['messagesPerReporterPerMinute', 'Messages per reporter per minute'],
+  ['messagesPerReporterPerDay', 'Messages per reporter per day'],
+  ['submissionsPerReporterPerHour', 'Submissions per reporter per hour'],
+  ['submissionsPerReporterPerDay', 'Submissions per reporter per day'],
+  ['sseStreamsPerSession', 'Event streams per session'],
+  ['uploadMbPerReporterPerDay', 'Upload MB per reporter per day'],
+];
+
 export function NetworkSettingsCard() {
   const { value, set, guard } = useSettingsSection({
     select: (settings) => ({
       enforceHttps: settings.enforceHttps || false,
       rateLimitPerMinute: settings.rateLimitPerMinute || 60,
+      ...DEFAULT_REPORTER_PORTAL_LIMITS,
+      ...settings.reporterPortalLimits,
     }),
-    toPayload: (changes) => changes,
+    toPayload: ({ enforceHttps, rateLimitPerMinute, ...limits }) => ({
+      ...(enforceHttps !== undefined ? { enforceHttps } : {}),
+      ...(rateLimitPerMinute !== undefined ? { rateLimitPerMinute } : {}),
+      ...(Object.keys(limits).length ? { reporterPortalLimits: limits } : {}),
+    }),
     successMessage: 'Network settings saved',
   });
 
@@ -194,6 +214,46 @@ export function NetworkSettingsCard() {
             />
           </SettingRow>
         </SettingRows>
+        <div className="border-t pt-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-medium">Reporter portal limits</h3>
+              <p className="text-sm text-muted-foreground">
+                Limits help prevent abuse of reporter sign-in, messages, and uploads.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() =>
+                PORTAL_LIMIT_FIELDS.forEach(([key]) =>
+                  set(key, DEFAULT_REPORTER_PORTAL_LIMITS[key])
+                )
+              }
+            >
+              Reset to defaults
+            </Button>
+          </div>
+          <SettingRows>
+            {PORTAL_LIMIT_FIELDS.map(([key, label]) => (
+              <SettingRow
+                key={key}
+                label={label}
+                htmlFor={`portal-limit-${key}`}
+                controlClassName="@sm:w-28"
+              >
+                <SettingsNumberInput
+                  id={`portal-limit-${key}`}
+                  min={1}
+                  max={
+                    key === 'sseStreamsPerSession' ? 10 : DEFAULT_REPORTER_PORTAL_LIMITS[key] * 10
+                  }
+                  value={value[key]}
+                  onChange={(limit) => set(key, limit)}
+                />
+              </SettingRow>
+            ))}
+          </SettingRows>
+        </div>
       </CardContent>
     </Card>
   );

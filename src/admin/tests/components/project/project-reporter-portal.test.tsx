@@ -60,7 +60,11 @@ describe('Project Reporter Portal', () => {
     expect(screen.getByRole('button', { name: 'Send me a test login link' })).toBeDisabled();
     expect(screen.getAllByText('Missing')).toHaveLength(3);
     expect(screen.getByText(/Confirmation emails are disabled/)).toBeInTheDocument();
-    expect(screen.getByText(/Reporter messaging is disabled/)).toBeInTheDocument();
+    expect(screen.queryByText(/Reporter messaging is disabled/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Portal access and email updates are independent/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Conversations and their files follow the report's retention period/)
+    ).toBeInTheDocument();
     expect(
       screen.getAllByRole('link', { name: 'Configure' }).map((link) => link.getAttribute('href'))
     ).toEqual(['/settings/general', '/settings/email', '/settings/general']);

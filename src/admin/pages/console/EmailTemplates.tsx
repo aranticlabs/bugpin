@@ -33,6 +33,11 @@ const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: st
     description: 'Sent when a reporter requests a sign-in link',
   },
   {
+    value: 'reporterActivity',
+    label: 'Reporter Activity',
+    description: 'Sent to staff when a reporter replies or submits feedback',
+  },
+  {
     value: 'newReport',
     label: 'New Report',
     description: 'Sent when a new bug report is created',
@@ -123,6 +128,7 @@ const REPORTER_VARIABLES = [
 ];
 
 const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
+  reporterActivity: ['app.name', 'project.name', 'report.title', 'report.url'],
   newReport: [
     'app.name',
     'app.url',

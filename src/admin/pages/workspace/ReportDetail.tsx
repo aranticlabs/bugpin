@@ -211,7 +211,10 @@ export function ReportDetail() {
   });
 
   const markReporterActivitySeen = useMutation({
-    mutationFn: () => api.post(`/reports/${id}/reporter-activity/seen`),
+    mutationFn: () =>
+      api.post(`/reports/${id}/reporter-activity/seen`, {
+        lastReporterActivityAt: data?.report.lastReporterActivityAt,
+      }),
     onSuccess: () => {
       for (const queryKey of [['report', id], ['reports'], ['reporter-activity-count']])
         void queryClient.invalidateQueries({ queryKey });

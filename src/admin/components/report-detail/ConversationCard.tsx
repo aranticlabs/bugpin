@@ -154,19 +154,19 @@ export function ConversationCard({
               aria-hidden
             />
           </CollapsibleTrigger>
+          {hasNewReporterActivity && (
+            <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
+              <Badge variant="secondary">New reporter activity</Badge>
+              {canEdit && onMarkSeen && (
+                <Button variant="outline" size="sm" disabled={isMarkingSeen} onClick={onMarkSeen}>
+                  Mark as seen
+                </Button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-4">
-            {hasNewReporterActivity && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">New reporter activity</Badge>
-                {canEdit && onMarkSeen && (
-                  <Button variant="outline" size="sm" disabled={isMarkingSeen} onClick={onMarkSeen}>
-                    Mark as seen
-                  </Button>
-                )}
-              </div>
-            )}
             {portalEnabled !== undefined && (
               <p className="text-sm text-muted-foreground">
                 {!portalEnabled

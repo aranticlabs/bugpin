@@ -84,6 +84,27 @@ afterEach(() => {
 });
 
 describe('ConversationCard', () => {
+  it('keeps activity and its acknowledgement action visible when the saved card state is collapsed', async () => {
+    server.use(
+      http.get('/api/user-preferences/me', () =>
+        HttpResponse.json({ success: true, preferences: { reportMessagesOpen: false } })
+      )
+    );
+    const onMarkSeen = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<Harness hasNewReporterActivity onMarkSeen={onMarkSeen} />);
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: 'Messages' })).not.toBeInTheDocument()
+    );
+    expect(await screen.findByText('New reporter activity')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
+    expect(onMarkSeen).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: /Conversation/ })).toHaveAttribute(
+      'data-state',
+      'closed'
+    );
+  });
+
   it('shows new activity without clearing it on view and lets editors acknowledge it', async () => {
     const onMarkSeen = vi.fn();
     const user = userEvent.setup();

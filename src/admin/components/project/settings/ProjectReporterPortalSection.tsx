@@ -46,7 +46,7 @@ export function ProjectReporterPortalSection({
       globalSettings?.reporterNotifications?.notifyOnNewReport ??
       true);
   const messagingEnabled =
-    emailEnabled &&
+    project?.settings.notifyReporter !== false &&
     (emailSettings.messagingEnabled ??
       globalSettings?.reporterNotifications?.messagingEnabled ??
       true);
@@ -116,6 +116,15 @@ export function ProjectReporterPortalSection({
               }
             />
           </div>
+          <p className="text-sm text-muted-foreground">
+            Portal access and email updates are independent. Reporters can read their feedback even
+            when update emails or messaging are disabled. Update emails respect each reporter's
+            unsubscribe preference.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Reporters see the original description and visible conversation messages. Conversations
+            and their files follow the report's retention period.
+          </p>
           <div className="space-y-2">
             <Label htmlFor="reporter-portal-url">Portal URL</Label>
             <div className="flex min-w-0 gap-2">
