@@ -16,6 +16,7 @@ interface RateLimitOptions {
   window?: number; // in seconds
   keyGenerator?: (c: Context) => string | Promise<string>;
   onLimit?: (c: Context) => Response;
+  exposeHeaders?: boolean;
 }
 
 // Rate Limit Store
@@ -75,14 +76,16 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
     const resetSeconds = Math.ceil((entry.resetAt - now) / 1000);
 
     // Set rate limit headers
-    c.header('X-RateLimit-Limit', max.toString());
-    c.header('X-RateLimit-Remaining', remaining.toString());
-    c.header('X-RateLimit-Reset', resetSeconds.toString());
+    if (options.exposeHeaders !== false) {
+      c.header('X-RateLimit-Limit', max.toString());
+      c.header('X-RateLimit-Remaining', remaining.toString());
+      c.header('X-RateLimit-Reset', resetSeconds.toString());
+    }
 
     // Check if over limit
     if (entry.count > max) {
       if (options.onLimit) return options.onLimit(c);
-      c.header('Retry-After', resetSeconds.toString());
+      if (options.exposeHeaders !== false) c.header('Retry-After', resetSeconds.toString());
       return c.json(
         {
           success: false,
