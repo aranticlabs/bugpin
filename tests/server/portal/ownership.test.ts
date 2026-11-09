@@ -243,7 +243,7 @@ it('does not return an unauthorized token navigation target', async () => {
   expect(login('jane@example.com', report.id).targetReportId).toBeUndefined();
 });
 
-it('uses the portal setting independently of widget project activation', async () => {
+it('attaches inactive-project ownership but redirects only when the owned report is visible', async () => {
   const report = await reportsRepo.create({
     projectId: project.id,
     title: 'Claimable report',
@@ -251,7 +251,17 @@ it('uses the portal setting independently of widget project activation', async (
     claimableEmail: 'jane@example.com',
   });
   await projectsRepo.update(project.id, { isActive: false });
-  const session = login();
+  const session = login('jane@example.com', report.id);
   expect(session.attachedReportCount).toBe(1);
-  expect(reporterOwnershipRepo.canAccess(report.id, session.reporter.id)).toBe(true);
+  expect((await reportsRepo.findById(report.id))!.reporterId).toBe(session.reporter.id);
+  expect(reporterAuthService.validateSession(session.sessionSecret).success).toBe(true);
+  expect(reporterOwnershipRepo.canAccess(report.id, session.reporter.id)).toBe(false);
+  expect(session.targetReportId).toBeUndefined();
+  await projectsRepo.update(project.id, { isActive: true });
+  const active = login('jane@example.com', report.id);
+  expect(active.attachedReportCount).toBe(0);
+  expect(active.targetReportId).toBe(report.id);
+  expect(reporterOwnershipRepo.canAccess(report.id, active.reporter.id)).toBe(true);
+  await projectsRepo.delete(project.id);
+  expect(login('jane@example.com', report.id).targetReportId).toBeUndefined();
 });
