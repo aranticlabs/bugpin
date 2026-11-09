@@ -11,7 +11,7 @@ it('bundles shared presentation for browsers without staff or drag-and-drop modu
       'components/report-board/ReportViewSwitcher.tsx',
       'lib/status.tsx',
     ].map((file) => `${directory}${file}`),
-    tsconfig: fileURLToPath(new URL('../../src/admin/tsconfig.json', import.meta.url)),
+    tsconfig: `${directory}tsconfig.json`,
     target: 'browser',
     metafile: true,
   });

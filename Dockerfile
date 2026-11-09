@@ -19,6 +19,7 @@ COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
+COPY src/shared-ui/package.json ./src/shared-ui/
 
 # Install the exact dependency graph from the committed lockfile
 RUN bun install --frozen-lockfile
@@ -59,6 +60,7 @@ COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
+COPY src/shared-ui/package.json ./src/shared-ui/
 RUN bun install --production --frozen-lockfile --filter @bugpin/server
 
 # Copy server source (Bun runs TypeScript directly)

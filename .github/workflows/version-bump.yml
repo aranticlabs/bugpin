@@ -36,7 +36,7 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          for PKG in package.json src/server/package.json src/admin/package.json; do
+          for PKG in package.json src/server/package.json src/admin/package.json src/shared-ui/package.json; do
             node -e "
               const fs = require('fs');
               const j = JSON.parse(fs.readFileSync('$PKG'));
@@ -61,6 +61,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json src/server/package.json src/admin/package.json
+          git add package.json src/server/package.json src/admin/package.json src/shared-ui/package.json
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           git push origin HEAD:${{ steps.branch.outputs.target }}
