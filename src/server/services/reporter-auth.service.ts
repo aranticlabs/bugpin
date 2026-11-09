@@ -14,7 +14,7 @@ import { normalizeLocale } from '../utils/locale.js';
 import { maskEmail } from '../utils/mask-email.js';
 import { generateSecureToken, hashToken } from '../utils/secure-token.js';
 import { isValidEmail } from '../utils/validators.js';
-import { isSecurePortalUrl } from '../utils/portal-url.js';
+import { securePortalBaseUrl } from '../utils/portal-url.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type { Reporter, ReporterAuthTokenSource, LocaleCode } from '@shared/types';
@@ -64,8 +64,7 @@ export const reporterAuthService = {
     try {
       const settings = await settingsCacheService.getAll();
       if (
-        !isSecurePortalUrl(settings.appUrl) ||
-        (settings.portalBaseUrl && !isSecurePortalUrl(settings.portalBaseUrl)) ||
+        !securePortalBaseUrl(settings) ||
         !settings.smtpEnabled ||
         !settings.smtpConfig.host ||
         !settings.smtpConfig.from
@@ -85,11 +84,13 @@ export const reporterAuthService = {
   },
 
   async sendLoginLink(email: string, locale: LocaleCode = 'en'): Promise<Result<void>> {
-    const minted = this.mintLoginToken(email, 'request');
-    if (!minted.success) return minted;
     try {
       const settings = await settingsCacheService.getAll();
-      const loginUrl = new URL('/reporter-portal/login', settings.portalBaseUrl || settings.appUrl);
+      const baseUrl = securePortalBaseUrl(settings);
+      if (!baseUrl) return Result.fail('Could not send the login email', 'EMAIL_DELIVERY_FAILED');
+      const minted = this.mintLoginToken(email, 'request');
+      if (!minted.success) return minted;
+      const loginUrl = new URL('/reporter-portal/login', baseUrl);
       loginUrl.hash = minted.value.secret;
       const sent = await emailService.sendReporterLoginEmail(minted.value.email, {
         loginUrl: loginUrl.href,

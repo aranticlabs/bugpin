@@ -48,20 +48,11 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
   }
 
   const url = new URL(c.req.url);
-  const requestHost = c.req.header('host') ?? url.host;
-  if (!HOST_PATTERN.test(requestHost))
-    return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
-  let requestOrigin: URL;
-  try {
-    requestOrigin = new URL(`${url.protocol}//${requestHost}`);
-  } catch {
-    return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
-  }
   const origin = getEffectiveOrigin(c);
 
   // Separate origins require a configured host; other redirects use appUrl or the raw Host.
-  if (origin?.startsWith('http:')) {
-    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
+  if (origin?.startsWith('http:') || (!origin && url.protocol === 'http:')) {
+    const hostname = new URL(origin ?? url.href).hostname.replace(/^\[|\]$/g, '');
     if (
       c.req.path === '/health' &&
       (hostname === 'localhost' || isLoopbackAddress(hostname)) &&
@@ -72,7 +63,7 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
     if (settings.portalBaseUrl) {
       configured =
         [settings.appUrl, settings.portalBaseUrl].find(
-          (value) => value && new URL(value).host === new URL(origin).host
+          (value) => value && origin && new URL(value).host === new URL(origin).host
         ) ?? '';
       if (!configured)
         return c.json(
@@ -80,7 +71,18 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
           421
         );
     }
-    const destination = configured ? new URL(configured) : requestOrigin;
+    let destination: URL;
+    if (configured) destination = new URL(configured);
+    else {
+      const requestHost = c.req.header('host') ?? url.host;
+      if (!HOST_PATTERN.test(requestHost))
+        return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
+      try {
+        destination = new URL(`${url.protocol}//${requestHost}`);
+      } catch {
+        return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
+      }
+    }
     url.protocol = 'https:';
     url.hostname = destination.hostname;
     url.port = destination.port;

@@ -263,3 +263,53 @@ describe('DISABLE_HTTPS_ENFORCEMENT', () => {
     expect(loadDisableFlag(' TRUE ')).toBe(true);
   });
 });
+
+describe('HTTPS enforcement behind a trusted proxy with an internal Host', () => {
+  it.each(['', 'https://portal.example.com'])(
+    'accepts forwarded HTTPS when portalBaseUrl=%s',
+    async (portal) => {
+      portalBaseUrl = portal;
+      const response = await createApp().request(
+        'http://bugpin_app:7300/health',
+        {
+          headers: {
+            Host: 'bugpin_app:7300',
+            'X-Forwarded-Host': portal ? 'portal.example.com' : 'bugpin.example.com',
+            'X-Forwarded-Proto': 'https',
+          },
+        },
+        { requestIP: () => ({ address: '172.18.0.2' }) }
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('strict-transport-security')).toContain('max-age=31536000');
+    }
+  );
+
+  it('uses the configured public host for an HTTP redirect without validating the unused internal Host', async () => {
+    const response = await createApp().request(
+      'http://bugpin_app:7300/health',
+      {
+        headers: {
+          Host: 'bugpin_app:7300',
+          'X-Forwarded-Host': 'bugpin.example.com',
+          'X-Forwarded-Proto': 'http',
+        },
+      },
+      { requestIP: () => ({ address: '172.18.0.2' }) }
+    );
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe('https://bugpin.example.com/health');
+  });
+
+  it('rejects an invalid raw redirect destination when no URL or forwarded host is configured', async () => {
+    appUrl = '';
+    const response = await createApp().request(
+      'http://internal.example/health',
+      { headers: { Host: 'bad host' } },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(response.status).toBe(400);
+    expect(response.headers.get('location')).toBeNull();
+  });
+});

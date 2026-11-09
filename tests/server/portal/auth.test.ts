@@ -416,3 +416,27 @@ it('does not deliver login credentials over public HTTP or a malformed portal UR
   }
   expect(sent).toHaveLength(0);
 });
+
+it.each([
+  ['', 'https://feedback.example.com'],
+  ['http://app.example.com', 'https://feedback.example.com'],
+  ['https://app.example.com', 'http://feedback.example.com'],
+  ['https://app.example.com', 'invalid'],
+])(
+  'refuses login credential delivery for insecure restored settings (%s, %s)',
+  async (appUrl, portalBaseUrl) => {
+    await settingsRepo.updateAll({ appUrl, portalBaseUrl });
+    settingsCacheService.invalidate();
+    const before = count('reporter_auth_tokens');
+    expect(await reporterAuthService.sendLoginLink('recipient@example.com')).toMatchObject({
+      success: false,
+      code: 'EMAIL_DELIVERY_FAILED',
+    });
+    expect(await reporterAuthService.requestLogin('recipient@example.com')).toEqual(
+      Result.ok(undefined)
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(sent).toHaveLength(0);
+    expect(count('reporter_auth_tokens')).toBe(before);
+  }
+);

@@ -20,16 +20,19 @@ export function isSecurePortalUrl(value: string): boolean {
   }
 }
 
+export function securePortalBaseUrl(
+  settings: Pick<AppSettings, 'appUrl' | 'portalBaseUrl'>
+): string | null {
+  const baseUrl = settings.portalBaseUrl || settings.appUrl;
+  return isSecurePortalUrl(settings.appUrl) && isSecurePortalUrl(baseUrl) ? baseUrl : null;
+}
+
 export function projectPortalUrl(
   project: Pick<Project, 'settings'>,
   settings: Pick<AppSettings, 'appUrl' | 'portalBaseUrl'>
 ): string | null {
-  const baseUrl = settings.portalBaseUrl || settings.appUrl;
-  if (
-    !project.settings.reporterPortal?.enabled ||
-    !isSecurePortalUrl(settings.appUrl) ||
-    !isSecurePortalUrl(baseUrl)
-  )
-    return null;
-  return new URL('/reporter-portal/', baseUrl).href;
+  const baseUrl = securePortalBaseUrl(settings);
+  return project.settings.reporterPortal?.enabled && baseUrl
+    ? new URL('/reporter-portal/', baseUrl).href
+    : null;
 }
