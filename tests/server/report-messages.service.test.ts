@@ -1,3 +1,5 @@
+import { createDefaultHooks } from '../../src/server/types/ee-plugin';
+import { registerEEHooks, resetEEHooks } from '../../src/server/utils/ee-hooks';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import * as fs from 'node:fs';
@@ -27,6 +29,7 @@ import type { MediaFile } from '../../src/server/services/reports.service';
 const originalConfig = { ...config };
 const originalLogger = { ...logger };
 const originalNotify = notificationsService.notifyReporterMessage;
+const originalNotifyActivity = notificationsService.notifyReporterActivity;
 let directory: string;
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -66,10 +69,13 @@ beforeEach(async () => {
     INSERT INTO reports (id, project_id, title, metadata) VALUES ('second', 'project', 'Another report', '{}');
   `);
   notificationsService.notifyReporterMessage = async () => undefined;
+  notificationsService.notifyReporterActivity = async () => undefined;
 });
 
 afterEach(() => {
+  resetEEHooks();
   notificationsService.notifyReporterMessage = originalNotify;
+  notificationsService.notifyReporterActivity = originalNotifyActivity;
   settingsCacheService.invalidate();
   closeDatabase();
   rmSync(directory, { recursive: true, force: true });
@@ -108,6 +114,146 @@ async function uploadLimit(mb: number): Promise<void> {
 }
 
 describe('message writes', () => {
+  it('keeps a committed invitation and claimability when delivery fails', async () => {
+    const notify = spyOn(notificationsService, 'notifyReporterMessage').mockRejectedValue(
+      new Error('Delivery unavailable')
+    );
+    expect(
+      await reportMessagesService.sendInvitation(
+        'report',
+        'staff',
+        'Invitee@Example.com',
+        'Join us'
+      )
+    ).toMatchObject({
+      success: true,
+      value: {
+        reporterId: null,
+        claimableEmail: 'invitee@example.com',
+        correspondentEmail: 'invitee@example.com',
+      },
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual({ reporter_id: null, claimable_email: 'invitee@example.com' });
+    expect(counts()).toEqual({ messages: 1, files: 0 });
+    notify.mockRestore();
+  });
+
+  it('rolls ownership and the invitation back together when ownership history cannot be saved', async () => {
+    const before = getDb()
+      .query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'")
+      .get();
+    getDb().exec(
+      "CREATE TRIGGER reject_invitation_history BEFORE INSERT ON report_history WHEN NEW.action = 'claimable_set' BEGIN SELECT RAISE(ABORT, 'History unavailable'); END"
+    );
+    expect(
+      await reportMessagesService.sendInvitation(
+        'report',
+        'staff',
+        'invitee@example.com',
+        'Join the conversation'
+      )
+    ).toMatchObject({ success: false, code: 'MESSAGE_WRITE_FAILED' });
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual(before);
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+  });
+
+  it('rejects invalid invitation input before storing ownership or a message', async () => {
+    for (const [email, body, code] of [
+      ['invalid', 'Hello', 'INVALID_EMAIL'],
+      ['invitee@example.com', '   ', 'VALIDATION_ERROR'],
+      ['invitee@example.com', 'x'.repeat(5001), 'VALIDATION_ERROR'],
+    ]) {
+      expect(
+        await reportMessagesService.sendInvitation('report', 'staff', email, body)
+      ).toMatchObject({ success: false, code });
+    }
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual({ reporter_id: 'reporter', claimable_email: null });
+  });
+
+  it('does not describe an inactive project conversation as visible in the portal', async () => {
+    expect(await reportMessagesService.portalContext('report')).toMatchObject({
+      success: true,
+      value: { visible: true },
+    });
+    getDb().run("UPDATE projects SET is_active = 0 WHERE id = 'project'");
+    expect(await reportMessagesService.portalContext('report')).toMatchObject({
+      success: true,
+      value: { visible: false },
+    });
+  });
+
+  it('preserves an expected ownership failure while rolling the message and staged files back', async () => {
+    getDb().run(
+      "UPDATE reports SET reporter_id = NULL, reporter_email = 'invalid' WHERE id = 'report'"
+    );
+    expect(
+      await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)
+    ).toMatchObject({ success: false, code: 'INVALID_EMAIL' });
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(stagedFiles()).toEqual([]);
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: null,
+    });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+  });
+  it('requires confirmation before staging files or changing claimability', async () => {
+    getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+    expect(
+      await reportMessagesService.send('report', 'staff', 'Reply', false, [image()])
+    ).toMatchObject({ success: false, code: 'CONFIRMATION_REQUIRED' });
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(stagedFiles()).toEqual([]);
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: null,
+    });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+    const confirmed = await reportMessagesService.send(
+      'report',
+      'staff',
+      '',
+      true,
+      [image()],
+      true
+    );
+    expect(confirmed.success).toBe(true);
+    expect(counts()).toEqual({ messages: 1, files: 1 });
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: 'reporter@example.com',
+    });
+    expect(getDb().query('SELECT action, user_id FROM report_history').all()).toEqual([
+      { action: 'claimable_set', user_id: 'staff' },
+    ]);
+  });
+
+  it('rolls confirmed claimability, history and message back when a file insert fails', async () => {
+    getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+    const failure = spyOn(filesRepo, 'insert').mockImplementation(() => {
+      throw new Error('Insert failed');
+    });
+    try {
+      expect(
+        await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)
+      ).toMatchObject({ success: false, code: 'MESSAGE_WRITE_FAILED' });
+      expect(counts()).toEqual({ messages: 0, files: 0 });
+      expect(stagedFiles()).toEqual([]);
+      expect(
+        getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()
+      ).toEqual({ claimable_email: null });
+      expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+    } finally {
+      failure.mockRestore();
+    }
+  });
+
   it('saves text and media with a server-derived author snapshot', async () => {
     const notify = spyOn(notificationsService, 'notifyReporterMessage');
     try {
@@ -129,6 +275,13 @@ describe('message writes', () => {
         uploadedByReporterId: null,
       });
       expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'report' }),
+        'A reply',
+        'staff',
+        true,
+        result.value.files
+      );
     } finally {
       notify.mockRestore();
     }
@@ -700,4 +853,44 @@ it('allows inactive-project staff replies and moderation while denying reporter 
     success: false,
     code: 'NOT_FOUND',
   });
+});
+
+it('emits metadata-only file webhooks after commit and emits no events for rolled-back writes', async () => {
+  const hooks = createDefaultHooks();
+  const messageCreated = spyOn(hooks, 'onReportMessageCreated').mockImplementation(async () => {
+    expect(counts()).toEqual({ messages: 1, files: 1 });
+    throw new Error('Delivery unavailable');
+  });
+  const ownerChanged = spyOn(hooks, 'onReportOwnerChanged');
+  registerEEHooks(hooks);
+  getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+  const saved = await reportMessagesService.send('report', 'staff', '', false, [image()], true);
+  expect(saved.success).toBe(true);
+  if (!saved.success) return;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(messageCreated).toHaveBeenCalledWith({
+    reportId: 'report',
+    projectId: 'project',
+    messageId: saved.value.id,
+    authorKind: 'staff',
+    body: '',
+    createdAt: saved.value.createdAt,
+    files: saved.value.files.map(({ id, type, mimeType, sizeBytes }) => ({
+      id,
+      type,
+      mimeType,
+      sizeBytes,
+    })),
+  });
+  expect(ownerChanged).toHaveBeenCalledTimes(1);
+  messageCreated.mockClear();
+  ownerChanged.mockClear();
+  getDb().run(
+    "UPDATE reports SET claimable_email = NULL, reporter_email = 'invalid' WHERE id = 'report'"
+  );
+  expect(
+    (await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)).success
+  ).toBe(false);
+  expect(messageCreated).not.toHaveBeenCalled();
+  expect(ownerChanged).not.toHaveBeenCalled();
 });

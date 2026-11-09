@@ -6,6 +6,17 @@ import { NotificationDefaults } from '../../../pages/console/NotificationDefault
 import { mockSettingsServer } from './settingsServer';
 
 describe('NotificationDefaults', () => {
+  it('saves the global reporter-reply default', async () => {
+    const settingsServer = mockSettingsServer();
+    const user = userEvent.setup();
+    renderWithProviders(<NotificationDefaults />);
+    await user.click(await screen.findByRole('switch', { name: 'Reporter replies' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ notifications: { notifyOnReporterReply: false } }])
+    );
+  });
+
   it('saves team and reporter defaults together, sending only the changed fields', async () => {
     const settingsServer = mockSettingsServer();
     const user = userEvent.setup();

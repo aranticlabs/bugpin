@@ -29,6 +29,7 @@ import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-
 import { authService } from '../../../src/server/services/auth.service';
 import { reportMessagesService } from '../../../src/server/services/report-messages.service';
 import { notificationsService } from '../../../src/server/services/notifications.service';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { Result } from '../../../src/server/utils/result';
 import type { ReporterMessage } from '../../../src/shared/types';
 
@@ -37,6 +38,7 @@ let directory: string;
 
 beforeEach(async () => {
   closeDatabase();
+  settingsCacheService.invalidate();
   directory = mkdtempSync(join(tmpdir(), 'bugpin-message-migration-'));
   Object.assign(config, {
     dataDir: directory,
@@ -50,6 +52,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  settingsCacheService.invalidate();
   closeDatabase();
   rmSync(directory, { recursive: true, force: true });
   Object.assign(config, originalConfig);
@@ -125,7 +128,11 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
     ]);
     const sent = await app.request('http://localhost/reports/report/reporter-messages', {
       method: 'POST',
-      headers: { cookie: 'session=session', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=session',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ message: 'A new reply', ccSender: true }),
     });
     expect(sent.status).toBe(200);
@@ -140,7 +147,8 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
       expect.objectContaining({ id: 'report' }),
       'A new reply',
       'staff',
-      true
+      true,
+      []
     );
   } finally {
     auth.mockRestore();

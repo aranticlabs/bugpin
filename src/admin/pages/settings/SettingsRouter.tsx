@@ -42,6 +42,9 @@ const License = lazyWithRetry(() =>
   import('../console/License').then((m) => ({ default: m.License }))
 );
 const Users = lazyWithRetry(() => import('../console/Users').then((m) => ({ default: m.Users })));
+const Reporters = lazyWithRetry(() =>
+  import('../console/Reporters').then((m) => ({ default: m.Reporters }))
+);
 const UserDetail = lazyWithRetry(() =>
   import('./UserDetail').then((m) => ({ default: m.UserDetail }))
 );
@@ -216,6 +219,14 @@ export function SettingsRouter() {
           <SettingsPage adminOnly header={false}>
             <Users />
             <InvitationSettings />
+          </SettingsPage>
+        }
+      />
+      <Route
+        path="reporters"
+        element={
+          <SettingsPage adminOnly wide>
+            <Reporters />
           </SettingsPage>
         }
       />

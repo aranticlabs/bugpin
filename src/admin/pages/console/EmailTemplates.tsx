@@ -26,7 +26,26 @@ import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { useConfirmUnsavedChanges } from '../../hooks/useConfirmUnsavedChanges';
 import { useSettings } from '../../hooks/useSettings';
 
+const REPORTER_RECIPIENT_TEMPLATES: readonly EmailTemplateType[] = [
+  'reporterLogin',
+  'reporterConfirmation',
+  'reporterStatusChange',
+  'reporterPriorityChange',
+  'reporterMessage',
+  'reporterAssignment',
+];
+
 const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: string }[] = [
+  {
+    value: 'reporterLogin',
+    label: 'Reporter Login',
+    description: 'Sent when a reporter requests a sign-in link',
+  },
+  {
+    value: 'reporterActivity',
+    label: 'Reporter Activity',
+    description: 'Sent to staff when a reporter replies or submits feedback',
+  },
   {
     value: 'newReport',
     label: 'New Report',
@@ -105,7 +124,20 @@ const LOCALE_LABELS: Record<LocaleCode, string> = {
   zh: '中文 (简体) (CN)',
 };
 
+const REPORTER_VARIABLES = [
+  'portal.url',
+  'report.portalUrl',
+  'reporter.loginUrl',
+  'reporter.unsubscribeUrl',
+  'reporter.updateUrl',
+  'reporter.actionLabel',
+  'reporter.portalDisplay',
+  'reporter.unsubscribeLabel',
+  'reporter.unsubscribeDisplay',
+];
+
 const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
+  reporterActivity: ['app.name', 'project.name', 'report.title', 'report.url'],
   newReport: [
     'app.name',
     'app.url',
@@ -168,7 +200,9 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'report.priorityFormatted',
   ],
   testEmail: ['app.name'],
+  reporterLogin: ['app.name', 'app.url', 'reporter.loginUrl'],
   reporterConfirmation: [
+    ...REPORTER_VARIABLES,
     'app.name',
     'app.url',
     'project.name',
@@ -181,6 +215,7 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'report.createdAt',
   ],
   reporterStatusChange: [
+    ...REPORTER_VARIABLES,
     'app.name',
     'app.url',
     'project.name',
@@ -194,6 +229,7 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'reporterMessageDisplay',
   ],
   reporterPriorityChange: [
+    ...REPORTER_VARIABLES,
     'app.name',
     'app.url',
     'project.name',
@@ -205,6 +241,7 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'newPriorityFormatted',
   ],
   reporterMessage: [
+    ...REPORTER_VARIABLES,
     'app.name',
     'app.url',
     'project.name',
@@ -215,6 +252,7 @@ const TEMPLATE_VARIABLES: Record<EmailTemplateType, string[]> = {
     'message',
   ],
   reporterAssignment: [
+    ...REPORTER_VARIABLES,
     'app.name',
     'app.url',
     'project.name',
@@ -526,6 +564,20 @@ export function EmailTemplates() {
                     </p>
                   </div>
 
+                  {REPORTER_RECIPIENT_TEMPLATES.includes(selectedType) &&
+                    html.trim() &&
+                    !(selectedType === 'reporterLogin' || selectedType === 'reporterConfirmation'
+                      ? html.includes('reporter.loginUrl')
+                      : html.includes('reporter.updateUrl') ||
+                        html.includes('report.portalUrl')) && (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {selectedType === 'reporterConfirmation'
+                          ? 'This confirmation template has no reporter.loginUrl. Add it so reporters can sign in to follow their feedback.'
+                          : selectedType === 'reporterLogin'
+                            ? 'This login template has no reporter.loginUrl. Add it so reporters can sign in.'
+                            : 'This update template has no reporter.updateUrl or report.portalUrl. Add a link so reporters can follow their feedback.'}
+                      </p>
+                    )}
                   <VariablesReference variables={availableVariables} />
 
                   <div className="space-y-2">

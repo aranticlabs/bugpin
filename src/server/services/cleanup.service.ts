@@ -3,8 +3,17 @@ import { filesRepo } from '../database/repositories/files.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { deleteReportFiles } from '../storage/files.js';
 import { logger } from '../utils/logger.js';
+import { reportersService } from './reporters.service.js';
 
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+let initialCleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+async function runScheduledCleanup(): Promise<void> {
+  await cleanupOldReports();
+  const result = await reportersService.cleanup();
+  if (!result.success) throw new Error(result.error);
+  logger.info('Reporter cleanup completed', result.value);
+}
 
 /**
  * Delete reports older than the configured retention period
@@ -89,8 +98,9 @@ function startCleanupScheduler(): void {
   }
 
   // Run cleanup on startup (with a small delay to let the server initialize)
-  setTimeout(() => {
-    cleanupOldReports().catch((error) => {
+  initialCleanupTimeout = setTimeout(() => {
+    initialCleanupTimeout = null;
+    runScheduledCleanup().catch((error) => {
       logger.error('Scheduled cleanup failed', error);
     });
   }, 5000);
@@ -98,7 +108,7 @@ function startCleanupScheduler(): void {
   // Run cleanup every 24 hours
   const oneDayMs = 24 * 60 * 60 * 1000;
   cleanupInterval = setInterval(() => {
-    cleanupOldReports().catch((error) => {
+    runScheduledCleanup().catch((error) => {
       logger.error('Scheduled cleanup failed', error);
     });
   }, oneDayMs);
@@ -110,6 +120,10 @@ function startCleanupScheduler(): void {
  * Stop the cleanup scheduler
  */
 function stopCleanupScheduler(): void {
+  if (initialCleanupTimeout) {
+    clearTimeout(initialCleanupTimeout);
+    initialCleanupTimeout = null;
+  }
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
     cleanupInterval = null;

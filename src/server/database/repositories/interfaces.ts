@@ -43,6 +43,7 @@ export interface CreateReportData {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  claimableEmail?: string;
   submissionId?: string;
 }
 
@@ -291,6 +292,7 @@ export interface CreateNotificationPreferencesData {
   notifyOnPriorityChange?: boolean;
   notifyOnAssignment?: boolean;
   notifyOnDeletion?: boolean;
+  notifyOnReporterReply?: boolean;
   emailEnabled?: boolean;
 }
 
@@ -339,6 +341,7 @@ export type MessageAuthor =
   { kind: 'staff'; userId: string } | { kind: 'reporter'; reporterId: string };
 
 export interface MessageWriteContext {
+  claimableEmail: string | null;
   projectId: string;
   status: ReportStatus;
   reporterId: string | null;

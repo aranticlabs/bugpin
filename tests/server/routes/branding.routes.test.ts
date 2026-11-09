@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { brandingService } from '../../../src/server/services/branding.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
 // Mock EE module to ensure requireEEFeature returns 402 for admin branding routes
@@ -47,7 +49,10 @@ const baseSession: Session = {
 const originalAuthService = { ...authService };
 const originalBrandingService = { ...brandingService };
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   authService.validateSession = async () =>
     Result.ok({
       user: baseUser,
@@ -70,6 +75,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(brandingService, originalBrandingService);
 });
@@ -112,6 +118,7 @@ describe('branding routes - CE features (should work)', () => {
         method: 'PUT',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
@@ -135,7 +142,11 @@ describe('branding routes - CE features (should work)', () => {
       ]) {
         const res = await app.request('http://localhost/branding/widget-primary-colors', {
           method: 'PUT',
-          headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+          headers: {
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+            'content-type': 'application/json',
+          },
           body: JSON.stringify(body),
         });
         expect(res.status).toBe(400);
@@ -149,7 +160,11 @@ describe('branding routes - CE features (should work)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/widget-primary-colors', {
         method: 'PUT',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify({ lightButtonColor: '#123456' }),
       });
       expect(res.status).toBe(403);
@@ -161,7 +176,11 @@ describe('branding routes - CE features (should work)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/widget-primary-colors', {
         method: 'PUT',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify({ lightButtonColor: '#123456' }),
       });
       expect(res.status).toBe(500);
@@ -175,6 +194,7 @@ describe('branding routes - CE features (should work)', () => {
         method: 'PUT',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
@@ -191,6 +211,7 @@ describe('branding routes - CE features (should work)', () => {
         method: 'PUT',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
@@ -208,7 +229,7 @@ describe('branding routes - EE features (returns 402)', () => {
       formData.append('file', new File(['logo'], 'logo.png', { type: 'image/png' }));
       const res = await app.request('http://localhost/branding/logo/light', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         body: formData,
       });
       expect(res.status).toBe(402);
@@ -224,7 +245,7 @@ describe('branding routes - EE features (returns 402)', () => {
       formData.append('file', new File(['favicon'], 'favicon.png', { type: 'image/png' }));
       const res = await app.request('http://localhost/branding/favicon/light', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         body: formData,
       });
       expect(res.status).toBe(402);
@@ -240,7 +261,7 @@ describe('branding routes - EE features (returns 402)', () => {
       formData.append('file', new File(['icon'], 'icon.png', { type: 'image/png' }));
       const res = await app.request('http://localhost/branding/icon/light', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
         body: formData,
       });
       expect(res.status).toBe(402);
@@ -256,6 +277,7 @@ describe('branding routes - EE features (returns 402)', () => {
         method: 'PUT',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ color: '#123456' }),
@@ -273,6 +295,7 @@ describe('branding routes - EE features (returns 402)', () => {
         method: 'PUT',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ lightButtonColor: '#123456', darkButtonColor: '#654321' }),
@@ -288,7 +311,7 @@ describe('branding routes - EE features (returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/logo/light', {
         method: 'DELETE',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
       expect(res.status).toBe(402);
       const body = (await res.json()) as { code: string };
@@ -301,7 +324,7 @@ describe('branding routes - EE features (returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/icon/light', {
         method: 'DELETE',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
       expect(res.status).toBe(402);
       const body = (await res.json()) as { code: string };
@@ -314,7 +337,7 @@ describe('branding routes - EE features (returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/favicon/light', {
         method: 'DELETE',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
       expect(res.status).toBe(402);
       const body = (await res.json()) as { code: string };
@@ -327,7 +350,7 @@ describe('branding routes - EE features (returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/branding/reset', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
       expect(res.status).toBe(402);
       const body = (await res.json()) as { code: string };

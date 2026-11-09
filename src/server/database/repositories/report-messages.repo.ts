@@ -87,12 +87,13 @@ export const reportMessagesRepo = {
           status: ReportStatus;
           reporter_id: string | null;
           reporter_email: string | null;
+          claimable_email: string | null;
           settings: string;
           project_is_active: number;
         },
         [string]
       >(
-        `SELECT r.project_id, r.status, r.reporter_id, r.reporter_email, p.settings, p.is_active AS project_is_active
+        `SELECT r.project_id, r.status, r.reporter_id, r.reporter_email, r.claimable_email, p.settings, p.is_active AS project_is_active
        FROM reports r JOIN projects p ON p.id = r.project_id
        WHERE r.id = ? AND p.deleted_at IS NULL`
       )
@@ -103,6 +104,7 @@ export const reportMessagesRepo = {
           status: row.status,
           reporterId: row.reporter_id,
           reporterEmail: row.reporter_email,
+          claimableEmail: row.claimable_email,
           settings: JSON.parse(row.settings) as ProjectSettings,
           projectIsActive: row.project_is_active === 1,
         }
@@ -122,10 +124,18 @@ export const reportMessagesRepo = {
   },
 
   recordActivity(reportId: string, author: MessageAuthor, now: string): void {
-    getDb().run(
-      `UPDATE reports SET updated_at = ? ${author.kind === 'reporter' ? ', last_reporter_activity_at = ?' : ''} WHERE id = ?`,
-      author.kind === 'reporter' ? [now, now, reportId] : [now, reportId]
-    );
+    if (author.kind === 'reporter') {
+      getDb().run(
+        `UPDATE reports SET updated_at = ?, last_reporter_activity_at =
+        CASE WHEN julianday(last_reporter_activity_at) >= julianday(?) THEN strftime('%Y-%m-%dT%H:%M:%fZ', last_reporter_activity_at, '+0.001 seconds') ELSE ? END WHERE id = ?`,
+        [now, now, now, reportId]
+      );
+    } else {
+      getDb().run(
+        'UPDATE reports SET updated_at = ?, reporter_activity_seen_at = last_reporter_activity_at WHERE id = ?',
+        [now, reportId]
+      );
+    }
   },
 
   setHidden(

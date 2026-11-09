@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Report, Session, User } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -55,7 +57,10 @@ let createManualPayload: unknown;
 let userRole: User['role'] = 'admin';
 let boardMove: unknown;
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   listFilter = undefined;
   reportResult = baseReport;
   reportUpdatePayload = undefined;
@@ -129,6 +134,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(reportsService, originalReportsService);
   Object.assign(filesRepo, originalFilesRepo);
@@ -146,7 +152,7 @@ describe('reports routes', () => {
     const res = await app.request(
       'http://localhost/reports?status=open,closed&assignedTo=usr_2&source=manual&limit=10',
       {
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       }
     );
     expect(res.status).toBe(200);
@@ -190,7 +196,7 @@ describe('reports routes', () => {
 
     const res = await app.request('http://localhost/reports', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
 
@@ -218,7 +224,7 @@ describe('reports routes', () => {
 
     const res = await createApp().request('http://localhost/reports', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
 
@@ -235,6 +241,7 @@ describe('reports routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ projectId: 'prj_1', title: 'Manual report' }),
@@ -259,6 +266,7 @@ describe('reports routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ title: 'New title' }),
@@ -271,7 +279,11 @@ describe('reports routes', () => {
     userRole = 'editor';
     const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
       method: 'PATCH',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({
         status: 'resolved',
         previousId: 'rpt_2',
@@ -294,7 +306,11 @@ describe('reports routes', () => {
     const request = (body: unknown) =>
       createApp().request('http://localhost/reports/rpt_1/board-position', {
         method: 'PATCH',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify(body),
       });
 
@@ -311,7 +327,11 @@ describe('reports routes', () => {
   it('scopes a saved sort to the board filters and resolves the signed-in assignee', async () => {
     const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
       method: 'PATCH',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({
         status: 'open',
         nextId: 'rpt_2',
@@ -346,7 +366,11 @@ describe('reports routes', () => {
     const request = (scope: unknown) =>
       createApp().request('http://localhost/reports/rpt_1/board-position', {
         method: 'PATCH',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify({
           status: 'open',
           adoptSort: { sortBy: 'title', sortOrder: 'asc', scope },
@@ -363,7 +387,11 @@ describe('reports routes', () => {
     reportsService.moveOnBoard = async () => Result.fail('Failed to move report', 'UPDATE_FAILED');
     const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
       method: 'PATCH',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ status: 'open' }),
     });
     expect(res.status).toBe(500);
@@ -373,7 +401,11 @@ describe('reports routes', () => {
     userRole = 'editor';
     const res = await createApp().request('http://localhost/reports/bulk-board-position', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ ids: ['rpt_1', 'rpt_2'], status: 'closed', previousId: 'rpt_3' }),
     });
     expect(res.status).toBe(200);
@@ -389,7 +421,11 @@ describe('reports routes', () => {
     const request = (body: unknown) =>
       createApp().request('http://localhost/reports/bulk-board-position', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
         body: JSON.stringify(body),
       });
 
@@ -407,7 +443,11 @@ describe('reports routes', () => {
     reportResult = null;
     const res = await createApp().request('http://localhost/reports/rpt_1/board-position', {
       method: 'PATCH',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ status: 'open' }),
     });
     expect(res.status).toBe(404);
@@ -420,6 +460,7 @@ describe('reports routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -444,7 +485,7 @@ describe('reports routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(403);
   });
@@ -455,6 +496,7 @@ describe('reports routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ ids: ['rpt_1'], updates: { status: 'closed' } }),

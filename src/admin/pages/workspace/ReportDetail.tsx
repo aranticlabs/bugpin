@@ -4,10 +4,11 @@ import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ScrollArea } from '../../components/ui/scroll-area';
-import { api, getApiErrorMessage } from '../../api/client';
+import { api, isApiError, getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
 import { useReporterMessages, useSendReporterMessage } from '../../hooks/useReporterMessages';
+import { PortalAccessConfirmation } from '../../components/report-detail/PortalAccessConfirmation';
 import { ConversationCard } from '../../components/report-detail/ConversationCard';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -82,6 +83,7 @@ import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
 import { ActivityDialog } from '../../components/report/ActivityDialog';
 import { useReportHistory } from '../../hooks/useReportHistory';
+import { OwnerField } from '../../components/report/OwnerField';
 import {
   REPORT_STATUSES,
   type AppSettings,
@@ -148,6 +150,7 @@ export function ReportDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ url: string; filename: string } | null>(null);
   const [resolveMessage, setResolveMessage] = useState('');
+  const [confirmResolutionAccess, setConfirmResolutionAccess] = useState(false);
   const [resolveCcSender, setResolveCcSender] = useState(false);
   const [showResolveMessage, setShowResolveMessage] = useState(false);
   const [justResolved, setJustResolved] = useState(false);
@@ -207,11 +210,25 @@ export function ReportDetail() {
     enabled: !!data?.report?.projectId,
   });
 
+  const markReporterActivitySeen = useMutation({
+    mutationFn: () =>
+      api.post(`/reports/${id}/reporter-activity/seen`, {
+        lastReporterActivityAt: data?.report.lastReporterActivityAt,
+      }),
+    onSuccess: () => {
+      for (const queryKey of [['report', id], ['reports'], ['reporter-activity-count']])
+        void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, 'Could not mark reporter activity as seen')),
+  });
+
   const conversation = useReporterMessages(id ?? '');
   const resolutionSend = useSendReporterMessage(id ?? '');
 
   useEffect(() => {
     setResolveMessage('');
+    setConfirmResolutionAccess(false);
     setResolveCcSender(false);
     setShowResolveMessage(false);
     setJustResolved(false);
@@ -360,7 +377,7 @@ export function ReportDetail() {
     );
   })();
 
-  const hasRecipient = Boolean(report.reporterId || report.reporterEmail);
+  const hasRecipient = Boolean(report.reporterId || report.claimableEmail || report.reporterEmail);
 
   const handleStatusChange = (value: string) => {
     if (value === report.status) return;
@@ -407,13 +424,28 @@ export function ReportDetail() {
     );
   };
 
-  const handleSendResolveMessage = () => {
+  const handleSendResolveMessage = (confirmPortalAccess = false) => {
     if (!resolveMessage.trim() || resolutionSend.isPending) return;
+    if (!confirmPortalAccess && conversation.portal?.requiresPortalAccessConfirmation) {
+      resolutionSend.reset();
+      setConfirmResolutionAccess(true);
+      return;
+    }
     resolutionSend.mutate(
-      { message: resolveMessage.trim(), ccSender: resolveCcSender },
       {
+        message: resolveMessage.trim(),
+        ccSender: resolveCcSender,
+        confirmPortalAccess: confirmPortalAccess || undefined,
+      },
+      {
+        onError: (error) => {
+          if (isApiError(error) && error.response?.data?.error === 'CONFIRMATION_REQUIRED')
+            setConfirmResolutionAccess(true);
+          else setConfirmResolutionAccess(false);
+        },
         onSuccess: () => {
           setResolveMessage('');
+          setConfirmResolutionAccess(false);
           setResolveCcSender(false);
           setShowResolveMessage(false);
           setJustResolved(false);
@@ -596,6 +628,15 @@ export function ReportDetail() {
             </CardContent>
           </Card>
 
+          <PortalAccessConfirmation
+            open={confirmResolutionAccess}
+            busy={resolutionSend.isPending}
+            onOpenChange={(open) => {
+              setConfirmResolutionAccess(open);
+              if (!open) resolutionSend.reset();
+            }}
+            onConfirm={() => handleSendResolveMessage(true)}
+          />
           <ConversationCard
             key={report.id}
             reportId={report.id}
@@ -606,7 +647,11 @@ export function ReportDetail() {
             portalEnabled={
               projectData ? (projectData.settings?.reporterPortal?.enabled ?? false) : undefined
             }
+            projectActive={projectData?.isActive}
             hasOwner={Boolean(report.reporterId)}
+            hasNewReporterActivity={report.hasNewReporterActivity}
+            onMarkSeen={() => markReporterActivitySeen.mutate()}
+            isMarkingSeen={markReporterActivitySeen.isPending}
             maxImageMb={
               projectData?.settings?.screenshot?.maxImageUploadSizeMb ??
               settingsData?.screenshot?.maxImageUploadSizeMb
@@ -949,14 +994,19 @@ export function ReportDetail() {
                                     rows={3}
                                     className="text-sm"
                                   />
-                                  {resolutionSend.error && (
-                                    <p role="alert" className="text-sm text-destructive">
-                                      {getApiErrorMessage(
-                                        resolutionSend.error,
-                                        'Failed to send message'
-                                      )}
-                                    </p>
-                                  )}
+                                  {resolutionSend.error &&
+                                    !(
+                                      isApiError(resolutionSend.error) &&
+                                      resolutionSend.error.response?.data?.error ===
+                                        'CONFIRMATION_REQUIRED'
+                                    ) && (
+                                      <p role="alert" className="text-sm text-destructive">
+                                        {getApiErrorMessage(
+                                          resolutionSend.error,
+                                          'Failed to send message'
+                                        )}
+                                      </p>
+                                    )}
                                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                                     <Checkbox
                                       checked={resolveCcSender}
@@ -968,7 +1018,7 @@ export function ReportDetail() {
                                   </label>
                                   <Button
                                     size="sm"
-                                    onClick={handleSendResolveMessage}
+                                    onClick={() => handleSendResolveMessage()}
                                     disabled={!resolveMessage.trim() || resolutionSend.isPending}
                                   >
                                     {resolutionSend.isPending ? (
@@ -1055,6 +1105,7 @@ export function ReportDetail() {
                       <AssigneeDisplay user={report.assignee} showEmail />
                     )}
                   </div>
+                  <OwnerField report={report} canEdit={canEdit} />
                   <Separator />
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-4">

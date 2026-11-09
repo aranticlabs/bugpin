@@ -3,6 +3,7 @@ import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { integrationsRepo } from '../database/repositories/integrations.repo.js';
 import { webhooksRepo } from '../database/repositories/webhooks.repo.js';
 import { usersService } from './users.service.js';
+import { reporterPortalSettingsService } from './reporter-portal-settings.service.js';
 import { Result } from '../utils/result.js';
 import { checkProjectLicense, ProjectLicenseError } from '../utils/project-license.js';
 import { logger } from '../utils/logger.js';
@@ -68,6 +69,8 @@ export const projectsService = {
       name: input.name.trim(),
       settings: input.settings ?? {},
     };
+    const portalSettings = await reporterPortalSettingsService.validate(projectData.settings ?? {});
+    if (!portalSettings.success) return portalSettings;
 
     let project: Project;
     try {
@@ -91,7 +94,12 @@ export const projectsService = {
       return Result.fail('Project not found', 'NOT_FOUND');
     }
 
-    return Result.ok({ ...project, licenseLocked: !checkProjectLicense(project.id).success });
+    const prerequisites = await reporterPortalSettingsService.checkPrerequisites();
+    return Result.ok({
+      ...project,
+      licenseLocked: !checkProjectLicense(project.id).success,
+      reporterPortalPrerequisites: prerequisites.success ? [] : (prerequisites.details ?? []),
+    });
   },
 
   /**
@@ -176,6 +184,13 @@ export const projectsService = {
 
     if (input.settings !== undefined) {
       const nextSettings = withoutClearedOverrides({ ...existing.settings, ...input.settings });
+      if (input.settings.reporterPortal !== undefined) {
+        const portalSettings = await reporterPortalSettingsService.validate(
+          nextSettings,
+          existing.settings
+        );
+        if (!portalSettings.success) return portalSettings;
+      }
       const defaultAssigneeUserId = nextSettings.defaultAssigneeUserId;
 
       if (defaultAssigneeUserId) {

@@ -121,6 +121,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {
@@ -386,6 +387,7 @@ function readAll(): AppSettings {
     // Notification defaults
     notifications: {
       ...DEFAULT_NOTIFICATIONS,
+      notifyOnReporterReply: (settings.defaultNotifyOnReporterReply as boolean) ?? true,
       ...(settings.notifications as Partial<NotificationDefaultSettings>),
     },
     // Reporter notification settings

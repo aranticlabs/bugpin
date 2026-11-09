@@ -191,5 +191,6 @@ export function useProjectSettingsForm(projectId: string) {
     globalSettings,
     brandingConfig,
     assignableUsers,
+    project: projectDetail,
   };
 }

@@ -8,6 +8,8 @@ export const WEBHOOK_EVENTS: { value: WebhookEvent; label: string }[] = [
   { value: 'report.resolved', label: 'Report resolved' },
   { value: 'report.closed', label: 'Report closed' },
   { value: 'report.deleted', label: 'Report deleted' },
+  { value: 'report.message_created', label: 'Conversation message created' },
+  { value: 'report.owner_changed', label: 'Reporter owner changed' },
 ];
 
 export function webhookEventLabel(value: WebhookEvent): string {

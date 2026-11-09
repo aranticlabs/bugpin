@@ -141,9 +141,14 @@ function decodeCursor(
   return values;
 }
 
+const NEW_REPORTER_ACTIVITY =
+  'reports.last_reporter_activity_at IS NOT NULL AND (reports.reporter_activity_seen_at IS NULL OR julianday(reports.last_reporter_activity_at) > julianday(reports.reporter_activity_seen_at))';
+
 type ReportConditionFilter = Pick<
   ReportFilter,
   | 'projectId'
+  | 'reporterId'
+  | 'reporterActivity'
   | 'source'
   | 'status'
   | 'priority'
@@ -162,9 +167,14 @@ function reportConditions(filter: ReportConditionFilter): {
   const conditions: string[] = [];
   const params: SortValue[] = [];
 
+  if (filter.reporterActivity === 'new') conditions.push(NEW_REPORTER_ACTIVITY);
   if (filter.projectId) {
     conditions.push('reports.project_id = ?');
     params.push(filter.projectId);
+  }
+  if (filter.reporterId) {
+    conditions.push('reports.reporter_id = ?');
+    params.push(filter.reporterId);
   }
 
   if (filter.source) {
@@ -295,6 +305,11 @@ function mapRowToReport(row: ReportRow & { project_name?: string }): Report {
     ownerSeenAt: row.owner_seen_at ?? undefined,
     lastReporterActivityAt: row.last_reporter_activity_at ?? undefined,
     reporterActivitySeenAt: row.reporter_activity_seen_at ?? undefined,
+    hasNewReporterActivity: Boolean(
+      row.last_reporter_activity_at &&
+      (!row.reporter_activity_seen_at ||
+        Date.parse(row.last_reporter_activity_at) > Date.parse(row.reporter_activity_seen_at))
+    ),
     assignedTo: row.assigned_to ?? undefined,
     assignee,
     customFields: row.custom_fields ? JSON.parse(row.custom_fields) : undefined,
@@ -332,8 +347,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        submission_id, created_at, updated_at, original_description, board_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
+        submission_id, created_at, updated_at, original_description, claimable_email, board_position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${TOP_OF_COLUMN})`,
       [
         id,
         data.projectId,
@@ -352,6 +367,7 @@ export const reportsRepo = {
         now,
         now,
         data.description ?? null,
+        data.claimableEmail ?? null,
         status,
       ]
     );
@@ -469,13 +485,17 @@ export const reportsRepo = {
   /**
    * Update a report
    */
-  async update(id: string, updates: Partial<Report>): Promise<Report | null> {
-    this.applyUpdate(id, updates);
+  async update(
+    id: string,
+    updates: Partial<Report>,
+    acknowledgeActivity = false
+  ): Promise<Report | null> {
+    this.applyUpdate(id, updates, acknowledgeActivity);
     return this.findById(id);
   },
 
   /** Writes report changes without reading the report back, so it can run inside a transaction */
-  applyUpdate(id: string, updates: Partial<Report>): void {
+  applyUpdate(id: string, updates: Partial<Report>, acknowledgeActivity = false): void {
     const db = getDb();
     const now = new Date().toISOString();
     const sets: string[] = ['updated_at = ?'];
@@ -492,6 +512,12 @@ export const reportsRepo = {
     }
 
     if (updates.status !== undefined) {
+      if (acknowledgeActivity) {
+        sets.push(
+          'reporter_activity_seen_at = CASE WHEN status != ? THEN last_reporter_activity_at ELSE reporter_activity_seen_at END'
+        );
+        params.push(updates.status);
+      }
       // SET expressions read the row as it was, so `status` here is the previous status.
       sets.push(
         `board_position = CASE WHEN status = ? THEN board_position ELSE ${TOP_OF_COLUMN} END`
@@ -667,6 +693,23 @@ export const reportsRepo = {
     }
 
     return count;
+  },
+
+  countReporterActivity(): number {
+    return getDb()
+      .query<{ count: number }, []>(
+        `SELECT COUNT(*) AS count FROM reports WHERE ${NEW_REPORTER_ACTIVITY}`
+      )
+      .get()!.count;
+  },
+
+  acknowledgeReporterActivity(id: string, displayedAt: string): void {
+    getDb().run(
+      `UPDATE reports SET reporter_activity_seen_at = ? WHERE id = ?
+      AND julianday(?) <= julianday(last_reporter_activity_at)
+      AND (reporter_activity_seen_at IS NULL OR julianday(?) > julianday(reporter_activity_seen_at))`,
+      [displayedAt, id, displayedAt, displayedAt]
+    );
   },
 
   /**

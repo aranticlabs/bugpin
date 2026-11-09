@@ -24,7 +24,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { ReportViewSwitcher } from '../report-board/ReportViewSwitcher';
 import { AssigneeDisplay } from './ReportFields';
 
-export type ReportsFilterKey = 'status' | 'priority' | 'projectId' | 'assignedTo';
+export type ReportsFilterKey =
+  'status' | 'priority' | 'projectId' | 'assignedTo' | 'reporterActivity';
 
 const BOARD_SORT_OPTIONS: { key: ReportSortKey; label: string }[] = [
   { key: 'position', label: 'Manual' },
@@ -176,6 +177,22 @@ export function ReportsToolbar({
             </SelectContent>
           </Select>
         )}
+
+        <Select
+          value={filters.reporterActivity || 'all'}
+          onValueChange={(value) => onFilterChange('reporterActivity', value)}
+        >
+          <SelectTrigger
+            className="min-w-32 flex-1 xl:min-w-20 xl:max-w-45"
+            aria-label="Filter by reporter activity"
+          >
+            <SelectValue placeholder="All activity" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All activity</SelectItem>
+            <SelectItem value="new">New reporter activity</SelectItem>
+          </SelectContent>
+        </Select>
 
         {view === 'board' && (
           <TooltipProvider>

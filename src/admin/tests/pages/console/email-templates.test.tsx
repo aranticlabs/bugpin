@@ -111,6 +111,37 @@ describe('EmailTemplates', () => {
     return { calls, putSpy, deleteSpy };
   }
 
+  it.each([
+    ['Reporter Login', 'reporter.loginUrl'],
+    ['Reporter Status Change', 'reporter.updateUrl'],
+    ['Reporter Priority Change', 'report.portalUrl'],
+    ['Reporter Message', 'reporter.updateUrl'],
+    ['Reporter Assignment', 'report.portalUrl'],
+  ])('warns when %s lacks its link variable', async (label, variable) => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: label }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /This (login|update) template has no/
+    );
+    await user.clear(screen.getByLabelText('Email Body'));
+    await user.type(screen.getByLabelText('Email Body'), variable);
+    expect(screen.queryByText(/This (login|update) template has no/)).not.toBeInTheDocument();
+  });
+
+  it('keeps reporter-recipient link hints off the staff activity template', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: 'Reporter Activity' }));
+    await waitFor(() => expect(screen.getByLabelText('Email Body')).toHaveValue('<p>def</p>'));
+    expect(
+      screen.queryByText(/This (login|update|confirmation) template has no/)
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('renders locale tabs and preloads built-in templates', async () => {
     mockApi();
     renderWithProviders(<EmailTemplates />);
@@ -125,6 +156,23 @@ describe('EmailTemplates', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Subject Line/i)).toHaveValue('Default subject');
     });
+  });
+
+  it('offers reporter login templates and hints when confirmation has no sign-in link', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: 'Reporter Login' }));
+    await waitFor(() => expect(screen.getByLabelText('Email Body')).toHaveValue('<p>def</p>'));
+    await user.click(screen.getByRole('button', { name: 'Reporter Confirmation' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'This confirmation template has no reporter.loginUrl.'
+    );
+    await user.clear(screen.getByLabelText('Email Body'));
+    await user.type(screen.getByLabelText('Email Body'), 'reporter.loginUrl');
+    expect(
+      screen.queryByText(/This confirmation template has no reporter.loginUrl/)
+    ).not.toBeInTheDocument();
   });
 
   it('preserves draft state when switching between locale tabs', async () => {

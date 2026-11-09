@@ -9,6 +9,8 @@ import {
   applyBrandColor,
   DEFAULT_BRAND_COLOR,
 } from '../constants/email-templates.js';
+import { normalizeEmail } from '../utils/email-normalize.js';
+import { reporterCopy } from '../i18n/reporter-copy.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import { getStatusLabel, getPriorityLabel, formatReportDate } from '../i18n/labels.js';
 import type {
@@ -33,6 +35,53 @@ export interface SendEmailOptions {
   subject: string;
   html: string;
   text?: string;
+  headers?: Record<string, string>;
+  loginToken?: { email: string; secret: string };
+  sensitive?: boolean;
+}
+
+export interface ReporterEmailOptions {
+  locale: LocaleCode;
+  portalUrl: string;
+  reportPortalUrl: string;
+  loginUrl: string;
+  unsubscribeUrl: string;
+  loginToken?: { email: string; secret: string };
+}
+
+function reporterTemplateData(
+  options: ReporterEmailOptions | undefined,
+  locale: LocaleCode,
+  action: string
+) {
+  const updateUrl = options?.loginUrl || options?.reportPortalUrl || '';
+  return {
+    portal: { url: options?.portalUrl ?? '' },
+    reporter: {
+      loginUrl: options?.loginUrl ?? '',
+      unsubscribeUrl: options?.unsubscribeUrl ?? '',
+      updateUrl,
+      actionLabel: action,
+      portalDisplay: updateUrl ? 'block' : 'none',
+      unsubscribeLabel: reporterCopy[locale].unsubscribe,
+      unsubscribeDisplay: options?.unsubscribeUrl ? 'block' : 'none',
+    },
+  };
+}
+
+function reporterSendOptions(
+  options?: ReporterEmailOptions
+): Pick<SendEmailOptions, 'headers' | 'loginToken' | 'sensitive'> {
+  return {
+    sensitive: true,
+    loginToken: options?.loginToken,
+    headers: options?.unsubscribeUrl
+      ? {
+          'List-Unsubscribe': `<${options.unsubscribeUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+      : undefined,
+  };
 }
 
 export interface ReportEmailData {
@@ -108,6 +157,14 @@ export const emailService = {
    * Send an email using configured SMTP settings
    */
   async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; error?: string }> {
+    const sensitive = Boolean(options.sensitive || options.loginToken);
+    if (
+      options.loginToken &&
+      (options.to.length !== 1 || normalizeEmail(options.to[0].email) !== options.loginToken.email)
+    ) {
+      logger.error('Reporter login token recipient mismatch');
+      return { success: false, error: 'Reporter login token recipient mismatch' };
+    }
     try {
       // Load SMTP settings
       const settings = withEffectiveBranding(await settingsCacheService.getAll());
@@ -115,7 +172,7 @@ export const emailService = {
       logger.debug('sendEmail called', {
         recipientCount: options.to.length,
         recipients: options.to.map((r) => r.email),
-        subject: options.subject,
+        subject: sensitive ? undefined : options.subject,
         smtpEnabled: settings.smtpEnabled,
         smtpHost: settings.smtpConfig.host || '(not set)',
         smtpFrom: settings.smtpConfig.from || '(not set)',
@@ -161,6 +218,7 @@ export const emailService = {
               subject: options.subject,
               html: options.html,
               text: options.text,
+              headers: options.headers,
             })
           )
         );
@@ -170,7 +228,9 @@ export const emailService = {
             failures++;
             logger.warn('Failed to send email to recipient', {
               email: batch[j].email,
-              error: (results[j] as PromiseRejectedResult).reason,
+              error: sensitive
+                ? 'Email delivery failed'
+                : (results[j] as PromiseRejectedResult).reason,
             });
           }
         }
@@ -185,7 +245,7 @@ export const emailService = {
 
       logger.info('Email sent successfully', {
         to: options.to.map((r) => r.email),
-        subject: options.subject,
+        subject: sensitive ? undefined : options.subject,
       });
 
       return { success: true };
@@ -196,6 +256,7 @@ export const emailService = {
           : typeof error === 'object' && error !== null && 'message' in error
             ? String((error as Record<string, unknown>).message)
             : String(error);
+      if (sensitive) return { success: false, error: 'Email delivery failed' };
       logger.error('Failed to send email', undefined, { error: message });
       return { success: false, error: message };
     }
@@ -443,9 +504,61 @@ export const emailService = {
     });
   },
 
-  /**
-   * Send confirmation email to reporter after submitting a report
-   */
+  async sendReporterActivityEmail(
+    recipients: EmailRecipient[],
+    report: Report,
+    projectName: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
+    const variables = {
+      app: { name: settings.appName },
+      project: { name: projectName },
+      report: {
+        title: report.title,
+        url: new URL(
+          `/admin/reports/${encodeURIComponent(report.id)}`,
+          settings.appUrl || 'http://localhost:3000'
+        ).href,
+      },
+    };
+    const template = await this.getTemplate('reporterActivity');
+    const subject = templateService.compileTemplate(template.subject, variables);
+    const content = templateService.compileTemplate(template.html, variables);
+    const html = applyBrandColor(
+      await this.appendFooter(content, 'reporterActivity'),
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
+    );
+    return this.sendEmail({ to: recipients, subject, html });
+  },
+
+  async sendReporterLoginEmail(
+    recipient: string,
+    data: { loginUrl: string; loginToken: { email: string; secret: string }; locale: LocaleCode }
+  ): Promise<{ success: boolean; error?: string }> {
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
+    const template = await this.getTemplate('reporterLogin', data.locale);
+    const variables = {
+      app: { name: settings.appName, url: settings.appUrl },
+      reporter: { loginUrl: data.loginUrl },
+    };
+    const subject = templateService.compileTemplate(template.subject, variables);
+    const html = applyBrandColor(
+      await this.appendFooter(
+        templateService.compileTemplate(template.html, variables),
+        'reporterLogin'
+      ),
+      settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
+    );
+    return this.sendEmail({
+      to: [{ email: recipient }],
+      subject,
+      html,
+      text: `${reporterCopy[data.locale].login}: ${data.loginUrl}\n${reporterCopy[data.locale].loginExpiry}`,
+      loginToken: data.loginToken,
+      sensitive: true,
+    });
+  },
+
   async sendReporterConfirmationEmail(
     recipient: string,
     data: {
@@ -453,14 +566,16 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
     }
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterConfirmation', locale);
     const templateData = {
+      ...reporterTemplateData(data.correspondence, locale, reporterCopy[locale].track),
       app: {
         name: appName,
         url: appUrl,
@@ -469,6 +584,7 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         status: report.status,
@@ -488,6 +604,7 @@ export const emailService = {
     );
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,
@@ -504,6 +621,7 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
       oldStatus: string;
       newStatus: string;
       reporterMessage?: string;
@@ -511,10 +629,11 @@ export const emailService = {
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldStatus, newStatus, reporterMessage } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterStatusChange', locale);
     const templateData = {
+      ...reporterTemplateData(data.correspondence, locale, reporterCopy[locale].view),
       app: {
         name: appName,
         url: appUrl,
@@ -523,6 +642,7 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         status: report.status,
@@ -545,6 +665,7 @@ export const emailService = {
     );
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,
@@ -561,16 +682,18 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
       oldPriority: string;
       newPriority: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldPriority, newPriority } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterPriorityChange', locale);
     const templateData = {
+      ...reporterTemplateData(data.correspondence, locale, reporterCopy[locale].view),
       app: {
         name: appName,
         url: appUrl,
@@ -579,6 +702,7 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         priority: report.priority,
@@ -599,6 +723,7 @@ export const emailService = {
     );
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,
@@ -615,17 +740,18 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
       assigneeName: string;
       previousAssigneeName?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, assigneeName, previousAssigneeName } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterAssignment', locale);
-    const reportUrl = appUrl ? `${appUrl}/admin/reports/${report.id}` : '';
     const templateData = {
+      ...reporterTemplateData(data.correspondence, locale, reporterCopy[locale].view),
       app: {
         name: appName,
         url: appUrl,
@@ -634,11 +760,12 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         status: report.status,
         statusFormatted: getStatusLabel(report.status as ReportStatus, locale),
-        url: reportUrl,
+        url: data.correspondence?.reportPortalUrl ?? '',
       },
       assignee: {
         name: assigneeName,
@@ -657,6 +784,7 @@ export const emailService = {
     );
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,
@@ -673,16 +801,23 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
       senderName: string;
       message: string;
+      files?: { filename: string }[];
     }
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterMessage', locale);
     const templateData = {
+      ...reporterTemplateData(
+        data.correspondence,
+        locale,
+        report.status === 'closed' ? reporterCopy[locale].view : reporterCopy[locale].reply
+      ),
       app: {
         name: appName,
         url: appUrl,
@@ -691,6 +826,7 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         status: report.status,
@@ -699,7 +835,18 @@ export const emailService = {
       sender: {
         name: senderName,
       },
-      message,
+      message: [
+        message || (data.files?.length ? reporterCopy[locale].fileOnly : ''),
+        ...(data.files?.length
+          ? [
+              `${reporterCopy[locale].files}:`,
+              ...data.files.map((file) => file.filename),
+              data.correspondence?.portalUrl
+                ? reporterCopy[locale].fileHint
+                : reporterCopy[locale].fileUnavailable,
+            ]
+          : []),
+      ].join('\n'),
     };
 
     const subject = templateService.compileTemplate(template.subject, templateData);
@@ -711,6 +858,7 @@ export const emailService = {
     );
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,
@@ -727,16 +875,34 @@ export const emailService = {
       projectName: string;
       appName: string;
       appUrl: string;
+      correspondence?: ReporterEmailOptions;
       senderName: string;
       message: string;
+      files?: { filename: string }[];
     }
   ): Promise<{ success: boolean; error?: string }> {
+    data = {
+      ...data,
+      correspondence: data.correspondence
+        ? {
+            ...data.correspondence,
+            loginToken: undefined,
+            loginUrl: '',
+            unsubscribeUrl: '',
+          }
+        : undefined,
+    };
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
-    const locale = report.reporterLocale ?? 'en';
+    const locale = data.correspondence?.locale ?? report.reporterLocale ?? 'en';
 
     const template = await this.getTemplate('reporterMessage', locale);
     const templateData = {
+      ...reporterTemplateData(
+        data.correspondence,
+        locale,
+        report.status === 'closed' ? reporterCopy[locale].view : reporterCopy[locale].reply
+      ),
       app: {
         name: appName,
         url: appUrl,
@@ -745,6 +911,7 @@ export const emailService = {
         name: projectName,
       },
       report: {
+        portalUrl: data.correspondence?.reportPortalUrl ?? '',
         title: report.title,
         description: report.description || '',
         status: report.status,
@@ -753,7 +920,18 @@ export const emailService = {
       sender: {
         name: senderName,
       },
-      message,
+      message: [
+        message || (data.files?.length ? reporterCopy[locale].fileOnly : ''),
+        ...(data.files?.length
+          ? [
+              `${reporterCopy[locale].files}:`,
+              ...data.files.map((file) => file.filename),
+              data.correspondence?.portalUrl
+                ? reporterCopy[locale].fileHint
+                : reporterCopy[locale].fileUnavailable,
+            ]
+          : []),
+      ].join('\n'),
     };
 
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
@@ -766,6 +944,7 @@ export const emailService = {
     const subject = `[CC] Message sent to reporter - ${report.title}`;
 
     return this.sendEmail({
+      ...reporterSendOptions(data.correspondence),
       to: [{ email: recipient }],
       subject,
       html,

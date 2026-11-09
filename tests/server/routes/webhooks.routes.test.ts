@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
 // Mock EE module to ensure requireEEFeature returns 402
@@ -45,7 +47,10 @@ const baseSession: Session = {
 
 const originalAuthService = { ...authService };
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   authService.validateSession = async () =>
     Result.ok({
       user: baseUser,
@@ -54,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
 });
 
@@ -98,6 +104,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
         method: 'POST',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -120,6 +127,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
         method: 'PATCH',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -138,7 +146,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/webhooks/whk_1', {
         method: 'DELETE',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);
@@ -152,7 +160,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/webhooks/whk_1/test', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);

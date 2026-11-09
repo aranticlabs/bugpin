@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidHexColor, isValidUrl, normalizeUrl } from '../utils/validators.js';
 import { RECORDING_QUALITIES } from '@shared/recording-quality';
+import { reporterPortalLimitsSchema } from '../utils/reporter-portal-limits.js';
 import {
   ACHIEVEMENT_IDS,
   DASHBOARD_RANGES,
@@ -29,6 +30,8 @@ const webhookEventSchema = z.enum([
   'report.resolved',
   'report.closed',
   'report.deleted',
+  'report.message_created',
+  'report.owner_changed',
 ]);
 
 const localeEnumValues = SUPPORTED_LOCALES as readonly [LocaleCode, ...LocaleCode[]];
@@ -239,6 +242,11 @@ const widgetDialogContentProjectSchema = z
 
 const projectSettingsSchema = z
   .object({
+    reporterPortal: z
+      .object({ enabled: z.boolean(), allowNewFeedback: z.boolean() })
+      .strict()
+      .nullable()
+      .optional(),
     defaultAssigneeUserId: z.string().nullable().optional(),
     language: projectLanguageSchema.nullable().optional(),
     widgetLauncherButton: widgetLauncherButtonProjectSchema.nullable().optional(),
@@ -417,6 +425,8 @@ const boardMoveShape = {
       scope: z
         .object({
           projectId: z.string().min(1).max(64).optional(),
+          reporterId: z.string().min(1).max(64).optional(),
+          reporterActivity: z.literal('new').optional(),
           status: z.array(z.enum(REPORT_STATUSES)).max(REPORT_STATUSES.length).optional(),
           priority: z.array(z.enum(REPORT_PRIORITIES)).max(REPORT_PRIORITIES.length).optional(),
           assignedTo: z.string().min(1).max(64).optional(),
@@ -430,6 +440,9 @@ const boardMoveShape = {
 };
 
 export const schemas = {
+  reporterActivitySeen: z
+    .object({ lastReporterActivityAt: z.string().datetime({ offset: true }) })
+    .strict(),
   // ID parameter
   id: z.object({
     id: z.string().min(1, 'ID is required'),
@@ -448,7 +461,9 @@ export const schemas = {
 
   // Report filter query
   reportFilter: z.object({
+    reporterActivity: z.literal('new').optional(),
     projectId: z.string().optional(),
+    reporterId: z.string().min(1).max(64).optional(),
     source: z.enum(['widget', 'manual']).optional(),
     status: z.string().optional(), // comma-separated list
     priority: z.string().optional(), // comma-separated list
@@ -712,6 +727,8 @@ export const schemas = {
         .optional(),
       appName: z.string().min(1).max(100).optional(),
       appUrl: z.string().optional(),
+      portalBaseUrl: z.string().max(2048).optional(),
+      reporterPortalLimits: reporterPortalLimitsSchema.optional(),
       privacy: z
         .object({
           euPrivacyMode: z.boolean().optional(),
@@ -747,6 +764,7 @@ export const schemas = {
           notifyOnPriorityChange: z.boolean().optional(),
           notifyOnAssignment: z.boolean().optional(),
           notifyOnDeletion: z.boolean().optional(),
+          notifyOnReporterReply: z.boolean().optional(),
         })
         .optional(),
       reporterNotifications: z
@@ -813,6 +831,7 @@ export const schemas = {
     notifyOnPriorityChange: z.boolean().optional(),
     notifyOnAssignment: z.boolean().optional(),
     notifyOnDeletion: z.boolean().optional(),
+    notifyOnReporterReply: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
   }),
 
@@ -823,6 +842,7 @@ export const schemas = {
     defaultNotifyOnPriorityChange: z.boolean().optional(),
     defaultNotifyOnAssignment: z.boolean().optional(),
     defaultNotifyOnDeletion: z.boolean().optional(),
+    defaultNotifyOnReporterReply: z.boolean().optional(),
     defaultEmailEnabled: z.boolean().optional(),
   }),
 
@@ -849,6 +869,7 @@ export const schemas = {
 
   // Reporter message request
   reporterMessage: z.object({
+    confirmPortalAccess: z.boolean().optional(),
     message: z.string().trim().max(5000, 'Message must be at most 5000 characters'),
     ccSender: z.boolean().optional(),
   }),

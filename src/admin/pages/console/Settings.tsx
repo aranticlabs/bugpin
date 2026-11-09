@@ -20,6 +20,7 @@ const settingsSchema = z.object({
     .min(1, 'Application name is required')
     .max(100, 'Application name must be 100 characters or less'),
   appUrl: z.string().url('Please enter a valid URL').or(z.literal('')),
+  portalBaseUrl: z.string().url('Please enter a valid URL').or(z.literal('')),
   updateCheckEnabled: z.boolean(),
 });
 
@@ -65,6 +66,7 @@ export function Settings() {
       settings && {
         appName: settings.appName || '',
         appUrl: settings.appUrl || '',
+        portalBaseUrl: settings.portalBaseUrl || '',
         updateCheckEnabled: settings.updateCheckEnabled ?? true,
       },
     [settings]
@@ -80,6 +82,7 @@ export function Settings() {
     defaultValues: {
       appName: '',
       appUrl: '',
+      portalBaseUrl: '',
       updateCheckEnabled: true,
     },
     // Reloaded settings replace only the fields the user has not edited.
@@ -142,6 +145,23 @@ export function Settings() {
             {errors.appUrl && <p className="text-xs text-destructive">{errors.appUrl.message}</p>}
           </SettingRow>
           <SettingRow
+            label="Portal Base URL"
+            htmlFor="portal-base-url"
+            description="Optional separate origin for the Reporter Portal. Use a different host from the Application URL. Leave blank to use the Application URL."
+            controlClassName="@sm:w-80"
+          >
+            <Input
+              id="portal-base-url"
+              type="url"
+              placeholder="https://feedback.example.com"
+              {...register('portalBaseUrl')}
+              aria-invalid={!!errors.portalBaseUrl}
+            />
+            {errors.portalBaseUrl && (
+              <p className="text-xs text-destructive">{errors.portalBaseUrl.message}</p>
+            )}
+          </SettingRow>
+          <SettingRow
             label="Check for Updates"
             htmlFor="update-check"
             description="Checks once a day for new releases and shows administrators a banner when an update is available."
@@ -188,7 +208,10 @@ export function DataRetention() {
   if (isLoading) return <LoadingCard />;
 
   return (
-    <SettingsCard title="Data Retention" description="How long reports and their files are kept.">
+    <SettingsCard
+      title="Data Retention"
+      description="How long reports and their files are kept. Conversations and their files are deleted with their report."
+    >
       <UnsavedChangesGuard
         isDirty={isDirty}
         onSave={() => submitForm(handleSubmit, saveRetention).catch(() => false)}

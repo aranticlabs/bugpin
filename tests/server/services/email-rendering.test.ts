@@ -34,6 +34,15 @@ const baseReport: Report = {
 function renderReporterConfirmation(locale: LocaleCode): { subject: string; html: string } {
   const template = resolveTemplate('reporterConfirmation', locale);
   const data = {
+    reporter: {
+      loginUrl: 'https://example.com/reporter-portal/login#sample',
+      updateUrl: 'https://example.com/reporter-portal/reports/sample',
+      portalDisplay: 'block',
+      actionLabel: 'View update',
+      unsubscribeUrl: 'https://example.com/api/portal/unsubscribe?t=sample',
+      unsubscribeDisplay: 'block',
+      unsubscribeLabel: 'Unsubscribe',
+    },
     app: { name: 'BugPin', url: 'https://example.com' },
     project: { name: 'Acme Web' },
     report: {
@@ -60,6 +69,15 @@ function renderReporterStatusChange(
 ): { subject: string; html: string } {
   const template = resolveTemplate('reporterStatusChange', locale);
   const data = {
+    reporter: {
+      loginUrl: 'https://example.com/reporter-portal/login#sample',
+      updateUrl: 'https://example.com/reporter-portal/reports/sample',
+      portalDisplay: 'block',
+      actionLabel: 'View update',
+      unsubscribeUrl: 'https://example.com/api/portal/unsubscribe?t=sample',
+      unsubscribeDisplay: 'block',
+      unsubscribeLabel: 'Unsubscribe',
+    },
     app: { name: 'BugPin', url: 'https://example.com' },
     project: { name: 'Acme Web' },
     report: {

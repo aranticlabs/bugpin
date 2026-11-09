@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { eventsRoutes } from './api/events.js';
 import { authRoutes } from './api/auth.js';
 import { reportsRoutes } from './api/reports.js';
 import { projectsRoutes } from './api/projects.js';
@@ -30,15 +31,22 @@ import { twoFactorRoutes } from './api/two-factor.js';
 import { passkeyRoutes } from './api/passkeys.js';
 import { getEERoutes } from '../utils/ee.js';
 import { logger } from '../utils/logger.js';
+import { portalRoutes } from './portal/index.js';
+import { reportersRoutes } from './api/reporters.js';
+import { reportOwnerRoutes } from './api/report-owner.js';
 
 export function createApiRouter(): Hono {
   const api = new Hono();
+  api.route('/portal', portalRoutes);
+  api.route('/events', eventsRoutes);
 
   // Mount core CE API routes
   api.route('/auth/two-factor', twoFactorRoutes);
   api.route('/auth/passkeys', passkeyRoutes);
   api.route('/auth', authRoutes);
   api.route('/reports', reportsRoutes);
+  api.route('/reports', reportOwnerRoutes);
+  api.route('/reporters', reportersRoutes);
   api.route('/reports', reporterMessagesRoutes);
   api.route('/reports', reportHistoryRoutes);
   api.route('/dashboard', dashboardRoutes);

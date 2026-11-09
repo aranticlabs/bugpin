@@ -305,6 +305,11 @@ export const mockStats = {
 
 // Default handlers
 export const handlers = [
+  http.get('/api/reports/reporter-activity/count', () =>
+    HttpResponse.json({ success: true, count: 0 })
+  ),
+  http.post('/api/reports/:id/reporter-activity/seen', () => HttpResponse.json({ success: true })),
+
   http.get('/api/user-preferences/me', () => HttpResponse.json({ success: true, preferences: {} })),
   http.patch('/api/user-preferences/me', async ({ request }) =>
     HttpResponse.json({ success: true, preferences: await request.json() })
@@ -797,6 +802,7 @@ export const handlers = [
           notifyOnPriorityChange: false,
           notifyOnAssignment: true,
           notifyOnDeletion: true,
+          notifyOnReporterReply: true,
         },
         branding: {
           primaryColor: '#02658D',

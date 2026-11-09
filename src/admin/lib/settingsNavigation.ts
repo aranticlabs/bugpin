@@ -156,6 +156,12 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         icon: UsersRound,
       },
       {
+        title: 'Reporters',
+        description: 'Manage reporter accounts and portal access',
+        path: '/settings/reporters',
+        icon: UsersRound,
+      },
+      {
         title: 'Authentication',
         description: 'Sessions, two-factor enforcement and password policy',
         path: '/settings/authentication',

@@ -1,5 +1,6 @@
 import type { RecordingQuality } from './recording-quality';
 import type { PasswordPolicy } from './password-policy';
+import type { ReportOwner } from './reporter-types';
 
 // Locale Types
 
@@ -278,12 +279,14 @@ export interface Report {
   reporterName?: string;
   reporterLocale: LocaleCode;
   reporterId?: string;
+  owner?: ReportOwner;
   claimableEmail?: string;
   originalDescription?: string;
   originalDescriptionBackfilled?: boolean;
   ownerSeenAt?: string;
   lastReporterActivityAt?: string;
   reporterActivitySeenAt?: string;
+  hasNewReporterActivity?: boolean;
   assignedTo?: string;
   assignee?: ReportAssignee;
   customFields?: Record<string, unknown>;
@@ -516,6 +519,7 @@ export interface CustomField {
 }
 
 export interface Project {
+  reporterPortalPrerequisites?: string[];
   licenseLocked?: boolean;
   id: string;
   name: string;
@@ -633,6 +637,25 @@ export interface FileRecord {
 
 // Webhook Types
 
+export interface ReportMessageCreatedEvent {
+  reportId: string;
+  projectId: string;
+  messageId: string;
+  authorKind: MessageAuthorKind;
+  body: string;
+  files: Array<{ id: string; type: FileType; mimeType: string; sizeBytes: number }>;
+  createdAt: string;
+}
+
+export interface ReportOwnerChangedEvent {
+  reportId: string;
+  projectId: string;
+  action: 'owner_assigned' | 'owner_removed' | 'claimable_set';
+  oldReporterId: string | null;
+  newReporterId: string | null;
+  actorUserId: string | null;
+}
+
 export type WebhookEvent =
   | 'report.created'
   | 'report.updated'
@@ -640,7 +663,9 @@ export type WebhookEvent =
   | 'report.assigned'
   | 'report.resolved'
   | 'report.closed'
-  | 'report.deleted';
+  | 'report.deleted'
+  | 'report.message_created'
+  | 'report.owner_changed';
 
 export interface Webhook {
   id: string;
@@ -675,6 +700,8 @@ export interface CreateReportRequest {
 }
 
 export interface ReportFilter {
+  reporterActivity?: 'new';
+  reporterId?: string;
   projectId?: string;
   source?: ReportSource;
   status?: ReportStatus[];
@@ -694,7 +721,7 @@ export interface ReportFilter {
 /** The reports a board shows, which limits the cards a drop on a sorted board reorders */
 export type ReportBoardScope = Pick<
   ReportFilter,
-  'projectId' | 'status' | 'priority' | 'assignedTo' | 'search'
+  'projectId' | 'reporterId' | 'reporterActivity' | 'status' | 'priority' | 'assignedTo' | 'search'
 >;
 
 /** Where a report is dropped on the board */
@@ -728,6 +755,7 @@ export interface NotificationDefaultSettings {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
 }
 
 // Reporter notification settings
@@ -936,6 +964,7 @@ export interface NotificationPreferences {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
   emailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -949,6 +978,7 @@ export interface ProjectNotificationDefaults {
   defaultNotifyOnPriorityChange: boolean;
   defaultNotifyOnAssignment: boolean;
   defaultNotifyOnDeletion: boolean;
+  defaultNotifyOnReporterReply: boolean;
   defaultEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -973,6 +1003,7 @@ export interface ApiToken {
 // Email Template Types
 
 export type ReporterTemplateType =
+  | 'reporterLogin'
   | 'reporterConfirmation'
   | 'reporterStatusChange'
   | 'reporterPriorityChange'
@@ -981,6 +1012,7 @@ export type ReporterTemplateType =
 
 export type TeamTemplateType =
   | 'newReport'
+  | 'reporterActivity'
   | 'statusChange'
   | 'priorityChange'
   | 'assignment'
@@ -1011,7 +1043,9 @@ export type CustomEmailTemplates = Partial<{
 }>;
 
 export interface EmailTemplates {
+  reporterLogin: EmailTemplate;
   newReport: EmailTemplate;
+  reporterActivity: EmailTemplate;
   statusChange: EmailTemplate;
   priorityChange: EmailTemplate;
   assignment: EmailTemplate;

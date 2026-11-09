@@ -94,6 +94,13 @@ export function reporterConfirmationHtml(copy: ReporterConfirmationCopy): string
       </div>
 
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
+
+      <p style="display: {{reporter.portalDisplay}}; text-align: center;">
+        <a class="button" href="{{reporter.loginUrl}}">{{reporter.actionLabel}}</a>
+      </p>
+      <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
+        <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
+      </p>
     </div>
   </div>
 </body>
@@ -134,6 +141,13 @@ export function reporterStatusChangeHtml(copy: ReporterStatusChangeCopy): string
       </div>
 
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
+
+      <p style="display: {{reporter.portalDisplay}}; text-align: center;">
+        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+      </p>
+      <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
+        <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
+      </p>
     </div>
   </div>
 </body>
@@ -168,6 +182,13 @@ export function reporterPriorityChangeHtml(copy: ReporterPriorityChangeCopy): st
       </div>
 
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
+
+      <p style="display: {{reporter.portalDisplay}}; text-align: center;">
+        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+      </p>
+      <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
+        <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
+      </p>
     </div>
   </div>
 </body>
@@ -207,11 +228,14 @@ export function reporterAssignmentHtml(copy: ReporterAssignmentCopy): string {
         </div>
       </div>
 
-      <p style="text-align: center;">
-        <a class="button" href="{{report.url}}">${copy.ctaViewReport}</a>
-      </p>
-
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
+
+      <p style="display: {{reporter.portalDisplay}}; text-align: center;">
+        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+      </p>
+      <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
+        <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
+      </p>
     </div>
   </div>
 </body>
@@ -242,8 +266,26 @@ export function reporterMessageHtml(copy: ReporterMessageCopy): string {
         <p style="margin: 0; color: #4b5563; ">{{message}}</p>
       </div>
 
+
+      <p style="display: {{reporter.portalDisplay}}; text-align: center;">
+        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+      </p>
+      <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
+        <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
+      </p>
     </div>
   </div>
 </body>
 </html>`;
+}
+
+export function reporterLoginHtml(copy: {
+  login: string;
+  loginIntro: string;
+  loginExpiry: string;
+}): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles}</style></head>
+<body><div class="container"><div class="header"><h1>${copy.login}</h1><p>{{app.name}}</p></div>
+<div class="content"><p>${copy.loginIntro}</p><a class="button" href="{{reporter.loginUrl}}">${copy.login}</a><p>${copy.loginExpiry}</p></div>
+</div></body></html>`;
 }

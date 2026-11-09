@@ -28,6 +28,8 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
 
   const filter = {
     projectId: query.projectId,
+    reporterId: query.reporterId,
+    reporterActivity: query.reporterActivity as 'new' | undefined,
     source: query.source as 'widget' | 'manual' | undefined,
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],
@@ -51,6 +53,32 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     ...result.value,
   });
 });
+
+reports.get('/reporter-activity/count', (c) => {
+  const result = reportsService.reporterActivityCount();
+  if (!result.success)
+    return c.json({ success: false, error: result.code, message: result.error }, 500);
+  return c.json({ success: true, count: result.value });
+});
+
+reports.post(
+  '/:id/reporter-activity/seen',
+  authorize(['admin', 'editor']),
+  validate({ params: schemas.id, body: schemas.reporterActivitySeen }),
+  async (c) => {
+    const { lastReporterActivityAt } = await c.req.json<{ lastReporterActivityAt: string }>();
+    const result = await reportsService.acknowledgeReporterActivity(
+      c.req.param('id'),
+      lastReporterActivityAt
+    );
+    if (!result.success)
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'NOT_FOUND' ? 404 : 403
+      );
+    return c.json({ success: true });
+  }
+);
 
 // Create Manual Report (Admin and Editor)
 

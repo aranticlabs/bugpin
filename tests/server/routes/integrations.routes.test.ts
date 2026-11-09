@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { integrationsRoutes } from '../../../src/server/routes/api/integrations';
 import { integrationsService } from '../../../src/server/services/integrations.service';
 import { githubService } from '../../../src/server/services/integrations/github.service';
@@ -8,6 +9,7 @@ import { syncQueueService } from '../../../src/server/services/integrations/sync
 import { integrationsRepo } from '../../../src/server/database/repositories/integrations.repo';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Integration, Session, User } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -70,7 +72,10 @@ let updateResult = Result.ok(baseIntegration);
 let deleteResult = Result.ok(undefined);
 let testResult = Result.ok({ success: true });
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   userRole = 'admin';
   integrationById = baseIntegration;
   listProjectId = null;
@@ -159,6 +164,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(integrationsService, originalIntegrationsService);
   Object.assign(githubService, originalGithubService);
@@ -241,6 +247,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -261,6 +268,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -279,6 +287,7 @@ describe('integrations routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New name' }),
@@ -294,6 +303,7 @@ describe('integrations routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New name' }),
@@ -305,7 +315,7 @@ describe('integrations routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/integrations/int_1', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
     expect(deleteId).toBe('int_1');
@@ -316,7 +326,7 @@ describe('integrations routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/integrations/int_missing', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(404);
   });
@@ -325,7 +335,7 @@ describe('integrations routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/integrations/int_1/test', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
     expect(testId).toBe('int_1');
@@ -336,7 +346,7 @@ describe('integrations routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/integrations/int_1/test', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(400);
   });
@@ -347,6 +357,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token' }),
@@ -360,6 +371,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({}),
@@ -374,6 +386,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token' }),
@@ -387,6 +400,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token', owner: 'org', repo: 'repo' }),
@@ -400,6 +414,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token' }),
@@ -413,6 +428,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token', owner: 'org', repo: 'repo' }),
@@ -426,6 +442,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ accessToken: 'token' }),
@@ -439,6 +456,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ syncMode: 'automatic' }),
@@ -454,6 +472,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ syncMode: 'automatic' }),
@@ -471,6 +490,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ syncMode: 'automatic' }),
@@ -487,6 +507,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ syncMode: 'automatic' }),
@@ -501,6 +522,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ syncMode: 'manual' }),
@@ -514,6 +536,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ reportIds: 'all' }),
@@ -527,7 +550,11 @@ describe('integrations routes', () => {
     syncQueueService.enqueueBatch = async () => Result.fail('Report not found', 'NOT_FOUND');
     const res = await createApp().request('http://localhost/integrations/int_1/sync-existing', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ reportIds: ['rpt_1', 'missing'] }),
     });
     expect(res.status).toBe(400);
@@ -539,7 +566,11 @@ describe('integrations routes', () => {
     syncQueueService.enqueueBatch = async () => Result.ok(1);
     const res = await createApp().request('http://localhost/integrations/int_1/sync-existing', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ reportIds: ['rpt_1', 'rpt_1'] }),
     });
     expect(res.status).toBe(200);
@@ -552,6 +583,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ reportIds: 123 }),
@@ -566,6 +598,7 @@ describe('integrations routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ reportIds: 'all' }),

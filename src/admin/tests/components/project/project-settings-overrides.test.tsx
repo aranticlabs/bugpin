@@ -43,6 +43,7 @@ const notificationDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnPriorityChange: false,
   defaultNotifyOnAssignment: true,
   defaultNotifyOnDeletion: true,
+  defaultNotifyOnReporterReply: true,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -97,6 +98,23 @@ function renderPanel(section: ProjectSettingsSection) {
 describe('ProjectSettingsPanel overrides', () => {
   beforeEach(() => {
     patchBodies = [];
+  });
+
+  it('saves the project reporter-reply default using its project field name', async () => {
+    mockServer(overrides, notificationDefaults);
+    const bodies: unknown[] = [];
+    server.use(
+      http.patch('/api/notification-preferences/projects/:id/defaults', async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const user = userEvent.setup();
+    renderPanel('notifications');
+    await user.click(await screen.findByRole('switch', { name: 'Reporter replies' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toHaveProperty('defaultNotifyOnReporterReply', false);
   });
 
   it.each<{

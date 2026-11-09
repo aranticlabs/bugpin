@@ -1,3 +1,4 @@
+import { realtimeService } from './realtime.service.js';
 import {
   InvalidReportCursorError,
   reportsRepo,
@@ -15,6 +16,7 @@ import {
 } from '../storage/files.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
+import { normalizeEmail } from '../utils/email-normalize.js';
 import { logger } from '../utils/logger.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
@@ -24,6 +26,7 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
+import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { normalizeUrl } from '../utils/validators.js';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
@@ -398,6 +401,12 @@ async function createForProject(
     reporterEmail: normalizeOptionalText(input.reporterEmail),
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
+    claimableEmail:
+      options.source === 'widget' &&
+      project.settings.reporterPortal?.enabled &&
+      input.reporterEmail?.trim()
+        ? normalizeEmail(input.reporterEmail)
+        : undefined,
     submissionId: input.submissionId,
   };
 
@@ -487,6 +496,7 @@ async function createForProject(
       logger.error('Failed to check for auto-sync integration', error, { projectId: project.id });
     });
 
+  realtimeService.publish('report.updated', { reportId: report.id, projectId: report.projectId });
   return Result.ok(report);
 }
 
@@ -496,6 +506,7 @@ type ReportChanges = Record<string, { old: unknown; new: unknown }>;
 
 /** Webhooks, notifications, and GitHub sync for committed report changes; none of them block */
 function announceReportChanges(report: Report, changes: ReportChanges): void {
+  realtimeService.publish('report.updated', { reportId: report.id, projectId: report.projectId });
   // Trigger webhooks via EE hooks if there are changes (async, don't block)
   if (Object.keys(changes).length > 0) {
     getEEHooks()
@@ -665,6 +676,23 @@ function placeOnBoard(id: string, target: ReportBoardMove): void {
 }
 
 export const reportsService = {
+  reporterActivityCount(): Result<number> {
+    return Result.ok(reportsRepo.countReporterActivity());
+  },
+
+  async acknowledgeReporterActivity(id: string, displayedAt: string): Promise<Result<void>> {
+    const report = await reportsRepo.findById(id);
+    if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
+    reportsRepo.acknowledgeReporterActivity(id, displayedAt);
+    realtimeService.publish('reporter_activity.changed', {
+      reportId: id,
+      projectId: report.projectId,
+    });
+    return Result.ok(undefined);
+  },
+
   /** The report an earlier widget submission with this id created, if any */
   findIdByWidgetSubmission(projectId: string, submissionId: string): string | null {
     return reportsRepo.findIdBySubmission(projectId, submissionId);
@@ -773,7 +801,11 @@ export const reportsService = {
     const files = await filesRepo.findOriginalByReportId(id);
 
     return Result.ok({
-      report: { ...report, licenseLocked: !checkProjectLicense(report.projectId).success },
+      report: {
+        ...report,
+        licenseLocked: !checkProjectLicense(report.projectId).success,
+        owner: Result.unwrap(reporterOwnershipService.describeOwner(report)),
+      },
       files,
     });
   },
@@ -859,7 +891,7 @@ export const reportsService = {
       updates.assignedTo = input.assignedTo ?? undefined;
     }
 
-    const report = await reportsRepo.update(id, updates);
+    const report = await reportsRepo.update(id, updates, Boolean(userId));
 
     if (!report) {
       return Result.fail('Failed to update report', 'UPDATE_FAILED');
@@ -913,7 +945,6 @@ export const reportsService = {
     }
 
     announceReportChanges(report, changes);
-
     return Result.ok(report);
   },
 
@@ -973,7 +1004,11 @@ export const reportsService = {
         }
         existing.forEach((report, index) => {
           if (report.status !== target.status) {
-            reportsRepo.applyUpdate(report.id, statusUpdates(target.status, userId));
+            reportsRepo.applyUpdate(
+              report.id,
+              statusUpdates(target.status, userId),
+              Boolean(userId)
+            );
             reportHistoryRepo.insert({
               reportId: report.id,
               userId: userId ?? null,
@@ -1003,6 +1038,11 @@ export const reportsService = {
       if (before.status !== target.status) {
         logger.info('Report updated', { reportId: report.id, updates: ['status'] });
         announceReportChanges(report, { status: { old: before.status, new: target.status } });
+      } else {
+        realtimeService.publish('report.updated', {
+          reportId: report.id,
+          projectId: report.projectId,
+        });
       }
     }
     return Result.ok(moved);
@@ -1050,6 +1090,7 @@ export const reportsService = {
     });
 
     logger.info('Report deleted', { reportId: id });
+    realtimeService.publish('report.updated', { reportId: id, projectId: existing.projectId });
     return Result.ok(undefined);
   },
 

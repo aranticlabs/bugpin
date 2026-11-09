@@ -19,6 +19,7 @@ interface NotificationPreferencesRow {
   notify_on_priority_change: number;
   notify_on_assignment: number;
   notify_on_deletion: number;
+  notify_on_reporter_reply: number;
   email_enabled: number;
   created_at: string;
   updated_at: string;
@@ -32,6 +33,7 @@ interface ProjectNotificationDefaultsRow {
   default_notify_on_priority_change: number;
   default_notify_on_assignment: number;
   default_notify_on_deletion: number;
+  default_notify_on_reporter_reply: number;
   default_email_enabled: number;
   created_at: string;
   updated_at: string;
@@ -49,6 +51,7 @@ function mapRowToPreferences(row: NotificationPreferencesRow): NotificationPrefe
     notifyOnPriorityChange: Boolean(row.notify_on_priority_change),
     notifyOnAssignment: Boolean(row.notify_on_assignment),
     notifyOnDeletion: Boolean(row.notify_on_deletion),
+    notifyOnReporterReply: Boolean(row.notify_on_reporter_reply),
     emailEnabled: Boolean(row.email_enabled),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -64,6 +67,7 @@ function mapRowToDefaults(row: ProjectNotificationDefaultsRow): ProjectNotificat
     defaultNotifyOnPriorityChange: Boolean(row.default_notify_on_priority_change),
     defaultNotifyOnAssignment: Boolean(row.default_notify_on_assignment),
     defaultNotifyOnDeletion: Boolean(row.default_notify_on_deletion),
+    defaultNotifyOnReporterReply: Boolean(row.default_notify_on_reporter_reply),
     defaultEmailEnabled: Boolean(row.default_email_enabled),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -123,6 +127,7 @@ export const notificationPreferencesRepo = {
           COALESCE(np.notify_on_priority_change, pnd.default_notify_on_priority_change, ?) as notify_on_priority_change,
           COALESCE(np.notify_on_assignment, pnd.default_notify_on_assignment, ?) as notify_on_assignment,
           COALESCE(np.notify_on_deletion, pnd.default_notify_on_deletion, ?) as notify_on_deletion,
+          COALESCE(np.notify_on_reporter_reply, pnd.default_notify_on_reporter_reply, ?) as notify_on_reporter_reply,
           COALESCE(np.email_enabled, pnd.default_email_enabled, ?) as email_enabled,
           COALESCE(np.created_at, u.created_at) as created_at,
           COALESCE(np.updated_at, u.updated_at) as updated_at
@@ -139,6 +144,7 @@ export const notificationPreferencesRepo = {
         toFlag(globalDefaults.notifyOnPriorityChange),
         toFlag(globalDefaults.notifyOnAssignment),
         toFlag(globalDefaults.notifyOnDeletion),
+        toFlag(globalDefaults.notifyOnReporterReply),
         toFlag(globalDefaults.emailEnabled),
         projectId,
         projectId,
@@ -190,6 +196,10 @@ export const notificationPreferencesRepo = {
         sets.push('notify_on_deletion = ?');
         params.push(preferences.notifyOnDeletion ? 1 : 0);
       }
+      if (preferences.notifyOnReporterReply !== undefined) {
+        sets.push('notify_on_reporter_reply = ?');
+        params.push(preferences.notifyOnReporterReply ? 1 : 0);
+      }
       if (preferences.emailEnabled !== undefined) {
         sets.push('email_enabled = ?');
         params.push(preferences.emailEnabled ? 1 : 0);
@@ -210,8 +220,8 @@ export const notificationPreferencesRepo = {
         `INSERT INTO notification_preferences (
           id, user_id, project_id,
           notify_on_new_report, notify_on_status_change, notify_on_priority_change, notify_on_assignment,
-          notify_on_deletion, email_enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          notify_on_deletion, notify_on_reporter_reply, email_enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           userId,
@@ -240,6 +250,11 @@ export const notificationPreferencesRepo = {
             preferences.notifyOnDeletion ??
               defaults?.defaultNotifyOnDeletion ??
               globalDefaults.notifyOnDeletion
+          ),
+          toFlag(
+            preferences.notifyOnReporterReply ??
+              defaults?.defaultNotifyOnReporterReply ??
+              globalDefaults.notifyOnReporterReply
           ),
           toFlag(
             preferences.emailEnabled ?? defaults?.defaultEmailEnabled ?? globalDefaults.emailEnabled
@@ -336,6 +351,10 @@ export const projectNotificationDefaultsRepo = {
         sets.push('default_notify_on_deletion = ?');
         params.push(defaults.defaultNotifyOnDeletion ? 1 : 0);
       }
+      if (defaults.defaultNotifyOnReporterReply !== undefined) {
+        sets.push('default_notify_on_reporter_reply = ?');
+        params.push(defaults.defaultNotifyOnReporterReply ? 1 : 0);
+      }
       if (defaults.defaultEmailEnabled !== undefined) {
         sets.push('default_email_enabled = ?');
         params.push(defaults.defaultEmailEnabled ? 1 : 0);
@@ -355,8 +374,8 @@ export const projectNotificationDefaultsRepo = {
           id, project_id,
           default_notify_on_new_report, default_notify_on_status_change,
           default_notify_on_priority_change, default_notify_on_assignment,
-          default_notify_on_deletion, default_email_enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          default_notify_on_deletion, default_notify_on_reporter_reply, default_email_enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           projectId,
@@ -365,6 +384,7 @@ export const projectNotificationDefaultsRepo = {
           (defaults.defaultNotifyOnPriorityChange ?? true) ? 1 : 0,
           (defaults.defaultNotifyOnAssignment ?? true) ? 1 : 0,
           (defaults.defaultNotifyOnDeletion ?? true) ? 1 : 0,
+          (defaults.defaultNotifyOnReporterReply ?? true) ? 1 : 0,
           (defaults.defaultEmailEnabled ?? true) ? 1 : 0,
           now,
           now,

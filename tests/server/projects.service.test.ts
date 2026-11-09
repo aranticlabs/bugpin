@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { reporterPortalSettingsService } from '../../src/server/services/reporter-portal-settings.service';
 import { projectsService } from '../../src/server/services/projects.service';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
@@ -37,7 +38,10 @@ let updateReturnsProject: Project | null = baseProject;
 let regenerateApiKeyProject: Project | null = { ...baseProject, apiKey: 'proj_new' };
 let deletedProjectId: string | null = null;
 
+const originalPortalPrerequisites = reporterPortalSettingsService.checkPrerequisites;
+
 beforeEach(() => {
+  reporterPortalSettingsService.checkPrerequisites = async () => Result.ok(undefined);
   projectById = baseProject;
   projectByApiKey = baseProject;
   lastProjectUpdates = undefined;
@@ -82,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reporterPortalSettingsService.checkPrerequisites = originalPortalPrerequisites;
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(webhooksRepo, originalWebhooksRepo);

@@ -4,33 +4,11 @@ import { bodyLimit } from 'hono/body-limit';
 import { reportMessagesService } from '../../services/report-messages.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
+import { reportMessageErrorStatus } from '../../utils/http-status.js';
 import { MAX_MESSAGE_FILES } from '../../utils/request-limits.js';
 
 const reporterMessages = new Hono();
 reporterMessages.use('*', authMiddleware);
-
-function errorStatus(code: string | undefined) {
-  switch (code) {
-    case 'NOT_FOUND':
-      return 404;
-    case 'UNAUTHORIZED':
-      return 401;
-    case 'FORBIDDEN':
-    case 'PROJECT_NOT_LICENSED':
-    case 'MESSAGING_DISABLED':
-      return 403;
-    case 'REPORT_CLOSED':
-      return 409;
-    case 'UPLOAD_QUOTA_EXCEEDED':
-    case 'VIDEO_QUOTA_EXCEEDED':
-    case 'PAYLOAD_TOO_LARGE':
-      return 413;
-    case 'MESSAGE_WRITE_FAILED':
-      return 500;
-    default:
-      return 400;
-  }
-}
 
 reporterMessages.post(
   '/:id/reporter-messages',
@@ -41,7 +19,7 @@ reporterMessages.post(
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        errorStatus(result.code)
+        reportMessageErrorStatus(result.code)
       );
     return bodyLimit({
       maxSize: c.req.header('content-type')?.includes('multipart/form-data')
@@ -73,8 +51,17 @@ reporterMessages.post(
         }
         uploads = values.filter((value) => typeof value !== 'string');
         const cc = form.get('ccSender');
+        const confirm = form.get('confirmPortalAccess');
         body = {
           message: form.get('message') ?? '',
+          confirmPortalAccess:
+            confirm === null
+              ? undefined
+              : confirm === 'true'
+                ? true
+                : confirm === 'false'
+                  ? false
+                  : confirm,
           ccSender: cc === null ? undefined : cc === 'true' ? true : cc === 'false' ? false : cc,
         };
       } else {
@@ -102,12 +89,13 @@ reporterMessages.post(
       user.id,
       parsed.data.message,
       parsed.data.ccSender,
-      uploads
+      uploads,
+      parsed.data.confirmPortalAccess
     );
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        errorStatus(result.code)
+        reportMessageErrorStatus(result.code)
       );
     return c.json({ success: true, reporterMessage: result.value });
   }
@@ -118,9 +106,15 @@ reporterMessages.get('/:id/reporter-messages', validate({ params: schemas.id }),
   if (!result.success)
     return c.json(
       { success: false, error: result.code, message: result.error },
-      errorStatus(result.code)
+      reportMessageErrorStatus(result.code)
     );
-  return c.json({ success: true, messages: result.value });
+  const portal = await reportMessagesService.portalContext(c.req.param('id'));
+  if (!portal.success)
+    return c.json(
+      { success: false, error: portal.code, message: portal.error },
+      reportMessageErrorStatus(portal.code)
+    );
+  return c.json({ success: true, messages: result.value, portal: portal.value });
 });
 
 for (const [action, hidden] of [
@@ -140,7 +134,7 @@ for (const [action, hidden] of [
       if (!result.success)
         return c.json(
           { success: false, error: result.code, message: result.error },
-          errorStatus(result.code)
+          reportMessageErrorStatus(result.code)
         );
       return c.json({ success: true, message: result.value });
     }

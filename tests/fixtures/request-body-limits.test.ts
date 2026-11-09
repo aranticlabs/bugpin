@@ -18,7 +18,7 @@ const originalMessages = { ...reportMessagesService };
 
 beforeEach(() => {
   settingsCacheService.getAll = async () =>
-    ({ enforceHttps: false, rateLimitPerMinute: 10 }) as AppSettings;
+    ({ appUrl: 'http://localhost', enforceHttps: false, rateLimitPerMinute: 10 }) as AppSettings;
 });
 
 afterEach(() => {
@@ -161,6 +161,7 @@ it('reserves the larger allowance for the authenticated staff message POST', asy
       body: form,
       headers: {
         cookie: 'session=session',
+        Origin: 'http://localhost',
         'content-length': String(MAX_SUBMISSION_REQUEST_BODY_SIZE + 1),
       },
     });

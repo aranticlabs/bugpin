@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePreference } from '../../hooks/useUserPreferences';
+import { Badge } from '../ui/badge';
 import { api } from '../../api/client';
 import { sortableSensors } from '../../lib/sortable-sensors';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
@@ -164,6 +165,13 @@ export function NavMain() {
   const [pinnedOpen, setPinnedOpen] = usePinnedProjectsOpen();
   const [recentShown, setRecentShown] = useState(RECENT_PAGE_SIZE);
 
+  const { data: activityCount } = useQuery({
+    queryKey: ['reporter-activity-count'],
+    queryFn: async () =>
+      (await api.get<{ count: number }>('/reports/reporter-activity/count')).data.count,
+    enabled: canLoadData,
+  });
+
   const { data: reportStats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
@@ -275,6 +283,15 @@ export function NavMain() {
               <Link to="/reports" onClick={closeSidebarOnMobile}>
                 <ClipboardList />
                 <span>Reports</span>
+                {activityCount !== undefined && activityCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="group-data-[collapsible=icon]:hidden"
+                    aria-label={`${activityCount} reports with new reporter activity`}
+                  >
+                    {activityCount}
+                  </Badge>
+                )}
               </Link>
             </SidebarMenuButton>
             <CountBadge count={reportStats?.total} />
