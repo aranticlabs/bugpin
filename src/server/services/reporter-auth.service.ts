@@ -67,18 +67,8 @@ export const reporterAuthService = {
         !settings.smtpConfig.from
       )
         return Result.ok(undefined);
-      const minted = this.mintLoginToken(email, 'request');
-      if (!minted.success) return Result.ok(undefined);
-      const loginUrl = new URL('/reporter-portal/login', settings.portalBaseUrl || settings.appUrl);
-      loginUrl.hash = minted.value.secret;
       // SMTP latency and delivery failures must not reveal whether an account exists.
-      void emailService
-        .sendEmail({
-          to: [{ email: minted.value.email }],
-          subject: 'Sign in to your feedback',
-          html: `<p><a href="${loginUrl.href}">Sign in to your feedback</a></p><p>This link expires in 15 minutes.</p>`,
-          text: `Sign in to your feedback: ${loginUrl.href}\nThis link expires in 15 minutes.`,
-        })
+      void this.sendLoginLink(email)
         .then((sent) => {
           if (!sent.success) logger.warn('Reporter login email delivery failed');
         })
@@ -87,6 +77,26 @@ export const reporterAuthService = {
       logger.warn('Reporter login request failed');
     }
     return Result.ok(undefined);
+  },
+
+  async sendLoginLink(email: string): Promise<Result<void>> {
+    const minted = this.mintLoginToken(email, 'request');
+    if (!minted.success) return minted;
+    try {
+      const settings = await settingsCacheService.getAll();
+      const loginUrl = new URL('/reporter-portal/login', settings.portalBaseUrl || settings.appUrl);
+      loginUrl.hash = minted.value.secret;
+      const sent = await emailService.sendEmail({
+        to: [{ email: minted.value.email }],
+        subject: 'Sign in to your feedback',
+        html: `<p><a href="${loginUrl.href}">Sign in to your feedback</a></p><p>This link expires in 15 minutes.</p>`,
+        text: `Sign in to your feedback: ${loginUrl.href}\nThis link expires in 15 minutes.`,
+      });
+      if (sent.success) return Result.ok(undefined);
+    } catch {
+      logger.warn('Reporter login email delivery failed');
+    }
+    return Result.fail('Could not send the login email', 'EMAIL_DELIVERY_FAILED');
   },
 
   preview(

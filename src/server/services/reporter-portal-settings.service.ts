@@ -44,6 +44,6 @@ export const reporterPortalSettingsService = {
     if (!access.success) return access;
     const prerequisites = await this.checkPrerequisites();
     if (!prerequisites.success) return prerequisites;
-    return reporterAuthService.requestLogin(email);
+    return reporterAuthService.sendLoginLink(email);
   },
 };

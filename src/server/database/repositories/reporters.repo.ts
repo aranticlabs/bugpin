@@ -107,7 +107,7 @@ export const reportersRepo = {
       >(
         `SELECT reports.reporter_id AS reporterId, projects.id AS projectId, projects.name AS projectName, COUNT(*) AS reportCount
        FROM reports JOIN projects ON projects.id = reports.project_id
-       WHERE reports.reporter_id IN (${ids.map(() => '?').join(',')})
+       WHERE reports.reporter_id IN (${ids.map(() => '?').join(',')}) AND projects.deleted_at IS NULL
        GROUP BY reports.reporter_id, projects.id ORDER BY projects.name, projects.id`
       )
       .all(...ids);
@@ -147,7 +147,7 @@ export const reportersRepo = {
   findIdle(cutoff: string): Reporter[] {
     return getDb()
       .query<ReporterRow, [string]>(
-        `SELECT * FROM reporters WHERE julianday(COALESCE(last_login_at, created_at)) < julianday(?)
+        `SELECT * FROM reporters WHERE suspended_at IS NULL AND julianday(COALESCE(last_login_at, created_at)) < julianday(?)
        AND NOT EXISTS (SELECT 1 FROM reports WHERE reports.reporter_id = reporters.id)
        AND NOT EXISTS (SELECT 1 FROM reports WHERE reports.reporter_id IS NULL AND reports.claimable_email = reporters.email)`
       )

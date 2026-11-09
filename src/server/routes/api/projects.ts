@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { projectsService } from '../../services/projects.service.js';
 import { workspaceViewsService } from '../../services/workspace-views.service.js';
+import { errorStatus } from '../../utils/http-status.js';
 import { reporterPortalSettingsService } from '../../services/reporter-portal-settings.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, validatedBody, schemas } from '../../middleware/validate.js';
@@ -178,11 +179,7 @@ projects.post(
           message: result.error,
           ...(result.details ? { details: result.details } : {}),
         },
-        result.code === 'NOT_FOUND'
-          ? 404
-          : result.code === 'PORTAL_PREREQUISITES_MISSING'
-            ? 409
-            : 400
+        result.code === 'PORTAL_PREREQUISITES_MISSING' ? 409 : errorStatus(result.code)
       );
     return c.json({ success: true });
   }

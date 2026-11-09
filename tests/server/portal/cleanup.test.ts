@@ -127,6 +127,21 @@ it('removes only idle reporters with no owned or claimable reports and retains s
   ).toBe(0);
 });
 
+it('preserves idle suspended reporters until an admin unsuspends them', async () => {
+  const reporter = account('suspended', 40);
+  reportersRepo.setSuspension(reporter.id, ago(35), null, ago(35));
+  const suspended = reportersRepo.findById(reporter.id)!;
+  expect(Result.unwrap(await reportersService.cleanup()).reporters).toBe(0);
+  expect(reportersRepo.findById(reporter.id)?.suspendedAt).toBe(suspended.suspendedAt);
+  expect(reporterAuthService.mintLoginToken(reporter.email, 'request')).toMatchObject({
+    success: false,
+    code: 'REPORTER_SUSPENDED',
+  });
+  Result.unwrap(reportersService.unsuspend(reporter.id));
+  const token = Result.unwrap(reporterAuthService.mintLoginToken(reporter.email, 'request'));
+  expect(Result.unwrap(reporterAuthService.exchange(token.secret)).reporter.id).toBe(reporter.id);
+});
+
 it('keeps idle reporters when retention is zero while still cleaning old credentials', async () => {
   const reporter = account('idle', 100, false);
   await settingsRepo.updateAll({ retentionDays: 0 });

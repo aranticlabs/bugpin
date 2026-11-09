@@ -23,6 +23,7 @@ import { githubSyncService } from '../../../src/server/services/integrations/git
 import { emailService } from '../../../src/server/services/email.service';
 import { registerEEHooks, resetEEHooks } from '../../../src/server/utils/ee-hooks';
 import { createDefaultHooks } from '../../../src/server/types/ee-plugin';
+import { getEEProjectLicenseService } from '../../../src/server/utils/ee';
 import { hashToken } from '../../../src/server/utils/secure-token';
 import { config } from '../../../src/server/config';
 import { Result } from '../../../src/server/utils/result';
@@ -178,6 +179,31 @@ it('rejects mixed owner inputs and missing reporters, and rolls back ownership w
     reporterOwnershipService.set(first.id, { reporterId: target.reporter.id }, 'admin')
   ).toThrow('refused');
   expect((await reportsRepo.findById(first.id))!.reporterId).toBeUndefined();
+});
+
+it('returns a client error without changing ownership when the project license denies mutations', async () => {
+  const target = login();
+  const first = await report();
+  Result.unwrap(
+    reporterOwnershipService.set(first.id, { reporterId: target.reporter.id }, 'admin')
+  );
+  spyOn(getEEProjectLicenseService()!, 'checkAccess').mockReturnValue(
+    Result.fail('Project is read-only', 'PROJECT_NOT_LICENSED')
+  );
+  for (const [method, body] of [
+    ['PUT', { reporterId: target.reporter.id }],
+    ['PUT', { claimableEmail: 'other@example.com' }],
+    ['DELETE', undefined],
+  ] as const) {
+    const response = await request(`/api/reports/${first.id}/owner`, method, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: 'PROJECT_NOT_LICENSED',
+    });
+  }
+  expect((await reportsRepo.findById(first.id))!.reporterId).toBe(target.reporter.id);
+  expect(getDb().query('SELECT COUNT(*) AS count FROM report_history').get()).toEqual({ count: 1 });
 });
 
 it('does not reattach a removed owner on a later verified login', async () => {
@@ -376,6 +402,37 @@ it('lists reporters with cursor pagination, literal search, status, projects, an
   expect(Result.unwrap(reportersService.lookup(' A_1@EXAMPLE.COM '))?.id).toBe(target.reporter.id);
 });
 
+it('excludes soft-deleted projects and their reports from reporter list summaries', async () => {
+  const target = login('owner@example.com');
+  const active = await report();
+  Result.unwrap(
+    reporterOwnershipService.set(active.id, { reporterId: target.reporter.id }, 'admin')
+  );
+  const deleted = await projectsRepo.create({ name: 'Deleted project' });
+  for (let index = 0; index < 2; index++) {
+    const hidden = await reportsRepo.create({
+      projectId: deleted.id,
+      title: 'Report in deleted project',
+      metadata,
+    });
+    Result.unwrap(
+      reporterOwnershipService.set(hidden.id, { reporterId: target.reporter.id }, 'admin')
+    );
+  }
+  await projectsRepo.delete(deleted.id);
+  const response = await request('/api/reporters');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    reporters: [
+      {
+        id: target.reporter.id,
+        projects: [{ id: project.id, name: project.name }],
+        ownedReportCount: 1,
+      },
+    ],
+  });
+});
+
 it('enforces staff CSRF checks against the configured origin for cookie mutations', async () => {
   const first = await report();
   for (const overrides of [
@@ -501,6 +558,92 @@ it('checks prerequisites for project enablement and sends test login only to the
     ).status
   ).toBe(200);
 });
+
+it('waits for test-login delivery and sends a usable request token to the acting admin', async () => {
+  const delivery = Promise.withResolvers<{ success: boolean }>();
+  const started = Promise.withResolvers<void>();
+  const sent = spyOn(emailService, 'sendEmail').mockImplementation(() => {
+    started.resolve();
+    return delivery.promise;
+  });
+  let completed = false;
+  const pending = request(`/api/projects/${project.id}/reporter-portal/test-login`, 'POST').then(
+    (response) => {
+      completed = true;
+      return response;
+    }
+  );
+  await started.promise;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(completed).toBe(false);
+  delivery.resolve({ success: true });
+  expect((await pending).status).toBe(200);
+  const email = sent.mock.calls[0][0];
+  expect(email.to[0].email).toBe('admin@example.com');
+  const url = new URL(email.text!.match(/https:\/\/\S+/)![0]);
+  const token = url.hash.slice(1);
+  const stored = getDb()
+    .query<
+      {
+        email: string;
+        source: string;
+        created_at: string;
+        expires_at: string;
+      },
+      [string]
+    >('SELECT email, source, created_at, expires_at FROM reporter_auth_tokens WHERE token_hash = ?')
+    .get(hashToken(token))!;
+  expect(stored).toMatchObject({ email: 'admin@example.com', source: 'request' });
+  expect(Date.parse(stored.expires_at) - Date.parse(stored.created_at)).toBe(15 * 60000);
+  expect(Result.unwrap(reporterAuthService.exchange(token)).reporter.email).toBe(
+    'admin@example.com'
+  );
+});
+
+it('rejects test login when the acting admin reporter identity is suspended', async () => {
+  const admin = login('admin@example.com');
+  Result.unwrap(reportersService.suspend(admin.reporter.id, 'admin'));
+  const sent = spyOn(emailService, 'sendEmail');
+  const response = await request(`/api/projects/${project.id}/reporter-portal/test-login`, 'POST');
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ success: false, error: 'REPORTER_SUSPENDED' });
+  expect(sent).not.toHaveBeenCalled();
+  expect(getDb().query('SELECT COUNT(*) AS count FROM reporter_auth_tokens').get()).toEqual({
+    count: 1,
+  });
+});
+
+it('rejects test login when the acting admin email is invalid', async () => {
+  getDb().run('UPDATE users SET email = ? WHERE id = ?', ['invalid-email', 'admin']);
+  const sent = spyOn(emailService, 'sendEmail');
+  const response = await request(`/api/projects/${project.id}/reporter-portal/test-login`, 'POST');
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ success: false, error: 'INVALID_EMAIL' });
+  expect(sent).not.toHaveBeenCalled();
+  expect(getDb().query('SELECT COUNT(*) AS count FROM reporter_auth_tokens').get()).toEqual({
+    count: 0,
+  });
+});
+
+for (const failure of ['result', 'exception'] as const) {
+  it(`reports test-login delivery failure when SMTP returns a failing ${failure}`, async () => {
+    const sent = spyOn(emailService, 'sendEmail');
+    if (failure === 'result')
+      sent.mockResolvedValue({ success: false, error: 'Private SMTP details' });
+    else sent.mockRejectedValue(new Error('Private SMTP details'));
+    const response = await request(
+      `/api/projects/${project.id}/reporter-portal/test-login`,
+      'POST'
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'EMAIL_DELIVERY_FAILED',
+      message: 'Could not send the login email',
+    });
+    expect(sent).toHaveBeenCalledTimes(1);
+  });
+}
 
 const staffMatrix = [
   { method: 'PUT', path: '/api/reports/:id/owner', target: 'report', editors: true },

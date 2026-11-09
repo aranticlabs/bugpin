@@ -82,6 +82,10 @@ it('does not wait for SMTP or expose delivery failures in the response', async (
   expect(await response.json()).toEqual({ success: true });
   spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('delivery failed'));
   expect((await portalPost(app, '/auth/request', { email: 'other@example.com' })).status).toBe(200);
+  spyOn(emailService, 'sendEmail').mockResolvedValue({ success: false, error: 'delivery failed' });
+  const failed = await portalPost(app, '/auth/request', { email: 'failed@example.com' });
+  expect(failed.status).toBe(200);
+  expect(await failed.json()).toEqual({ success: true });
 });
 
 it('keeps IP-limited login requests neutral across different emails', async () => {
