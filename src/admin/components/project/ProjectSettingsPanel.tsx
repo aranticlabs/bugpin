@@ -10,10 +10,11 @@ import { ProjectGeneralSection } from './settings/ProjectGeneralSection';
 import { ProjectLanguageSection } from './settings/ProjectLanguageSection';
 import { ProjectLauncherSection } from './settings/ProjectLauncherSection';
 import { ProjectNotificationsSection } from './settings/ProjectNotificationsSection';
+import { ProjectReporterPortalSection } from './settings/ProjectReporterPortalSection';
 import { useProjectSettingsForm } from './settings/useProjectSettingsForm';
 
 export type ProjectSettingsSection =
-  'general' | 'launcher' | 'dialog' | 'language' | 'capture' | 'notifications';
+  'general' | 'launcher' | 'dialog' | 'language' | 'capture' | 'notifications' | 'reporter-portal';
 
 interface ProjectSettingsPanelProps {
   projectId: string;
@@ -91,6 +92,15 @@ export function ProjectSettingsPanel({ projectId, section }: ProjectSettingsPane
           <ProjectNotificationsSection
             form={form}
             update={update}
+            globalSettings={globalSettings}
+          />
+        )}
+        {section === 'reporter-portal' && (
+          <ProjectReporterPortalSection
+            projectId={projectId}
+            form={form}
+            update={update}
+            project={settings.project}
             globalSettings={globalSettings}
           />
         )}

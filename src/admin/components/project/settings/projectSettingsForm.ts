@@ -6,6 +6,7 @@ import type {
   ProjectSettings,
   ProjectSettingsUpdate,
   ReporterNotificationSettings,
+  ReporterPortalProjectSettings,
   ScreenshotSettings,
   ThemeColors,
   WidgetDialogContentSettings,
@@ -15,6 +16,7 @@ import { DEFAULT_LANGUAGE_SETTINGS } from '../../LanguageSettingsForm';
 import { resolveDiagnosticSettings } from '../../DiagnosticsSettingsForm';
 
 export interface ProjectSettingsForm {
+  reporterPortal: ReporterPortalProjectSettings;
   useCustomWidgetDialog: boolean;
   widgetDialogSettings: Partial<ThemeColors>;
   useCustomDialogContent: boolean;
@@ -72,6 +74,10 @@ export function projectSettingsToForm(
   };
 
   return {
+    reporterPortal: {
+      enabled: settings?.reporterPortal?.enabled ?? false,
+      allowNewFeedback: settings?.reporterPortal?.allowNewFeedback ?? false,
+    },
     useCustomWidgetDialog: hasKeys(widgetDialog),
     widgetDialogSettings: widgetDialog,
     useCustomDialogContent: hasDefinedValue(widgetDialogContent),
@@ -200,6 +206,8 @@ export function buildProjectSettingsUpdate(
   );
 
   update.defaultAssigneeUserId = form.defaultAssigneeUserId;
+  if (saved?.reporterPortal || form.reporterPortal.enabled || form.reporterPortal.allowNewFeedback)
+    update.reporterPortal = form.reporterPortal;
   update.language = form.useCustomLanguage ? form.languageSettings : null;
 
   return update;

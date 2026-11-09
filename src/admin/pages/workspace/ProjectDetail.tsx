@@ -33,6 +33,7 @@ const SETTINGS_TABS: { value: ProjectSettingsSection; label: string }[] = [
   { value: 'language', label: 'Language' },
   { value: 'capture', label: 'Capture' },
   { value: 'notifications', label: 'Notifications' },
+  { value: 'reporter-portal', label: 'Reporter Portal' },
 ];
 
 type ProjectTab = 'reports' | ProjectSettingsSection | 'integrations';

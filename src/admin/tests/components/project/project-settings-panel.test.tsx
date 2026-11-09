@@ -187,6 +187,7 @@ const SECTIONS: ProjectSettingsSection[] = [
   'language',
   'capture',
   'notifications',
+  'reporter-portal',
 ];
 
 function PanelPage({ initial }: { initial: ProjectSettingsSection }) {
@@ -231,6 +232,28 @@ async function makeUnsavedChange(user: ReturnType<typeof userEvent.setup>) {
 describe('ProjectSettingsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('saves the portal switches through the existing unsaved-changes flow', async () => {
+    setupMockResponses(notificationDefaults, false, {
+      ...baseProject,
+      reporterPortalPrerequisites: [],
+    });
+    const user = userEvent.setup();
+    renderWithQuery(<Harness initial="reporter-portal" />);
+    await user.click(await screen.findByRole('switch', { name: 'Enable reporter portal' }));
+    await user.click(screen.getByRole('switch', { name: 'Allow new feedback' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+        settings: expect.objectContaining({
+          reporterPortal: { enabled: true, allowNewFeedback: true },
+        }),
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    );
   });
 
   it('saves project settings and notification defaults', async () => {
