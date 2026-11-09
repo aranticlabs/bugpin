@@ -6,6 +6,7 @@ import { reportersRepo } from '../../../src/server/database/repositories/reporte
 import { reporterAuthTokensRepo } from '../../../src/server/database/repositories/reporter-auth-tokens.repo';
 import { reporterSuppressionsRepo } from '../../../src/server/database/repositories/reporter-suppressions.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
+import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { reporterCorrespondenceService } from '../../../src/server/services/reporter-correspondence.service';
 import { reporterSuppressionService } from '../../../src/server/services/reporter-suppression.service';
 import { reporterAuthService } from '../../../src/server/services/reporter-auth.service';
@@ -131,6 +132,41 @@ it('omits portal links when the project is disabled and gives safe instructions 
     expect(email.html).not.toContain('/reporter-portal');
     expect(email.loginToken).toBeUndefined();
   }
+});
+
+for (const settings of [
+  { appUrl: 'http://bugpin.example.com', portalBaseUrl: '' },
+  { appUrl: 'http://bugpin.example.com', portalBaseUrl: 'https://feedback.example.com' },
+  { appUrl: portalOrigin, portalBaseUrl: 'http://feedback.example.com' },
+]) {
+  it(`sends confirmation and invitation without credentials after insecure settings are restored: ${settings.appUrl}, ${settings.portalBaseUrl}`, async () => {
+    await settingsRepo.updateAll(settings);
+    settingsCacheService.invalidate();
+    const mint = spyOn(reporterAuthService, 'mintLoginToken');
+    const report = (await reportsRepo.findById('report'))!;
+    await notificationsService.notifyReporterSubmission(report);
+    await notificationsService.notifyReporterMessage(report, 'Reply', 'staff', true);
+    expect(sent).toHaveLength(3);
+    expect(mint).not.toHaveBeenCalled();
+    expect(getDb().query('SELECT COUNT(*) AS count FROM reporter_auth_tokens').get()).toEqual({
+      count: 0,
+    });
+    for (const email of sent) {
+      expect(email.loginToken).toBeUndefined();
+      expect(email.headers).toBeUndefined();
+      expect(email.html).not.toContain('/reporter-portal');
+      expect(email.html).not.toContain('/api/portal/unsubscribe');
+    }
+  });
+}
+
+it('keeps confirmation token delivery on loopback URLs allowed by the shared security policy', async () => {
+  await settingsRepo.updateAll({ appUrl: 'http://localhost:3000', portalBaseUrl: '' });
+  settingsCacheService.invalidate();
+  await notificationsService.notifyReporterSubmission((await reportsRepo.findById('report'))!);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].loginToken?.email).toBe('bob@example.com');
+  expect(sent[0].html).toContain('http://localhost:3000/reporter-portal/login#');
 });
 
 for (const locale of SUPPORTED_LOCALES) {

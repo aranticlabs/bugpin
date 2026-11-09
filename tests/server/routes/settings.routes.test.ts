@@ -39,6 +39,8 @@ let storedSettings: AppSettings;
 function settingsWithSecrets(): AppSettings {
   return {
     appName: 'BugPin',
+    appUrl: 'http://localhost',
+    portalBaseUrl: '',
     smtpEnabled: true,
     smtpConfig: {
       host: 'smtp.example.com',

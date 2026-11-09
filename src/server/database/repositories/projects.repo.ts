@@ -78,6 +78,17 @@ function mapRowToProject(row: ProjectRow): Project {
 export { CreateProjectData };
 
 export const projectsRepo = {
+  hasEnabledReporterPortal(): boolean {
+    return (
+      getDb()
+        .query(
+          `SELECT 1 FROM projects WHERE deleted_at IS NULL
+      AND json_extract(settings, '$.reporterPortal.enabled') = 1 LIMIT 1`
+        )
+        .get() !== null
+    );
+  },
+
   /**
    * Create a new project
    * New projects are inserted at position 0 (top of the list)

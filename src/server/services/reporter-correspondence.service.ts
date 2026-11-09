@@ -5,6 +5,7 @@ import { normalizeEmail } from '../utils/email-normalize.js';
 import { isValidEmail } from '../utils/validators.js';
 import { Result } from '../utils/result.js';
 import { normalizeLocale } from '../utils/locale.js';
+import { isSecurePortalUrl } from '../utils/portal-url.js';
 import type { AppSettings, Project, Report } from '@shared/types';
 import type { ReporterEmailOptions } from './email.service.js';
 
@@ -28,7 +29,11 @@ export const reporterCorrespondenceService = {
       unsubscribeUrl: '',
     };
     const baseUrl = settings.portalBaseUrl || settings.appUrl;
-    if (baseUrl && project.settings?.reporterPortal?.enabled) {
+    if (
+      project.settings?.reporterPortal?.enabled &&
+      isSecurePortalUrl(settings.appUrl) &&
+      isSecurePortalUrl(baseUrl)
+    ) {
       options.portalUrl = new URL('/reporter-portal', baseUrl).href;
       if (owner || report.claimableEmail)
         options.reportPortalUrl = new URL(`/reporter-portal/reports/${report.id}`, baseUrl).href;
@@ -48,24 +53,18 @@ export const reporterCorrespondenceService = {
     if (reportersRepo.findByEmail(recipient)?.suspendedAt) return Result.ok(null);
     const options = this.staffCopyOptions(report, project, settings);
     const baseUrl = settings.portalBaseUrl || settings.appUrl;
-    if (baseUrl) {
+    if (isSecurePortalUrl(settings.appUrl) && isSecurePortalUrl(baseUrl)) {
       const unsubscribe = new URL('/api/portal/unsubscribe', baseUrl);
       unsubscribe.searchParams.set('t', reporterSuppressionService.unsubscribeToken(recipient));
       unsubscribe.searchParams.set('locale', options.locale);
       options.unsubscribeUrl = unsubscribe.href;
-      if (project.settings?.reporterPortal?.enabled) {
-        options.portalUrl = new URL('/reporter-portal', baseUrl).href;
-        if (owner || report.claimableEmail) {
-          options.reportPortalUrl = new URL(`/reporter-portal/reports/${report.id}`, baseUrl).href;
-          if (source && (source === 'confirmation' || !owner)) {
-            const minted = reporterAuthService.mintLoginToken(recipient, source, report.id);
-            if (!minted.success) return minted;
-            const login = new URL('/reporter-portal/login', baseUrl);
-            login.hash = minted.value.secret;
-            options.loginToken = minted.value;
-            options.loginUrl = login.href;
-          }
-        }
+      if (options.reportPortalUrl && source && (source === 'confirmation' || !owner)) {
+        const minted = reporterAuthService.mintLoginToken(recipient, source, report.id);
+        if (!minted.success) return minted;
+        const login = new URL('/reporter-portal/login', baseUrl);
+        login.hash = minted.value.secret;
+        options.loginToken = minted.value;
+        options.loginUrl = login.href;
       }
     }
     return Result.ok({ recipient, options });

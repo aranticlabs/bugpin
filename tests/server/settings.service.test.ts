@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { settingsService } from '../../src/server/services/settings.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { emailService, type SMTPConfig } from '../../src/server/services/email.service';
 import { cleanupService } from '../../src/server/services/cleanup.service';
 import { getEELicenseService } from '../../src/server/utils/ee';
@@ -111,6 +112,7 @@ function createBaseSettings(): AppSettings {
 }
 
 const originalGetAll = settingsRepo.getAll;
+const originalHasEnabledReporterPortal = projectsRepo.hasEnabledReporterPortal;
 const originalUpdateAll = settingsRepo.updateAll;
 const originalGet = settingsRepo.get;
 const originalSendTestEmail = emailService.sendTestEmail;
@@ -120,6 +122,7 @@ let baseSettings: AppSettings;
 let lastUpdates: Partial<AppSettings> | null;
 
 beforeEach(() => {
+  projectsRepo.hasEnabledReporterPortal = () => false;
   baseSettings = createBaseSettings();
   lastUpdates = null;
 
@@ -140,6 +143,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  projectsRepo.hasEnabledReporterPortal = originalHasEnabledReporterPortal;
   settingsRepo.getAll = originalGetAll;
   settingsRepo.updateAll = originalUpdateAll;
   settingsRepo.get = originalGet;

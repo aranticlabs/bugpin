@@ -1,5 +1,7 @@
 import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
+import { projectsRepo } from '../database/repositories/projects.repo.js';
+import { isSecurePortalUrl } from '../utils/portal-url.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { cleanupService } from './cleanup.service.js';
 import { emailService } from './email.service.js';
@@ -345,6 +347,20 @@ export const settingsService = {
       } catch {
         return Result.fail('Invalid Portal Base URL', 'INVALID_PORTAL_BASE_URL');
       }
+    }
+    const secureAppUrl = isSecurePortalUrl(appUrl);
+    const securePortalUrl = !portalBaseUrl || isSecurePortalUrl(portalBaseUrl);
+    if ((!secureAppUrl || !securePortalUrl) && projectsRepo.hasEnabledReporterPortal()) {
+      if (!secureAppUrl)
+        return Result.fail(
+          'A secure Application URL is required while a reporter portal is enabled',
+          'INVALID_APP_URL'
+        );
+      if (!securePortalUrl)
+        return Result.fail(
+          'A secure Portal Base URL is required while a reporter portal is enabled',
+          'INVALID_PORTAL_BASE_URL'
+        );
     }
     const updates: Partial<AppSettings> = {};
 

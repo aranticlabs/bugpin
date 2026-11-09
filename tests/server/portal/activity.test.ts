@@ -473,7 +473,8 @@ it('renders localized editable staff activity emails with their own footer type 
   expect(sent.at(-1)!.html).not.toContain('/nested/');
 });
 
-it('labels an invalid Application URL separately and allows clearing either URL field', async () => {
+it('labels an invalid Application URL separately and allows clearing either URL field while the portal is disabled', async () => {
+  getDb().run("UPDATE projects SET settings = '{}' WHERE id = 'project'");
   await settingsRepo.updateAll({ appUrl: 'invalid', portalBaseUrl: '' });
   expect(
     await settingsService.update({ portalBaseUrl: 'https://feedback.example.com' })
@@ -490,4 +491,48 @@ it('labels an invalid Application URL separately and allows clearing either URL 
     success: false,
     code: 'INVALID_APP_URL',
   });
+});
+
+it('rejects global URL downgrades while any reporter portal is enabled and preserves loopback URLs', async () => {
+  for (const [updates, code] of [
+    [{ appUrl: 'http://bugpin.example.com' }, 'INVALID_APP_URL'],
+    [{ appUrl: '' }, 'INVALID_APP_URL'],
+    [{ portalBaseUrl: 'http://feedback.example.com' }, 'INVALID_PORTAL_BASE_URL'],
+  ] as const) {
+    expect(await settingsService.update(updates)).toMatchObject({ success: false, code });
+    expect((await settingsRepo.getAll()).appUrl).toBe(portalOrigin);
+    expect((await settingsRepo.getAll()).portalBaseUrl).toBe('');
+  }
+  expect(
+    (
+      await settingsService.update({
+        appUrl: 'http://localhost:3000',
+        portalBaseUrl: 'http://127.0.0.1:3001',
+      })
+    ).success
+  ).toBe(true);
+  expect((await settingsRepo.getAll()).portalBaseUrl).toBe('http://127.0.0.1:3001');
+});
+
+it('rejects other global updates when an enabled portal has insecure restored settings', async () => {
+  await settingsRepo.updateAll({ appUrl: 'http://bugpin.example.com' });
+  expect(await settingsService.update({ appName: 'Renamed' })).toMatchObject({
+    success: false,
+    code: 'INVALID_APP_URL',
+  });
+  expect((await settingsRepo.getAll()).appName).toBe('BugPin');
+});
+
+it('enforces secure URLs for an enabled portal on another inactive project, excluding deleted projects', async () => {
+  getDb().run("UPDATE projects SET settings = '{}' WHERE id = 'project'");
+  getDb().exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix, is_active, settings)
+    VALUES ('other', 'Other', 'other-hash', 'other-prefix', 0, '{"reporterPortal":{"enabled":true}}')`);
+  expect(await settingsService.update({ appUrl: 'http://bugpin.example.com' })).toMatchObject({
+    success: false,
+    code: 'INVALID_APP_URL',
+  });
+  getDb().run("UPDATE projects SET deleted_at = ? WHERE id = 'other'", [new Date().toISOString()]);
+  expect((await settingsService.update({ appUrl: 'http://bugpin.example.com' })).success).toBe(
+    true
+  );
 });
