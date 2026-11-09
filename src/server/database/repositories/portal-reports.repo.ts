@@ -1,9 +1,9 @@
 import { getDb, transaction } from '../database.js';
-import type { FileType, MessageAuthorKind, ReportStatus } from '@shared/types';
+import type { FileType, MessageAuthorKind, ReportStatus, ProjectSettings } from '@shared/types';
 import type { PortalReportCursor } from '../../utils/portal-schemas.js';
 
-const visibleReport = `r.reporter_id = ? AND p.deleted_at IS NULL AND p.is_active = 1
-  AND json_extract(p.settings, '$.reporterPortal.enabled') = 1`;
+const enabledProject = `p.deleted_at IS NULL AND p.is_active = 1 AND json_extract(p.settings, '$.reporterPortal.enabled') = 1`;
+const visibleReport = `r.reporter_id = ? AND ${enabledProject}`;
 const reportTables = 'reports r JOIN projects p ON p.id = r.project_id';
 const unread = `EXISTS (SELECT 1 FROM report_messages m WHERE m.report_id = r.id
   AND m.author_kind = 'staff' AND m.hidden_at IS NULL
@@ -61,6 +61,82 @@ const fileColumns = `f.id, f.type, f.mime_type AS mimeType, f.size_bytes AS size
   f.width, f.height, f.message_id AS messageId`;
 
 export const portalReportsRepo = {
+  visibleIds(reporterId: string): string[] {
+    return getDb()
+      .query<{ id: string }, [string]>(`SELECT r.id FROM ${reportTables} WHERE ${visibleReport}`)
+      .all(reporterId)
+      .map((row) => row.id);
+  },
+
+  eventOwner(reportId: string): { reporterId: string; projectId: string } | null {
+    return getDb()
+      .query<{ reporterId: string; projectId: string }, [string]>(
+        `SELECT r.reporter_id AS reporterId, p.id AS projectId FROM ${reportTables}
+       WHERE r.id = ? AND r.reporter_id IS NOT NULL AND ${enabledProject}`
+      )
+      .get(reportId);
+  },
+
+  submissionContext(projectId: string, reporterId: string) {
+    const row = getDb()
+      .query<
+        {
+          settings: string;
+          email: string;
+          displayName: string;
+          locale: string;
+          assignedTo: string | null;
+        },
+        [string, string]
+      >(
+        `SELECT p.settings, a.email, a.display_name AS displayName, a.locale, u.id AS assignedTo
+      FROM projects p JOIN reporters a ON a.id = ? AND a.suspended_at IS NULL
+      LEFT JOIN users u ON u.id = json_extract(p.settings, '$.defaultAssigneeUserId') AND u.is_active = 1
+        AND (u.invitation_sent_at IS NULL OR u.invitation_accepted_at IS NOT NULL)
+      WHERE p.id = ? AND ${enabledProject} AND json_extract(p.settings, '$.reporterPortal.allowNewFeedback') = 1
+      AND EXISTS (SELECT 1 FROM reports r WHERE r.project_id = p.id AND r.reporter_id = a.id)`
+      )
+      .get(reporterId, projectId);
+    return row ? { ...row, settings: JSON.parse(row.settings) as ProjectSettings } : null;
+  },
+
+  insertSubmission(input: {
+    id: string;
+    projectId: string;
+    reporterId: string;
+    title: string;
+    description?: string;
+    email: string;
+    displayName: string;
+    locale: string;
+    assignedTo: string | null;
+    now: string;
+  }): void {
+    getDb().run(
+      `INSERT INTO reports (id, project_id, source, title, description, original_description,
+      reporter_id, reporter_email, reporter_name, reporter_locale, assigned_to,
+      metadata, created_at, updated_at, last_reporter_activity_at, board_position)
+      VALUES (?, ?, 'portal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        (SELECT COALESCE(MIN(board_position), 0) - 1 FROM reports WHERE status = 'open'))`,
+      [
+        input.id,
+        input.projectId,
+        input.title,
+        input.description ?? null,
+        input.description ?? null,
+        input.reporterId,
+        input.email,
+        input.displayName,
+        input.locale,
+        input.assignedTo,
+        JSON.stringify({ timestamp: input.now, portal: true }),
+        input.now,
+        input.now,
+        input.now,
+      ]
+    );
+  },
+
   projects(reporterId: string): ProjectRow[] {
     return getDb()
       .query<ProjectRow, [string]>(

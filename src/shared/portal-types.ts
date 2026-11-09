@@ -1,5 +1,9 @@
 import type { FileType, MessageAuthorKind, ReportStatus } from './types';
 
+export type PortalEvent =
+  | { type: 'report.updated' | 'message.created'; data: { reportId: string; projectId: string } }
+  | { type: 'access.changed'; data: Record<string, never> };
+
 export interface PortalProject {
   id: string;
   name: string;

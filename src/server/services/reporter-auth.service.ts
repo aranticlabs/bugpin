@@ -6,6 +6,7 @@ import { reporterSuppressionsRepo } from '../database/repositories/reporter-supp
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
+import { realtimeService } from './realtime.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { emailService } from './email.service.js';
 import { normalizeEmail } from '../utils/email-normalize.js';
@@ -204,7 +205,10 @@ export const reporterAuthService = {
           : {}),
       });
     });
-    if (result.success) reporterOwnershipService.announce(ownershipChanges);
+    if (result.success) {
+      reporterOwnershipService.announce(ownershipChanges);
+      if (previousHash) realtimeService.invalidatePortalAccess();
+    }
     return result;
   },
 
@@ -238,6 +242,7 @@ export const reporterAuthService = {
 
   logout(sessionId: string): Result<void> {
     reporterSessionsRepo.revoke(sessionId, new Date().toISOString());
+    realtimeService.invalidatePortalAccess();
     return Result.ok(undefined);
   },
 };

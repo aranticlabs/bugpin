@@ -41,6 +41,7 @@ interface MatrixRow {
   path: string;
   publicStatus?: number | null;
   resource?: boolean;
+  submission?: boolean;
 }
 const matrix: MatrixRow[] = [
   { method: 'GET', path: '/config', publicStatus: 200 },
@@ -54,6 +55,9 @@ const matrix: MatrixRow[] = [
   { method: 'GET', path: '/me', publicStatus: null },
   { method: 'PATCH', path: '/me' },
   { method: 'GET', path: '/projects' },
+  { method: 'GET', path: '/events' },
+  { method: 'POST', path: '/reports', submission: true },
+  { method: 'POST', path: '/reports/:id/messages', resource: true },
   { method: 'GET', path: '/reports' },
   { method: 'GET', path: '/reports/:id', resource: true },
   { method: 'GET', path: '/reports/:id/files/:fileId', resource: true },
@@ -116,7 +120,7 @@ async function credential(caller: Caller): Promise<string> {
       'matrix-report',
     ]);
     getDb().run('UPDATE projects SET settings = ? WHERE id = ?', [
-      JSON.stringify({ reporterPortal: { enabled: caller === 'owner', allowNewFeedback: false } }),
+      JSON.stringify({ reporterPortal: { enabled: caller === 'owner', allowNewFeedback: true } }),
       'matrix-project',
     ]);
   }
@@ -139,11 +143,14 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
       const path = row.path.replace(':id', 'matrix-report').replace(':fileId', 'matrix-file');
       const variants = row.path.includes('/files/')
         ? ['', 'bytes=0-3']
-        : row.path === '/reports'
+        : row.path === '/reports' && row.method === 'GET'
           ? ['', '?groupByStatus=true']
           : [''];
       for (const variant of variants) {
         const fileRequest = row.path.includes('/files/');
+        const form = new FormData();
+        form.set('projectId', 'matrix-project');
+        form.set('title', 'New feedback');
         const response = await app.request(
           `${portalOrigin}/api/portal${path}${fileRequest ? '' : variant}`,
           {
@@ -153,18 +160,22 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
               ...(caller === 'bearer' ? { Authorization: 'Bearer some-api-token' } : {}),
               Origin: portalOrigin,
               'X-BugPin-Portal': '1',
-              'content-type': 'application/json',
+              ...(!row.submission ? { 'content-type': 'application/json' } : {}),
               ...(fileRequest && variant ? { Range: variant } : {}),
             },
             ...(['POST', 'PATCH'].includes(row.method)
               ? {
-                  body: JSON.stringify(
-                    row.path === '/auth/request'
-                      ? { email: 'request@example.com' }
-                      : row.method === 'PATCH'
-                        ? { displayName: 'Updated name' }
-                        : { token: 'invalid' }
-                  ),
+                  body: row.submission
+                    ? form
+                    : JSON.stringify(
+                        row.path === '/auth/request'
+                          ? { email: 'request@example.com' }
+                          : row.method === 'PATCH'
+                            ? { displayName: 'Updated name' }
+                            : row.path.endsWith('/messages')
+                              ? { body: 'Reporter reply' }
+                              : { token: 'invalid' }
+                      ),
                 }
               : {}),
           }
@@ -174,13 +185,19 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
           row.publicStatus ??
           (!authenticated
             ? 401
-            : row.resource
-              ? caller !== 'owner'
-                ? 404
-                : fileRequest && variant
-                  ? 206
-                  : 200
-              : 200);
+            : row.submission
+              ? caller === 'owner'
+                ? 201
+                : 404
+              : row.resource
+                ? caller !== 'owner'
+                  ? 404
+                  : fileRequest && variant
+                    ? 206
+                    : row.method === 'POST'
+                      ? 201
+                      : 200
+                : 200);
         expect({
           endpoint: `${row.method} ${row.path}`,
           caller,
@@ -196,7 +213,16 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
           fileRequest && caller === 'owner' ? 'private, no-store' : 'no-store'
         );
         expect(response.headers.get('access-control-allow-origin')).toBeNull();
-        if ((row.path === '/projects' || row.path === '/reports') && authenticated) {
+        if (row.path === '/events' && authenticated) {
+          const reader = response.body!.getReader();
+          expect(new TextDecoder().decode((await reader.read()).value)).toContain(': connected');
+          await reader.cancel();
+        }
+        if (
+          row.method === 'GET' &&
+          (row.path === '/projects' || row.path === '/reports') &&
+          authenticated
+        ) {
           const body = (await response.json()) as {
             projects?: unknown[];
             reports?: unknown[];
@@ -237,6 +263,8 @@ it('checks Origin, Fetch Metadata, and the portal header on public and authentic
     '/auth/resend',
     '/auth/exchange',
     '/auth/logout',
+    '/reports',
+    '/reports/matrix-report/messages',
   ]) {
     const rejectedHeaders: Record<string, string>[] = [
       { Origin: 'https://other.example.test', 'X-BugPin-Portal': '1' },

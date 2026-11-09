@@ -9,6 +9,9 @@ import { portalMeRoutes } from './me.js';
 import { portalProjectsRoutes } from './projects.js';
 import { portalReportsRoutes } from './reports.js';
 import { portalFilesRoutes } from './files.js';
+import { portalMessagesRoutes } from './messages.js';
+import { portalSubmissionsRoutes } from './submissions.js';
+import { portalEventsRoutes } from './events.js';
 
 export const portalRoutes = new Hono();
 
@@ -34,6 +37,9 @@ portalRoutes.route('/', portalMeRoutes);
 portalRoutes.route('/', portalProjectsRoutes);
 portalRoutes.route('/', portalReportsRoutes);
 portalRoutes.route('/', portalFilesRoutes);
+portalRoutes.route('/', portalMessagesRoutes);
+portalRoutes.route('/', portalSubmissionsRoutes);
+portalRoutes.route('/', portalEventsRoutes);
 portalRoutes.get('/me', reporterAuthMiddleware, (c) =>
   c.json({ success: true, reporter: c.get('reporter') })
 );

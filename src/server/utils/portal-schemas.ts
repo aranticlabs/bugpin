@@ -37,6 +37,17 @@ export const portalCursorSchema = z
 
 export type PortalReportCursor = z.output<typeof portalCursorSchema>;
 
+export const portalMessageSchema = z
+  .object({ body: z.string().trim().max(5000).default('') })
+  .strict();
+export const portalSubmissionSchema = z
+  .object({
+    projectId: z.string().min(1).max(200),
+    title: z.string().trim().min(4).max(500),
+    description: z.string().max(10000).optional(),
+  })
+  .strict();
+
 export const portalProfileSchema = z
   .object({
     displayName: z

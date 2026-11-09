@@ -17,21 +17,58 @@ import type {
   PortalReportBoard,
   PortalReportDetail,
   PortalReportList,
+  PortalMessage,
 } from '@shared/portal-types';
+import type { FileRecord, ReportMessage } from '@shared/types';
 
-function toPortalFile(reportId: string, file: PortalFileRow): PortalFile {
+function toPortalFile(reportId: string, file: PortalFileRow | FileRecord): PortalFile {
   return {
     id: file.id,
     type: file.type,
     mimeType: file.mimeType,
     sizeBytes: file.sizeBytes,
-    width: file.width,
-    height: file.height,
+    width: file.width ?? null,
+    height: file.height ?? null,
     url: `/api/portal/reports/${encodeURIComponent(reportId)}/files/${encodeURIComponent(file.id)}`,
   };
 }
 
+function toPortalMessage(
+  message: Pick<
+    ReportMessage,
+    'id' | 'authorKind' | 'authorName' | 'reporterId' | 'body' | 'createdAt'
+  >,
+  reporterId: string,
+  files: PortalFile[]
+): PortalMessage {
+  return {
+    id: message.id,
+    authorKind: message.authorKind,
+    authorName:
+      message.authorKind === 'reporter' && message.reporterId !== reporterId
+        ? 'Previous reporter'
+        : message.authorName,
+    isOwn: message.authorKind === 'reporter' && message.reporterId === reporterId,
+    body: message.body,
+    createdAt: message.createdAt,
+    files,
+  };
+}
+
 export const portalReportsService = {
+  access(reportId: string, reporterId: string): Result<void> {
+    return portalReportsRepo.detail(reportId, reporterId)
+      ? Result.ok(undefined)
+      : Result.fail('Report not found', 'NOT_FOUND');
+  },
+
+  message(message: ReportMessage, reporterId: string): PortalMessage {
+    return toPortalMessage(
+      message,
+      reporterId,
+      message.files.map((file) => toPortalFile(message.reportId, file))
+    );
+  },
   async projects(reporterId: string): Promise<Result<PortalProject[]>> {
     const settings = await settingsCacheService.getAll();
     return Result.ok(
@@ -123,18 +160,9 @@ export const portalReportsService = {
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         files: byMessage.get(null) ?? [],
-        messages: messages.map((message) => ({
-          id: message.id,
-          authorKind: message.authorKind,
-          authorName:
-            message.authorKind === 'reporter' && message.reporterId !== reporterId
-              ? 'Previous reporter'
-              : message.authorName,
-          isOwn: message.authorKind === 'reporter' && message.reporterId === reporterId,
-          body: message.body,
-          createdAt: message.createdAt,
-          files: byMessage.get(message.id) ?? [],
-        })),
+        messages: messages.map((message) =>
+          toPortalMessage(message, reporterId, byMessage.get(message.id) ?? [])
+        ),
         canReply:
           row.status !== 'closed' &&
           row.notifyReporter !== 0 &&
