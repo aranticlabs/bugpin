@@ -14,6 +14,8 @@ const originalGetAll = settingsCacheService.getAll;
 const originalWarn = logger.warn;
 
 let enforceHttps = true;
+let appUrl = 'https://bugpin.example.com';
+let portalBaseUrl = '';
 let warnings: string[] = [];
 
 function createApp() {
@@ -24,15 +26,21 @@ function createApp() {
 }
 
 function viaProxy(proto: 'http' | 'https') {
-  return createApp().request('http://bugpin.example.com/health', {
-    headers: { 'x-forwarded-proto': proto },
-  });
+  return createApp().request(
+    'http://bugpin.example.com/health',
+    { headers: { 'x-forwarded-proto': proto } },
+    { requestIP: () => ({ address: '127.0.0.1' }) }
+  );
 }
 
 beforeEach(() => {
   enforceHttps = true;
+  appUrl = 'https://bugpin.example.com';
+  portalBaseUrl = '';
+  config.trustProxy = 'auto';
   warnings = [];
-  settingsCacheService.getAll = async () => ({ enforceHttps }) as AppSettings;
+  settingsCacheService.getAll = async () =>
+    ({ enforceHttps, appUrl, portalBaseUrl }) as AppSettings;
   logger.warn = (message: string) => {
     warnings.push(message);
   };
@@ -62,6 +70,199 @@ describe('httpsEnforcement', () => {
     const res = await viaProxy('https');
     expect(res.status).toBe(200);
     expect(res.headers.get('strict-transport-security')).toContain('max-age=31536000');
+  });
+
+  it('keeps loopback health checks available over HTTP when HTTPS is enforced', async () => {
+    for (const host of ['localhost', '127.0.0.1', '127.0.0.2', '[::1]']) {
+      const response = await createApp().request(
+        `http://${host}/health`,
+        {},
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Location')).toBeNull();
+    }
+  });
+
+  it.each([
+    ['', 'http://bugpin.example.com/health?next=1', 'https://bugpin.example.com/health?next=1'],
+    ['', 'http://bugpin.example.com:8080/health', 'https://bugpin.example.com:8080/health'],
+    [
+      'https://bugpin.example.com',
+      'http://bugpin.example.com:8080/health',
+      'https://bugpin.example.com/health',
+    ],
+    [
+      'https://canonical.example.com:8443',
+      'http://bugpin.example.com:8080/health?next=1',
+      'https://canonical.example.com:8443/health?next=1',
+    ],
+    [
+      'https://canonical.example.com:80',
+      'http://bugpin.example.com:8080/health',
+      'https://canonical.example.com:80/health',
+    ],
+  ])(
+    'redirects single-origin HTTP with appUrl=%s and request=%s',
+    async (configured, request, expected) => {
+      appUrl = configured;
+      const response = await createApp().request(request);
+      expect(response.status).toBe(301);
+      expect(response.headers.get('Location')).toBe(expected);
+    }
+  );
+
+  it.each([
+    ['', 'https://public.example/health?next=1'],
+    ['https://bugpin.example.com', 'https://bugpin.example.com/health?next=1'],
+  ])(
+    'selects the canonical or trusted origin in single-origin mode with appUrl=%s',
+    async (configured, expected) => {
+      appUrl = configured;
+      const response = await createApp().request(
+        'http://internal.example/health?next=1',
+        {
+          headers: { 'X-Forwarded-Host': 'public.example', 'X-Forwarded-Proto': 'http' },
+        },
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      );
+      expect(response.status).toBe(301);
+      expect(response.headers.get('Location')).toBe(expected);
+    }
+  );
+
+  it.each(['internal.example:7300', 'bugpin_app:7300'])(
+    'uses the trusted public host instead of internal Host %s when no URL is configured',
+    async (host) => {
+      appUrl = '';
+      const response = await createApp().request(
+        `http://${host}/health?next=1`,
+        {
+          headers: {
+            Host: host,
+            'X-Forwarded-Host': 'public.example:8080',
+            'X-Forwarded-Proto': 'http',
+          },
+        },
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      );
+      expect(response.status).toBe(301);
+      expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
+    }
+  );
+
+  it('ignores forwarded origins from an untrusted peer when no URL is configured', async () => {
+    appUrl = '';
+    const response = await createApp().request(
+      'http://internal.example/health?next=1',
+      {
+        headers: {
+          Host: 'public.example:8080',
+          'X-Forwarded-Host': 'attacker.example',
+          'X-Forwarded-Proto': 'https, http',
+        },
+      },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
+  });
+
+  it.each([
+    '',
+    'bad host',
+    'example.test/path',
+    'person@example.test',
+    'example.test,evil.test',
+    'example.test:invalid',
+    '[::1',
+  ])('rejects malformed direct HTTP and HTTPS Host %s with a controlled 400', async (host) => {
+    appUrl = '';
+    for (const protocol of ['http', 'https']) {
+      const response = await createApp().request(
+        `${protocol}://internal.example/health`,
+        {
+          headers: {
+            Host: host,
+          },
+        },
+        { requestIP: () => ({ address: '203.0.113.7' }) }
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        success: false,
+        error: 'INVALID_HOST',
+        message: 'Invalid host',
+      });
+      expect(response.headers.get('Location')).toBeNull();
+    }
+  });
+
+  it.each([
+    ['https, http', 'bugpin.example.com'],
+    ['http, https', 'bugpin.example.com'],
+    ['ftp', 'bugpin.example.com'],
+    ['', 'bugpin.example.com'],
+    ['https', 'bugpin.example.com,other.example.com'],
+    ['http', 'bad host'],
+    ['https', 'bugpin.example.com:invalid'],
+    ['http', ''],
+  ])(
+    'rejects unreadable trusted origin proto=%s host=%s without redirecting',
+    async (proto, host) => {
+      for (const canonical of ['', 'https://bugpin.example.com']) {
+        appUrl = canonical;
+        const response = await createApp().request(
+          'http://bugpin.example.com/health',
+          { headers: { 'X-Forwarded-Proto': proto, 'X-Forwarded-Host': host } },
+          { requestIP: () => ({ address: '127.0.0.1' }) }
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          success: false,
+          error: 'INVALID_HOST',
+          message: 'Invalid host',
+        });
+        expect(response.headers.get('Location')).toBeNull();
+        expect(response.headers.get('Strict-Transport-Security')).toBeNull();
+      }
+    }
+  );
+
+  it('uses the trusted forwarded protocol without redirecting an already secure single-origin request', async () => {
+    appUrl = '';
+    const response = await createApp().request(
+      'http://internal.example/health',
+      {
+        headers: { 'X-Forwarded-Host': 'attacker.example', 'X-Forwarded-Proto': 'https' },
+      },
+      { requestIP: () => ({ address: '127.0.0.1' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Location')).toBeNull();
+  });
+
+  it('rejects an unconfigured forwarded host in separate-origin mode', async () => {
+    portalBaseUrl = 'https://portal.example.com';
+    const response = await createApp().request(
+      'http://internal.example/health?next=1',
+      {
+        headers: { 'X-Forwarded-Host': 'attacker.example', 'X-Forwarded-Proto': 'http' },
+      },
+      { requestIP: () => ({ address: '127.0.0.1' }) }
+    );
+    expect(response.status).toBe(421);
+    expect(response.headers.get('Location')).toBeNull();
+  });
+
+  it('does not exempt a forged loopback Host from a public peer in single-origin mode', async () => {
+    const response = await createApp().request(
+      'http://localhost/health',
+      {},
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe('https://bugpin.example.com/health');
   });
 
   it('skips the redirect and HSTS when DISABLE_HTTPS_ENFORCEMENT is set', async () => {
@@ -111,5 +312,55 @@ describe('DISABLE_HTTPS_ENFORCEMENT', () => {
   it('accepts true in any case', () => {
     expect(loadDisableFlag('true')).toBe(true);
     expect(loadDisableFlag(' TRUE ')).toBe(true);
+  });
+});
+
+describe('HTTPS enforcement behind a trusted proxy with an internal Host', () => {
+  it.each(['', 'https://portal.example.com'])(
+    'accepts forwarded HTTPS when portalBaseUrl=%s',
+    async (portal) => {
+      portalBaseUrl = portal;
+      const response = await createApp().request(
+        'http://bugpin_app:7300/health',
+        {
+          headers: {
+            Host: 'bugpin_app:7300',
+            'X-Forwarded-Host': portal ? 'portal.example.com' : 'bugpin.example.com',
+            'X-Forwarded-Proto': 'https',
+          },
+        },
+        { requestIP: () => ({ address: '172.18.0.2' }) }
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('strict-transport-security')).toContain('max-age=31536000');
+    }
+  );
+
+  it('uses the configured public host for an HTTP redirect without validating the unused internal Host', async () => {
+    const response = await createApp().request(
+      'http://bugpin_app:7300/health',
+      {
+        headers: {
+          Host: 'bugpin_app:7300',
+          'X-Forwarded-Host': 'bugpin.example.com',
+          'X-Forwarded-Proto': 'http',
+        },
+      },
+      { requestIP: () => ({ address: '172.18.0.2' }) }
+    );
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe('https://bugpin.example.com/health');
+  });
+
+  it('rejects an invalid raw redirect destination when no URL or forwarded host is configured', async () => {
+    appUrl = '';
+    const response = await createApp().request(
+      'http://internal.example/health',
+      { headers: { Host: 'bad host' } },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(response.status).toBe(400);
+    expect(response.headers.get('location')).toBeNull();
   });
 });

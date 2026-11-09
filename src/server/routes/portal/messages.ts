@@ -30,13 +30,16 @@ portalMessagesRoutes.post(
         { success: false, error: limit.code, message: limit.error },
         errorStatus(limit.code)
       );
+    const multipart = c.req.header('content-type')?.includes('multipart/form-data');
     return bodyLimit({
-      maxSize: c.req.header('content-type')?.includes('multipart/form-data')
-        ? limit.value
-        : 32 * 1024,
+      maxSize: multipart ? limit.value.maxSize : 32 * 1024,
       onError: (context) =>
         context.json(
-          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Message upload is too large' },
+          {
+            success: false,
+            error: multipart ? limit.value.errorCode : 'PAYLOAD_TOO_LARGE',
+            message: 'Message upload is too large',
+          },
           413
         ),
     })(c, next);

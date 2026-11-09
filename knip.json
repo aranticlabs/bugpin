@@ -15,10 +15,13 @@
   "workspaces": {
     ".": {
       "project": ["**/*.{ts,tsx,js,jsx}", "!ee/**"],
-      "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts"]
+      "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts", "tests/e2e/**/*.ts"]
     },
     "src/server": {
       "entry": ["scripts/*.ts"]
+    },
+    "src/portal": {
+      "entry": ["tests/**/*.test.{ts,tsx}"]
     }
   }
 }

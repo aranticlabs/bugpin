@@ -10,10 +10,13 @@ const payloadTooLarge = {
 
 export const requestBodyLimit: MiddlewareHandler = async (c, next) => {
   const request = c.req.raw;
-  // Message uploads enforce their project limit after staff authentication.
+  // Authenticated upload routes enforce their own limits after authentication.
   if (
     !request.body ||
-    (request.method === 'POST' && /^\/api\/reports\/[^/]+\/reporter-messages$/.test(c.req.path))
+    (request.method === 'POST' &&
+      (c.req.path === '/api/portal/reports' ||
+        /^\/api\/portal\/reports\/[^/]+\/messages$/.test(c.req.path) ||
+        /^\/api\/reports\/[^/]+\/reporter-messages$/.test(c.req.path)))
   ) {
     return next();
   }

@@ -25,7 +25,11 @@ import { normalizeMimeType } from '@shared/mime';
 import type { PortalReportDetail } from '@shared/portal-types';
 
 export const portalSubmissionsService = {
-  async uploadBodyLimit(reporterId: string): Promise<Result<number>> {
+  async uploadBodyLimit(
+    reporterId: string
+  ): Promise<
+    Result<{ maxSize: number; errorCode: 'PAYLOAD_TOO_LARGE' | 'UPLOAD_QUOTA_EXCEEDED' }>
+  > {
     const projects = await portalReportsService.projects(reporterId);
     if (!projects.success) return projects;
     const sizeMb = Math.max(
@@ -40,10 +44,11 @@ export const portalSubmissionsService = {
       settings.reporterPortalLimits.uploadMbPerReporterPerDay
     );
     if (!remaining.success) return remaining;
-    return Result.ok(
-      Math.min(MAX_MESSAGE_FILES * sizeMb * 1024 * 1024, remaining.value) +
-        MESSAGE_BODY_OVERHEAD_BYTES
-    );
+    const fileBytes = MAX_MESSAGE_FILES * sizeMb * 1024 * 1024;
+    return Result.ok({
+      maxSize: Math.min(fileBytes, remaining.value) + MESSAGE_BODY_OVERHEAD_BYTES,
+      errorCode: remaining.value < fileBytes ? 'UPLOAD_QUOTA_EXCEEDED' : 'PAYLOAD_TOO_LARGE',
+    });
   },
 
   async create(

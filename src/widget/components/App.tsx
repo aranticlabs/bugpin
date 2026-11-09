@@ -21,7 +21,7 @@ import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 import { cn } from '../lib/utils.js';
 
-type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording';
+type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording' | 'success';
 
 const BYTES_PER_MB = 1024 * 1024;
 const RECORDING_ID_PREFIX = 'recording-';
@@ -121,6 +121,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [step, setStep] = useState<WidgetStep>('closed');
   const stepRef = useRef<WidgetStep>('closed');
   stepRef.current = step;
+  const [submittedWithEmail, setSubmittedWithEmail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -678,6 +679,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
         // Close modal and clear draft
         handleCloseWidget(true);
+        if (!result?.queued && config.portalUrl) {
+          setSubmittedWithEmail(Boolean(formData.reporterEmail.trim()));
+          setToast(null);
+          setStep('success');
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           return;
@@ -781,9 +787,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         </div>
       )}
 
-      {step === 'form' && (
+      {(step === 'form' || step === 'success') && (
         <WidgetDialogComponent
           hidePoweredBy={config.hidePoweredBy}
+          portalUrl={config.portalUrl}
+          submitted={step === 'success'}
+          submittedWithEmail={submittedWithEmail}
           content={{
             title: config.dialogTitle,
             titlePlaceholder: config.dialogTitlePlaceholder,
@@ -791,7 +800,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
             submitButtonText: config.dialogSubmitButtonText,
             showPriority: config.dialogShowPriority,
           }}
-          onClose={handleRequestClose}
+          onClose={step === 'success' ? () => handleCloseWidget() : handleRequestClose}
           onSubmit={handleSubmit}
           onCaptureScreenshot={handleCaptureScreenshot}
           onAnnotateMedia={handleAnnotateMedia}

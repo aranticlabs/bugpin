@@ -165,6 +165,9 @@ const it: WidgetCatalog = {
   'annotation.defaultText': 'Testo',
   'annotation.buttons.cancel': 'Annulla',
   'annotation.buttons.done': 'Fatto',
+  'portal.checkEmail': 'Cerca un link di accesso nella posta o richiedine uno in I miei feedback.',
+  'portal.viewFeedback': 'Visualizza i miei feedback',
+  'portal.myFeedback': 'I miei feedback',
 };
 
 export default it;

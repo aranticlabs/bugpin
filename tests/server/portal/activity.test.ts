@@ -408,6 +408,36 @@ it('allows only admins to change portal settings and keeps staff Origin bound to
   }
 });
 
+it('rejects API updates that leave a portal origin without an Application URL', async () => {
+  getDb().run("UPDATE projects SET settings = '{}' WHERE id = 'project'");
+  const app = createPortalTestApp();
+  app.route('/api/settings', settingsRoutes);
+  const session = await sessionsRepo.create({
+    userId: 'admin',
+    expiresAt: '2099-01-01T00:00:00.000Z',
+  });
+  for (const portalBaseUrl of ['', 'https://feedback.example.com']) {
+    await settingsRepo.updateAll({ appUrl: portalOrigin, portalBaseUrl });
+    settingsCacheService.invalidate();
+    const before = await settingsRepo.getAll();
+    const response = await app.request(`${portalOrigin}/api/settings`, {
+      method: 'PUT',
+      headers: {
+        Cookie: `session=${session.id}`,
+        Origin: portalOrigin,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        appUrl: '',
+        ...(portalBaseUrl ? {} : { portalBaseUrl: 'https://feedback.example.com' }),
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ success: false, error: 'INVALID_APP_URL' });
+    expect(await settingsRepo.getAll()).toEqual(before);
+  }
+});
+
 it('validates and persists a separate portal URL and rejects a colliding Application URL', async () => {
   for (const portalBaseUrl of [
     'bad',
@@ -473,18 +503,37 @@ it('renders localized editable staff activity emails with their own footer type 
   expect(sent.at(-1)!.html).not.toContain('/nested/');
 });
 
-it('labels an invalid Application URL separately and allows clearing either URL field while the portal is disabled', async () => {
+it('requires a valid Application URL for a separate portal even while projects have portals disabled', async () => {
   getDb().run("UPDATE projects SET settings = '{}' WHERE id = 'project'");
   await settingsRepo.updateAll({ appUrl: 'invalid', portalBaseUrl: '' });
   expect(
     await settingsService.update({ portalBaseUrl: 'https://feedback.example.com' })
   ).toMatchObject({ success: false, code: 'INVALID_APP_URL' });
+  for (const appUrl of ['', ' ', 'invalid', 'ftp://staff.example.com']) {
+    expect(
+      await settingsService.update({ appUrl, portalBaseUrl: 'https://feedback.example.com' })
+    ).toMatchObject({ success: false, code: 'INVALID_APP_URL' });
+    expect((await settingsRepo.getAll()).portalBaseUrl).toBe('');
+  }
   expect(
-    (await settingsService.update({ appUrl: '', portalBaseUrl: 'https://feedback.example.com' }))
-      .success
+    (
+      await settingsService.update({
+        appUrl: 'https://staff.example.com',
+        portalBaseUrl: 'https://feedback.example.com',
+      })
+    ).success
   ).toBe(true);
+  expect(await settingsService.update({ appUrl: '' })).toMatchObject({
+    success: false,
+    code: 'INVALID_APP_URL',
+  });
+  expect((await settingsRepo.getAll()).appUrl).toBe('https://staff.example.com');
+  expect((await settingsService.update({ appUrl: '', portalBaseUrl: '' })).success).toBe(true);
   expect((await settingsRepo.getAll()).appUrl).toBe('');
-  await settingsRepo.updateAll({ appUrl: 'invalid' });
+  await settingsRepo.updateAll({
+    appUrl: 'invalid',
+    portalBaseUrl: 'https://feedback.example.com',
+  });
   expect((await settingsService.update({ portalBaseUrl: '' })).success).toBe(true);
   expect((await settingsRepo.getAll()).portalBaseUrl).toBe('');
   expect(await settingsService.update({ appUrl: 'invalid' })).toMatchObject({

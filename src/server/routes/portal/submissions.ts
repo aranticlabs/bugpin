@@ -20,10 +20,14 @@ portalSubmissionsRoutes.post(
         errorStatus(result.code)
       );
     return bodyLimit({
-      maxSize: result.value,
+      maxSize: result.value.maxSize,
       onError: (context) =>
         context.json(
-          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Feedback upload is too large' },
+          {
+            success: false,
+            error: result.value.errorCode,
+            message: 'Feedback upload is too large',
+          },
           413
         ),
     })(c, next);

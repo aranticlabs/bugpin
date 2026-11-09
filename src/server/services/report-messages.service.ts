@@ -342,7 +342,12 @@ async function sendStaffMessage(
 }
 
 export const reportMessagesService = {
-  async uploadBodyLimit(reportId: string, reporterId?: string): Promise<Result<number>> {
+  async uploadBodyLimit(
+    reportId: string,
+    reporterId?: string
+  ): Promise<
+    Result<{ maxSize: number; errorCode: 'PAYLOAD_TOO_LARGE' | 'UPLOAD_QUOTA_EXCEEDED' }>
+  > {
     const context = reportMessagesRepo.writeContext(reportId);
     if (!context) return Result.fail('Report not found', 'NOT_FOUND');
     const settings = await settingsCacheService.getAll();
@@ -351,15 +356,19 @@ export const reportMessagesService = {
     const videoMb =
       context.settings.screenshot?.maxVideoUploadSizeMb ?? settings.screenshot.maxVideoUploadSizeMb;
     let fileBytes = MAX_MESSAGE_FILES * Math.max(imageMb, videoMb) * 1024 * 1024;
+    let errorCode: 'PAYLOAD_TOO_LARGE' | 'UPLOAD_QUOTA_EXCEEDED' = 'PAYLOAD_TOO_LARGE';
     if (reporterId) {
       const remaining = uploadQuotaService.remaining(
         reporterId,
         settings.reporterPortalLimits.uploadMbPerReporterPerDay
       );
       if (!remaining.success) return remaining;
-      fileBytes = Math.min(fileBytes, remaining.value);
+      if (remaining.value < fileBytes) {
+        fileBytes = remaining.value;
+        errorCode = 'UPLOAD_QUOTA_EXCEEDED';
+      }
     }
-    return Result.ok(fileBytes + MESSAGE_BODY_OVERHEAD_BYTES);
+    return Result.ok({ maxSize: fileBytes + MESSAGE_BODY_OVERHEAD_BYTES, errorCode });
   },
 
   async send(

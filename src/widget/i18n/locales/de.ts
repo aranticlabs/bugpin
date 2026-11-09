@@ -166,6 +166,10 @@ const de: WidgetCatalog = {
   'annotation.defaultText': 'Text',
   'annotation.buttons.cancel': 'Abbrechen',
   'annotation.buttons.done': 'Fertig',
+  'portal.checkEmail':
+    'Sieh in deinem Posteingang nach einem Anmeldelink oder fordere unter Mein Feedback einen an.',
+  'portal.viewFeedback': 'Mein Feedback ansehen',
+  'portal.myFeedback': 'Mein Feedback',
 };
 
 export default de;

@@ -166,6 +166,10 @@ const fr: WidgetCatalog = {
   'annotation.defaultText': 'Texte',
   'annotation.buttons.cancel': 'Annuler',
   'annotation.buttons.done': 'Terminer',
+  'portal.checkEmail':
+    'Consultez votre boîte de réception pour un lien de connexion ou demandez-en un dans Mes retours.',
+  'portal.viewFeedback': 'Voir mes retours',
+  'portal.myFeedback': 'Mes retours',
 };
 
 export default fr;

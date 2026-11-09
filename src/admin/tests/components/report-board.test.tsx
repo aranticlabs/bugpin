@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReportStatus } from '@shared/types';
 import {
@@ -63,6 +63,27 @@ function boardProps(columns: ReportBoardColumnData<Item>[]) {
 }
 
 describe('ReportBoard', () => {
+  it('releases the frozen width when a closing column is immediately expanded again', () => {
+    vi.useFakeTimers();
+    try {
+      const props = boardProps([column('open', [crash])]);
+      const { container, rerender } = render(<ReportBoard {...props} />);
+      const content = container.querySelector<HTMLElement>('[data-column-content]')!;
+      Object.defineProperty(content, 'offsetWidth', { value: 320 });
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse Open' }));
+      rerender(<ReportBoard {...props} collapsed={['open']} />);
+      expect(content.style.width).toBe('320px');
+      rerender(<ReportBoard {...props} collapsed={[]} />);
+      expect(content.style.width).toBe('');
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(screen.getByRole('button', { name: 'Collapse Open' })).toBeVisible();
+      expect(content.style.width).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('renders one column per status with its server total', () => {
     render(
       <ReportBoard

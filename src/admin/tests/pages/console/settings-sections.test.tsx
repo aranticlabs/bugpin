@@ -37,6 +37,32 @@ afterEach(() => {
 });
 
 describe('Settings sections', () => {
+  it.each([
+    { appUrl: '', portalBaseUrl: '' },
+    { appUrl: 'https://bugpin.example.com', portalBaseUrl: 'https://feedback.example.com' },
+  ])(
+    'requires the Application URL while a separate portal origin is present: %j',
+    async (initial) => {
+      const settingsServer = mockSettingsServer(initial);
+      const user = userEvent.setup();
+      renderWithProviders(<Settings />);
+      const appUrl = await screen.findByLabelText('Application URL');
+      if (initial.appUrl) await user.clear(appUrl);
+      else
+        await user.type(screen.getByLabelText('Portal Base URL'), 'https://feedback.example.com');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      expect(
+        await screen.findByText(
+          'A valid Application URL is required while a Portal Base URL is configured'
+        )
+      ).toBeInTheDocument();
+      expect(settingsServer.puts).toHaveLength(0);
+      await user.type(appUrl, 'https://staff.example.com');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
+    }
+  );
+
   it('saves and clears the separate portal URL without changing other settings and shows retention scope', async () => {
     const settingsServer = mockSettingsServer();
     const user = userEvent.setup();

@@ -323,7 +323,10 @@ export function ReportBoardColumn({
       },
       prefersReducedMotion() ? 0 : COLUMN_RESIZE_MS
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      setFrozenWidth(null);
+    };
   }, [closing]);
 
   const collapse = (event: MouseEvent<HTMLButtonElement>) => {

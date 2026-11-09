@@ -5,7 +5,7 @@ import { normalizeEmail } from '../utils/email-normalize.js';
 import { isValidEmail } from '../utils/validators.js';
 import { Result } from '../utils/result.js';
 import { normalizeLocale } from '../utils/locale.js';
-import { isSecurePortalUrl } from '../utils/portal-url.js';
+import { securePortalBaseUrl, projectPortalUrl } from '../utils/portal-url.js';
 import type { AppSettings, Project, Report } from '@shared/types';
 import type { ReporterEmailOptions } from './email.service.js';
 
@@ -28,15 +28,11 @@ export const reporterCorrespondenceService = {
       loginUrl: '',
       unsubscribeUrl: '',
     };
-    const baseUrl = settings.portalBaseUrl || settings.appUrl;
-    if (
-      project.settings?.reporterPortal?.enabled &&
-      isSecurePortalUrl(settings.appUrl) &&
-      isSecurePortalUrl(baseUrl)
-    ) {
-      options.portalUrl = new URL('/reporter-portal', baseUrl).href;
+    const portalUrl = projectPortalUrl(project, settings);
+    if (portalUrl) {
+      options.portalUrl = portalUrl;
       if (owner || report.claimableEmail)
-        options.reportPortalUrl = new URL(`/reporter-portal/reports/${report.id}`, baseUrl).href;
+        options.reportPortalUrl = new URL(`/reporter-portal/reports/${report.id}`, portalUrl).href;
     }
     return options;
   },
@@ -52,8 +48,8 @@ export const reporterCorrespondenceService = {
     const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
     if (reportersRepo.findByEmail(recipient)?.suspendedAt) return Result.ok(null);
     const options = this.staffCopyOptions(report, project, settings);
-    const baseUrl = settings.portalBaseUrl || settings.appUrl;
-    if (isSecurePortalUrl(settings.appUrl) && isSecurePortalUrl(baseUrl)) {
+    const baseUrl = securePortalBaseUrl(settings);
+    if (baseUrl) {
       const unsubscribe = new URL('/api/portal/unsubscribe', baseUrl);
       unsubscribe.searchParams.set('t', reporterSuppressionService.unsubscribeToken(recipient));
       unsubscribe.searchParams.set('locale', options.locale);

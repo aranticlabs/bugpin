@@ -290,7 +290,7 @@ it('rejects mixed owner inputs and missing reporters, and rolls back ownership w
   expect((await reportsRepo.findById(first.id))!.reporterId).toBeUndefined();
 });
 
-it('returns a client error without changing ownership when the project license denies mutations', async () => {
+it('returns 403 without changing ownership when the project license denies mutations', async () => {
   app.route('/api/reports', reporterMessagesRoutes);
   const target = login();
   const first = await report();
@@ -306,7 +306,7 @@ it('returns a client error without changing ownership when the project license d
     ['DELETE', undefined],
   ] as const) {
     const response = await request(`/api/reports/${first.id}/owner`, method, body);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
       success: false,
       error: 'PROJECT_NOT_LICENSED',

@@ -446,3 +446,15 @@ for (const locale of SUPPORTED_LOCALES) {
     }
   });
 }
+
+it('uses the canonical project portal URL for correspondence', async () => {
+  const report = (await reportsRepo.findById('report'))!;
+  const project = (await projectsRepo.findById('project'))!;
+  const options = reporterCorrespondenceService.staffCopyOptions(
+    report,
+    project,
+    await settingsCacheService.getAll()
+  );
+  expect(options.portalUrl).toBe(`${portalOrigin}/reporter-portal/`);
+  expect(options.reportPortalUrl).toBe(`${portalOrigin}/reporter-portal/reports/report`);
+});

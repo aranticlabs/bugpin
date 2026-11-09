@@ -4,6 +4,20 @@ import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { resolvePathInside, resolveStaticPath } from '../utils/safe-path.js';
 
+export const servePortal = async (c: Context) => {
+  const path = c.req.path.substring('/reporter-portal'.length) || '/';
+  const filePath = resolveStaticPath(config.portalDir, path === '/' ? '/index.html' : path);
+  if (filePath) {
+    const file = Bun.file(filePath);
+    if (await file.exists()) return new Response(file);
+    if (!path.includes('.')) {
+      const index = Bun.file(`${config.portalDir}/index.html`);
+      if (await index.exists()) return new Response(index);
+    }
+  }
+  return c.json({ success: false, error: 'NOT_FOUND', message: 'File not found' }, 404);
+};
+
 // Serve admin portal (static files) - handler for both /admin and /admin/*
 export const serveAdmin = async (c: Context) => {
   let path = c.req.path.substring('/admin'.length);

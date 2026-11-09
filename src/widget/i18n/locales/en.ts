@@ -161,6 +161,9 @@ const en = {
   'annotation.defaultText': 'Text',
   'annotation.buttons.cancel': 'Cancel',
   'annotation.buttons.done': 'Done',
+  'portal.checkEmail': 'Check your inbox for a sign-in link, or request one in My feedback.',
+  'portal.viewFeedback': 'View my feedback',
+  'portal.myFeedback': 'My feedback',
 } as const satisfies Record<string, string>;
 
 export default en;

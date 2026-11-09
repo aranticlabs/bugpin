@@ -235,20 +235,23 @@ it('logs exactly one warning for a rejecting public delivery while test delivery
   expect(warnings).toHaveBeenCalledTimes(1);
 });
 
-it('shares the per-email allowance between requests and expired-link resends', async () => {
-  await settingsRepo.updateAll({
-    reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerEmailPer15Min: 1 },
-  });
-  settingsCacheService.invalidate();
-  const { secret } = mint('jane@example.com', 'invitation');
-  getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
-    new Date(Date.now() - 1000).toISOString(),
-    hashToken(secret),
-  ]);
-  await portalPost(app, '/auth/request', { email: 'jane@example.com' });
-  expect((await portalPost(app, '/auth/resend', { token: secret })).status).toBe(200);
-  expect(sent).toHaveLength(1);
-});
+it.each(['request', 'confirmation', 'invitation'] as const)(
+  'shares the per-email allowance between requests and expired %s resends',
+  async (source) => {
+    await settingsRepo.updateAll({
+      reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerEmailPer15Min: 1 },
+    });
+    settingsCacheService.invalidate();
+    const { secret } = mint('jane@example.com', source);
+    getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
+      new Date(Date.now() - 1000).toISOString(),
+      hashToken(secret),
+    ]);
+    await portalPost(app, '/auth/request', { email: 'jane@example.com' });
+    expect((await portalPost(app, '/auth/resend', { token: secret })).status).toBe(200);
+    expect(sent).toHaveLength(1);
+  }
+);
 
 it('gives preview and exchange separate IP counters with the same configured maximum', async () => {
   await settingsRepo.updateAll({
@@ -331,39 +334,93 @@ it('previews repeatedly without consuming and rejects requested links after 15 m
     hashToken(expired.secret),
   ]);
   expect((await portalPost(app, '/auth/exchange', { token: expired.secret })).status).toBe(400);
+  expect(Result.unwrap(reporterAuthService.preview(expired.secret))).toEqual({
+    state: 'expired',
+    maskedEmail: 'e***@example.com',
+  });
   expect(count('reporter_sessions')).toBe(1);
 });
 
-it('resends expired email links only to the stored email with a fresh requested token', async () => {
-  const { secret, expiresAt } = mint('jane@example.com', 'confirmation');
-  expect(Date.parse(expiresAt) - Date.now()).toBeWithin(86399000, 86400001);
-  getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
-    new Date(Date.now() - 3600000).toISOString(),
-    hashToken(secret),
-  ]);
-  expect(await (await portalPost(app, '/auth/preview', { token: secret })).json()).toEqual({
-    success: true,
-    state: 'expired',
-    maskedEmail: 'j***@example.com',
-  });
-  expect(await (await portalPost(app, '/auth/resend', { token: secret })).json()).toEqual({
-    success: true,
-  });
-  expect(sent[0].to[0].email).toBe('jane@example.com');
-  expect(count('reporter_auth_tokens')).toBe(2);
-  const replacementSecret = new URL(sent[0].text!.match(/https?:\/\/[^\s]+/)![0]).hash.slice(1);
-  const replacement = reporterAuthTokensRepo.findByHash(hashToken(replacementSecret))!;
-  expect(replacement.source).toBe('request');
-  expect(Date.parse(replacement.expiresAt) - Date.now()).toBeWithin(899000, 900001);
-  expect((await portalPost(app, '/auth/exchange', { token: replacementSecret })).status).toBe(200);
-  expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumedAt).toBeNull();
-  getDb().run('UPDATE reporter_auth_tokens SET revoked_at = ? WHERE token_hash = ?', [
-    new Date().toISOString(),
-    hashToken(secret),
-  ]);
-  await portalPost(app, '/auth/resend', { token: secret });
-  expect(sent).toHaveLength(1);
-});
+it.each(['request', 'confirmation', 'invitation'] as const)(
+  'resends expired %s links only to the stored email with a fresh requested token',
+  async (source) => {
+    const { secret, expiresAt } = mint('jane@example.com', source);
+    const lifetime = source === 'request' ? 15 * 60000 : 24 * 3600000;
+    expect(Date.parse(expiresAt) - Date.now()).toBeWithin(lifetime - 1000, lifetime + 1);
+    getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
+      new Date(Date.now() - 3600000).toISOString(),
+      hashToken(secret),
+    ]);
+    expect(await (await portalPost(app, '/auth/preview', { token: secret })).json()).toEqual({
+      success: true,
+      state: 'expired',
+      maskedEmail: 'j***@example.com',
+    });
+    expect(await (await portalPost(app, '/auth/resend', { token: secret })).json()).toEqual({
+      success: true,
+    });
+    expect(sent[0].to[0].email).toBe('jane@example.com');
+    expect(Result.unwrap(reporterAuthService.resendTarget(secret))).toBe('jane@example.com');
+    expect(count('reporter_auth_tokens')).toBe(2);
+    const replacementSecret = new URL(sent[0].text!.match(/https?:\/\/[^\s]+/)![0]).hash.slice(1);
+    const replacement = reporterAuthTokensRepo.findByHash(hashToken(replacementSecret))!;
+    expect(replacement.source).toBe('request');
+    expect(Date.parse(replacement.expiresAt) - Date.now()).toBeWithin(899000, 900001);
+    expect((await portalPost(app, '/auth/exchange', { token: replacementSecret })).status).toBe(
+      200
+    );
+    expect(reporterAuthTokensRepo.findByHash(hashToken(secret))!.consumedAt).toBeNull();
+    getDb().run('UPDATE reporter_auth_tokens SET revoked_at = ? WHERE token_hash = ?', [
+      new Date().toISOString(),
+      hashToken(secret),
+    ]);
+    await portalPost(app, '/auth/resend', { token: secret });
+    expect(sent).toHaveLength(1);
+  }
+);
+
+it.each(['request', 'confirmation', 'invitation'] as const)(
+  'keeps ineligible %s resends neutral and sends no credentials',
+  async (source) => {
+    const email = 'blocked@example.com';
+    const { secret } = mint(email, source);
+    expect(await (await portalPost(app, '/auth/resend', { token: secret })).json()).toEqual({
+      success: true,
+    });
+    expect(sent).toHaveLength(0);
+    getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
+      new Date(Date.now() - 1000).toISOString(),
+      hashToken(secret),
+    ]);
+    const reporter = reportersRepo.resolve(email, 'Blocked', new Date().toISOString());
+    for (const field of ['consumed_at', 'revoked_at'] as const) {
+      getDb().run(`UPDATE reporter_auth_tokens SET ${field} = ? WHERE token_hash = ?`, [
+        new Date().toISOString(),
+        hashToken(secret),
+      ]);
+      expect(Result.unwrap(reporterAuthService.resendTarget(secret))).toBeNull();
+      expect(await (await portalPost(app, '/auth/resend', { token: secret })).json()).toEqual({
+        success: true,
+      });
+      getDb().run(`UPDATE reporter_auth_tokens SET ${field} = NULL WHERE token_hash = ?`, [
+        hashToken(secret),
+      ]);
+    }
+    getDb().run('UPDATE reporters SET suspended_at = ? WHERE id = ?', [
+      new Date().toISOString(),
+      reporter.id,
+    ]);
+    for (const token of [secret, 'unknown']) {
+      expect(Result.unwrap(reporterAuthService.resendTarget(token))).toBeNull();
+      expect(await (await portalPost(app, '/auth/resend', { token })).json()).toEqual({
+        success: true,
+      });
+    }
+    expect(sent).toHaveLength(0);
+    expect(count('reporter_auth_tokens')).toBe(1);
+    expect(count('reporter_sessions')).toBe(0);
+  }
+);
 
 it('allows exactly one concurrent exchange, sends an allowlisted DTO, and sets a host-only secure cookie', async () => {
   const { secret } = mint();
@@ -490,3 +547,27 @@ it('does not deliver login credentials over public HTTP or a malformed portal UR
   }
   expect(sent).toHaveLength(0);
 });
+
+it.each([
+  ['', 'https://feedback.example.com'],
+  ['http://app.example.com', 'https://feedback.example.com'],
+  ['https://app.example.com', 'http://feedback.example.com'],
+  ['https://app.example.com', 'invalid'],
+])(
+  'refuses login credential delivery for insecure restored settings (%s, %s)',
+  async (appUrl, portalBaseUrl) => {
+    await settingsRepo.updateAll({ appUrl, portalBaseUrl });
+    settingsCacheService.invalidate();
+    const before = count('reporter_auth_tokens');
+    expect(await reporterAuthService.sendLoginLink('recipient@example.com')).toMatchObject({
+      success: false,
+      code: 'EMAIL_DELIVERY_FAILED',
+    });
+    expect(await reporterAuthService.requestLogin('recipient@example.com')).toEqual(
+      Result.ok(undefined)
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(sent).toHaveLength(0);
+    expect(count('reporter_auth_tokens')).toBe(before);
+  }
+);

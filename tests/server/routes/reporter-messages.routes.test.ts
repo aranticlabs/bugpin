@@ -4,6 +4,7 @@ import { settingsCacheService } from '../../../src/server/services/settings-cach
 import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reportOwnerRoutes } from '../../../src/server/routes/api/report-owner';
 import { reportMessagesService } from '../../../src/server/services/report-messages.service';
+import { reporterOwnershipService } from '../../../src/server/services/reporter-ownership.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type { AppSettings } from '../../../src/shared/types';
@@ -44,6 +45,7 @@ const baseMessage: ReporterMessage = {
 
 const originalAuthService = { ...authService };
 const originalReportMessagesService = { ...reportMessagesService };
+const originalOwnershipService = { ...reporterOwnershipService };
 
 let userRole: User['role'] = 'admin';
 
@@ -61,7 +63,8 @@ beforeEach(() => {
       emailSuppressed: false,
       requiresPortalAccessConfirmation: false,
     });
-  reportMessagesService.uploadBodyLimit = async () => Result.ok(1024 * 1024);
+  reportMessagesService.uploadBodyLimit = async () =>
+    Result.ok({ maxSize: 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
   reportMessagesService.setHidden = async () => Result.ok(baseMessage);
 
   authService.validateSession = async () =>
@@ -79,6 +82,7 @@ afterEach(() => {
   settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(reportMessagesService, originalReportMessagesService);
+  Object.assign(reporterOwnershipService, originalOwnershipService);
 });
 
 function createApp() {
@@ -93,11 +97,18 @@ describe('reporter-messages routes POST', () => {
     ['PROJECT_NOT_LICENSED', 403],
     ['REPORT_CLOSED', 409],
     ['UPLOAD_QUOTA_EXCEEDED', 413],
+    ['CONFIRMATION_REQUIRED', 409],
+    ['NO_REPORTER_EMAIL', 400],
+    ['NOT_FOUND', 404],
+    ['MESSAGE_WRITE_FAILED', 500],
+    ['UNEXPECTED_FAILURE', 500],
+    [undefined, 500],
   ] as const)(
     'returns the same message error status for %s through both write routes',
     async (code, status) => {
       reportMessagesService.send = async () => Result.fail('Write refused', code);
       reportMessagesService.sendInvitation = async () => Result.fail('Write refused', code);
+      reporterOwnershipService.set = () => Result.fail('Write refused', code);
       const app = createApp();
       for (const [path, method, body] of [
         ['reporter-messages', 'POST', { message: 'Reply' }],
@@ -106,6 +117,7 @@ describe('reporter-messages routes POST', () => {
           'PUT',
           { claimableEmail: 'invitee@example.com', invitation: { message: 'Reply' } },
         ],
+        ['owner', 'PUT', { claimableEmail: 'invitee@example.com' }],
       ] as const) {
         const response = await app.request(`http://localhost/reports/rpt_1/${path}`, {
           method,
@@ -117,7 +129,10 @@ describe('reporter-messages routes POST', () => {
           body: JSON.stringify(body),
         });
         expect(response.status).toBe(status);
-        expect(await response.json()).toMatchObject({ error: code });
+        expect(await response.json()).toMatchObject({
+          success: false,
+          ...(code ? { error: code } : {}),
+        });
       }
     }
   );
@@ -355,7 +370,8 @@ describe('message uploads and moderation', () => {
   });
 
   it('bounds streamed multipart bodies without trusting Content-Length', async () => {
-    reportMessagesService.uploadBodyLimit = async () => Result.ok(16);
+    reportMessagesService.uploadBodyLimit = async () =>
+      Result.ok({ maxSize: 16, errorCode: 'PAYLOAD_TOO_LARGE' });
     const form = new FormData();
     form.set('message', 'Reply');
     const request = new Request('http://localhost/reports/rpt_1/reporter-messages', {

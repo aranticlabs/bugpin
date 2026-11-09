@@ -19,6 +19,7 @@ COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
+COPY src/portal/package.json ./src/portal/
 COPY src/shared-ui/package.json ./src/shared-ui/
 
 # Install the exact dependency graph from the committed lockfile
@@ -34,8 +35,8 @@ RUN if [ -n "$APP_VERSION" ]; then \
     node -e "const fs=require('fs');const p='./package.json';const j=JSON.parse(fs.readFileSync(p));j.version='$APP_VERSION';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"; \
   fi
 
-# Build admin portal and widget
-RUN bun run build:admin && bun run build:widget
+# Build Admin Console, reporter portal, and widget
+RUN bun run build:admin && bun run build:portal && bun run build:widget
 
 # Build EE module (compile TypeScript to JavaScript) if submodule is present
 # Create stub files for CE-only builds so COPY commands don't fail
@@ -60,6 +61,7 @@ COPY package.json bun.lock ./
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
+COPY src/portal/package.json ./src/portal/
 COPY src/shared-ui/package.json ./src/shared-ui/
 RUN bun install --production --frozen-lockfile --filter @bugpin/server
 
@@ -74,6 +76,7 @@ COPY --from=builder /app/ee/tsconfig.json ./ee/tsconfig.json
 
 # Copy built frontend assets from builder
 COPY --from=builder /app/dist/admin ./dist/admin
+COPY --from=builder /app/dist/portal ./dist/portal
 
 # Copy entire widget source directory (includes dist/ and test-widget.html)
 COPY --from=builder /app/src/widget ./src/widget

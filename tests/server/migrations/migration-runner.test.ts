@@ -278,9 +278,16 @@ describe('migration runner', () => {
   it('cleans abandoned staging directories before checking available disk space', () => {
     writeMigration('001_test.sql', 'CREATE TABLE upgraded (id INTEGER);');
     const stale = path.join(directory, '.bugpin-upgrade-abandoned');
+    const recent = path.join(directory, '.bugpin-upgrade-active');
     const unrelated = path.join(directory, 'unrelated');
     fs.mkdirSync(stale);
     fs.writeFileSync(path.join(stale, 'snapshot.db'), new Uint8Array(1024 * 1024));
+    const oldTime = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    fs.utimesSync(stale, oldTime, oldTime);
+    fs.mkdirSync(recent);
+    fs.writeFileSync(path.join(recent, 'snapshot.db'), 'in progress');
+    const recentTime = new Date(Date.now() - 23 * 60 * 60 * 1000);
+    fs.utimesSync(recent, recentTime, recentTime);
     fs.mkdirSync(unrelated);
     fs.writeFileSync(path.join(unrelated, 'keep'), 'keep');
     fs.symlinkSync(unrelated, path.join(directory, '.bugpin-upgrade-link'));
@@ -290,11 +297,13 @@ describe('migration runner', () => {
       ...args: Parameters<typeof fs.statfsSync>
     ) => {
       expect(fs.existsSync(stale)).toBe(false);
+      expect(fs.readFileSync(path.join(recent, 'snapshot.db'), 'utf8')).toBe('in progress');
       return statfs(...args);
     }) as typeof fs.statfsSync);
     try {
       runner.run();
       expect(spaceCheck).toHaveBeenCalled();
+      expect(fs.readFileSync(path.join(recent, 'snapshot.db'), 'utf8')).toBe('in progress');
       expect(fs.readFileSync(path.join(unrelated, 'keep'), 'utf8')).toBe('keep');
       expect(fs.lstatSync(path.join(directory, '.bugpin-upgrade-link')).isSymbolicLink()).toBe(
         true

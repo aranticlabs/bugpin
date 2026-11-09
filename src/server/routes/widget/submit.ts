@@ -1,3 +1,4 @@
+import { projectPortalUrl } from '../../utils/portal-url.js';
 import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { getEEHooks } from '../../utils/ee-hooks.js';
 import { Hono } from 'hono';
@@ -682,6 +683,7 @@ widget.get('/config/:apiKey', async (c) => {
     success: true,
     config: {
       hidePoweredBy: Boolean(whiteLabel?.enabled && whiteLabel.hidePoweredBy),
+      portalUrl: projectPortalUrl(project, appSettings),
       projectName: project.name,
       branding: project.settings?.branding || {},
       brandingPrimaryColor,

@@ -42,6 +42,7 @@ async function fetchConfig(
         const cfg = data.config;
         return {
           hidePoweredBy: cfg.hidePoweredBy === true,
+          portalUrl: typeof cfg.portalUrl === 'string' ? cfg.portalUrl : null,
           buttonText: cfg.buttonText,
           buttonShape: cfg.buttonShape,
           buttonIcon: cfg.buttonIcon,

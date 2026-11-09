@@ -22,11 +22,16 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "typeRoots": ["../../src/server/node_modules/@types", "../../src/server/node_modules"],
-    "types": ["bun-types"],
+    "types": ["bun"],
     "paths": {
       "@shared/*": ["../../src/shared/*"]
     }
   },
-  "include": ["./**/*.ts", "../../src/shared/**/*.ts"],
+  "include": [
+    "./**/*.ts",
+    "../fixtures/dev-proxy.test.ts",
+    "../fixtures/request-body-limits.test.ts",
+    "../../src/shared/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

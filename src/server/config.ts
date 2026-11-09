@@ -118,6 +118,7 @@ function loadConfig() {
     defaultBrandingDir: path.join(projectRoot, 'src/admin/public/branding'),
     avatarsDir: path.join(parsed.dataDir, 'uploads', 'avatars'),
     adminDir: path.join(projectRoot, 'dist/admin'),
+    portalDir: path.join(projectRoot, 'dist/portal'),
     widgetDir: path.join(projectRoot, 'src/widget/dist'),
     migrationsDir: path.join(projectRoot, 'src/server/database/migrations'),
     isDev: parsed.nodeEnv === 'development',

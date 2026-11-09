@@ -321,8 +321,12 @@ export const settingsService = {
     let portalBaseUrl = input.portalBaseUrl?.trim() ?? current.portalBaseUrl;
     const appUrl = input.appUrl?.trim() ?? current.appUrl;
     let appHostname: string | undefined;
-    if (portalBaseUrl && appUrl) {
-      if (!isValidUrl(appUrl)) return Result.fail('Invalid app URL format', 'INVALID_APP_URL');
+    if (portalBaseUrl) {
+      if (!isValidUrl(appUrl))
+        return Result.fail(
+          'A valid Application URL is required while a Portal Base URL is configured',
+          'INVALID_APP_URL'
+        );
       appHostname = new URL(appUrl).hostname;
     }
     if (portalBaseUrl) {

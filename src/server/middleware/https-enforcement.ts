@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from 'hono';
 import { config } from '../config.js';
 import { settingsCacheService } from '../services/settings-cache.service.js';
 import { logger } from '../utils/logger.js';
+import { getEffectiveOrigin, getSocketAddress, isLoopbackAddress } from '../utils/client-ip.js';
 
 let overrideWarningLogged = false;
 
@@ -20,7 +21,7 @@ export async function warnIfHttpsEnforcementOverridden(): Promise<void> {
  * HTTPS enforcement middleware
  *
  * When enforceHttps is enabled in settings:
- * - Redirects HTTP requests to HTTPS (using x-forwarded-proto header from proxy)
+ * - Redirects HTTP to the configured host, or the request host when no URL is configured
  * - Adds Strict-Transport-Security header to HTTPS responses
  *
  * The DISABLE_HTTPS_ENFORCEMENT environment variable turns both off regardless of the setting.
@@ -41,19 +42,43 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
     return next();
   }
 
-  // Check the protocol from the proxy header
-  const proto = c.req.header('x-forwarded-proto');
+  const url = new URL(c.req.url);
+  const origin = getEffectiveOrigin(c);
+  if (!origin)
+    return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
+  const effectiveUrl = new URL(origin);
 
-  // If request came via HTTP (as reported by proxy), redirect to HTTPS
-  if (proto === 'http') {
-    const url = new URL(c.req.url);
+  // Separate origins require a configured host; other redirects use appUrl or the validated origin.
+  if (effectiveUrl.protocol === 'http:') {
+    const hostname = effectiveUrl.hostname.replace(/^\[|\]$/g, '');
+    if (
+      c.req.path === '/health' &&
+      (hostname === 'localhost' || isLoopbackAddress(hostname)) &&
+      isLoopbackAddress(getSocketAddress(c))
+    )
+      return next();
+    let configured = settings.appUrl;
+    if (settings.portalBaseUrl) {
+      configured =
+        [settings.appUrl, settings.portalBaseUrl].find(
+          (value) => value && new URL(value).host === effectiveUrl.host
+        ) ?? '';
+      if (!configured)
+        return c.json(
+          { success: false, error: 'MISDIRECTED_REQUEST', message: 'Unknown host' },
+          421
+        );
+    }
+    const destination = configured ? new URL(configured) : effectiveUrl;
     url.protocol = 'https:';
+    url.hostname = destination.hostname;
+    url.port = destination.port;
     return c.redirect(url.toString(), 301);
   }
 
   // For HTTPS requests, add HSTS header
   // max-age=31536000 = 1 year; includeSubDomains extends to all subdomains
-  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-
-  return next();
+  await next();
+  if (effectiveUrl.protocol === 'https:')
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 };

@@ -3,6 +3,10 @@ import { createApp } from '../../src/server/app';
 import { projectsService } from '../../src/server/services/projects.service';
 import { authService } from '../../src/server/services/auth.service';
 import { reportMessagesService } from '../../src/server/services/report-messages.service';
+import { reporterAuthService } from '../../src/server/services/reporter-auth.service';
+import { portalReportsService } from '../../src/server/services/portal-reports.service';
+import { portalSubmissionsService } from '../../src/server/services/portal-submissions.service';
+import { clearAllRateLimits } from '../../src/server/middleware/rate-limit';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import {
   MAX_REQUEST_BODY_SIZE,
@@ -10,15 +14,25 @@ import {
 } from '../../src/server/utils/request-limits';
 import { Result } from '../../src/server/utils/result';
 import type { AppSettings, Project } from '../../src/shared/types';
+import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../src/shared/types';
 
 const originalSettings = settingsCacheService.getAll;
 const originalAuth = authService.validateSession;
 const originalWidgetAccess = projectsService.validateWidgetAccess;
 const originalMessages = { ...reportMessagesService };
+const originalReporterAuth = reporterAuthService.validateSession;
+const originalPortalReports = portalReportsService.access;
+const originalSubmissions = { ...portalSubmissionsService };
 
 beforeEach(() => {
   settingsCacheService.getAll = async () =>
-    ({ appUrl: 'http://localhost', enforceHttps: false, rateLimitPerMinute: 10 }) as AppSettings;
+    ({
+      appUrl: 'http://localhost',
+      enforceHttps: false,
+      rateLimitPerMinute: 100,
+      reporterPortalLimits: DEFAULT_REPORTER_PORTAL_LIMITS,
+    }) as AppSettings;
+  clearAllRateLimits();
 });
 
 afterEach(() => {
@@ -26,6 +40,9 @@ afterEach(() => {
   authService.validateSession = originalAuth;
   projectsService.validateWidgetAccess = originalWidgetAccess;
   Object.assign(reportMessagesService, originalMessages);
+  reporterAuthService.validateSession = originalReporterAuth;
+  portalReportsService.access = originalPortalReports;
+  Object.assign(portalSubmissionsService, originalSubmissions);
 });
 
 for (const [path, method, contentType] of [
@@ -35,6 +52,10 @@ for (const [path, method, contentType] of [
   ['/api/settings', 'PATCH', 'application/json'],
   ['/api/reports/report/reporter-messages/message/hide', 'POST', 'application/json'],
   ['/api/reports/report/reporter-messages', 'PUT', 'multipart/form-data'],
+  ['/api/portal/reports', 'PUT', 'multipart/form-data'],
+  ['/api/portal/reports/report/messages', 'PATCH', 'multipart/form-data'],
+  ['/api/portal/reports/report/messages/extra', 'POST', 'multipart/form-data'],
+  ['/api/portal/reports/extra', 'POST', 'multipart/form-data'],
 ]) {
   it(`preserves the original ceiling on ${method} ${path}`, async () => {
     expect(MAX_SUBMISSION_REQUEST_BODY_SIZE).toBe(256 * 1024 * 1024);
@@ -90,30 +111,96 @@ for (const path of [
   '/api/reports',
   '/api/users/me/avatar',
   '/api/reports/report/reporter-messages/message/hide',
+  '/api/portal/reports',
+  '/api/portal/reports/report/messages',
 ]) {
-  it(`rejects an unauthenticated streamed request to ${path} before consuming it`, async () => {
-    let reads = 0;
-    let cancelled = false;
-    const body = new ReadableStream<Uint8Array>(
-      {
-        pull(controller) {
-          reads++;
-          controller.enqueue(new Uint8Array(1024 * 1024));
+  it.each(path.startsWith('/api/portal/') ? [false, true] : [false])(
+    `rejects an unauthenticated streamed request to ${path} before consuming it (Content-Length: %s)`,
+    async (contentLength) => {
+      let reads = 0;
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            reads++;
+            controller.enqueue(new Uint8Array(1024 * 1024));
+          },
+          cancel() {
+            cancelled = true;
+          },
         },
-        cancel() {
-          cancelled = true;
+        { highWaterMark: 0 }
+      );
+      const response = await createApp().request(path, {
+        method: 'POST',
+        body,
+        headers: {
+          'content-type': 'multipart/form-data',
+          Origin: 'http://localhost',
+          'X-BugPin-Portal': '1',
+          ...(contentLength
+            ? { 'content-length': String(MAX_SUBMISSION_REQUEST_BODY_SIZE + 1) }
+            : {}),
         },
-      },
-      { highWaterMark: 0 }
+      });
+      expect(response.status).toBe(401);
+      expect(reads).toBe(0);
+      expect(cancelled).toBe(!path.startsWith('/api/portal/'));
+      if (!cancelled) await body.cancel();
+    }
+  );
+}
+
+for (const path of ['/api/portal/reports', '/api/portal/reports/report/messages']) {
+  it(`uses the authenticated route allowance above 256 MB for ${path}`, async () => {
+    reporterAuthService.validateSession = () =>
+      Result.ok({
+        reporter: {
+          id: 'reporter',
+          email: 'reporter@example.test',
+          displayName: 'Reporter',
+          locale: 'en',
+          emailUpdates: true,
+        },
+        sessionId: 'session',
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    portalReportsService.access = () => Result.ok(undefined);
+    portalSubmissionsService.uploadBodyLimit = async () =>
+      Result.ok({ maxSize: 300 * 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
+    reportMessagesService.uploadBodyLimit = async () =>
+      Result.ok({ maxSize: 300 * 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
+    const create = spyOn(portalSubmissionsService, 'create').mockResolvedValue(
+      Result.fail('Form reached service', 'VALIDATION_ERROR')
     );
-    const response = await createApp().request(path, {
-      method: 'POST',
-      body,
-      headers: { 'content-type': 'multipart/form-data' },
-    });
-    expect(response.status).toBe(401);
-    expect(reads).toBe(0);
-    expect(cancelled).toBe(true);
+    const send = spyOn(reportMessagesService, 'sendReporter').mockResolvedValue(
+      Result.fail('Form reached service', 'VALIDATION_ERROR')
+    );
+    try {
+      const form = new FormData();
+      form.set('body', 'Reply');
+      if (path === '/api/portal/reports') {
+        form.delete('body');
+        form.set('projectId', 'project');
+        form.set('title', 'Feedback');
+      }
+      const response = await createApp().request(path, {
+        method: 'POST',
+        body: form,
+        headers: {
+          cookie: 'bugpin_reporter_session=session',
+          Origin: 'http://localhost',
+          'X-BugPin-Portal': '1',
+          'content-length': String(MAX_SUBMISSION_REQUEST_BODY_SIZE + 1),
+        },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
+      expect(path === '/api/portal/reports' ? create : send).toHaveBeenCalledTimes(1);
+    } finally {
+      create.mockRestore();
+      send.mockRestore();
+    }
   });
 }
 
@@ -137,7 +224,8 @@ it('reserves the larger allowance for the authenticated staff message POST', asy
         expiresAt: '2099-01-01',
       },
     });
-  reportMessagesService.uploadBodyLimit = async () => Result.ok(300 * 1024 * 1024);
+  reportMessagesService.uploadBodyLimit = async () =>
+    Result.ok({ maxSize: 300 * 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
   const send = spyOn(reportMessagesService, 'send').mockResolvedValue(
     Result.ok({
       id: 'message',

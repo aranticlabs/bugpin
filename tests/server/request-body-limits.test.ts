@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('request bounds preserve legacy limits and the authenticated message exception', async () => {
+test('request bounds preserve legacy limits and authenticated upload exceptions', async () => {
   const child = Bun.spawn(
     [process.execPath, 'test', resolve(import.meta.dir, '../fixtures/request-body-limits.test.ts')],
     { env: { ...process.env, NODE_ENV: 'test' }, stdout: 'pipe', stderr: 'pipe' }

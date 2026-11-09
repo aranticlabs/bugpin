@@ -48,9 +48,6 @@ GEMINI.md
 # Obsidian files
 .obsidian/
 
-# Build automation
-Makefile
-
 # Development docs
 docs-dev/
 src/admin/prototypes/
@@ -69,3 +66,7 @@ temp/
 # Vite
 .vite/
 .cache/
+
+# Browser test artifacts
+playwright-report/
+test-results/

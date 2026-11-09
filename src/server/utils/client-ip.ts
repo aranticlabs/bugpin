@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { config } from '../config.js';
 
 export type TrustProxyMode = 'auto' | 'always' | 'never';
+const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -17,7 +18,7 @@ function isRequestIpServer(value: unknown): value is RequestIpServer {
 }
 
 // Bun passes its server as the second `fetch` argument, which Hono exposes as `c.env`.
-function getSocketAddress(c: Context): string | undefined {
+export function getSocketAddress(c: Context): string | undefined {
   const env: unknown = c.env;
   if (!isRequestIpServer(env)) return undefined;
   try {
@@ -33,6 +34,12 @@ function normalizeAddress(address: string): string {
   // IPv4-mapped IPv6 (`::ffff:10.0.0.1`) as reported for dual-stack sockets
   const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(trimmed);
   return mapped ? mapped[1] : trimmed;
+}
+
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const ip = normalizeAddress(address);
+  return ip === '::1' || (isIP(ip) === 4 && ip.startsWith('127.'));
 }
 
 /**
@@ -68,14 +75,21 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
 export function getEffectiveOrigin(c: Context): string | null {
   try {
     const url = new URL(c.req.url);
+    let host = c.req.header('host') ?? url.host;
+    let protocol = url.protocol;
     if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
-      const host = c.req.header('x-forwarded-host');
-      const protocol = c.req.header('x-forwarded-proto');
-      if (host && !/^[a-z0-9.:[\]-]+$/i.test(host)) return null;
-      if (protocol && protocol !== 'http' && protocol !== 'https') return null;
-      return new URL(`${protocol ? `${protocol}:` : url.protocol}//${host || url.host}`).origin;
+      host = c.req.header('x-forwarded-host') ?? host;
+      const forwardedProtocol = c.req.header('x-forwarded-proto');
+      if (
+        forwardedProtocol !== undefined &&
+        forwardedProtocol !== 'http' &&
+        forwardedProtocol !== 'https'
+      )
+        return null;
+      if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
     }
-    return url.origin;
+    if (!HOST_PATTERN.test(host)) return null;
+    return new URL(`${protocol}//${host}`).origin;
   } catch {
     return null;
   }
