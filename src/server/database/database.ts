@@ -9,6 +9,9 @@ import {
   REPORTS_SCHEMA,
   REPORT_HISTORY_SCHEMA,
   REPORT_PORTAL_INDEXES,
+  REPORT_MESSAGES_SCHEMA,
+  FILE_MESSAGE_SCHEMA,
+  FILE_MESSAGE_INDEXES,
 } from './portal-schema.js';
 
 let db: Database | null = null;
@@ -265,7 +268,10 @@ export async function initSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_report_history_report_action ON report_history(report_id, action, created_at)`
   );
 
+  db.exec(REPORT_MESSAGES_SCHEMA);
+
   // Files table
+  const filesExist = hasColumn(db, 'files', 'id');
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
@@ -282,6 +288,10 @@ export async function initSchema(): Promise<void> {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_report ON files(report_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_type ON files(type)`);
+  if (!filesExist) db.exec(FILE_MESSAGE_SCHEMA);
+  if (hasColumn(db, 'files', 'message_id') && hasColumn(db, 'files', 'uploaded_by_reporter_id')) {
+    db.exec(FILE_MESSAGE_INDEXES);
+  }
 
   // Webhooks table
   db.exec(`

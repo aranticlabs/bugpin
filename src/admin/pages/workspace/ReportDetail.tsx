@@ -4,10 +4,11 @@ import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ScrollArea } from '../../components/ui/scroll-area';
-import { api } from '../../api/client';
+import { api, getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
-import { useReporterMessages } from '../../hooks/useReporterMessages';
+import { useReporterMessages, useSendReporterMessage } from '../../hooks/useReporterMessages';
+import { ConversationCard } from '../../components/report-detail/ConversationCard';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -63,7 +64,7 @@ import {
 } from '../../components/ui/collapsible';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Spinner } from '../../components/ui/spinner';
-import { formatDate, formatDateTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { ImageLightbox } from '../../components/report/ImageLightbox';
 import {
@@ -144,19 +145,8 @@ export function ReportDetail() {
     legacyKey: 'bugpin.report-detail.environment-open',
     parseLegacy: (raw) => raw === 'true',
   });
-  const [reporterMessagesOpen, setReporterMessagesOpen] = usePreference(
-    'reportMessagesOpen',
-    true,
-    {
-      legacyKey: 'bugpin.report-detail.reporter-messages-open',
-      parseLegacy: (raw) => raw === 'true',
-    }
-  );
-
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ url: string; filename: string } | null>(null);
-  const [composeMessage, setComposeMessage] = useState('');
-  const [composeCcSender, setComposeCcSender] = useState(false);
   const [resolveMessage, setResolveMessage] = useState('');
   const [resolveCcSender, setResolveCcSender] = useState(false);
   const [showResolveMessage, setShowResolveMessage] = useState(false);
@@ -217,14 +207,15 @@ export function ReportDetail() {
     enabled: !!data?.report?.projectId,
   });
 
-  // Reporter messages
-  const {
-    messages: reporterMessages,
-    isLoading: messagesLoading,
-    sendMessage,
-    sendMessageAsync,
-    isSending,
-  } = useReporterMessages(id ?? '');
+  const conversation = useReporterMessages(id ?? '');
+  const resolutionSend = useSendReporterMessage(id ?? '');
+
+  useEffect(() => {
+    setResolveMessage('');
+    setResolveCcSender(false);
+    setShowResolveMessage(false);
+    setJustResolved(false);
+  }, [id]);
 
   const { data: reportHistory = [], isLoading: historyLoading } = useReportHistory(id);
 
@@ -362,11 +353,6 @@ export function ReportDetail() {
 
   const messagingEnabled = (() => {
     if (projectData?.settings?.notifyReporter === false) return false;
-    const effectiveEmailEnabled =
-      projectData?.settings?.reporterNotifications?.emailEnabled ??
-      settingsData?.reporterNotifications?.emailEnabled ??
-      true;
-    if (!effectiveEmailEnabled) return false;
     return (
       projectData?.settings?.reporterNotifications?.messagingEnabled ??
       settingsData?.reporterNotifications?.messagingEnabled ??
@@ -374,16 +360,13 @@ export function ReportDetail() {
     );
   })();
 
+  const hasRecipient = Boolean(report.reporterId || report.reporterEmail);
+
   const handleStatusChange = (value: string) => {
     if (value === report.status) return;
     const previous = localStatus;
     setLocalStatus(value);
-    if (
-      value === 'resolved' &&
-      previous !== 'resolved' &&
-      report.reporterEmail &&
-      messagingEnabled
-    ) {
+    if (value === 'resolved' && previous !== 'resolved' && hasRecipient && messagingEnabled) {
       setJustResolved(true);
     } else {
       setJustResolved(false);
@@ -424,20 +407,19 @@ export function ReportDetail() {
     );
   };
 
-  const handleSendResolveMessage = async () => {
-    if (!resolveMessage.trim()) return;
-    try {
-      await sendMessageAsync({
-        message: resolveMessage.trim(),
-        ccSender: resolveCcSender,
-      });
-      setResolveMessage('');
-      setResolveCcSender(false);
-      setShowResolveMessage(false);
-      setJustResolved(false);
-    } catch {
-      // Toast error is handled by the hook
-    }
+  const handleSendResolveMessage = () => {
+    if (!resolveMessage.trim() || resolutionSend.isPending) return;
+    resolutionSend.mutate(
+      { message: resolveMessage.trim(), ccSender: resolveCcSender },
+      {
+        onSuccess: () => {
+          setResolveMessage('');
+          setResolveCcSender(false);
+          setShowResolveMessage(false);
+          setJustResolved(false);
+        },
+      }
+    );
   };
 
   const handleForward = async (integrationId: string, integrationName: string) => {
@@ -526,7 +508,7 @@ export function ReportDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 lg:col-span-2 space-y-6">
           {/* Screenshots/Media */}
           {files?.length > 0 && (
             <Card>
@@ -613,6 +595,27 @@ export function ReportDetail() {
               </p>
             </CardContent>
           </Card>
+
+          <ConversationCard
+            key={report.id}
+            reportId={report.id}
+            conversation={conversation}
+            canEdit={canEdit}
+            messagingEnabled={messagingEnabled}
+            hasRecipient={hasRecipient}
+            portalEnabled={
+              projectData ? (projectData.settings?.reporterPortal?.enabled ?? false) : undefined
+            }
+            hasOwner={Boolean(report.reporterId)}
+            maxImageMb={
+              projectData?.settings?.screenshot?.maxImageUploadSizeMb ??
+              settingsData?.screenshot?.maxImageUploadSizeMb
+            }
+            maxVideoMb={
+              projectData?.settings?.screenshot?.maxVideoUploadSizeMb ??
+              settingsData?.screenshot?.maxVideoUploadSizeMb
+            }
+          />
 
           {/* Console Output */}
           {consoleErrors.length > 0 && (
@@ -917,7 +920,7 @@ export function ReportDetail() {
                         </Select>
                         {justResolved &&
                           localStatus === 'resolved' &&
-                          report.reporterEmail &&
+                          hasRecipient &&
                           messagingEnabled && (
                             <div className="mt-2 space-y-2">
                               <Button
@@ -926,7 +929,10 @@ export function ReportDetail() {
                                 className="h-auto gap-1 p-0 [&_svg]:size-3"
                                 onClick={() => {
                                   setShowResolveMessage(!showResolveMessage);
-                                  if (showResolveMessage) setResolveMessage('');
+                                  if (showResolveMessage) {
+                                    setResolveMessage('');
+                                    resolutionSend.reset();
+                                  }
                                 }}
                               >
                                 <MessageSquare />
@@ -943,6 +949,14 @@ export function ReportDetail() {
                                     rows={3}
                                     className="text-sm"
                                   />
+                                  {resolutionSend.error && (
+                                    <p role="alert" className="text-sm text-destructive">
+                                      {getApiErrorMessage(
+                                        resolutionSend.error,
+                                        'Failed to send message'
+                                      )}
+                                    </p>
+                                  )}
                                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                                     <Checkbox
                                       checked={resolveCcSender}
@@ -955,9 +969,9 @@ export function ReportDetail() {
                                   <Button
                                     size="sm"
                                     onClick={handleSendResolveMessage}
-                                    disabled={!resolveMessage.trim() || isSending}
+                                    disabled={!resolveMessage.trim() || resolutionSend.isPending}
                                   >
-                                    {isSending ? (
+                                    {resolutionSend.isPending ? (
                                       <>
                                         <Spinner size="sm" className="mr-2" />
                                         Sending...
@@ -1152,115 +1166,6 @@ export function ReportDetail() {
                 {manualChannel && <InfoRow label="Channel" value={manualChannel} />}
               </CardContent>
             </Card>
-          )}
-
-          {/* Reporter Messages */}
-          {report.reporterEmail && messagingEnabled && (
-            <Collapsible open={reporterMessagesOpen} onOpenChange={setReporterMessagesOpen}>
-              <Card>
-                <CardHeader className="p-0">
-                  <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between rounded-t-xl p-6 text-left outline-none transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-                    <CardTitle className="flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Reporter Messages
-                      {reporterMessages.length > 0 && (
-                        <Badge variant="secondary" className="ml-1">
-                          {reporterMessages.length}
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
-                  </CollapsibleTrigger>
-                </CardHeader>
-                <CollapsibleContent>
-                  <CardContent className="space-y-4 pt-4">
-                    {/* Compose new message (admin/editor only) */}
-                    {canEdit && (
-                      <>
-                        <div className="space-y-2">
-                          <Textarea
-                            placeholder="Write a message to the reporter..."
-                            value={composeMessage}
-                            onChange={(e) => setComposeMessage(e.target.value)}
-                            rows={3}
-                            disabled={isSending}
-                          />
-                          <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                              <Checkbox
-                                checked={composeCcSender}
-                                onCheckedChange={(checked) => setComposeCcSender(checked === true)}
-                                disabled={isSending}
-                              />
-                              Send me a copy
-                            </label>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                if (composeMessage.trim()) {
-                                  sendMessage(
-                                    {
-                                      message: composeMessage.trim(),
-                                      ccSender: composeCcSender,
-                                    },
-                                    {
-                                      onSuccess: () => {
-                                        setComposeMessage('');
-                                        setComposeCcSender(false);
-                                      },
-                                    }
-                                  );
-                                }
-                              }}
-                              disabled={!composeMessage.trim() || isSending}
-                            >
-                              {isSending ? (
-                                <>
-                                  <Spinner size="sm" className="mr-2" />
-                                  Sending...
-                                </>
-                              ) : (
-                                <>
-                                  <Send className="h-4 w-4 mr-2" />
-                                  Send Message
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <Separator />
-                      </>
-                    )}
-
-                    {/* Message history */}
-                    {messagesLoading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Spinner size="sm" className="text-muted-foreground" />
-                      </div>
-                    ) : reporterMessages.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No messages sent yet. Send a message to communicate with the reporter.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {reporterMessages.map((msg) => (
-                          <div key={msg.id} className="rounded-lg border bg-muted/30 p-3 space-y-1">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span className="font-medium">{msg.userName ?? 'System'}</span>
-                              <span title={formatDateTime(msg.sentAt)}>
-                                {formatRelativeTime(new Date(msg.sentAt))}
-                              </span>
-                            </div>
-                            <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
           )}
 
           {/* Forwarded To */}
@@ -1473,19 +1378,4 @@ function AssigneeDisplay({
       </div>
     </div>
   );
-}
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return formatDate(date);
 }

@@ -52,14 +52,73 @@ const MAGIC_BYTES: Record<string, { bytes: number[]; offset: number }[]> = {
   'video/quicktime': [{ bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }], // ftyp at offset 4
 };
 
-function matchesMagicBytes(
-  data: Buffer | Uint8Array,
-  signatures: { bytes: number[]; offset: number }[]
-): boolean {
-  return signatures.some((sig) => {
+const MP4_MAJOR_BRANDS = [
+  'isom',
+  'iso2',
+  'iso3',
+  'iso4',
+  'iso5',
+  'iso6',
+  'iso7',
+  'iso8',
+  'iso9',
+  'isoa',
+  'isob',
+  'isoc',
+  'mp41',
+  'mp42',
+  'avc1',
+  'M4V ',
+  'M4VH',
+  'M4VP',
+  'MSNV',
+  'dash',
+  'XAVC',
+  '3gp4',
+  '3gp5',
+  '3gp6',
+  '3gp7',
+  '3gp8',
+  '3gp9',
+  '3g2a',
+  'mp71',
+  'f4v ',
+  'av01',
+  'cmfc',
+  'cmfs',
+];
+
+function matchesFileSignature(data: Buffer | Uint8Array, mimeType: string): boolean {
+  const signatures = MAGIC_BYTES[mimeType];
+  if (!signatures) return true;
+  const matches = signatures.some((sig) => {
     if (data.length < sig.offset + sig.bytes.length) return false;
     return sig.bytes.every((byte, i) => data[sig.offset + i] === byte);
   });
+  if (!matches) return false;
+  if (mimeType === 'image/webp') {
+    return data.length >= 12 && [0x57, 0x45, 0x42, 0x50].every((byte, i) => data[8 + i] === byte);
+  }
+  if (mimeType === 'video/mp4' || mimeType === 'video/quicktime') {
+    if (data.length < 16) return false;
+    const header = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    let size = header.getUint32(0);
+    let brandOffset = 8;
+    if (size === 1) {
+      if (data.length < 24) return false;
+      const extendedSize = header.getBigUint64(8);
+      if (extendedSize > BigInt(data.length)) return false;
+      size = Number(extendedSize);
+      brandOffset = 16;
+    }
+    if (size < brandOffset + 8 || size > data.length || (size - brandOffset) % 4 !== 0)
+      return false;
+    const majorBrand = String.fromCharCode(...data.subarray(brandOffset, brandOffset + 4));
+    return mimeType === 'video/quicktime'
+      ? majorBrand === 'qt  '
+      : MP4_MAJOR_BRANDS.includes(majorBrand);
+  }
+  return true;
 }
 
 export interface ValidateFileOptions {
@@ -88,8 +147,7 @@ export function validateFileContent(options: ValidateFileContentOptions): Result
       'INVALID_MIME_TYPE'
     );
   }
-  const signatures = MAGIC_BYTES[mimeType];
-  if (signatures && !matchesMagicBytes(data, signatures)) {
+  if (!matchesFileSignature(data, mimeType)) {
     return Result.fail(
       `File content does not match declared MIME type "${mimeType}"`,
       'INVALID_FILE_CONTENT'
@@ -283,7 +341,12 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
   }
 
   const filePath = path.join(reportDir, storedFilename);
-  fs.writeFileSync(filePath, buffer);
+  try {
+    fs.writeFileSync(filePath, buffer);
+  } catch (error) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    throw error;
+  }
 
   logger.info('File saved to local storage', {
     fileId,

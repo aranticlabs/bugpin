@@ -14,6 +14,19 @@ export const REPORT_HISTORY_SCHEMA = fs.readFileSync(
   path.join(config.migrationsDir, '020_rebuild_report_history_actions.sql'),
   'utf8'
 );
+export const REPORT_MESSAGES_SCHEMA = fs.readFileSync(
+  path.join(config.migrationsDir, '021_add_report_messages.sql'),
+  'utf8'
+);
+export const FILE_MESSAGE_SCHEMA = fs.readFileSync(
+  path.join(config.migrationsDir, '022_add_file_message_links.sql'),
+  'utf8'
+);
+
+export const FILE_MESSAGE_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_files_message ON files(message_id) WHERE message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_files_reporter_upload ON files(uploaded_by_reporter_id, created_at) WHERE uploaded_by_reporter_id IS NOT NULL;
+`;
 
 export const REPORT_PORTAL_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id, project_id, updated_at DESC) WHERE reporter_id IS NOT NULL;

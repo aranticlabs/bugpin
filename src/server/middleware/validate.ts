@@ -849,10 +849,7 @@ export const schemas = {
 
   // Reporter message request
   reporterMessage: z.object({
-    message: z
-      .string()
-      .min(1, 'Message is required')
-      .max(5000, 'Message must be at most 5000 characters'),
+    message: z.string().trim().max(5000, 'Message must be at most 5000 characters'),
     ccSender: z.boolean().optional(),
   }),
 

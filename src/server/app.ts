@@ -1,6 +1,7 @@
 import { Hono, Context, Next } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
+import { requestBodyLimit } from './middleware/body-limit.js';
 import { createApiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
@@ -61,6 +62,8 @@ export function createApp(): Hono {
 
   // CORS applies to the public widget API only; every other route stays same-origin
   app.use('/api/widget/*', widgetCors);
+
+  app.use('*', requestBodyLimit);
 
   // Routes
 

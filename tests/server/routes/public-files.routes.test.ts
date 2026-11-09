@@ -47,6 +47,8 @@ beforeEach(() => {
   fileRecord = {
     id: 'file_1',
     reportId: 'rpt_1',
+    messageId: null,
+    uploadedByReporterId: null,
     type: 'screenshot',
     filename: 'file.png',
     path: filePath,
@@ -54,8 +56,12 @@ beforeEach(() => {
     sizeBytes: 6,
     createdAt: new Date().toISOString(),
   };
-  filesRepo.findByReportId = async () => [fileRecord];
-  report = { id: 'rpt_1', projectId: 'prj_1' } as Report;
+  filesRepo.findOriginalByReportId = async () => [fileRecord];
+  report = {
+    id: 'rpt_1',
+    projectId: 'prj_1',
+    githubIssueUrl: 'https://github.com/acme/widgets/issues/12',
+  } as Report;
   reportsRepo.findById = async () => report;
   integrationsRepo.findActiveByProjectId = async () => [];
 });
@@ -106,10 +112,10 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
-  it('serves ranged videos privately while an active GitHub integration allows public links', async () => {
+  it('serves ranged videos while an active GitHub integration allows public links', async () => {
     fileRecord = { ...fileRecord, type: 'video', mimeType: 'video/mp4' };
     syncReportTo('acme', 'widgets');
     integrationsRepo.findActiveByProjectId = async () => [githubIntegration()];
@@ -119,7 +125,7 @@ describe('public file routes', () => {
     });
 
     expect(res.status).toBe(206);
-    expect(res.headers.get('Cache-Control')).toBe('private, max-age=300');
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
     expect(res.headers.get('Content-Range')).toBe('bytes 0-2/6');
     expect(await res.text()).toBe('pub');
   });
@@ -154,6 +160,7 @@ describe('public file routes', () => {
 
   it('refuses videos of reports that were never sent to GitHub', async () => {
     fileRecord = { ...fileRecord, type: 'video', mimeType: 'video/mp4' };
+    report = { ...report, githubIssueUrl: null, forwardedTo: [] };
     let integrationsLoaded = false;
     integrationsRepo.findActiveByProjectId = async () => {
       integrationsLoaded = true;
@@ -162,7 +169,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(integrationsLoaded).toBe(false);
   });
 
@@ -176,7 +183,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('refuses public video links enabled by a non-boolean config value', async () => {
@@ -191,7 +198,7 @@ describe('public file routes', () => {
 
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('revokes video access when the toggle is disabled or the integration is inactive', async () => {
@@ -204,11 +211,11 @@ describe('public file routes', () => {
     expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(200);
 
     integration.config = { ...integration.config, publicVideoLinks: false };
-    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(403);
+    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(404);
 
     integration.config = { ...integration.config, publicVideoLinks: true };
     integration.isActive = false;
-    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(403);
+    expect((await app.request('http://localhost/public/files/rpt_1/file.png')).status).toBe(404);
   });
 
   for (const type of ['avatar', 'branding'] as const) {
@@ -218,7 +225,65 @@ describe('public file routes', () => {
 
       const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
+  }
+});
+
+for (const method of ['GET', 'HEAD']) {
+  for (const range of [undefined, 'bytes=0-2']) {
+    it(`rejects chat files through public ${method} with range ${range ?? 'none'}`, async () => {
+      fileRecord = { ...fileRecord, messageId: 'message' };
+      const response = await createApp().request('http://localhost/public/files/rpt_1/file.png', {
+        method,
+        headers: range ? { range } : {},
+      });
+      expect(response.status).toBe(404);
+    });
+    it(`rejects non-forwarded originals through public ${method} with range ${range ?? 'none'}`, async () => {
+      report = { ...report, githubIssueUrl: null, forwardedTo: [] };
+      const response = await createApp().request('http://localhost/public/files/rpt_1/file.png', {
+        method,
+        headers: range ? { range } : {},
+      });
+      expect(response.status).toBe(404);
+    });
+  }
+}
+
+it('serves forwarded originals with one-day caching and safe media headers', async () => {
+  const response = await createApp().request('http://localhost/public/files/rpt_1/file.png');
+  expect(response.status).toBe(200);
+  expect(response.headers.get('Cache-Control')).toBe('public, max-age=86400');
+  expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  expect(response.headers.get('Content-Disposition')).toBe('inline; filename="file.png"');
+});
+
+it('returns the same not-found response for every inaccessible file', async () => {
+  const app = createApp();
+  const url = 'http://localhost/public/files/rpt_1/file.png';
+  const responses: Response[] = [];
+  filesRepo.findOriginalByReportId = async () => [];
+  responses.push(await app.request(url));
+  filesRepo.findOriginalByReportId = async () => [fileRecord];
+  fileRecord = { ...fileRecord, messageId: 'chat' };
+  responses.push(await app.request(url));
+  fileRecord = { ...fileRecord, messageId: null };
+  const forwarded = report;
+  report = { ...report, githubIssueUrl: null, forwardedTo: [] };
+  responses.push(await app.request(url));
+  report = forwarded;
+  fileRecord = { ...fileRecord, type: 'video', mimeType: 'video/mp4' };
+  responses.push(await app.request(url));
+  fileRecord = {
+    ...fileRecord,
+    type: 'screenshot',
+    mimeType: 'image/png',
+    path: join(tempDir, 'missing.png'),
+  };
+  responses.push(await app.request(url));
+  for (const response of responses) {
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'File not found' });
   }
 });

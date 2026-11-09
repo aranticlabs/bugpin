@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
-import { http, HttpResponse } from 'msw';
-import { Routes, Route } from 'react-router-dom';
-import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { http, HttpResponse, delay } from 'msw';
+import { Link, Routes, Route } from 'react-router-dom';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
 import { ReportDetail } from '../../../pages/workspace/ReportDetail';
 import { server } from '../../mocks/server';
+import { mockConversationMessages } from '../../mocks/reporter-messages';
 import { mockReports } from '../../mocks/handlers';
 
 vi.mock('sonner', () => ({
@@ -17,6 +18,124 @@ vi.mock('sonner', () => ({
 import { toast } from 'sonner';
 
 describe('ReportDetail', () => {
+  beforeEach(() => vi.clearAllMocks());
+  it('places the conversation after Description and keeps it enabled when update emails are off', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    const conversation = await screen.findByRole('region', { name: 'Conversation' });
+    const description = screen.getByText('The submit button does not respond to clicks');
+    expect(
+      description.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(conversation.parentElement?.parentElement).toContainElement(description);
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toBeInTheDocument();
+  });
+
+  it('sends a resolution message through the shared conversation and refreshes the thread', async () => {
+    const sent: unknown[] = [];
+    let messages: typeof mockConversationMessages = [];
+    server.use(
+      http.get('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({ success: true, messages })
+      ),
+      http.post('/api/reports/:id/reporter-messages', async ({ request }) => {
+        const body = (await request.json()) as { message: string; ccSender: boolean };
+        sent.push(body);
+        const message = { ...mockConversationMessages[0], message: body.message, files: [] };
+        messages = [message];
+        return HttpResponse.json({ success: true, reporterMessage: message });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    await screen.findByRole('region', { name: 'Conversation' });
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    await user.type(
+      screen.getByPlaceholderText('Optional message to send to the reporter...'),
+      'Resolved with a workaround'
+    );
+    await user.click(screen.getAllByRole('checkbox', { name: 'Send me a copy' })[1]);
+    await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+    await waitFor(() =>
+      expect(sent).toEqual([{ message: 'Resolved with a workaround', ccSender: true }])
+    );
+    expect(await screen.findByText('Resolved with a workaround')).toBeInTheDocument();
+  });
+
+  it('isolates resolution failures from the composer and resets them on report navigation', async () => {
+    server.use(
+      http.post('/api/reports/:id/reporter-messages', async () => {
+        await delay(100);
+        return HttpResponse.json({ message: 'Resolution delivery failed' }, { status: 400 });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/reports/:id"
+          element={
+            <>
+              <Link to="/reports/report-3">Next report</Link>
+              <ReportDetail />
+            </>
+          }
+        />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    const conversation = await screen.findByRole('region', { name: 'Conversation' });
+    await user.type(within(conversation).getByRole('textbox'), 'Composer draft');
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    await user.type(
+      screen.getByPlaceholderText('Optional message to send to the reporter...'),
+      'Resolution draft'
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+    expect(within(conversation).getByRole('textbox')).toBeEnabled();
+    expect(within(conversation).getByRole('button', { name: 'Send Message' })).toBeEnabled();
+    expect(await screen.findByText('Resolution delivery failed')).toBeInTheDocument();
+    expect(within(conversation).queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+      'Resolution draft'
+    );
+    expect(within(conversation).getByRole('textbox')).toHaveValue('Composer draft');
+    expect(toast.error).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('link', { name: 'Next report' }));
+    await screen.findByText(mockReports[2].title);
+    expect(screen.queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('Optional message to send to the reporter...')
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toHaveValue('');
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+      ''
+    );
+    expect(screen.queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+  });
+
   it('records the report as recently viewed once it loads', async () => {
     const viewed: string[] = [];
     server.use(
