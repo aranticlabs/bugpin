@@ -992,6 +992,8 @@ describe('widget routes', () => {
         'https://feedback.example.test/reporter-portal/',
       ],
       [true, '', '', null],
+      [true, 'http://app.example.com', 'https://feedback.example.com', null],
+      [true, 'https://app.example.com', 'http://feedback.example.com', null],
       [true, 'https://app.example.test', 'invalid', null],
     ])(
       'exposes a portal URL only for enabled, configured projects (%s, %s, %s)',

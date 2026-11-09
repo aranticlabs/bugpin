@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { config } from '../config.js';
+import type { AppSettings, Project } from '@shared/types';
 
 export function isSecurePortalUrl(value: string): boolean {
   try {
@@ -17,4 +18,18 @@ export function isSecurePortalUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function projectPortalUrl(
+  project: Pick<Project, 'settings'>,
+  settings: Pick<AppSettings, 'appUrl' | 'portalBaseUrl'>
+): string | null {
+  const baseUrl = settings.portalBaseUrl || settings.appUrl;
+  if (
+    !project.settings.reporterPortal?.enabled ||
+    !isSecurePortalUrl(settings.appUrl) ||
+    !isSecurePortalUrl(baseUrl)
+  )
+    return null;
+  return new URL('/reporter-portal/', baseUrl).href;
 }
