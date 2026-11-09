@@ -95,7 +95,7 @@ export const reporterAuthService = {
       });
       if (sent.success) return Result.ok(undefined);
     } catch {
-      logger.warn('Reporter login email delivery failed');
+      // Transport errors are returned without exposing SMTP details.
     }
     return Result.fail('Could not send the login email', 'EMAIL_DELIVERY_FAILED');
   },

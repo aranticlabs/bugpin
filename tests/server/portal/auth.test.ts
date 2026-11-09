@@ -126,6 +126,22 @@ it('logs delivery warnings for SMTP failures but not intentional login mint refu
   expect(warnings).toHaveBeenCalledWith('Reporter login email delivery failed');
 });
 
+it('logs exactly one warning for a rejecting public delivery while test delivery returns a failure', async () => {
+  const warnings = spyOn(logger, 'warn').mockImplementation(() => {});
+  spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('SMTP failed'));
+  expect((await portalPost(app, '/auth/request', { email: 'public@example.com' })).status).toBe(
+    200
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(warnings).toHaveBeenCalledTimes(1);
+  expect(warnings).toHaveBeenCalledWith('Reporter login email delivery failed');
+  expect(await reporterAuthService.sendLoginLink('admin@example.com')).toMatchObject({
+    success: false,
+    code: 'EMAIL_DELIVERY_FAILED',
+  });
+  expect(warnings).toHaveBeenCalledTimes(1);
+});
+
 it('shares the per-email allowance between requests and expired-link resends', async () => {
   await settingsRepo.updateAll({
     reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerEmailPer15Min: 1 },
