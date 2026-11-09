@@ -77,7 +77,6 @@ const en = {
   'recording.quality.low': 'Low',
   'recording.quality.standard': 'Standard',
   'recording.quality.high': 'High',
-  'recording.quality.setting': 'Recording quality: {quality}',
   'recording.helperText': 'Supported: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Unsupported image format: {type}',

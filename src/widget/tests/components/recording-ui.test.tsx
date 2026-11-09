@@ -1021,11 +1021,10 @@ describe('ScreenRecordingPanel', () => {
     onDismissOversizedRecording: noop,
   };
 
-  it('shows the configured quality and each clip’s saved quality in the existing footer', async () => {
+  it('shows each clip’s saved quality in the existing footer', async () => {
     await mount(
       <ScreenRecordingPanel
         {...panelProps}
-        recordingQuality="low"
         clips={[
           {
             ...clip('quality', 'recording'),
@@ -1036,7 +1035,7 @@ describe('ScreenRecordingPanel', () => {
         ]}
       />
     );
-    expect(container.textContent).toContain('Recording quality: Low');
+    expect(container.textContent).not.toContain('Recording quality');
     const footer = [...container.querySelectorAll('span')].find(
       (span) => span.textContent === 'High · 1920 x 1080 · 1:05 · 1.0 MB'
     )?.parentElement;

@@ -811,7 +811,6 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
           recordingEnabled={recordingEnabled}
-          recordingQuality={config.recordingQuality}
           allowRecordingMicrophone={config.allowRecordingMicrophone}
           includeMicrophone={includeMicrophone}
           onIncludeMicrophoneChange={setIncludeMicrophone}

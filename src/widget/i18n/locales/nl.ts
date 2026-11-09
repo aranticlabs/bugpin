@@ -80,7 +80,6 @@ const nl: WidgetCatalog = {
   'recording.quality.low': 'Laag',
   'recording.quality.standard': 'Standaard',
   'recording.quality.high': 'Hoog',
-  'recording.quality.setting': 'Opnamekwaliteit: {quality}',
   'recording.helperText': 'Ondersteund: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',
