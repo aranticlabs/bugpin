@@ -80,6 +80,28 @@ function createApp() {
 }
 
 describe('public file routes', () => {
+  it.each([
+    ['video', 'application/octet-stream', 'private, max-age=300'],
+    ['attachment', 'video/webm', 'private, max-age=300'],
+    ['attachment', 'image/png', 'public, max-age=86400'],
+  ] as const)(
+    'uses the expected cache policy for %s with MIME %s',
+    async (type, mimeType, expected) => {
+      fileRecord = { ...fileRecord, type, mimeType };
+      syncReportTo('acme', 'widgets');
+      integrationsRepo.findActiveByProjectId = async () => [githubIntegration()];
+      for (const method of ['GET', 'HEAD']) {
+        for (const range of [undefined, 'bytes=0-2']) {
+          const response = await createApp().request(
+            'http://localhost/public/files/rpt_1/file.png',
+            { method, headers: range ? { range } : {} }
+          );
+          expect(response.status).toBe(range ? 206 : 200);
+          expect(response.headers.get('Cache-Control')).toBe(expected);
+        }
+      }
+    }
+  );
   it('serves full files with range support advertised', async () => {
     const res = await createApp().request('http://localhost/public/files/rpt_1/file.png');
 
@@ -125,7 +147,7 @@ describe('public file routes', () => {
     });
 
     expect(res.status).toBe(206);
-    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
+    expect(res.headers.get('Cache-Control')).toBe('private, max-age=300');
     expect(res.headers.get('Content-Range')).toBe('bytes 0-2/6');
     expect(await res.text()).toBe('pub');
   });
