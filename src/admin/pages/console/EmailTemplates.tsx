@@ -26,6 +26,15 @@ import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { useConfirmUnsavedChanges } from '../../hooks/useConfirmUnsavedChanges';
 import { useSettings } from '../../hooks/useSettings';
 
+const REPORTER_RECIPIENT_TEMPLATES: readonly EmailTemplateType[] = [
+  'reporterLogin',
+  'reporterConfirmation',
+  'reporterStatusChange',
+  'reporterPriorityChange',
+  'reporterMessage',
+  'reporterAssignment',
+];
+
 const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: string }[] = [
   {
     value: 'reporterLogin',
@@ -555,7 +564,7 @@ export function EmailTemplates() {
                     </p>
                   </div>
 
-                  {selectedType.startsWith('reporter') &&
+                  {REPORTER_RECIPIENT_TEMPLATES.includes(selectedType) &&
                     html.trim() &&
                     !(selectedType === 'reporterLogin' || selectedType === 'reporterConfirmation'
                       ? html.includes('reporter.loginUrl')

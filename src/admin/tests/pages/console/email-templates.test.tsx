@@ -130,6 +130,18 @@ describe('EmailTemplates', () => {
     expect(screen.queryByText(/This (login|update) template has no/)).not.toBeInTheDocument();
   });
 
+  it('keeps reporter-recipient link hints off the staff activity template', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: 'Reporter Activity' }));
+    await waitFor(() => expect(screen.getByLabelText('Email Body')).toHaveValue('<p>def</p>'));
+    expect(
+      screen.queryByText(/This (login|update|confirmation) template has no/)
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('renders locale tabs and preloads built-in templates', async () => {
     mockApi();
     renderWithProviders(<EmailTemplates />);
