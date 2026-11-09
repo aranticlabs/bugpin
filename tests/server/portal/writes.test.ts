@@ -562,12 +562,16 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
     });
     const maximum = 1024 * 1024 - usedBytes + 64 * 1024;
     expect(Result.unwrap(await portalSubmissionsService.uploadBodyLimit(reporterId))).toBe(maximum);
-    expect(Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId))).toBe(
-      maximum
-    );
-    expect(Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId))).toBe(
-      500 * 1024 * 1024 + 64 * 1024
-    );
+    expect(
+      Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId))
+    ).toEqual({
+      maxSize: maximum,
+      errorCode: 'UPLOAD_QUOTA_EXCEEDED',
+    });
+    expect(Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId))).toEqual({
+      maxSize: 500 * 1024 * 1024 + 64 * 1024,
+      errorCode: 'PAYLOAD_TOO_LARGE',
+    });
     const parse = spyOn(Request.prototype, 'formData');
     for (const path of ['/reports', `/reports/${reportId}/messages`]) {
       for (const contentLength of [true, false]) {
@@ -595,7 +599,10 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
         });
         const response = await app.request(request);
         expect(response.status).toBe(413);
-        expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+        expect(await response.json()).toMatchObject({
+          success: false,
+          error: path === '/reports' ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_QUOTA_EXCEEDED',
+        });
         expect(parse).not.toHaveBeenCalled();
         expect(pulls).toBeLessThanOrEqual(contentLength ? 1 : Math.ceil(maximum / (16 * 1024)) + 2);
         stop();
@@ -606,6 +613,46 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
     expect(count('report_messages')).toBe(0);
   });
 }
+
+it.each([
+  [4, 'UPLOAD_QUOTA_EXCEEDED'],
+  [5, 'PAYLOAD_TOO_LARGE'],
+  [6, 'PAYLOAD_TOO_LARGE'],
+] as const)(
+  'reports the binding reply upload limit with a %s MB daily quota',
+  async (quota, error) => {
+    await limits({ uploadMbPerReporterPerDay: quota });
+    await project({
+      reporterPortal: { enabled: true, allowNewFeedback: true },
+      screenshot: { maxImageUploadSizeMb: 1, maxVideoUploadSizeMb: 1 },
+    });
+    const limit = Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId));
+    expect(limit).toEqual({
+      maxSize: Math.min(5, quota) * 1024 * 1024 + 64 * 1024,
+      errorCode: error,
+    });
+    for (const contentType of ['multipart/form-data; boundary=boundary', 'application/json']) {
+      const response = await app.request(
+        `${portalOrigin}/api/portal/reports/${reportId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Cookie: cookie,
+            Origin: portalOrigin,
+            'X-BugPin-Portal': '1',
+            'content-type': contentType,
+            'content-length': String(limit.maxSize + 1),
+          },
+          body: 'x',
+        }
+      );
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({
+        error: contentType.startsWith('multipart/') ? error : 'PAYLOAD_TOO_LARGE',
+      });
+    }
+  }
+);
 
 it('rejects duplicate multipart scalars before report or message service writes', async () => {
   const create = spyOn(portalSubmissionsService, 'create');
@@ -708,7 +755,10 @@ it('rejects real chunked multipart overflows without persisting reports, message
       })
     );
     expect(response.status).toBe(413);
-    expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: path === '/reports' ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_QUOTA_EXCEEDED',
+    });
     await reader.cancel();
   }
   expect(count('reports')).toBe(1);

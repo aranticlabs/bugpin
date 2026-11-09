@@ -4,7 +4,7 @@ import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, validatedBody } from '../../middleware/validate.js';
 import { reporterOwnershipService } from '../../services/reporter-ownership.service.js';
 import { reportMessagesService } from '../../services/report-messages.service.js';
-import { errorStatus, reportMessageErrorStatus } from '../../utils/http-status.js';
+import { errorStatus } from '../../utils/http-status.js';
 
 const ownerSchema = z.union([
   z.object({ reporterId: z.string().min(1).max(64) }).strict(),
@@ -40,7 +40,7 @@ reportOwnerRoutes.put(
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        claimable?.invitation ? reportMessageErrorStatus(result.code) : errorStatus(result.code)
+        errorStatus(result.code)
       );
     return c.json({ success: true, owner: result.value });
   }

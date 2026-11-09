@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { reportMessagesService } from '../../services/report-messages.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
-import { reportMessageErrorStatus } from '../../utils/http-status.js';
+import { errorStatus } from '../../utils/http-status.js';
 import { MAX_MESSAGE_FILES } from '../../utils/request-limits.js';
 
 const reporterMessages = new Hono();
@@ -19,11 +19,11 @@ reporterMessages.post(
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        reportMessageErrorStatus(result.code)
+        errorStatus(result.code)
       );
     return bodyLimit({
       maxSize: c.req.header('content-type')?.includes('multipart/form-data')
-        ? result.value
+        ? result.value.maxSize
         : 32 * 1024,
       onError: (context) =>
         context.json(
@@ -95,7 +95,7 @@ reporterMessages.post(
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        reportMessageErrorStatus(result.code)
+        errorStatus(result.code)
       );
     return c.json({ success: true, reporterMessage: result.value });
   }
@@ -106,13 +106,13 @@ reporterMessages.get('/:id/reporter-messages', validate({ params: schemas.id }),
   if (!result.success)
     return c.json(
       { success: false, error: result.code, message: result.error },
-      reportMessageErrorStatus(result.code)
+      errorStatus(result.code)
     );
   const portal = await reportMessagesService.portalContext(c.req.param('id'));
   if (!portal.success)
     return c.json(
       { success: false, error: portal.code, message: portal.error },
-      reportMessageErrorStatus(portal.code)
+      errorStatus(portal.code)
     );
   return c.json({ success: true, messages: result.value, portal: portal.value });
 });
@@ -134,7 +134,7 @@ for (const [action, hidden] of [
       if (!result.success)
         return c.json(
           { success: false, error: result.code, message: result.error },
-          reportMessageErrorStatus(result.code)
+          errorStatus(result.code)
         );
       return c.json({ success: true, message: result.value });
     }
