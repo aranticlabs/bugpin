@@ -637,6 +637,25 @@ export interface FileRecord {
 
 // Webhook Types
 
+export interface ReportMessageCreatedEvent {
+  reportId: string;
+  projectId: string;
+  messageId: string;
+  authorKind: MessageAuthorKind;
+  body: string;
+  files: Array<{ id: string; type: FileType; mimeType: string; sizeBytes: number }>;
+  createdAt: string;
+}
+
+export interface ReportOwnerChangedEvent {
+  reportId: string;
+  projectId: string;
+  action: 'owner_assigned' | 'owner_removed' | 'claimable_set';
+  oldReporterId: string | null;
+  newReporterId: string | null;
+  actorUserId: string | null;
+}
+
 export type WebhookEvent =
   | 'report.created'
   | 'report.updated'
@@ -644,7 +663,9 @@ export type WebhookEvent =
   | 'report.assigned'
   | 'report.resolved'
   | 'report.closed'
-  | 'report.deleted';
+  | 'report.deleted'
+  | 'report.message_created'
+  | 'report.owner_changed';
 
 export interface Webhook {
   id: string;
@@ -991,6 +1012,7 @@ export type ReporterTemplateType =
 
 export type TeamTemplateType =
   | 'newReport'
+  | 'reporterActivity'
   | 'statusChange'
   | 'priorityChange'
   | 'assignment'
@@ -1023,6 +1045,7 @@ export type CustomEmailTemplates = Partial<{
 export interface EmailTemplates {
   reporterLogin: EmailTemplate;
   newReport: EmailTemplate;
+  reporterActivity: EmailTemplate;
   statusChange: EmailTemplate;
   priorityChange: EmailTemplate;
   assignment: EmailTemplate;

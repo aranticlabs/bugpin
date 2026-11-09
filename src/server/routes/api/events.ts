@@ -38,6 +38,7 @@ eventsRoutes.get('/', async (c) => {
   const sessionSecret = getCookie(c, 'session')!;
   const response = streamSSE(c, async (stream) => {
     let draining = false;
+    let heartbeatPending = false;
     const queue: [StaffEventType, StaffEventData][] = [];
     let ended = false;
     let finish: () => void;
@@ -75,6 +76,11 @@ eventsRoutes.get('/', async (c) => {
       })();
     };
     const heartbeat = setInterval(async () => {
+      if (heartbeatPending) {
+        end();
+        return;
+      }
+      heartbeatPending = true;
       try {
         const checked = await authService.validateSession(sessionSecret);
         if (ended) return;
@@ -89,6 +95,8 @@ eventsRoutes.get('/', async (c) => {
         if (!draining) await stream.write(': heartbeat\n\n');
       } catch {
         end();
+      } finally {
+        heartbeatPending = false;
       }
     }, 25000);
     heartbeat.unref();

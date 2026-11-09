@@ -5,6 +5,7 @@ import { reporterStatusChange } from './reporter-status-change/index.js';
 import { reporterPriorityChange } from './reporter-priority-change/index.js';
 import { reporterMessage } from './reporter-message/index.js';
 import { reporterAssignment } from './reporter-assignment/index.js';
+import { reporterActivity } from './team/reporterActivity.js';
 import { newReport } from './team/newReport.js';
 import { statusChange } from './team/statusChange.js';
 import { priorityChange } from './team/priorityChange.js';
@@ -21,6 +22,7 @@ export const defaultEmailTemplates: DefaultEmailTemplates = {
   reporterPriorityChange,
   reporterMessage,
   reporterAssignment,
+  reporterActivity,
   newReport,
   statusChange,
   priorityChange,

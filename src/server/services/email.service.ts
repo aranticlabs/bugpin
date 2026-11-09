@@ -10,7 +10,6 @@ import {
   DEFAULT_BRAND_COLOR,
 } from '../constants/email-templates.js';
 import { normalizeEmail } from '../utils/email-normalize.js';
-import { emailStyles } from '../i18n/email-defaults/styles.js';
 import { reporterCopy } from '../i18n/reporter-copy.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import { getStatusLabel, getPriorityLabel, formatReportDate } from '../i18n/labels.js';
@@ -508,24 +507,26 @@ export const emailService = {
   async sendReporterActivityEmail(
     recipients: EmailRecipient[],
     report: Report,
-    projectName: string
+    projectName: string,
+    locale: LocaleCode = 'en'
   ): Promise<{ success: boolean; error?: string }> {
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const variables = {
       app: { name: settings.appName },
       project: { name: projectName },
-      report: { title: report.title, url: `${settings.appUrl}/admin/reports/${report.id}` },
+      report: {
+        title: report.title,
+        url: new URL(
+          `/admin/reports/${encodeURIComponent(report.id)}`,
+          settings.appUrl || 'http://localhost:3000'
+        ).href,
+      },
     };
-    const subject = templateService.compileTemplate(
-      'New reporter activity: {{report.title}}',
-      variables
-    );
-    const content = templateService.compileTemplate(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles}</style></head><body><div class="container"><div class="header"><h1>New reporter activity</h1><p>{{app.name}}</p></div><div class="content"><p>A reporter replied or submitted feedback in {{project.name}}.</p><h2>{{report.title}}</h2><a class="button" href="{{report.url}}">View in the Admin Console</a></div></div></body></html>`,
-      variables
-    );
+    const template = await this.getTemplate('reporterActivity', locale);
+    const subject = templateService.compileTemplate(template.subject, variables);
+    const content = templateService.compileTemplate(template.html, variables);
     const html = applyBrandColor(
-      await this.appendFooter(content, 'newReport'),
+      await this.appendFooter(content, 'reporterActivity'),
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
     );
     return this.sendEmail({ to: recipients, subject, html });

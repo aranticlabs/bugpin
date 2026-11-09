@@ -1,3 +1,4 @@
+import type { ReportOwnerChangedEvent } from '@shared/types';
 import { reporterAuthTokensRepo } from '../database/repositories/reporter-auth-tokens.repo.js';
 import { reporterSessionsRepo } from '../database/repositories/reporter-sessions.repo.js';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
@@ -133,12 +134,15 @@ export const reporterAuthService = {
     return Result.ok(token.email);
   },
 
-  async resend(secret: string, locale: LocaleCode = 'en'): Promise<Result<void>> {
+  async resend(secret: string, locale?: LocaleCode): Promise<Result<void>> {
     const target = this.resendTarget(secret);
     if (target.success && target.value) {
       const token = reporterAuthTokensRepo.findByHash(hashToken(secret));
       const report = token?.reportId ? await reportsRepo.findById(token.reportId) : null;
-      await this.requestLogin(target.value, normalizeLocale(report?.reporterLocale) ?? locale);
+      await this.requestLogin(
+        target.value,
+        locale ?? normalizeLocale(report?.reporterLocale) ?? 'en'
+      );
     }
     return Result.ok(undefined);
   },
@@ -158,7 +162,8 @@ export const reporterAuthService = {
     const tokenHash = hashToken(secret);
     const previousHash = previousSessionSecret ? hashToken(previousSessionSecret) : null;
     const now = new Date().toISOString();
-    return reportersRepo.transaction(() => {
+    const ownershipChanges: ReportOwnerChangedEvent[] = [];
+    const result = reportersRepo.transaction(() => {
       const token = reporterAuthTokensRepo.findByHash(tokenHash);
       if (
         !token ||
@@ -175,7 +180,7 @@ export const reporterAuthService = {
         .slice(0, 80);
       const reporter = reportersRepo.resolve(token.email, displayName, now);
       const attachedReportCount = Result.unwrap(
-        reporterOwnershipService.attachClaimable(reporter.id, reporter.email)
+        reporterOwnershipService.attachClaimable(reporter.id, reporter.email, ownershipChanges)
       );
       const session = reporterSessionsRepo.create({
         tokenHash: sessionHash,
@@ -199,6 +204,8 @@ export const reporterAuthService = {
           : {}),
       });
     });
+    if (result.success) reporterOwnershipService.announce(ownershipChanges);
+    return result;
   },
 
   validateSession(

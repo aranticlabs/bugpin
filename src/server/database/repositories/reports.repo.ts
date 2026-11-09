@@ -703,10 +703,12 @@ export const reportsRepo = {
       .get()!.count;
   },
 
-  acknowledgeReporterActivity(id: string): void {
+  acknowledgeReporterActivity(id: string, displayedAt: string): void {
     getDb().run(
-      'UPDATE reports SET reporter_activity_seen_at = last_reporter_activity_at WHERE id = ?',
-      [id]
+      `UPDATE reports SET reporter_activity_seen_at = ? WHERE id = ?
+      AND julianday(?) <= julianday(last_reporter_activity_at)
+      AND (reporter_activity_seen_at IS NULL OR julianday(?) > julianday(reporter_activity_seen_at))`,
+      [displayedAt, id, displayedAt, displayedAt]
     );
   },
 

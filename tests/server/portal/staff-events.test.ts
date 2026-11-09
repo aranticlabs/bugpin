@@ -137,6 +137,18 @@ it('sends heartbeat comments after successful session revalidation', async () =>
   expect(new TextDecoder().decode((await reader.read()).value)).toBe(': heartbeat\n\n');
 });
 
+it('disconnects when a heartbeat remains blocked at the next tick without event traffic', async () => {
+  const pulse = captureHeartbeat();
+  const reader = await open();
+  await pulse();
+  const pending = pulse();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await pulse();
+  await pending;
+  expect(new TextDecoder().decode((await reader.read()).value)).toBe(': heartbeat\n\n');
+  expect((await reader.read()).done).toBe(true);
+});
+
 it('disconnects a slow reader once its hint queue is full and releases the subscription', async () => {
   const settings = await settingsCacheService.getAll();
   await settingsRepo.updateAll({

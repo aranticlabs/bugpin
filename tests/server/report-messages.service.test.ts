@@ -1,3 +1,5 @@
+import { createDefaultHooks } from '../../src/server/types/ee-plugin';
+import { registerEEHooks, resetEEHooks } from '../../src/server/utils/ee-hooks';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import * as fs from 'node:fs';
@@ -71,6 +73,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  resetEEHooks();
   notificationsService.notifyReporterMessage = originalNotify;
   notificationsService.notifyReporterActivity = originalNotifyActivity;
   settingsCacheService.invalidate();
@@ -767,4 +770,44 @@ it('allows inactive-project staff replies and moderation while denying reporter 
     success: false,
     code: 'NOT_FOUND',
   });
+});
+
+it('emits metadata-only file webhooks after commit and emits no events for rolled-back writes', async () => {
+  const hooks = createDefaultHooks();
+  const messageCreated = spyOn(hooks, 'onReportMessageCreated').mockImplementation(async () => {
+    expect(counts()).toEqual({ messages: 1, files: 1 });
+    throw new Error('Delivery unavailable');
+  });
+  const ownerChanged = spyOn(hooks, 'onReportOwnerChanged');
+  registerEEHooks(hooks);
+  getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+  const saved = await reportMessagesService.send('report', 'staff', '', false, [image()], true);
+  expect(saved.success).toBe(true);
+  if (!saved.success) return;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(messageCreated).toHaveBeenCalledWith({
+    reportId: 'report',
+    projectId: 'project',
+    messageId: saved.value.id,
+    authorKind: 'staff',
+    body: '',
+    createdAt: saved.value.createdAt,
+    files: saved.value.files.map(({ id, type, mimeType, sizeBytes }) => ({
+      id,
+      type,
+      mimeType,
+      sizeBytes,
+    })),
+  });
+  expect(ownerChanged).toHaveBeenCalledTimes(1);
+  messageCreated.mockClear();
+  ownerChanged.mockClear();
+  getDb().run(
+    "UPDATE reports SET claimable_email = NULL, reporter_email = 'invalid' WHERE id = 'report'"
+  );
+  expect(
+    (await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)).success
+  ).toBe(false);
+  expect(messageCreated).not.toHaveBeenCalled();
+  expect(ownerChanged).not.toHaveBeenCalled();
 });

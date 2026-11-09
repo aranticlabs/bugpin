@@ -680,12 +680,12 @@ export const reportsService = {
     return Result.ok(reportsRepo.countReporterActivity());
   },
 
-  async acknowledgeReporterActivity(id: string): Promise<Result<void>> {
+  async acknowledgeReporterActivity(id: string, displayedAt: string): Promise<Result<void>> {
     const report = await reportsRepo.findById(id);
     if (!report) return Result.fail('Report not found', 'NOT_FOUND');
     const access = checkProjectLicense(report.projectId);
     if (!access.success) return access;
-    reportsRepo.acknowledgeReporterActivity(id);
+    reportsRepo.acknowledgeReporterActivity(id, displayedAt);
     realtimeService.publish('reporter_activity.changed', {
       reportId: id,
       projectId: report.projectId,
@@ -1038,6 +1038,11 @@ export const reportsService = {
       if (before.status !== target.status) {
         logger.info('Report updated', { reportId: report.id, updates: ['status'] });
         announceReportChanges(report, { status: { old: before.status, new: target.status } });
+      } else {
+        realtimeService.publish('report.updated', {
+          reportId: report.id,
+          projectId: report.projectId,
+        });
       }
     }
     return Result.ok(moved);

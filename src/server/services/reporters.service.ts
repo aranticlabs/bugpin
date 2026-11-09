@@ -1,3 +1,5 @@
+import { reporterOwnershipService } from './reporter-ownership.service.js';
+import type { ReportOwnerChangedEvent } from '@shared/types';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { reporterAuthTokensRepo } from '../database/repositories/reporter-auth-tokens.repo.js';
 import { reporterSessionsRepo } from '../database/repositories/reporter-sessions.repo.js';
@@ -110,23 +112,35 @@ export const reportersService = {
   },
 
   delete(id: string, userId: string | null, eraseContactDetails = false): Result<void> {
-    return reportersRepo.transaction(() => {
+    const changes: ReportOwnerChangedEvent[] = [];
+    const result = reportersRepo.transaction<Result<void>>(() => {
       const reporter = reportersRepo.findById(id);
       if (!reporter) return Result.fail('Reporter not found', 'NOT_FOUND');
       revoke(reporter, userId, new Date().toISOString());
       const reports = reporterOwnershipRepo.findForReporter(id, reporter.email);
       reporterOwnershipRepo.clearForReporter(id, reporter.email, eraseContactDetails);
-      for (const report of reports)
+      for (const report of reports) {
+        changes.push({
+          reportId: report.id,
+          projectId: report.projectId,
+          action: 'owner_removed',
+          oldReporterId: report.reporterId,
+          newReporterId: null,
+          actorUserId: userId,
+        });
         reportHistoryRepo.insert({
           reportId: report.id,
           userId,
           action: 'owner_removed',
           oldValue: report.reporterId ?? report.claimableEmail,
         });
+      }
       reportersRepo.anonymizeMessages(id, 'Deleted reporter');
       reportersRepo.delete(id);
       return Result.ok(undefined);
     });
+    if (result.success) reporterOwnershipService.announce(changes);
+    return result;
   },
 
   async cleanup(): Promise<Result<{ tokens: number; sessions: number; reporters: number }>> {

@@ -91,6 +91,7 @@ export function getSampleDataForTemplate(
   };
 
   switch (templateType) {
+    case 'reporterActivity':
     case 'newReport':
     case 'statusChange':
     case 'priorityChange':

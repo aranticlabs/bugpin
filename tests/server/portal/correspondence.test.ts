@@ -367,7 +367,7 @@ it('chains one-click unsubscribe to a suppressed update and continued login deli
 });
 
 for (const source of ['confirmation', 'invitation'] as const) {
-  it(`resends an expired ${source} in the report locale without an account, then honors the account locale`, async () => {
+  it(`resends an expired ${source} in the page locale without an account, then honors the account locale`, async () => {
     const token = Result.unwrap(
       reporterAuthService.mintLoginToken('bob@example.com', source, 'report')
     );
@@ -377,12 +377,15 @@ for (const source of ['confirmation', 'invitation'] as const) {
     );
     await reporterAuthService.resend(token.secret, 'ja');
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(sent[0].subject).toBe(reporterCopy.de.login);
+    expect(sent[0].subject).toBe(reporterCopy.ja.login);
+    await reporterAuthService.resend(token.secret);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(sent[1].subject).toBe(reporterCopy.de.login);
     const account = reportersRepo.resolve('bob@example.com', 'Bob', new Date().toISOString());
     getDb().run("UPDATE reporters SET locale = 'fr' WHERE id = ?", [account.id]);
     await reporterAuthService.resend(token.secret, 'ja');
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(sent[1].subject).toBe(reporterCopy.fr.login);
+    expect(sent[2].subject).toBe(reporterCopy.fr.login);
   });
 }
 

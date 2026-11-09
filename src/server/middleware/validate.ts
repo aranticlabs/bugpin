@@ -30,6 +30,8 @@ const webhookEventSchema = z.enum([
   'report.resolved',
   'report.closed',
   'report.deleted',
+  'report.message_created',
+  'report.owner_changed',
 ]);
 
 const localeEnumValues = SUPPORTED_LOCALES as readonly [LocaleCode, ...LocaleCode[]];
@@ -438,6 +440,9 @@ const boardMoveShape = {
 };
 
 export const schemas = {
+  reporterActivitySeen: z
+    .object({ lastReporterActivityAt: z.string().datetime({ offset: true }) })
+    .strict(),
   // ID parameter
   id: z.object({
     id: z.string().min(1, 'ID is required'),
@@ -722,6 +727,7 @@ export const schemas = {
         .optional(),
       appName: z.string().min(1).max(100).optional(),
       appUrl: z.string().optional(),
+      portalBaseUrl: z.string().max(2048).optional(),
       reporterPortalLimits: reporterPortalLimitsSchema.optional(),
       privacy: z
         .object({

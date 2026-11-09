@@ -38,6 +38,7 @@ export interface UpdateSettingsInput {
   language?: ProjectLanguageSettings;
   appName?: string;
   appUrl?: string;
+  portalBaseUrl?: string;
   reporterPortalLimits?: Partial<AppSettings['reporterPortalLimits']>;
   retentionDays?: number;
   rateLimitPerMinute?: number;
@@ -315,6 +316,25 @@ export const settingsService = {
     )
       return Result.fail('S3 storage requires Enterprise license', 'FEATURE_NOT_LICENSED');
 
+    const portalBaseUrl = input.portalBaseUrl?.trim() ?? current.portalBaseUrl;
+    const appUrl = input.appUrl?.trim() ?? current.appUrl;
+    if (portalBaseUrl) {
+      try {
+        const portal = new URL(portalBaseUrl);
+        if (
+          !['http:', 'https:'].includes(portal.protocol) ||
+          portal.username ||
+          portal.password ||
+          (appUrl && portal.hostname === new URL(appUrl).hostname)
+        )
+          return Result.fail(
+            'Portal Base URL must use HTTP or HTTPS on a different host from the Application URL',
+            'INVALID_PORTAL_BASE_URL'
+          );
+      } catch {
+        return Result.fail('Invalid Portal Base URL', 'INVALID_PORTAL_BASE_URL');
+      }
+    }
     const updates: Partial<AppSettings> = {};
 
     // System settings
@@ -323,6 +343,7 @@ export const settingsService = {
     if (input.language !== undefined) updates.language = input.language;
     if (input.appName !== undefined) updates.appName = input.appName.trim();
     if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
+    if (input.portalBaseUrl !== undefined) updates.portalBaseUrl = portalBaseUrl;
     if (input.reporterPortalLimits !== undefined) {
       updates.reporterPortalLimits = mergeDefined(
         current.reporterPortalLimits,

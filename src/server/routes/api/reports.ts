@@ -61,15 +61,24 @@ reports.get('/reporter-activity/count', (c) => {
   return c.json({ success: true, count: result.value });
 });
 
-reports.post('/:id/reporter-activity/seen', authorize(['admin', 'editor']), async (c) => {
-  const result = await reportsService.acknowledgeReporterActivity(c.req.param('id'));
-  if (!result.success)
-    return c.json(
-      { success: false, error: result.code, message: result.error },
-      result.code === 'NOT_FOUND' ? 404 : 403
+reports.post(
+  '/:id/reporter-activity/seen',
+  authorize(['admin', 'editor']),
+  validate({ params: schemas.id, body: schemas.reporterActivitySeen }),
+  async (c) => {
+    const { lastReporterActivityAt } = await c.req.json<{ lastReporterActivityAt: string }>();
+    const result = await reportsService.acknowledgeReporterActivity(
+      c.req.param('id'),
+      lastReporterActivityAt
     );
-  return c.json({ success: true });
-});
+    if (!result.success)
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'NOT_FOUND' ? 404 : 403
+      );
+    return c.json({ success: true });
+  }
+);
 
 // Create Manual Report (Admin and Editor)
 

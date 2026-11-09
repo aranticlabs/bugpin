@@ -48,11 +48,11 @@ export const reporterOwnershipRepo = {
       [email]
     );
   },
-  attachClaimable(reporterId: string, email: string): Array<{ id: string }> {
+  attachClaimable(reporterId: string, email: string): Array<{ id: string; projectId: string }> {
     return getDb()
-      .query<{ id: string }, [string, string]>(
+      .query<{ id: string; projectId: string }, [string, string]>(
         `UPDATE reports SET reporter_id = ?, claimable_email = NULL, owner_seen_at = NULL
-       WHERE reporter_id IS NULL AND claimable_email = ? AND project_id IN (${enabledProject}) RETURNING id`
+       WHERE reporter_id IS NULL AND claimable_email = ? AND project_id IN (${enabledProject}) RETURNING id, project_id AS projectId`
       )
       .all(reporterId, email);
   },

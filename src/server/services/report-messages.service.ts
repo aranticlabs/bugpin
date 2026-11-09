@@ -1,3 +1,5 @@
+import type { ReportOwnerChangedEvent } from '@shared/types';
+import { getEEHooks } from '../utils/ee-hooks.js';
 import { transaction } from '../database/database.js';
 import { reportMessagesRepo } from '../database/repositories/report-messages.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
@@ -124,6 +126,7 @@ async function writeMessage(
     return Result.fail('A message can have at most 5 files', 'INVALID_FILE');
   const staged: CreateFileData[] = [];
   let committed = false;
+  const ownershipChanges: ReportOwnerChangedEvent[] = [];
   let ownershipFailure: Result<ReportMessage> | undefined;
   let releaseVideo: (() => void) | undefined;
   try {
@@ -243,7 +246,8 @@ async function writeMessage(
         const ownership = reporterOwnershipService.setInTransaction(
           reportId,
           { claimableEmail: current.value.reporterEmail! },
-          author.userId
+          author.userId,
+          ownershipChanges
         );
         if (!ownership.success) {
           ownershipFailure = ownership;
@@ -255,6 +259,28 @@ async function writeMessage(
       return Result.ok({ ...message, files: savedFiles });
     });
     committed = result.success;
+    if (result.success) {
+      reporterOwnershipService.announce(ownershipChanges);
+      const message = result.value;
+      void Promise.resolve()
+        .then(() =>
+          getEEHooks().onReportMessageCreated({
+            reportId,
+            projectId: access.value.projectId,
+            messageId: message.id,
+            authorKind: message.authorKind,
+            body: message.body,
+            createdAt: message.createdAt,
+            files: message.files.map(({ id, type, mimeType, sizeBytes }) => ({
+              id,
+              type,
+              mimeType,
+              sizeBytes,
+            })),
+          })
+        )
+        .catch(() => logger.warn('Message webhook dispatch failed', { reportId }));
+    }
     return result;
   } catch (error) {
     if (ownershipFailure) return ownershipFailure;
