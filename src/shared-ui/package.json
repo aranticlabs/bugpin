@@ -1,6 +1,5 @@
 {
   "name": "@bugpin/shared-ui",
-  "version": "1.2.6",
   "private": true,
   "type": "module",
   "scripts": {
