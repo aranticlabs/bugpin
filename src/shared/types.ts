@@ -622,6 +622,8 @@ export interface Session {
 export interface FileRecord {
   id: string;
   reportId: string;
+  messageId: string | null;
+  uploadedByReporterId: string | null;
   type: FileType;
   filename: string;
   path: string;
@@ -1027,10 +1029,31 @@ export interface EmailTemplates {
   reporterAssignment: EmailTemplate;
 }
 
+export type MessageAuthorKind = 'staff' | 'reporter';
+
+export interface ReportMessage {
+  id: string;
+  reportId: string;
+  authorKind: MessageAuthorKind;
+  userId: string | null;
+  reporterId: string | null;
+  authorName: string;
+  body: string;
+  hiddenAt: string | null;
+  hiddenByUserId: string | null;
+  files: FileRecord[];
+  createdAt: string;
+}
+
 export interface ReporterMessage {
   id: string;
   reportId: string;
-  userId: string;
+  userId: string | null;
+  authorKind: MessageAuthorKind;
+  reporterId: string | null;
+  authorName: string;
+  files: FileRecord[];
+  hiddenAt: string | null;
   userName?: string;
   message: string;
   sentAt: string;

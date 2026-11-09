@@ -1,0 +1,57 @@
+import type { ReporterMessage } from '@shared/types';
+
+export const mockConversationMessages: ReporterMessage[] = [
+  {
+    id: 'staff-message',
+    reportId: 'report-1',
+    authorKind: 'staff',
+    userId: 'user-1',
+    reporterId: null,
+    authorName: 'Anna Staff',
+    userName: 'Anna Staff',
+    message: 'Could you share more details?',
+    sentAt: '2026-11-01T10:00:00Z',
+    createdAt: '2026-11-01T10:00:00Z',
+    hiddenAt: null,
+    files: [
+      {
+        id: 'image-file',
+        reportId: 'report-1',
+        messageId: 'staff-message',
+        uploadedByReporterId: null,
+        type: 'screenshot',
+        filename: 'screen.png',
+        path: '/screen.png',
+        mimeType: 'image/png',
+        sizeBytes: 100,
+        createdAt: '2026-11-01T10:00:00Z',
+      },
+    ],
+  },
+  {
+    id: 'reporter-message',
+    reportId: 'report-1',
+    authorKind: 'reporter',
+    userId: null,
+    reporterId: 'reporter-1',
+    authorName: 'Taylor Reporter',
+    message: 'Here is a video of the issue.',
+    sentAt: '2026-11-01T11:00:00Z',
+    createdAt: '2026-11-01T11:00:00Z',
+    hiddenAt: null,
+    files: [
+      {
+        id: 'video-file',
+        reportId: 'report-1',
+        messageId: 'reporter-message',
+        uploadedByReporterId: 'reporter-1',
+        type: 'video',
+        filename: 'recording.mp4',
+        path: '/recording.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: 200,
+        createdAt: '2026-11-01T11:00:00Z',
+      },
+    ],
+  },
+];

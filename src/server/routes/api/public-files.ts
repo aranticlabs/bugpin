@@ -15,11 +15,8 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
   try {
     const result = await publicFilesService.get(reportId, filename);
     if (!result.success) {
-      if (result.code === 'FORBIDDEN') {
-        return c.json({ error: result.error }, 403);
-      }
       logger.warn('File not found', { reportId, filename });
-      return c.json({ error: result.error }, 404);
+      return c.json({ error: 'File not found' }, 404);
     }
 
     const { file, handle } = result.value;
@@ -28,8 +25,8 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
       rangeHeader: c.req.header('range'),
       size: file.sizeBytes,
       mimeType: file.mimeType,
-      cacheControl:
-        file.type === 'video' ? 'private, max-age=300' : 'public, max-age=31536000, immutable',
+      cacheControl: 'public, max-age=86400',
+      filename: file.filename,
       headOnly: c.req.method === 'HEAD',
     });
 
@@ -39,7 +36,7 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
         filename,
         path: file.path,
       });
-      return c.json({ error: 'File not found in storage' }, 404);
+      return c.json({ error: 'File not found' }, 404);
     }
 
     return response;

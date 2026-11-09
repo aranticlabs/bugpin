@@ -8,6 +8,8 @@ import {
   REPORTS_SCHEMA,
   REPORT_HISTORY_SCHEMA,
   REPORT_PORTAL_INDEXES,
+  REPORT_MESSAGES_SCHEMA,
+  FILE_MESSAGE_INDEXES,
 } from './portal-schema.js';
 import { rebuildTable } from './table-rebuild.js';
 
@@ -148,6 +150,30 @@ const migrations: Record<string, Migration> = {
   '020_rebuild_report_history_actions.sql': {
     isSatisfied: (db) => schemaMatches(db, REPORT_HISTORY_SCHEMA),
     apply: (db, sql) => rebuildTable(db, 'report_history', sql, copyColumns(db, 'report_history')),
+  },
+  '021_add_report_messages.sql': {
+    isSatisfied: (db) =>
+      schemaMatches(db, REPORT_MESSAGES_SCHEMA) && !hasObjects(db, ['reporter_messages']),
+    apply: (db, sql) => {
+      db.exec(sql);
+      if (hasObjects(db, ['reporter_messages'])) {
+        db.exec(`
+          INSERT INTO report_messages (id, report_id, author_kind, user_id, reporter_id, author_name, body, created_at)
+          SELECT rm.id, rm.report_id, 'staff', u.id, NULL,
+            COALESCE(u.name, 'Former team member'), rm.message, rm.sent_at
+          FROM reporter_messages rm
+          LEFT JOIN users u ON u.id = rm.user_id;
+          DROP TABLE reporter_messages;
+        `);
+      }
+    },
+  },
+  '022_add_file_message_links.sql': {
+    isSatisfied: (db) =>
+      hasColumn(db, 'files', 'message_id') &&
+      hasColumn(db, 'files', 'uploaded_by_reporter_id') &&
+      schemaMatches(db, FILE_MESSAGE_INDEXES),
+    apply: addMissingColumns,
   },
 };
 

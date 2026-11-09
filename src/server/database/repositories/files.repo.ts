@@ -1,6 +1,6 @@
 import { getDb } from '../database.js';
 import { generateFileId } from '../../utils/id.js';
-import type { CreateFileData } from './interfaces.js';
+import type { CreateFileData, IFilesRepository } from './interfaces.js';
 import type { FileRecord, FileType } from '@shared/types';
 
 // Database Row Type
@@ -8,6 +8,8 @@ import type { FileRecord, FileType } from '@shared/types';
 interface FileRow {
   id: string;
   report_id: string;
+  message_id: string | null;
+  uploaded_by_reporter_id: string | null;
   type: FileType;
   filename: string;
   path: string;
@@ -24,6 +26,8 @@ function mapRowToFile(row: FileRow): FileRecord {
   return {
     id: row.id,
     reportId: row.report_id,
+    messageId: row.message_id,
+    uploadedByReporterId: row.uploaded_by_reporter_id,
     type: row.type,
     filename: row.filename,
     path: row.path,
@@ -44,13 +48,25 @@ export const filesRepo = {
    * Create a new file record
    */
   async create(data: CreateFileData): Promise<FileRecord> {
+    return this.insert(data);
+  },
+
+  insert(data: CreateFileData): FileRecord {
     const db = getDb();
     const id = generateFileId();
     const now = new Date().toISOString();
+    if (
+      data.messageId &&
+      !db
+        .query('SELECT 1 FROM report_messages WHERE id = ? AND report_id = ?')
+        .get(data.messageId, data.reportId)
+    ) {
+      throw new Error('Message does not belong to this report');
+    }
 
     db.run(
-      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, created_at, message_id, uploaded_by_reporter_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.reportId,
@@ -62,10 +78,13 @@ export const filesRepo = {
         data.width ?? null,
         data.height ?? null,
         now,
+        data.messageId ?? null,
+        data.uploadedByReporterId ?? null,
       ]
     );
 
-    const file = await this.findById(id);
+    const row = db.query<FileRow, [string]>('SELECT * FROM files WHERE id = ?').get(id);
+    const file = row ? mapRowToFile(row) : null;
     if (!file) {
       throw new Error('Failed to create file record');
     }
@@ -89,6 +108,42 @@ export const filesRepo = {
     const rows = db
       .query('SELECT * FROM files WHERE report_id = ? ORDER BY created_at ASC')
       .all(reportId) as FileRow[];
+    return rows.map(mapRowToFile);
+  },
+
+  async findOriginalByReportId(reportId: string): Promise<FileRecord[]> {
+    return getDb()
+      .query<FileRow, [string]>(
+        'SELECT * FROM files WHERE report_id = ? AND message_id IS NULL ORDER BY created_at, id'
+      )
+      .all(reportId)
+      .map(mapRowToFile);
+  },
+
+  async findByReportMessages(reportId: string, visibleOnly = false): Promise<FileRecord[]> {
+    return getDb()
+      .query<FileRow, [string]>(
+        `SELECT f.* FROM files f JOIN report_messages m ON m.id = f.message_id AND m.report_id = f.report_id
+       WHERE f.report_id = ? ${visibleOnly ? 'AND m.hidden_at IS NULL' : ''} ORDER BY f.created_at, f.id`
+      )
+      .all(reportId)
+      .map(mapRowToFile);
+  },
+
+  getSizeByReporterSince(reporterId: string, since: string): number {
+    return (
+      getDb()
+        .query<{ total: number }, [string, string]>(
+          'SELECT COALESCE(SUM(size_bytes), 0) AS total FROM files WHERE uploaded_by_reporter_id = ? AND julianday(created_at) >= julianday(?)'
+        )
+        .get(reporterId, since)?.total ?? 0
+    );
+  },
+
+  async findByMessageId(messageId: string): Promise<FileRecord[]> {
+    const rows = getDb()
+      .query<FileRow, [string]>('SELECT * FROM files WHERE message_id = ? ORDER BY created_at, id')
+      .all(messageId);
     return rows.map(mapRowToFile);
   },
 
@@ -149,7 +204,7 @@ export const filesRepo = {
         `SELECT SUM(files.size_bytes) AS total
          FROM files
          JOIN reports ON reports.id = files.report_id
-         WHERE reports.project_id = ? AND files.type = 'video' AND files.created_at >= ?`
+         WHERE reports.project_id = ? AND files.type = 'video' AND julianday(files.created_at) >= julianday(?)`
       )
       .get(projectId, since) as { total: number | null };
     return result.total ?? 0;
@@ -190,4 +245,4 @@ export const filesRepo = {
 
     return { local, s3 };
   },
-};
+} satisfies IFilesRepository;

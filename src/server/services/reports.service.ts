@@ -778,7 +778,7 @@ export const reportsService = {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
 
-    const files = await filesRepo.findByReportId(id);
+    const files = await filesRepo.findOriginalByReportId(id);
 
     return Result.ok({
       report: {
@@ -1180,17 +1180,20 @@ export const reportsService = {
   },
 
   /**
-   * Get all files for a report
+   * Get original files for a report
    */
   async getReportFiles(reportId: string): Promise<Result<FileRecord[]>> {
-    const files = await filesRepo.findByReportId(reportId);
+    const files = await filesRepo.findOriginalByReportId(reportId);
     return Result.ok(files);
   },
 
-  async serveFile(fileId: string): Promise<Result<{ file: FileRecord; handle: StoredFileHandle }>> {
+  async serveFile(
+    reportId: string,
+    fileId: string
+  ): Promise<Result<{ file: FileRecord; handle: StoredFileHandle }>> {
     const file = await filesRepo.findById(fileId);
 
-    if (!file) {
+    if (!file || file.reportId !== reportId) {
       return Result.fail('File not found', 'NOT_FOUND');
     }
 

@@ -108,6 +108,8 @@ beforeEach(() => {
   filesRepo.findById = async () => ({
     id: 'file_1',
     reportId: 'rpt_1',
+    messageId: null,
+    uploadedByReporterId: null,
     type: 'screenshot',
     filename: 'file.png',
     path: storedFilePath,
@@ -276,3 +278,36 @@ describe('reports routes extras', () => {
     expect(enqueueMock).toHaveBeenCalledWith('rpt_1', 'int_1');
   });
 });
+
+for (const method of ['GET', 'HEAD']) {
+  for (const range of [undefined, 'bytes=0-1']) {
+    it(`serves chat files privately to staff through ${method}, range ${range ?? 'none'}`, async () => {
+      const file = await filesRepo.findById('file_1');
+      if (!file) throw new Error('Missing file fixture');
+      filesRepo.findById = async () => ({ ...file, messageId: 'hidden-message' });
+      const response = await createApp().request('http://localhost/reports/rpt_1/files/file_1', {
+        method,
+        headers: { cookie: 'session=sess_1', ...(range ? { range } : {}) },
+      });
+      expect(response.status).toBe(range ? 206 : 200);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(response.headers.get('Content-Disposition')).toBe('inline; filename="file.png"');
+      if (method === 'HEAD') expect(await response.text()).toBe('');
+    });
+    it(`rejects mismatched report IDs through ${method}, range ${range ?? 'none'}`, async () => {
+      const response = await createApp().request('http://localhost/reports/other/files/file_1', {
+        method,
+        headers: { cookie: 'session=sess_1', ...(range ? { range } : {}) },
+      });
+      expect(response.status).toBe(404);
+    });
+  }
+  it(`rejects reporter cookies on staff file ${method}`, async () => {
+    const response = await createApp().request('http://localhost/reports/rpt_1/files/file_1', {
+      method,
+      headers: { cookie: 'bugpin_reporter_session=reporter' },
+    });
+    expect(response.status).toBe(401);
+  });
+}

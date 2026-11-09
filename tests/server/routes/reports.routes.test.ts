@@ -129,6 +129,7 @@ beforeEach(() => {
     Result.ok({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } } as never);
 
   filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
   filesRepo.findById = async () => null;
 });
 
