@@ -395,6 +395,7 @@ it('signs out on the server before removing the local account and cached data', 
   await screen.findByLabelText('Email address');
   expect(loggedOut).toBe(true);
   expect(client.getQueryData(['portal', 'private'])).toBeUndefined();
+  expect(screen.getByRole('main')).toHaveFocus();
 });
 
 it('keeps a failed logout retryable instead of pretending the session ended', async () => {
@@ -537,6 +538,59 @@ it('keeps field focus when the page language changes without navigation', async 
   act(() => changeLanguage());
   expect(document.documentElement.lang).toBe('de');
   expect(email).toHaveFocus();
+});
+
+it('expires a rejected profile write, clears private data, and refocuses the same-path sign-in screen', async () => {
+  let auth!: ReturnType<typeof useAuth>;
+  function Controls() {
+    auth = useAuth();
+    return null;
+  }
+  server.use(
+    http.get('/api/portal/me', () => HttpResponse.json({ success: true, reporter })),
+    http.patch('/api/portal/me', () =>
+      HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 })
+    )
+  );
+  const client = mount('/reports/report', '', <Controls />);
+  await screen.findByRole('heading', { name: 'Report report' });
+  client.setQueryData(['portal', 'private'], 'Old account data');
+  const publicConfig = client.getQueryData(['portal', 'config']);
+  await userEvent.click(screen.getByRole('button', { name: 'Jane' }));
+  await act(async () => {
+    await auth.updateProfile({ displayName: 'New name' }).catch(() => undefined);
+  });
+  await screen.findByLabelText('Email address');
+  expect(screen.getByText('Your session expired. Request a new sign-in link.')).toBeInTheDocument();
+  expect(screen.getByRole('main')).toHaveFocus();
+  expect(client.getQueryData(['portal', 'private'])).toBeUndefined();
+  expect(client.getQueryData(['portal', 'config'])).toBe(publicConfig);
+  expect(screen.queryByText('Jane')).not.toBeInTheDocument();
+});
+
+it.each([undefined, 'get', 'GET'] as const)(
+  'does not expire an anonymous GET /me (%s)',
+  async (method) => {
+    mount('/reports');
+    const email = await screen.findByLabelText('Email address');
+    await userEvent.click(email);
+    await act(async () => {
+      await portalFetch('/me', { method }).catch(() => undefined);
+    });
+    expect(
+      screen.queryByText('Your session expired. Request a new sign-in link.')
+    ).not.toBeInTheDocument();
+    expect(email).toHaveFocus();
+  }
+);
+
+it('focuses main when navigating to another report screen', async () => {
+  server.use(http.get('/api/portal/me', () => HttpResponse.json({ success: true, reporter })));
+  mount('/reports/report');
+  await screen.findByRole('heading', { name: 'Report report' });
+  await userEvent.click(screen.getByRole('link', { name: 'My feedback' }));
+  await screen.findByRole('heading', { name: 'My feedback' });
+  expect(screen.getByRole('main')).toHaveFocus();
 });
 
 it.each(['signIn', 'signOut', 'expire', 'reconcile'] as const)(

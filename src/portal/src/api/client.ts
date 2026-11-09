@@ -14,7 +14,11 @@ export async function portalFetch<T>(path: string, init: RequestInit = {}): Prom
     headers.set('Content-Type', 'application/json');
   const response = await fetch(`/api/portal${path}`, { ...init, credentials: 'include', headers });
   init.signal?.throwIfAborted();
-  if (response.status === 401 && path !== '/me' && path !== '/auth/logout')
+  if (
+    response.status === 401 &&
+    !(path === '/me' && (init.method ?? 'GET').toUpperCase() === 'GET') &&
+    path !== '/auth/logout'
+  )
     window.dispatchEvent(new Event('bugpin:portal-session-expired'));
   const body: { success?: boolean; error?: string } = await response.json();
   if (!response.ok || !body.success)
