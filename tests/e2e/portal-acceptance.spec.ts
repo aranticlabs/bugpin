@@ -223,18 +223,23 @@ test('keeps the email unsubscribe URL on the API confirmation surface and accept
   await submit(request, runtime, email);
   const link = await runtime.waitForUnsubscribeLink(email);
   expect(new URL(link).pathname).toBe('/api/portal/unsubscribe');
+  expect(runtime.isSuppressed(email)).toBe(false);
   const get = await request.get(link, { maxRedirects: 0 });
   expect(get.status()).toBe(200);
   expect(get.headers()['location']).toBeUndefined();
   expect(await get.text()).toContain('form method="post"');
+  expect(runtime.isSuppressed(email)).toBe(false);
+  expect((await request.storageState()).cookies).toEqual([]);
   const post = await request.post(link, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     data: 'List-Unsubscribe=One-Click',
   });
   expect(post.status()).toBe(200);
   expect(await post.text()).toContain('unsubscribed');
+  expect(runtime.isSuppressed(email)).toBe(true);
   const again = await request.post(link, { form: { 'List-Unsubscribe': 'One-Click' } });
   expect(again.status()).toBe(200);
+  expect(runtime.isSuppressed(email)).toBe(true);
 });
 
 test('plays private video, exposes duration, and seeks after a portal reply', async ({

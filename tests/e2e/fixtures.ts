@@ -14,6 +14,7 @@ export interface Runtime {
   waitForUnsubscribeLink: (email: string) => Promise<string>;
   waitForLink: (email: string) => Promise<string>;
   expireLinks: (email: string, source: 'request' | 'confirmation') => void;
+  isSuppressed: (email: string) => boolean;
 }
 
 export const test = base.extend<object, { runtime: Runtime }>({
@@ -130,12 +131,17 @@ export const test = base.extend<object, { runtime: Runtime }>({
             received();
           });
         }
+        function database(email: string, operation: 'request' | 'confirmation' | 'suppression') {
+          return execFileSync('bun', [resolve('tests/e2e/database.ts'), email, operation], {
+            env: { ...process.env, E2E_DATA_DIR: directory },
+            encoding: 'utf8',
+          });
+        }
         await use({
           ...ready,
+          isSuppressed: (email) => JSON.parse(database(email, 'suppression')) as boolean,
           expireLinks: (email, source) => {
-            execFileSync('bun', [resolve('tests/e2e/database.ts'), email, source], {
-              env: { ...process.env, E2E_DATA_DIR: directory },
-            });
+            database(email, source);
           },
           waitForLink: (email) => waitForEmailLink(email, 'login'),
           waitForUnsubscribeLink: (email) => waitForEmailLink(email, 'unsubscribe'),
