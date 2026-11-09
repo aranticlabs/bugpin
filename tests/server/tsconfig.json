@@ -27,6 +27,6 @@
       "@shared/*": ["../../src/shared/*"]
     }
   },
-  "include": ["./**/*.ts", "../../src/shared/**/*.ts"],
+  "include": ["./**/*.ts", "../fixtures/dev-proxy.test.ts", "../../src/shared/**/*.ts"],
   "exclude": ["node_modules"]
 }
