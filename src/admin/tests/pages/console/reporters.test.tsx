@@ -27,7 +27,7 @@ beforeEach(() => {
 async function openAction(name: string, user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Actions for jane@example.com' }));
   await user.click(screen.getByRole('menuitem', { name }));
-  return screen.getByRole('dialog');
+  return screen.getByRole('alertdialog');
 }
 
 describe('Reporters', () => {
@@ -106,7 +106,7 @@ describe('Reporters', () => {
     const dialog = await openAction(label, user);
     expect(applied).toBe(false);
     await user.click(within(dialog).getByRole('button', { name: label }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(applied).toBe(true);
   });
 
@@ -145,5 +145,69 @@ describe('Reporters', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Suspend reporter' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Reporter no longer exists');
     expect(dialog).toBeInTheDocument();
+  });
+
+  it('focuses Cancel and restores focus after cancelling permanent deletion', async () => {
+    let removed = false;
+    server.use(
+      http.delete('/api/reporters/rptr_jane', () => {
+        removed = true;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<Reporters />);
+    const dialog = await openAction('Delete reporter', user);
+    expect(dialog).toHaveAccessibleName('Delete reporter');
+    expect(dialog).toHaveAccessibleDescription(/permanently deletes this reporter account/i);
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    expect(cancel).toHaveFocus();
+    await user.click(cancel);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(removed).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Actions for jane@example.com' })).toHaveFocus()
+    );
+  });
+
+  it('locks deletion and contact erasure while the request is pending', async () => {
+    let finish!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    server.use(http.delete('/api/reporters/rptr_jane', () => response));
+    const user = userEvent.setup();
+    renderWithProviders(<Reporters />);
+    const dialog = await openAction('Delete reporter', user);
+    await user.click(within(dialog).getByRole('button', { name: 'Delete reporter' }));
+    expect(await within(dialog).findByRole('button', { name: 'Updating...' })).toBeDisabled();
+    expect(within(dialog).getByRole('checkbox')).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(dialog).toBeInTheDocument();
+    finish(HttpResponse.json({ success: true }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('accepts each defined status filter', async () => {
+    const requested: Array<string | null> = [];
+    server.use(
+      http.get('/api/reporters', ({ request }) => {
+        requested.push(new URL(request.url).searchParams.get('status'));
+        return HttpResponse.json({ reporters: rows, total: rows.length, nextCursor: null });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<Reporters />);
+    await screen.findByText('jane@example.com');
+    for (const [label, status] of [
+      ['Active', 'active'],
+      ['Suspended', 'suspended'],
+      ['All statuses', null],
+    ] as const) {
+      await user.click(screen.getByRole('combobox', { name: 'Status' }));
+      await user.click(screen.getByRole('option', { name: label }));
+      await waitFor(() => expect(requested[requested.length - 1]).toBe(status));
+    }
   });
 });

@@ -8,6 +8,17 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -19,18 +30,22 @@ import { maskEmail } from '@shared/mask-email';
 import type { Report } from '@shared/types';
 import type { ReportOwner } from '@shared/reporter-types';
 
+type OwnerMode = 'assign' | 'claimable';
+
 export function OwnerField({
   report,
   canEdit,
 }: {
-  report: Pick<Report, 'id' | 'owner' | 'reporterId' | 'claimableEmail'>;
+  report: Pick<Report, 'id' | 'owner' | 'reporterId' | 'claimableEmail' | 'reporterEmail'>;
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState('assign');
+  const [mode, setMode] = useState<OwnerMode>('assign');
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [email, setEmail] = useState('');
   const ownerEmail = report.owner?.reporter?.email ?? report.claimableEmail;
+  const correspondentEmail = ownerEmail ?? report.owner?.correspondentEmail ?? report.reporterEmail;
   const hasOwner = Boolean(report.reporterId || report.claimableEmail);
 
   const changed = () => {
@@ -69,7 +84,10 @@ export function OwnerField({
   });
   const remove = useMutation({
     mutationFn: () => api.delete(`/reports/${report.id}/owner`),
-    onSuccess: changed,
+    onSuccess: () => {
+      setConfirmRemove(false);
+      changed();
+    },
   });
   const busy = save.isPending || remove.isPending;
 
@@ -79,6 +97,11 @@ export function OwnerField({
       <p className="break-all text-sm">
         {ownerEmail ? maskEmail(ownerEmail) : report.reporterId ? 'Assigned reporter' : 'No owner'}
       </p>
+      {correspondentEmail && (
+        <p className="break-all text-xs text-muted-foreground">
+          Email recipient: {maskEmail(correspondentEmail)}
+        </p>
+      )}
       {report.claimableEmail && (
         <p className="text-xs text-muted-foreground">Attaches when this email signs in.</p>
       )}
@@ -103,21 +126,55 @@ export function OwnerField({
             Change owner
           </Button>
           {hasOwner && (
-            <Button
-              variant="ghost-destructive"
-              size="sm"
-              disabled={busy}
-              onClick={() => remove.mutate()}
+            <AlertDialog
+              open={confirmRemove}
+              onOpenChange={(value) => {
+                if (!busy) setConfirmRemove(value);
+              }}
             >
-              Remove owner
-            </Button>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost-destructive"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => remove.reset()}
+                >
+                  Remove owner
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove owner?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes portal access to this report and clears claimability. Signing in
+                    again will not restore access.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <p className="break-all text-sm font-medium">
+                  {ownerEmail ? maskEmail(ownerEmail) : 'Assigned reporter'}
+                </p>
+                {remove.isError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {getApiErrorMessage(remove.error, 'Failed to remove owner')}
+                  </p>
+                )}
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    disabled={busy || !canEdit}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (!busy && canEdit) remove.mutate();
+                    }}
+                  >
+                    {remove.isPending ? 'Removing...' : 'Remove owner'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
-      )}
-      {remove.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {getApiErrorMessage(remove.error, 'Failed to remove owner')}
-        </p>
       )}
       <Dialog
         open={open}
@@ -145,6 +202,7 @@ export function OwnerField({
               <Select
                 value={mode}
                 onValueChange={(value) => {
+                  if (value !== 'assign' && value !== 'claimable') return;
                   setMode(value);
                   save.reset();
                 }}

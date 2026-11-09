@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MoreHorizontal } from 'lucide-react';
@@ -35,13 +35,15 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../components/ui/dialog';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import type { ReporterSummary } from '@shared/reporter-types';
 
 interface ReporterPage {
@@ -49,6 +51,7 @@ interface ReporterPage {
   nextCursor: string | null;
   total: number;
 }
+type ReporterStatus = 'all' | 'active' | 'suspended';
 type ReporterAction = 'suspend' | 'unsuspend' | 'revoke-sessions' | 'delete';
 const actionLabels: Record<ReporterAction, string> = {
   suspend: 'Suspend reporter',
@@ -71,7 +74,8 @@ export function Reporters() {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
+  const [status, setStatus] = useState<ReporterStatus>('all');
+  const returnFocus = useRef<HTMLButtonElement | null>(null);
   const [confirmation, setConfirmation] = useState<{
     reporter: ReporterSummary;
     action: ReporterAction;
@@ -144,7 +148,12 @@ export function Reporters() {
         </Button>
         <div className="space-y-2">
           <Label htmlFor="reporter-status">Status</Label>
-          <Select value={status} onValueChange={setStatus}>
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              if (value === 'all' || value === 'active' || value === 'suspended') setStatus(value);
+            }}
+          >
             <SelectTrigger id="reporter-status" className="sm:w-40">
               <SelectValue />
             </SelectTrigger>
@@ -249,6 +258,12 @@ export function Reporters() {
                           variant="ghost"
                           size="icon"
                           aria-label={`Actions for ${reporter.email}`}
+                          onFocus={(event) => {
+                            returnFocus.current = event.currentTarget;
+                          }}
+                          onPointerDown={(event) => {
+                            returnFocus.current = event.currentTarget;
+                          }}
                         >
                           <MoreHorizontal />
                         </Button>
@@ -296,19 +311,25 @@ export function Reporters() {
           {query.isFetchingNextPage ? 'Loading...' : 'Load more'}
         </Button>
       )}
-      <Dialog
+      <AlertDialog
         open={confirmation !== null}
         onOpenChange={(open) => {
           if (!open && !action.isPending) setConfirmation(null);
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{confirmation && actionLabels[confirmation.action]}</DialogTitle>
-            <DialogDescription>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (returnFocus.current?.isConnected) returnFocus.current.focus();
+            else document.getElementById('reporter-search')?.focus();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmation && actionLabels[confirmation.action]}</AlertDialogTitle>
+            <AlertDialogDescription>
               {confirmation && actionDescriptions[confirmation.action]}
-            </DialogDescription>
-          </DialogHeader>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <p className="break-all text-sm font-medium">{confirmation?.reporter.email}</p>
           {confirmation?.action === 'delete' && (
             <div className="flex items-start gap-2">
@@ -328,26 +349,27 @@ export function Reporters() {
               {getApiErrorMessage(action.error, 'Failed to update reporter')}
             </p>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={action.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={
+                confirmation?.action === 'delete' ||
+                confirmation?.action === 'suspend' ||
+                confirmation?.action === 'revoke-sessions'
+                  ? 'destructive'
+                  : 'default'
+              }
               disabled={action.isPending}
-              onClick={() => setConfirmation(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant={confirmation?.action === 'delete' ? 'destructive' : 'default'}
-              disabled={action.isPending}
-              onClick={() => {
-                if (confirmation) action.mutate(confirmation);
+              onClick={(event) => {
+                event.preventDefault();
+                if (confirmation && !action.isPending) action.mutate(confirmation);
               }}
             >
               {action.isPending ? 'Updating...' : confirmation && actionLabels[confirmation.action]}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

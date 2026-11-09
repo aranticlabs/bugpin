@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
-import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
 import { ReportDetail } from '../../../pages/workspace/ReportDetail';
 import { server } from '../../mocks/server';
 import { mockReports } from '../../mocks/handlers';
@@ -59,6 +59,9 @@ describe('ReportDetail', () => {
     );
     expect(await screen.findByText('j***@example.com')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Remove owner' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove owner' })
+    );
     expect(await screen.findByText('No owner')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove owner' })).not.toBeInTheDocument();
   });
