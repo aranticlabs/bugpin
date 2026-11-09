@@ -33,33 +33,38 @@ export const reporterOwnershipService = {
     input: { reporterId: string } | { claimableEmail: string },
     userId: string
   ): Result<ReportOwner> {
-    return reportersRepo.transaction(() => {
-      const report = reporterOwnershipRepo.findByReportId(reportId);
-      if (!report) return Result.fail('Report not found', 'NOT_FOUND');
-      const access = checkProjectLicense(report.projectId);
-      if (!access.success) return access;
-      const reporterId = 'reporterId' in input ? input.reporterId : null;
-      const claimableEmail =
-        'claimableEmail' in input ? normalizeEmail(input.claimableEmail) : null;
-      if (reporterId !== null && !reportersRepo.findById(reporterId))
-        return Result.fail('Reporter not found', 'NOT_FOUND');
-      if (claimableEmail !== null && !isValidEmail(claimableEmail))
-        return Result.fail('Invalid email address', 'INVALID_EMAIL');
-      if (report.reporterId !== reporterId || report.claimableEmail !== claimableEmail) {
-        reporterOwnershipRepo.setOwner(reportId, reporterId, claimableEmail);
-        reportHistoryRepo.insert({
-          reportId,
-          userId,
-          action: reporterId ? 'owner_assigned' : 'claimable_set',
-          oldValue: report.reporterId ?? report.claimableEmail,
-          newValue: reporterId ?? claimableEmail,
-        });
-      }
-      return this.describeOwner({
-        reporterId: reporterId ?? undefined,
-        claimableEmail: claimableEmail ?? undefined,
-        reporterEmail: report.reporterEmail ?? undefined,
+    return reportersRepo.transaction(() => this.setInTransaction(reportId, input, userId));
+  },
+
+  setInTransaction(
+    reportId: string,
+    input: { reporterId: string } | { claimableEmail: string },
+    userId: string
+  ): Result<ReportOwner> {
+    const report = reporterOwnershipRepo.findByReportId(reportId);
+    if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
+    const reporterId = 'reporterId' in input ? input.reporterId : null;
+    const claimableEmail = 'claimableEmail' in input ? normalizeEmail(input.claimableEmail) : null;
+    if (reporterId !== null && !reportersRepo.findById(reporterId))
+      return Result.fail('Reporter not found', 'NOT_FOUND');
+    if (claimableEmail !== null && !isValidEmail(claimableEmail))
+      return Result.fail('Invalid email address', 'INVALID_EMAIL');
+    if (report.reporterId !== reporterId || report.claimableEmail !== claimableEmail) {
+      reporterOwnershipRepo.setOwner(reportId, reporterId, claimableEmail);
+      reportHistoryRepo.insert({
+        reportId,
+        userId,
+        action: reporterId ? 'owner_assigned' : 'claimable_set',
+        oldValue: report.reporterId ?? report.claimableEmail,
+        newValue: reporterId ?? claimableEmail,
       });
+    }
+    return this.describeOwner({
+      reporterId: reporterId ?? undefined,
+      claimableEmail: claimableEmail ?? undefined,
+      reporterEmail: report.reporterEmail ?? undefined,
     });
   },
 

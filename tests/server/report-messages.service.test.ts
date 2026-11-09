@@ -108,6 +108,55 @@ async function uploadLimit(mb: number): Promise<void> {
 }
 
 describe('message writes', () => {
+  it('requires confirmation before staging files or changing claimability', async () => {
+    getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+    expect(
+      await reportMessagesService.send('report', 'staff', 'Reply', false, [image()])
+    ).toMatchObject({ success: false, code: 'CONFIRMATION_REQUIRED' });
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(stagedFiles()).toEqual([]);
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: null,
+    });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+    const confirmed = await reportMessagesService.send(
+      'report',
+      'staff',
+      '',
+      true,
+      [image()],
+      true
+    );
+    expect(confirmed.success).toBe(true);
+    expect(counts()).toEqual({ messages: 1, files: 1 });
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: 'reporter@example.com',
+    });
+    expect(getDb().query('SELECT action, user_id FROM report_history').all()).toEqual([
+      { action: 'claimable_set', user_id: 'staff' },
+    ]);
+  });
+
+  it('rolls confirmed claimability, history and message back when a file insert fails', async () => {
+    getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
+    const failure = spyOn(filesRepo, 'insert').mockImplementation(() => {
+      throw new Error('Insert failed');
+    });
+    try {
+      expect(
+        await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)
+      ).toMatchObject({ success: false, code: 'MESSAGE_WRITE_FAILED' });
+      expect(counts()).toEqual({ messages: 0, files: 0 });
+      expect(stagedFiles()).toEqual([]);
+      expect(
+        getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()
+      ).toEqual({ claimable_email: null });
+      expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+    } finally {
+      failure.mockRestore();
+    }
+  });
+
   it('saves text and media with a server-derived author snapshot', async () => {
     const notify = spyOn(notificationsService, 'notifyReporterMessage');
     try {
@@ -129,6 +178,13 @@ describe('message writes', () => {
         uploadedByReporterId: null,
       });
       expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'report' }),
+        'A reply',
+        'staff',
+        true,
+        result.value.files
+      );
     } finally {
       notify.mockRestore();
     }

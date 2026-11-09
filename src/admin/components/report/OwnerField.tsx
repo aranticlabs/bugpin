@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../api/client';
 import { formatDateTime } from '../../lib/format';
+import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -36,7 +37,15 @@ export function OwnerField({
   report,
   canEdit,
 }: {
-  report: Pick<Report, 'id' | 'owner' | 'reporterId' | 'claimableEmail' | 'reporterEmail'>;
+  report: Pick<
+    Report,
+    | 'id'
+    | 'owner'
+    | 'reporterId'
+    | 'claimableEmail'
+    | 'reporterEmail'
+    | 'originalDescriptionBackfilled'
+  >;
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -190,6 +199,14 @@ export function OwnerField({
               login.
             </DialogDescription>
           </DialogHeader>
+          {report.originalDescriptionBackfilled && (
+            <Alert>
+              <AlertDescription>
+                Reporters assigned to this historical report will see its current description as the
+                backfilled original, which may include staff edits.
+              </AlertDescription>
+            </Alert>
+          )}
           <form
             className="min-w-0 space-y-4"
             onSubmit={(event) => {

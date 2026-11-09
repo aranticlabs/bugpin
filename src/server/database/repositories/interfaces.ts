@@ -340,6 +340,7 @@ export type MessageAuthor =
   { kind: 'staff'; userId: string } | { kind: 'reporter'; reporterId: string };
 
 export interface MessageWriteContext {
+  claimableEmail: string | null;
   projectId: string;
   status: ReportStatus;
   reporterId: string | null;

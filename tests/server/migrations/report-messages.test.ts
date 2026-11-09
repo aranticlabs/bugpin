@@ -125,7 +125,11 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
     ]);
     const sent = await app.request('http://localhost/reports/report/reporter-messages', {
       method: 'POST',
-      headers: { cookie: 'session=session', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=session',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ message: 'A new reply', ccSender: true }),
     });
     expect(sent.status).toBe(200);
@@ -140,7 +144,8 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
       expect.objectContaining({ id: 'report' }),
       'A new reply',
       'staff',
-      true
+      true,
+      []
     );
   } finally {
     auth.mockRestore();

@@ -87,12 +87,13 @@ export const reportMessagesRepo = {
           status: ReportStatus;
           reporter_id: string | null;
           reporter_email: string | null;
+          claimable_email: string | null;
           settings: string;
           project_is_active: number;
         },
         [string]
       >(
-        `SELECT r.project_id, r.status, r.reporter_id, r.reporter_email, p.settings, p.is_active AS project_is_active
+        `SELECT r.project_id, r.status, r.reporter_id, r.reporter_email, r.claimable_email, p.settings, p.is_active AS project_is_active
        FROM reports r JOIN projects p ON p.id = r.project_id
        WHERE r.id = ? AND p.deleted_at IS NULL`
       )
@@ -103,6 +104,7 @@ export const reportMessagesRepo = {
           status: row.status,
           reporterId: row.reporter_id,
           reporterEmail: row.reporter_email,
+          claimableEmail: row.claimable_email,
           settings: JSON.parse(row.settings) as ProjectSettings,
           projectIsActive: row.project_is_active === 1,
         }

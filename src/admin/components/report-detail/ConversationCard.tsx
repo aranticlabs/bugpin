@@ -12,7 +12,8 @@ import { Spinner } from '../ui/spinner';
 import { FileDropzone } from '../FileDropzone';
 import { ImageLightbox } from '../report/ImageLightbox';
 import { usePreference } from '../../hooks/useUserPreferences';
-import { getApiErrorMessage } from '../../api/client';
+import { PortalAccessConfirmation } from './PortalAccessConfirmation';
+import { isApiError, getApiErrorMessage } from '../../api/client';
 import { formatDateTime } from '../../lib/format';
 import type { useReporterMessages } from '../../hooks/useReporterMessages';
 
@@ -79,6 +80,7 @@ export function ConversationCard({
   const [files, setFiles] = useState<File[]>([]);
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [confirming, setConfirming] = useState(false);
   const [image, setImage] = useState<{ url: string; filename: string } | null>(null);
 
   function changeFiles(next: File[]) {
@@ -102,11 +104,29 @@ export function ConversationCard({
   async function send(event: FormEvent) {
     event.preventDefault();
     if (conversation.isSending || (!message.trim() && files.length === 0)) return;
-    try {
-      await conversation.sendMessageAsync({ message: message.trim(), ccSender, files });
-    } catch {
+    if (conversation.portal?.requiresPortalAccessConfirmation) {
+      setConfirming(true);
       return;
     }
+    await submit(false);
+  }
+
+  async function submit(confirmPortalAccess: boolean) {
+    if (conversation.isSending) return;
+    try {
+      await conversation.sendMessageAsync({
+        message: message.trim(),
+        ccSender,
+        files,
+        confirmPortalAccess: confirmPortalAccess || undefined,
+      });
+    } catch (error) {
+      if (isApiError(error) && error.response?.data?.error === 'CONFIRMATION_REQUIRED')
+        setConfirming(true);
+      else setConfirming(false);
+      return;
+    }
+    setConfirming(false);
     setMessage('');
     setCcSender(false);
     setFiles([]);
@@ -138,6 +158,16 @@ export function ConversationCard({
                   : hasOwner
                     ? 'Visible to the reporter in the portal'
                     : 'No reporter currently has portal access to this report'}
+              </p>
+            )}
+            {conversation.portal?.ownerLastLoginAt && (
+              <p className="text-sm text-muted-foreground">
+                Last reporter login {formatDateTime(conversation.portal.ownerLastLoginAt)}
+              </p>
+            )}
+            {conversation.portal?.emailSuppressed && (
+              <p className="text-sm text-muted-foreground">
+                Reporter opted out of update emails. Messages remain in the conversation.
               </p>
             )}
             {conversation.isLoading ? (
@@ -345,6 +375,12 @@ export function ConversationCard({
             )}
           </CardContent>
         </CollapsibleContent>
+        <PortalAccessConfirmation
+          open={confirming}
+          busy={conversation.isSending}
+          onOpenChange={setConfirming}
+          onConfirm={() => void submit(true)}
+        />
         <ImageLightbox image={image} onClose={() => setImage(null)} />
       </Card>
     </Collapsible>

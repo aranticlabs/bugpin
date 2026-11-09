@@ -19,6 +19,7 @@ function errorStatus(code: string | undefined) {
     case 'PROJECT_NOT_LICENSED':
     case 'MESSAGING_DISABLED':
       return 403;
+    case 'CONFIRMATION_REQUIRED':
     case 'REPORT_CLOSED':
       return 409;
     case 'UPLOAD_QUOTA_EXCEEDED':
@@ -73,8 +74,17 @@ reporterMessages.post(
         }
         uploads = values.filter((value) => typeof value !== 'string');
         const cc = form.get('ccSender');
+        const confirm = form.get('confirmPortalAccess');
         body = {
           message: form.get('message') ?? '',
+          confirmPortalAccess:
+            confirm === null
+              ? undefined
+              : confirm === 'true'
+                ? true
+                : confirm === 'false'
+                  ? false
+                  : confirm,
           ccSender: cc === null ? undefined : cc === 'true' ? true : cc === 'false' ? false : cc,
         };
       } else {
@@ -102,7 +112,8 @@ reporterMessages.post(
       user.id,
       parsed.data.message,
       parsed.data.ccSender,
-      uploads
+      uploads,
+      parsed.data.confirmPortalAccess
     );
     if (!result.success)
       return c.json(
@@ -120,7 +131,13 @@ reporterMessages.get('/:id/reporter-messages', validate({ params: schemas.id }),
       { success: false, error: result.code, message: result.error },
       errorStatus(result.code)
     );
-  return c.json({ success: true, messages: result.value });
+  const portal = await reportMessagesService.portalContext(c.req.param('id'));
+  if (!portal.success)
+    return c.json(
+      { success: false, error: portal.code, message: portal.error },
+      errorStatus(portal.code)
+    );
+  return c.json({ success: true, messages: result.value, portal: portal.value });
 });
 
 for (const [action, hidden] of [

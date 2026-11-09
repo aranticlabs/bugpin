@@ -14,3 +14,12 @@ export interface ReporterSummary {
   lastLoginAt: string | null;
   status: 'active' | 'suspended';
 }
+
+export interface StaffConversationPortal {
+  visible: boolean;
+  ownerEmail: string | null;
+  correspondentEmail: string | null;
+  ownerLastLoginAt: string | null;
+  emailSuppressed: boolean;
+  requiresPortalAccessConfirmation: boolean;
+}

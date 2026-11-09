@@ -3,6 +3,11 @@ import { reportMessagesRepo } from '../database/repositories/report-messages.rep
 import { filesRepo } from '../database/repositories/files.repo.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
+import { reporterOwnershipService } from './reporter-ownership.service.js';
+import { reporterCorrespondenceService } from './reporter-correspondence.service.js';
+import { reporterSuppressionService } from './reporter-suppression.service.js';
+import { projectsRepo } from '../database/repositories/projects.repo.js';
+import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { notificationsService } from './notifications.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { uploadQuotaService } from './upload-quota.service.js';
@@ -84,17 +89,29 @@ function checkAccess(
       return Result.fail('Messaging is disabled for this project', 'MESSAGING_DISABLED');
     if (author.kind === 'reporter' && context.status === 'closed')
       return Result.fail('This report is closed', 'REPORT_CLOSED');
-    if (author.kind === 'staff' && !context.reporterId && !context.reporterEmail)
+    if (
+      author.kind === 'staff' &&
+      !context.reporterId &&
+      !context.claimableEmail &&
+      !context.reporterEmail
+    )
       return Result.fail('Report does not have a reporter email address', 'NO_REPORTER_EMAIL');
   }
   return Result.ok(context);
+}
+
+function needsPortalAccess(context: MessageWriteContext): boolean {
+  return Boolean(
+    context.settings.reporterPortal?.enabled && !context.reporterId && !context.claimableEmail
+  );
 }
 
 async function writeMessage(
   reportId: string,
   author: MessageAuthor,
   body: string,
-  files: MessageUpload[]
+  files: MessageUpload[],
+  confirmPortalAccess = false
 ): Promise<Result<ReportMessage>> {
   const text = body.trim();
   if (text.length > 5000 || (!text && files.length === 0))
@@ -111,6 +128,8 @@ async function writeMessage(
     let settings = await settingsCacheService.getAll();
     const access = checkAccess(reportId, author, settings);
     if (!access.success) return access;
+    if (author.kind === 'staff' && needsPortalAccess(access.value) && !confirmPortalAccess)
+      return Result.fail('Confirm that this message grants portal access', 'CONFIRMATION_REQUIRED');
     const screenshot = access.value.settings.screenshot;
     const maxImageMb = screenshot?.maxImageUploadSizeMb ?? settings.screenshot.maxImageUploadSizeMb;
     const maxVideoMb = screenshot?.maxVideoUploadSizeMb ?? settings.screenshot.maxVideoUploadSizeMb;
@@ -183,6 +202,11 @@ async function writeMessage(
     const result = transaction((): Result<ReportMessage> => {
       const current = checkAccess(reportId, author, settings);
       if (!current.success) return current;
+      if (author.kind === 'staff' && needsPortalAccess(current.value) && !confirmPortalAccess)
+        return Result.fail(
+          'Confirm that this message grants portal access',
+          'CONFIRMATION_REQUIRED'
+        );
       const currentScreenshot = current.value.settings.screenshot;
       for (const file of staged) {
         const limit = file.mimeType.startsWith('video/')
@@ -213,6 +237,15 @@ async function writeMessage(
       }
       const message = reportMessagesRepo.insert(reportId, author, text);
       if (!message) return Result.fail('Author is no longer available', 'UNAUTHORIZED');
+      if (author.kind === 'staff' && needsPortalAccess(current.value)) {
+        Result.unwrap(
+          reporterOwnershipService.setInTransaction(
+            reportId,
+            { claimableEmail: current.value.reporterEmail! },
+            author.userId
+          )
+        );
+      }
       const savedFiles = staged.map((file) => filesRepo.insert({ ...file, messageId: message.id }));
       reportMessagesRepo.recordActivity(reportId, author, message.createdAt);
       return Result.ok({ ...message, files: savedFiles });
@@ -252,15 +285,22 @@ export const reportMessagesService = {
     userId: string,
     message: string,
     ccSender?: boolean,
-    files: MessageUpload[] = []
+    files: MessageUpload[] = [],
+    confirmPortalAccess = false
   ): Promise<Result<ReporterMessage>> {
-    const saved = await writeMessage(reportId, { kind: 'staff', userId }, message, files);
+    const saved = await writeMessage(
+      reportId,
+      { kind: 'staff', userId },
+      message,
+      files,
+      confirmPortalAccess
+    );
     if (!saved.success) return saved;
     try {
       const report = await reportsRepo.findById(reportId);
       if (report)
         notificationsService
-          .notifyReporterMessage(report, saved.value.body, userId, ccSender)
+          .notifyReporterMessage(report, saved.value.body, userId, ccSender, saved.value.files)
           .catch((error) => {
             logger.error('Failed to send reporter message notification', error, { reportId });
           });
@@ -277,6 +317,24 @@ export const reportMessagesService = {
     files: MessageUpload[] = []
   ): Promise<Result<ReportMessage>> {
     return writeMessage(reportId, { kind: 'reporter', reporterId }, body, files);
+  },
+
+  async portalContext(reportId: string) {
+    const report = await reportsRepo.findById(reportId);
+    if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+    const project = await projectsRepo.findById(report.projectId);
+    const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
+    const email = reporterCorrespondenceService.recipient(report);
+    return Result.ok({
+      visible: Boolean(project?.settings.reporterPortal?.enabled && report.reporterId),
+      ownerEmail: owner?.email ?? null,
+      correspondentEmail: email,
+      ownerLastLoginAt: owner?.lastLoginAt ?? null,
+      emailSuppressed: email ? reporterSuppressionService.isSuppressed(email) : false,
+      requiresPortalAccessConfirmation: Boolean(
+        project?.settings.reporterPortal?.enabled && !report.reporterId && !report.claimableEmail
+      ),
+    });
   },
 
   async listByReport(reportId: string): Promise<Result<ReporterMessage[]>> {

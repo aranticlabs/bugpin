@@ -84,6 +84,83 @@ afterEach(() => {
 });
 
 describe('ConversationCard', () => {
+  it('confirms first portal access, preserves the draft on cancel, and sends explicit consent', async () => {
+    server.use(
+      http.get('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({
+          success: true,
+          messages,
+          portal: { requiresPortalAccessConfirmation: true },
+        })
+      )
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<Harness hasOwner={false} />);
+    await screen.findByRole('list', { name: 'Messages' });
+    await user.type(
+      screen.getByRole('textbox', { name: 'Message to reporter' }),
+      'Please review this.'
+    );
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+    expect(sent).toEqual([]);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toHaveValue(
+      'Please review this.'
+    );
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Grant access and send' }));
+    await waitFor(() =>
+      expect(sent).toEqual([
+        { message: 'Please review this.', ccSender: false, confirmPortalAccess: true },
+      ])
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('handles a stale access hint and preserves file-only attachments for the confirmed retry', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Confirm portal access'), {
+          isAxiosError: true,
+          response: { data: { error: 'CONFIRMATION_REQUIRED' } },
+        })
+      )
+      .mockResolvedValueOnce({ data: { reporterMessage: messages[0] } });
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+    await user.click(screen.getByRole('button', { name: 'Attach files' }));
+    await user.upload(
+      screen.getByTestId('file-dropzone-input'),
+      new window.File(['image'], 'attachment.png', { type: 'image/png' })
+    );
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Grant access and send' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    const form = post.mock.calls[1][1] as FormData;
+    expect(form.get('message')).toBe('');
+    expect(form.get('confirmPortalAccess')).toBe('true');
+    expect((form.get('files[]') as File).name).toBe('attachment.png');
+  });
+
+  it('shows suppression and last-login hints while keeping the conversation available', async () => {
+    server.use(
+      http.get('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({
+          success: true,
+          messages,
+          portal: { emailSuppressed: true, ownerLastLoginAt: '2026-11-01T12:00:00Z' },
+        })
+      )
+    );
+    renderWithProviders(<Harness />);
+    expect(await screen.findByText(/Reporter opted out of update emails/)).toBeInTheDocument();
+    expect(screen.getByText(/Last reporter login/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toBeEnabled();
+  });
   it('shows both authors, media and authenticated file links', async () => {
     renderWithProviders(<Harness />);
     expect(

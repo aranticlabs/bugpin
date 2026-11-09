@@ -5,6 +5,25 @@ import { renderWithQuery, screen, userEvent, waitFor, within } from '../utils';
 import { OwnerField } from '../../components/report/OwnerField';
 
 describe('OwnerField', () => {
+  it('warns before granting access to a backfilled historical description', async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <OwnerField report={{ id: 'report-1', originalDescriptionBackfilled: true }} canEdit />
+    );
+    await user.click(screen.getByRole('button', { name: 'Change owner' }));
+    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent(
+      'Reporters assigned to this historical report will see its current description as the backfilled original, which may include staff edits.'
+    );
+  });
+
+  it('omits the historical-description warning for an original submission', async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <OwnerField report={{ id: 'report-1', originalDescriptionBackfilled: false }} canEdit />
+    );
+    await user.click(screen.getByRole('button', { name: 'Change owner' }));
+    expect(within(screen.getByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('looks up and assigns an existing reporter without editing contact information', async () => {
     const writes: unknown[] = [];
     const lookups: string[] = [];

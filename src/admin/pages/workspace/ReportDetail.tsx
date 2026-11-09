@@ -4,10 +4,11 @@ import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ScrollArea } from '../../components/ui/scroll-area';
-import { api, getApiErrorMessage } from '../../api/client';
+import { api, isApiError, getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
 import { useReporterMessages, useSendReporterMessage } from '../../hooks/useReporterMessages';
+import { PortalAccessConfirmation } from '../../components/report-detail/PortalAccessConfirmation';
 import { ConversationCard } from '../../components/report-detail/ConversationCard';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -149,6 +150,7 @@ export function ReportDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ url: string; filename: string } | null>(null);
   const [resolveMessage, setResolveMessage] = useState('');
+  const [confirmResolutionAccess, setConfirmResolutionAccess] = useState(false);
   const [resolveCcSender, setResolveCcSender] = useState(false);
   const [showResolveMessage, setShowResolveMessage] = useState(false);
   const [justResolved, setJustResolved] = useState(false);
@@ -213,6 +215,7 @@ export function ReportDetail() {
 
   useEffect(() => {
     setResolveMessage('');
+    setConfirmResolutionAccess(false);
     setResolveCcSender(false);
     setShowResolveMessage(false);
     setJustResolved(false);
@@ -361,7 +364,7 @@ export function ReportDetail() {
     );
   })();
 
-  const hasRecipient = Boolean(report.reporterId || report.reporterEmail);
+  const hasRecipient = Boolean(report.reporterId || report.claimableEmail || report.reporterEmail);
 
   const handleStatusChange = (value: string) => {
     if (value === report.status) return;
@@ -408,13 +411,23 @@ export function ReportDetail() {
     );
   };
 
-  const handleSendResolveMessage = () => {
+  const handleSendResolveMessage = (confirmPortalAccess = false) => {
     if (!resolveMessage.trim() || resolutionSend.isPending) return;
     resolutionSend.mutate(
-      { message: resolveMessage.trim(), ccSender: resolveCcSender },
       {
+        message: resolveMessage.trim(),
+        ccSender: resolveCcSender,
+        confirmPortalAccess: confirmPortalAccess || undefined,
+      },
+      {
+        onError: (error) => {
+          if (isApiError(error) && error.response?.data?.error === 'CONFIRMATION_REQUIRED')
+            setConfirmResolutionAccess(true);
+          else setConfirmResolutionAccess(false);
+        },
         onSuccess: () => {
           setResolveMessage('');
+          setConfirmResolutionAccess(false);
           setResolveCcSender(false);
           setShowResolveMessage(false);
           setJustResolved(false);
@@ -597,6 +610,12 @@ export function ReportDetail() {
             </CardContent>
           </Card>
 
+          <PortalAccessConfirmation
+            open={confirmResolutionAccess}
+            busy={resolutionSend.isPending}
+            onOpenChange={setConfirmResolutionAccess}
+            onConfirm={() => handleSendResolveMessage(true)}
+          />
           <ConversationCard
             key={report.id}
             reportId={report.id}
@@ -969,7 +988,7 @@ export function ReportDetail() {
                                   </label>
                                   <Button
                                     size="sm"
-                                    onClick={handleSendResolveMessage}
+                                    onClick={() => handleSendResolveMessage()}
                                     disabled={!resolveMessage.trim() || resolutionSend.isPending}
                                   >
                                     {resolutionSend.isPending ? (

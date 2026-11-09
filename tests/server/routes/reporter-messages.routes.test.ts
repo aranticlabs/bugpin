@@ -51,6 +51,15 @@ const originalSettingsCacheGetAll = settingsCacheService.getAll;
 beforeEach(() => {
   settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   userRole = 'admin';
+  reportMessagesService.portalContext = async () =>
+    Result.ok({
+      visible: false,
+      ownerEmail: null,
+      correspondentEmail: 'reporter@example.com',
+      ownerLastLoginAt: null,
+      emailSuppressed: false,
+      requiresPortalAccessConfirmation: false,
+    });
   reportMessagesService.uploadBodyLimit = async () => Result.ok(1024 * 1024);
   reportMessagesService.setHidden = async () => Result.ok(baseMessage);
 
@@ -78,6 +87,52 @@ function createApp() {
 }
 
 describe('reporter-messages routes POST', () => {
+  it('returns 409 for an unconfirmed portal-access grant', async () => {
+    reportMessagesService.send = async () =>
+      Result.fail('Confirm portal access', 'CONFIRMATION_REQUIRED');
+    const response = await createApp().request('http://localhost/reports/rpt_1/reporter-messages', {
+      method: 'POST',
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ message: 'Reply' }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'CONFIRMATION_REQUIRED' });
+  });
+
+  it('passes explicit confirmation through JSON and multipart and rejects malformed confirmation flags', async () => {
+    const confirmations: (boolean | undefined)[] = [];
+    reportMessagesService.send = async (...args) => {
+      confirmations.push(args[5]);
+      return Result.ok(baseMessage);
+    };
+    const app = createApp();
+    const json = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
+      method: 'POST',
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ message: 'Reply', confirmPortalAccess: true }),
+    });
+    expect(json.status).toBe(200);
+    for (const flag of ['true', 'false', 'yes']) {
+      const form = new FormData();
+      form.set('message', 'Reply');
+      form.set('confirmPortalAccess', flag);
+      const response = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
+        method: 'POST',
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
+        body: form,
+      });
+      expect(response.status).toBe(flag === 'yes' ? 400 : 200);
+    }
+    expect(confirmations).toEqual([true, true, false]);
+  });
   it('creates message and returns it', async () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
@@ -176,7 +231,7 @@ describe('reporter-messages routes GET', () => {
   it('returns messages list', async () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; messages: { id: string }[] };
@@ -189,7 +244,7 @@ describe('reporter-messages routes GET', () => {
     userRole = 'viewer';
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
   });
@@ -198,7 +253,7 @@ describe('reporter-messages routes GET', () => {
     reportMessagesService.listByReport = async () => Result.ok([]);
     const app = createApp();
     const res = await app.request('http://localhost/reports/rpt_1/reporter-messages', {
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { messages: unknown[] };
@@ -219,7 +274,7 @@ describe('message uploads and moderation', () => {
     form.append('files[]', new File(['image'], 'picture.png', { type: 'image/png' }));
     const response = await createApp().request('http://localhost/reports/rpt_1/reporter-messages', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: form,
     });
     expect(response.status).toBe(200);
@@ -237,7 +292,7 @@ describe('message uploads and moderation', () => {
       (
         await createApp().request('http://localhost/reports/rpt_1/reporter-messages', {
           method: 'POST',
-          headers: { cookie: 'session=sess_1' },
+          headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
           body: form,
         })
       ).status
@@ -256,7 +311,7 @@ describe('message uploads and moderation', () => {
       form.append('files[]', new File(['image'], `${i}.png`, { type: 'image/png' }));
     const response = await createApp().request('http://localhost/reports/rpt_1/reporter-messages', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: form,
     });
     expect(response.status).toBe(400);
@@ -270,7 +325,7 @@ describe('message uploads and moderation', () => {
     form.set('message', 'Reply');
     const request = new Request('http://localhost/reports/rpt_1/reporter-messages', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: form,
     });
     request.headers.delete('content-length');
@@ -285,7 +340,11 @@ describe('message uploads and moderation', () => {
       (
         await app.request('http://localhost/reports/rpt_1/reporter-messages', {
           method: 'POST',
-          headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+          headers: {
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+            'content-type': 'application/json',
+          },
           body: '{',
         })
       ).status
@@ -297,7 +356,7 @@ describe('message uploads and moderation', () => {
       (
         await app.request('http://localhost/reports/rpt_1/reporter-messages', {
           method: 'POST',
-          headers: { cookie: 'session=sess_1' },
+          headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
           body: form,
         })
       ).status
@@ -310,7 +369,11 @@ describe('message uploads and moderation', () => {
       (
         await createApp().request('http://localhost/reports/rpt_1/reporter-messages', {
           method: 'POST',
-          headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+          headers: {
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+            'content-type': 'application/json',
+          },
           body: JSON.stringify({ message: 'Reply' }),
         })
       ).status
@@ -325,7 +388,7 @@ describe('message uploads and moderation', () => {
           `http://localhost/reports/rpt_1/reporter-messages/msg_1/${action}`,
           {
             method: 'POST',
-            headers: { cookie: 'session=sess_1' },
+            headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
           }
         );
         expect(response.status).toBe(role === 'viewer' ? 403 : 200);

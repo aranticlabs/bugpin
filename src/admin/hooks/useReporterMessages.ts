@@ -4,11 +4,13 @@ import { toast } from 'sonner';
 import { api } from '../api/client';
 import { dashboardKeys } from './useDashboard';
 import { gamificationKeys } from './useGamification';
+import type { StaffConversationPortal } from '@shared/reporter-types';
 import type { ReporterMessage } from '@shared/types';
 
 export interface SendReporterMessageInput {
   message: string;
   ccSender?: boolean;
+  confirmPortalAccess?: boolean;
   files?: File[];
 }
 
@@ -19,7 +21,7 @@ export function useReporterMessages(reportId: string) {
     queryKey: ['reporterMessages', reportId],
     queryFn: async () => {
       const response = await api.get(`/reports/${reportId}/reporter-messages`);
-      return response.data.messages as ReporterMessage[];
+      return response.data as { messages: ReporterMessage[]; portal?: StaffConversationPortal };
     },
     enabled: !!reportId,
   });
@@ -44,7 +46,8 @@ export function useReporterMessages(reportId: string) {
   useEffect(() => reset(), [reportId, reset]);
 
   return {
-    messages: query.data ?? [],
+    messages: query.data?.messages ?? [],
+    portal: query.data?.portal,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
@@ -63,14 +66,17 @@ export function useSendReporterMessage(reportId: string) {
   const mutation = useMutation({
     mutationKey: ['sendReporterMessage', reportId],
     mutationFn: async (data: SendReporterMessageInput) => {
-      let body: FormData | { message: string; ccSender?: boolean } = {
+      let body: FormData | Omit<SendReporterMessageInput, 'files'> = {
         message: data.message,
         ccSender: data.ccSender,
+        confirmPortalAccess: data.confirmPortalAccess,
       };
       if (data.files?.length) {
         body = new FormData();
         body.set('message', data.message);
         body.set('ccSender', String(data.ccSender ?? false));
+        if (data.confirmPortalAccess !== undefined)
+          body.set('confirmPortalAccess', String(data.confirmPortalAccess));
         for (const file of data.files) body.append('files[]', file);
       }
       const response = await api.post(
