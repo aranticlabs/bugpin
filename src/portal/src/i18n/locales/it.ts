@@ -9,7 +9,6 @@ const catalog = {
     'Se questo indirizzo può usare il portale, abbiamo inviato un link. Scade tra 15 minuti.',
   signInAs: 'Accedere come {email}?',
   switchAccount: 'Hai effettuato l’accesso come {email}. Continua per cambiare account.',
-  requestedLinkExpired: 'Questo link è scaduto. Richiedi un nuovo link di accesso.',
   linkExpired: 'Questo link è scaduto. Inviare un nuovo link a {email}?',
   linkInvalid: 'Questo link non è valido.',
   resend: 'Invia un nuovo link',

@@ -8,7 +8,6 @@ const catalog = {
   linkSent: '如果此邮箱可以使用门户，我们已发送链接。链接将在15分钟后过期。',
   signInAs: '以 {email} 登录？',
   switchAccount: '你当前以 {email} 登录。继续将切换账号。',
-  requestedLinkExpired: '此链接已过期，请申请新的登录链接。',
   linkExpired: '此链接已过期。要向 {email} 发送新链接吗？',
   linkInvalid: '此链接无效。',
   resend: '发送新链接',

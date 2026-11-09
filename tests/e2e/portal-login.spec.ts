@@ -75,7 +75,7 @@ test('resends a real widget confirmation link after expiry without consuming it 
   await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
 });
 
-test('offers only a new login request for an expired requested token', async ({
+test('resends an expired requested token without consuming it on preview', async ({
   page,
   runtime,
 }) => {
@@ -85,10 +85,13 @@ test('offers only a new login request for an expired requested token', async ({
   const link = await runtime.waitForLink('expired-request@example.test');
   runtime.expireLinks('expired-request@example.test', 'request');
   await page.goto(link);
-  await expect(page.getByText('This link expired. Request a new sign-in link.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Send a new link' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Request a new link' }).click();
-  await expect(page.getByLabel('Email address')).toBeVisible();
+  await expect(page.getByText(/This link expired/)).toBeVisible();
+  await page.getByRole('button', { name: 'Send a new link' }).click();
+  const next = await runtime.waitForLink('expired-request@example.test');
+  expect(next).not.toBe(link);
+  await page.goto(next);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
 });
 
 test('isolates cookies and routes between hosts and rejects unknown hosts', async ({

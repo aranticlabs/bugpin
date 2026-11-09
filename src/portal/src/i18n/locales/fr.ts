@@ -9,7 +9,6 @@ const catalog = {
     'Si cette adresse peut utiliser le portail, nous avons envoyé un lien. Il expire dans 15 minutes.',
   signInAs: 'Se connecter en tant que {email} ?',
   switchAccount: 'Vous êtes connecté en tant que {email}. Continuez pour changer de compte.',
-  requestedLinkExpired: 'Ce lien a expiré. Demandez un nouveau lien de connexion.',
   linkExpired: 'Ce lien a expiré. Envoyer un nouveau lien à {email} ?',
   linkInvalid: 'Ce lien n’est pas valide.',
   resend: 'Envoyer un nouveau lien',

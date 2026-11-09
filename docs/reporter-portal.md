@@ -104,7 +104,7 @@ Keep event responses streaming and do not add a buffering middleware. See [Traef
 
 Configure SMTP with a sender domain you control. Enable DKIM signing in the mail service and verify that a valid signature covers both `List-Unsubscribe` and `List-Unsubscribe-Post`. This is required for authenticated one-click unsubscribe under [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058.html). Configure SPF and DMARC with that provider. BugPin passes the unsubscribe headers to SMTP; DKIM signing and domain authentication belong to the mail service.
 
-Requested sign-in links expire in 15 minutes; confirmation and invitation links expire in 24 hours. Opening or previewing a link does not consume it. The reporter must press **Continue**, which creates a full account session. An expired confirmation or invitation link can request a replacement; an expired requested link offers a new login request. Link secrets use the URL fragment and are removed before application requests.
+Requested sign-in links expire in 15 minutes; confirmation and invitation links expire in 24 hours. Opening or previewing a link does not consume it. The reporter must press **Continue**, which creates a full account session. Any valid expired link can request a replacement 15-minute sign-in link sent to its stored email address. Link secrets use the URL fragment and are removed before application requests.
 
 Custom reporter templates can use these values:
 

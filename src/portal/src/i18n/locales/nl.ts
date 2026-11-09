@@ -9,7 +9,6 @@ const catalog = {
     'Als dit adres het portaal kan gebruiken, hebben we een link verstuurd. Deze verloopt over 15 minuten.',
   signInAs: 'Inloggen als {email}?',
   switchAccount: 'Je bent ingelogd als {email}. Ga verder om van account te wisselen.',
-  requestedLinkExpired: 'Deze link is verlopen. Vraag een nieuwe inloglink aan.',
   linkExpired: 'Deze link is verlopen. Een nieuwe link naar {email} sturen?',
   linkInvalid: 'Deze link is ongeldig.',
   resend: 'Nieuwe link sturen',

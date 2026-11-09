@@ -8,7 +8,6 @@ const catalog = {
   linkSent: 'このアドレスでポータルを利用できる場合、リンクを送信しました。有効期限は15分です。',
   signInAs: '{email} としてログインしますか？',
   switchAccount: '現在 {email} としてログインしています。続行するとアカウントが切り替わります。',
-  requestedLinkExpired: 'このリンクは期限切れです。新しいログインリンクをリクエストしてください。',
   linkExpired: 'このリンクは期限切れです。{email} に新しいリンクを送信しますか？',
   linkInvalid: 'このリンクは無効です。',
   resend: '新しいリンクを送信',

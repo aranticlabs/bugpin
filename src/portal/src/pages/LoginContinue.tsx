@@ -9,7 +9,7 @@ import { AuthCard } from '../components/AuthCard';
 
 type Preview =
   | { state: 'valid'; maskedEmail: string }
-  | { state: 'expired'; maskedEmail: string; canResend: boolean }
+  | { state: 'expired'; maskedEmail: string }
   | { state: 'invalid' };
 
 export function LoginContinue({ token, clearToken }: { token: string; clearToken: () => void }) {
@@ -110,22 +110,17 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
           {preview?.state === 'valid' && reporter && (
             <p>{t('switchAccount', { email: current })}</p>
           )}
-          {preview?.state === 'expired' && (
-            <p>
-              {t(preview.canResend ? 'linkExpired' : 'requestedLinkExpired', { email: masked })}
-            </p>
-          )}
+          {preview?.state === 'expired' && <p>{t('linkExpired', { email: masked })}</p>}
           {preview?.state === 'invalid' && <p role="alert">{t('linkInvalid')}</p>}
-          {preview &&
-            (preview.state === 'valid' || (preview.state === 'expired' && preview.canResend)) && (
-              <Button
-                className="h-11 w-full whitespace-normal"
-                disabled={pending}
-                onClick={() => void proceed()}
-              >
-                {pending ? t('loading') : t(preview.state === 'expired' ? 'resend' : 'continue')}
-              </Button>
-            )}
+          {preview && (preview.state === 'valid' || preview.state === 'expired') && (
+            <Button
+              className="h-11 w-full whitespace-normal"
+              disabled={pending}
+              onClick={() => void proceed()}
+            >
+              {pending ? t('loading') : t(preview.state === 'expired' ? 'resend' : 'continue')}
+            </Button>
+          )}
         </>
       )}
       <Button asChild variant="link" className="h-auto whitespace-normal px-0">

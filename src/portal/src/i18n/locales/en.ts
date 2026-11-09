@@ -6,7 +6,6 @@ const catalog = {
   linkSent: 'If this address can use the portal, we sent a link. It expires in 15 minutes.',
   signInAs: 'Sign in as {email}?',
   switchAccount: 'You are signed in as {email}. Continue to switch accounts.',
-  requestedLinkExpired: 'This link expired. Request a new sign-in link.',
   linkExpired: 'This link expired. Send a new link to {email}?',
   linkInvalid: 'This link is not valid.',
   resend: 'Send a new link',

@@ -188,7 +188,6 @@ it('resends an expired token to the stored address without accepting another ema
         success: true,
         state: 'expired',
         maskedEmail: 'j***@example.com',
-        canResend: true,
       })
     ),
     http.post('/api/portal/auth/resend', async ({ request }) => {
@@ -214,23 +213,6 @@ it('shows an invalid preview without an exchange button', async () => {
   expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
 });
 
-it('directs expired requested links to a new request instead of offering an unavailable resend', async () => {
-  server.use(
-    http.post('/api/portal/auth/preview', () =>
-      HttpResponse.json({
-        success: true,
-        state: 'expired',
-        maskedEmail: 'j***@example.com',
-        canResend: false,
-      })
-    )
-  );
-  mount('/login', tokenA);
-  await screen.findByText('This link expired. Request a new sign-in link.');
-  expect(screen.queryByRole('button', { name: 'Send a new link' })).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Request a new link' })).toBeInTheDocument();
-});
-
 it('handles a token becoming invalid between preview and exchange', async () => {
   server.use(
     http.post('/api/portal/auth/exchange', () =>
@@ -251,7 +233,7 @@ it('captures a fresh fragment link opened in the same tab after an expired link'
       return HttpResponse.json(
         token === tokenB
           ? { success: true, state: 'valid', maskedEmail: 'j***@example.com' }
-          : { success: true, state: 'expired', maskedEmail: 'j***@example.com', canResend: true }
+          : { success: true, state: 'expired', maskedEmail: 'j***@example.com' }
       );
     })
   );
@@ -281,7 +263,7 @@ it('does not let a late resend response replace the fresh link Continue screen',
       return HttpResponse.json(
         token === tokenB
           ? { success: true, state: 'valid', maskedEmail: 'j***@example.com' }
-          : { success: true, state: 'expired', maskedEmail: 'j***@example.com', canResend: true }
+          : { success: true, state: 'expired', maskedEmail: 'j***@example.com' }
       );
     })
   );
