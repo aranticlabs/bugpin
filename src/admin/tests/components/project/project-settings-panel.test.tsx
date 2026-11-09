@@ -127,6 +127,7 @@ const notificationDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnPriorityChange: false,
   defaultNotifyOnAssignment: true,
   defaultNotifyOnDeletion: true,
+  defaultNotifyOnReporterReply: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -322,6 +323,7 @@ describe('ProjectSettingsPanel', () => {
         defaultNotifyOnPriorityChange: false,
         defaultNotifyOnAssignment: true,
         defaultNotifyOnDeletion: true,
+        defaultNotifyOnReporterReply: true,
       }
     );
 

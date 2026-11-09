@@ -111,6 +111,25 @@ describe('EmailTemplates', () => {
     return { calls, putSpy, deleteSpy };
   }
 
+  it.each([
+    ['Reporter Login', 'reporter.loginUrl'],
+    ['Reporter Status Change', 'reporter.updateUrl'],
+    ['Reporter Priority Change', 'report.portalUrl'],
+    ['Reporter Message', 'reporter.updateUrl'],
+    ['Reporter Assignment', 'report.portalUrl'],
+  ])('warns when %s lacks its link variable', async (label, variable) => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: label }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /This (login|update) template has no/
+    );
+    await user.clear(screen.getByLabelText('Email Body'));
+    await user.type(screen.getByLabelText('Email Body'), variable);
+    expect(screen.queryByText(/This (login|update) template has no/)).not.toBeInTheDocument();
+  });
+
   it('renders locale tabs and preloads built-in templates', async () => {
     mockApi();
     renderWithProviders(<EmailTemplates />);

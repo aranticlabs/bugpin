@@ -34,6 +34,8 @@ export function NotificationSettingsForm({
     value.notifyOnPriorityChange ?? globalSettings?.notifications.notifyOnPriorityChange ?? true;
   const effectiveNotifyOnAssignment =
     value.notifyOnAssignment ?? globalSettings?.notifications.notifyOnAssignment ?? true;
+  const effectiveNotifyOnReporterReply =
+    value.notifyOnReporterReply ?? globalSettings?.notifications.notifyOnReporterReply ?? true;
   const effectiveNotifyOnDeletion =
     value.notifyOnDeletion ?? globalSettings?.notifications.notifyOnDeletion ?? true;
 
@@ -64,6 +66,7 @@ export function NotificationSettingsForm({
                   notifyOnPriorityChange: undefined,
                   notifyOnAssignment: undefined,
                   notifyOnDeletion: undefined,
+                  notifyOnReporterReply: undefined,
                 });
               }
             }}
@@ -173,6 +176,24 @@ export function NotificationSettingsForm({
                 id="default-deletion"
                 checked={effectiveNotifyOnDeletion}
                 onCheckedChange={(checked) => onChange({ ...value, notifyOnDeletion: checked })}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="default-reporter-reply" className="text-sm font-normal">
+                  Reporter replies
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Notify when reporters reply or submit feedback
+                </p>
+              </div>
+              <Switch
+                id="default-reporter-reply"
+                checked={effectiveNotifyOnReporterReply}
+                onCheckedChange={(checked) =>
+                  onChange({ ...value, notifyOnReporterReply: checked })
+                }
                 disabled={disabled}
               />
             </div>

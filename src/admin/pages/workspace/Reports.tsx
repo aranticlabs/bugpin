@@ -69,6 +69,7 @@ import {
   ReportPriorityLabel,
   ReportStatusLabel,
 } from '../../components/report/ReportStatusPriority';
+import { ReporterActivityIndicator } from '../../components/report/ReporterActivityIndicator';
 import { ReportsToolbar, type ReportsFilterKey } from '../../components/report/ReportsToolbar';
 import { ReportsBulkActionBar } from '../../components/report/ReportsBulkActionBar';
 import { ReportsBoard } from './ReportsBoard';
@@ -164,10 +165,12 @@ function parseStatusFilter(value: string): ReportStatus[] {
 function ReportTitleLink({
   reportId,
   title,
+  active,
   state,
 }: {
   reportId: string;
   title: string;
+  active?: boolean;
   state: ReturnType<typeof reportOriginState>;
 }) {
   return (
@@ -177,6 +180,7 @@ function ReportTitleLink({
       onClick={(event) => event.stopPropagation()}
       className="block rounded-sm font-medium hover:underline focus-visible:focus-ring"
     >
+      <ReporterActivityIndicator active={active} />
       {title}
     </Link>
   );
@@ -213,6 +217,7 @@ export function Reports({
   const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
   const assignedTo = searchParams.get('assignedTo') || '';
   const reporterId = searchParams.get('reporterId') || '';
+  const reporterActivity = searchParams.get('reporterActivity') === 'new' ? 'new' : '';
   const requestedSort = parseReportSort(searchParams);
   // Manual order exists only on the board; the list falls back to its default sort.
   const sort = requestedSort.key === 'position' ? DEFAULT_REPORT_SORT : requestedSort;
@@ -257,6 +262,7 @@ export function Reports({
         projectId,
         assignedTo,
         reporterId,
+        reporterActivity,
         sort,
         search: searchParams.get('search'),
       },
@@ -268,6 +274,7 @@ export function Reports({
       if (projectId) params.projectId = projectId;
       if (assignedTo) params.assignedTo = assignedTo;
       if (reporterId) params.reporterId = reporterId;
+      if (reporterActivity) params.reporterActivity = reporterActivity;
       params.sortBy = sort.key;
       params.sortOrder = sort.direction;
       if (searchParams.get('search')) params.search = searchParams.get('search')!;
@@ -582,7 +589,7 @@ export function Reports({
         search={search}
         onSearchChange={setSearch}
         onSearchSubmit={handleSearch}
-        filters={{ status, priority, projectId, assignedTo }}
+        filters={{ status, priority, projectId, assignedTo, reporterActivity }}
         onFilterChange={handleFilterChange}
         projects={projectsData}
         showProjectFilter={!fixedProjectId}
@@ -874,6 +881,7 @@ export function Reports({
             projectId,
             assignedTo,
             reporterId,
+            reporterActivity,
             search: searchParams.get('search') || '',
             sortBy: boardSort.key,
             sortOrder: boardSort.direction,
@@ -926,6 +934,7 @@ export function Reports({
                         <ReportTitleLink
                           reportId={report.id}
                           title={report.title}
+                          active={report.hasNewReporterActivity}
                           state={reportOrigin}
                         />
                         {report.licenseLocked && (
@@ -1069,6 +1078,7 @@ export function Reports({
                         <ReportTitleLink
                           reportId={report.id}
                           title={report.title}
+                          active={report.hasNewReporterActivity}
                           state={reportOrigin}
                         />
                         {report.licenseLocked && (

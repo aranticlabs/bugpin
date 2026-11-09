@@ -20,6 +20,39 @@ import { toast } from 'sonner';
 afterEach(() => vi.clearAllMocks());
 
 describe('ReportDetail', () => {
+  it('acknowledges reporter activity only after the staff action and refreshes its indicator', async () => {
+    let active = true;
+    let acknowledgements = 0;
+    server.use(
+      http.get('/api/reports/report-1', () =>
+        HttpResponse.json({
+          success: true,
+          report: { ...mockReports[0], hasNewReporterActivity: active },
+          files: [],
+        })
+      ),
+      http.post('/api/reports/report-1/reporter-activity/seen', () => {
+        acknowledgements++;
+        active = false;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    expect(await screen.findByText('New reporter activity')).toBeInTheDocument();
+    expect(acknowledgements).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
+    await waitFor(() =>
+      expect(screen.queryByText('New reporter activity')).not.toBeInTheDocument()
+    );
+    expect(acknowledgements).toBe(1);
+  });
+
   it('shows the Owner field and refreshes it after removal', async () => {
     let hasOwner = true;
     server.use(
@@ -406,4 +439,88 @@ describe('ReportDetail', () => {
     expect(screen.getByText('Manual Report')).toBeInTheDocument();
     expect(screen.queryByText('Environment')).not.toBeInTheDocument();
   });
+});
+
+it('pre-checks resolution access, preserves the draft on cancel, and sends explicit confirmation', async () => {
+  const sent: unknown[] = [];
+  server.use(
+    http.get('/api/reports/:id/reporter-messages', () =>
+      HttpResponse.json({
+        success: true,
+        messages: [],
+        portal: { requiresPortalAccessConfirmation: true },
+      })
+    ),
+    http.post('/api/reports/:id/reporter-messages', async ({ request }) => {
+      sent.push(await request.json());
+      return HttpResponse.json({ success: true, reporterMessage: mockConversationMessages[0] });
+    })
+  );
+  const user = userEvent.setup();
+  renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+  await screen.findByRole('region', { name: 'Conversation' });
+  await user.click(screen.getAllByRole('combobox')[0]);
+  await user.click(await screen.findByText('Resolved'));
+  await user.click(await screen.findByRole('button', { name: 'Send a message to the reporter?' }));
+  await user.type(
+    screen.getByPlaceholderText('Optional message to send to the reporter...'),
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  let dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  expect(sent).toEqual([]);
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  await user.click(within(dialog).getByRole('button', { name: 'Grant access and send' }));
+  await waitFor(() =>
+    expect(sent).toEqual([
+      { message: 'Resolution draft', ccSender: false, confirmPortalAccess: true },
+    ])
+  );
+});
+
+it('suppresses the expected resolution confirmation error and resets it on cancel', async () => {
+  let sends = 0;
+  server.use(
+    http.post('/api/reports/:id/reporter-messages', () => {
+      sends++;
+      return HttpResponse.json(
+        { error: 'CONFIRMATION_REQUIRED', message: 'Expected confirmation control flow' },
+        { status: 409 }
+      );
+    })
+  );
+  const user = userEvent.setup();
+  renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+  await screen.findByRole('region', { name: 'Conversation' });
+  await user.click(screen.getAllByRole('combobox')[0]);
+  await user.click(await screen.findByText('Resolved'));
+  await user.click(await screen.findByRole('button', { name: 'Send a message to the reporter?' }));
+  await user.type(
+    screen.getByPlaceholderText('Optional message to send to the reporter...'),
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  const dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  expect(screen.queryByText('Expected confirmation control flow')).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(sends).toBe(1);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+    'Resolution draft'
+  );
 });

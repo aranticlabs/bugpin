@@ -20,6 +20,7 @@ import {
   type ReportStatus,
   type ReportSortKey,
 } from '@shared/types';
+import { ReporterActivityIndicator } from '../../components/report/ReporterActivityIndicator';
 import { api, getApiErrorMessage } from '../../api/client';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { useFillScrollParentHeight } from '../../hooks/useFillScrollParentHeight';
@@ -56,6 +57,7 @@ const BOARD_PAGE_SIZE = 20;
 const NO_COLLAPSED_COLUMNS: ReportStatus[] = [];
 
 export interface ReportsBoardFilters {
+  reporterActivity?: 'new' | '';
   reporterId?: string;
   priority: string;
   projectId: string;
@@ -90,6 +92,7 @@ function boardScope(
   return {
     projectId: filters.projectId || undefined,
     reporterId: filters.reporterId || undefined,
+    reporterActivity: filters.reporterActivity || undefined,
     status: [...statuses],
     priority: priority.length > 0 ? priority : undefined,
     assignedTo: filters.assignedTo || undefined,
@@ -126,6 +129,7 @@ function useBoardColumn(
       if (filters.projectId) params.projectId = filters.projectId;
       if (filters.assignedTo) params.assignedTo = filters.assignedTo;
       if (filters.reporterId) params.reporterId = filters.reporterId;
+      if (filters.reporterActivity) params.reporterActivity = filters.reporterActivity;
       if (filters.search) params.search = filters.search;
       const response = await api.get<ReportPage>('/reports', { params });
       return response.data;
@@ -219,7 +223,10 @@ function BoardCardContent({ report, showProject }: { report: Report; showProject
           </span>
         )}
       </div>
-      <p className="line-clamp-2 text-sm font-medium leading-snug">{report.title}</p>
+      <p className="line-clamp-2 text-sm font-medium leading-snug">
+        <ReporterActivityIndicator active={report.hasNewReporterActivity} />
+        {report.title}
+      </p>
       {report.licenseLocked && (
         <p className="text-xs text-muted-foreground">Read-only · License limit</p>
       )}

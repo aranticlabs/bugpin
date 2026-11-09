@@ -210,6 +210,16 @@ export function ReportDetail() {
     enabled: !!data?.report?.projectId,
   });
 
+  const markReporterActivitySeen = useMutation({
+    mutationFn: () => api.post(`/reports/${id}/reporter-activity/seen`),
+    onSuccess: () => {
+      for (const queryKey of [['report', id], ['reports'], ['reporter-activity-count']])
+        void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, 'Could not mark reporter activity as seen')),
+  });
+
   const conversation = useReporterMessages(id ?? '');
   const resolutionSend = useSendReporterMessage(id ?? '');
 
@@ -413,6 +423,11 @@ export function ReportDetail() {
 
   const handleSendResolveMessage = (confirmPortalAccess = false) => {
     if (!resolveMessage.trim() || resolutionSend.isPending) return;
+    if (!confirmPortalAccess && conversation.portal?.requiresPortalAccessConfirmation) {
+      resolutionSend.reset();
+      setConfirmResolutionAccess(true);
+      return;
+    }
     resolutionSend.mutate(
       {
         message: resolveMessage.trim(),
@@ -613,7 +628,10 @@ export function ReportDetail() {
           <PortalAccessConfirmation
             open={confirmResolutionAccess}
             busy={resolutionSend.isPending}
-            onOpenChange={setConfirmResolutionAccess}
+            onOpenChange={(open) => {
+              setConfirmResolutionAccess(open);
+              if (!open) resolutionSend.reset();
+            }}
             onConfirm={() => handleSendResolveMessage(true)}
           />
           <ConversationCard
@@ -627,6 +645,9 @@ export function ReportDetail() {
               projectData ? (projectData.settings?.reporterPortal?.enabled ?? false) : undefined
             }
             hasOwner={Boolean(report.reporterId)}
+            hasNewReporterActivity={report.hasNewReporterActivity}
+            onMarkSeen={() => markReporterActivitySeen.mutate()}
+            isMarkingSeen={markReporterActivitySeen.isPending}
             maxImageMb={
               projectData?.settings?.screenshot?.maxImageUploadSizeMb ??
               settingsData?.screenshot?.maxImageUploadSizeMb
@@ -969,14 +990,19 @@ export function ReportDetail() {
                                     rows={3}
                                     className="text-sm"
                                   />
-                                  {resolutionSend.error && (
-                                    <p role="alert" className="text-sm text-destructive">
-                                      {getApiErrorMessage(
-                                        resolutionSend.error,
-                                        'Failed to send message'
-                                      )}
-                                    </p>
-                                  )}
+                                  {resolutionSend.error &&
+                                    !(
+                                      isApiError(resolutionSend.error) &&
+                                      resolutionSend.error.response?.data?.error ===
+                                        'CONFIRMATION_REQUIRED'
+                                    ) && (
+                                      <p role="alert" className="text-sm text-destructive">
+                                        {getApiErrorMessage(
+                                          resolutionSend.error,
+                                          'Failed to send message'
+                                        )}
+                                      </p>
+                                    )}
                                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                                     <Checkbox
                                       checked={resolveCcSender}

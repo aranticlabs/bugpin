@@ -84,6 +84,24 @@ afterEach(() => {
 });
 
 describe('ConversationCard', () => {
+  it('shows new activity without clearing it on view and lets editors acknowledge it', async () => {
+    const onMarkSeen = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<Harness hasNewReporterActivity onMarkSeen={onMarkSeen} />);
+    await screen.findByRole('list', { name: 'Messages' });
+    expect(screen.getByText('New reporter activity')).toBeInTheDocument();
+    expect(onMarkSeen).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
+    expect(onMarkSeen).toHaveBeenCalledOnce();
+  });
+
+  it('shows the activity indicator to viewers without the acknowledgement action', async () => {
+    renderWithProviders(<Harness hasNewReporterActivity canEdit={false} onMarkSeen={vi.fn()} />);
+    await screen.findByRole('list', { name: 'Messages' });
+    expect(screen.getByText('New reporter activity')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark as seen' })).not.toBeInTheDocument();
+  });
+
   it('confirms first portal access, preserves the draft on cancel, and sends explicit consent', async () => {
     server.use(
       http.get('/api/reports/:id/reporter-messages', () =>

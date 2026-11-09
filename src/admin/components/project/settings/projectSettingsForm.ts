@@ -105,6 +105,7 @@ export function projectSettingsToForm(
           notifyOnPriorityChange: notificationDefaults.defaultNotifyOnPriorityChange,
           notifyOnAssignment: notificationDefaults.defaultNotifyOnAssignment,
           notifyOnDeletion: notificationDefaults.defaultNotifyOnDeletion,
+          notifyOnReporterReply: notificationDefaults.defaultNotifyOnReporterReply,
         }
       : {},
     reporterSettings: settings?.reporterNotifications ?? {},
@@ -232,5 +233,6 @@ export function formToNotificationDefaults(
     defaultNotifyOnPriorityChange: notificationSettings.notifyOnPriorityChange,
     defaultNotifyOnAssignment: notificationSettings.notifyOnAssignment,
     defaultNotifyOnDeletion: notificationSettings.notifyOnDeletion,
+    defaultNotifyOnReporterReply: notificationSettings.notifyOnReporterReply,
   };
 }

@@ -549,12 +549,18 @@ export function EmailTemplates() {
                     </p>
                   </div>
 
-                  {selectedType === 'reporterConfirmation' &&
+                  {selectedType.startsWith('reporter') &&
                     html.trim() &&
-                    !html.includes('reporter.loginUrl') && (
+                    !(selectedType === 'reporterLogin' || selectedType === 'reporterConfirmation'
+                      ? html.includes('reporter.loginUrl')
+                      : html.includes('reporter.updateUrl') ||
+                        html.includes('report.portalUrl')) && (
                       <p role="status" className="text-sm text-muted-foreground">
-                        This confirmation template has no reporter.loginUrl. Add it so reporters can
-                        sign in to follow their feedback.
+                        {selectedType === 'reporterConfirmation'
+                          ? 'This confirmation template has no reporter.loginUrl. Add it so reporters can sign in to follow their feedback.'
+                          : selectedType === 'reporterLogin'
+                            ? 'This login template has no reporter.loginUrl. Add it so reporters can sign in.'
+                            : 'This update template has no reporter.updateUrl or report.portalUrl. Add a link so reporters can follow their feedback.'}
                       </p>
                     )}
                   <VariablesReference variables={availableVariables} />

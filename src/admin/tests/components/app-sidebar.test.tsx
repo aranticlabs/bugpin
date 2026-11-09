@@ -35,6 +35,26 @@ function signInAs(user: Partial<User> & Pick<User, 'id' | 'email' | 'name' | 'ro
 }
 
 describe('AppSidebar', () => {
+  it('refreshes the new-reporter-activity count and removes its badge at zero', async () => {
+    let count = 3;
+    server.use(
+      http.get('/api/reports/reporter-activity/count', () =>
+        HttpResponse.json({ success: true, count })
+      )
+    );
+    const { queryClient } = renderSidebar();
+    expect(await screen.findByLabelText('3 reports with new reporter activity')).toHaveTextContent(
+      '3'
+    );
+    count = 0;
+    await queryClient.invalidateQueries({ queryKey: ['reporter-activity-count'] });
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText('3 reports with new reporter activity')
+      ).not.toBeInTheDocument()
+    );
+  });
+
   it('shows the workspace navigation for admins', async () => {
     renderSidebar();
 

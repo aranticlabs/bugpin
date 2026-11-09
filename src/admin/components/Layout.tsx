@@ -13,6 +13,7 @@ import { Footer } from './Footer';
 import { PageBreadcrumb } from './PageBreadcrumb';
 import { findSettingsNavItem } from '../lib/settingsNavigation';
 import { UpdateBanner } from './UpdateBanner';
+import { useStaffEvents } from '../hooks/useStaffEvents';
 import { usePreference } from '../hooks/useUserPreferences';
 import { ThemePreferenceSync } from './ThemePreferenceSync';
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
@@ -24,6 +25,7 @@ const USERS_SETTINGS_PATH = '/settings/users';
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
+  useStaffEvents(canLoadData);
   const [sidebarWidth, setSidebarWidth] = usePreference('sidebarWidth', SIDEBAR_WIDTH_DEFAULT, {
     cache: true,
   });
