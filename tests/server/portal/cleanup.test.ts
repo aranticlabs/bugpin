@@ -160,10 +160,16 @@ it('keeps idle reporters when retention is zero while still cleaning old credent
 
 it('anonymizes message snapshots when cleanup removes an idle reporter', async () => {
   const reporter = account('idle', 40);
-  getDb().exec(
-    'CREATE TABLE report_messages (reporter_id TEXT REFERENCES reporters(id) ON DELETE SET NULL, author_kind TEXT, author_name TEXT)'
+  const project = await projectsRepo.create({ name: 'Project' });
+  const report = await reportsRepo.create({
+    projectId: project.id,
+    title: 'Unowned report',
+    metadata: { timestamp: ago(0) },
+  });
+  getDb().run(
+    "INSERT INTO report_messages (id, report_id, reporter_id, author_kind, author_name, body) VALUES ('original', ?, ?, 'reporter', 'Original', 'Kept text')",
+    [report.id, reporter.id]
   );
-  getDb().run("INSERT INTO report_messages VALUES (?, 'reporter', 'Original')", [reporter.id]);
   expect(Result.unwrap(await reportersService.cleanup()).reporters).toBe(1);
   expect(getDb().query('SELECT reporter_id, author_name FROM report_messages').get()).toEqual({
     reporter_id: null,
@@ -185,10 +191,10 @@ it('continues report retention by creation date even with recent activity and a 
     reporter.id,
     report.id,
   ]);
-  getDb().exec(
-    'CREATE TABLE report_messages (report_id TEXT REFERENCES reports(id) ON DELETE CASCADE, body TEXT)'
+  getDb().run(
+    "INSERT INTO report_messages (id, report_id, author_kind, author_name, body) VALUES ('recent', ?, 'staff', 'Staff', 'Recent conversation')",
+    [report.id]
   );
-  getDb().run("INSERT INTO report_messages VALUES (?, 'Recent conversation')", [report.id]);
   expect(await cleanupService.cleanupOldReports()).toEqual({ deleted: 1, errors: 0 });
   expect(await reportsRepo.findById(report.id)).toBeNull();
   expect(getDb().query('SELECT 1 FROM report_messages').get()).toBeNull();

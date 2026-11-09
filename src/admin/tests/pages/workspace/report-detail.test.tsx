@@ -183,7 +183,6 @@ describe('ReportDetail', () => {
       ''
     );
     expect(screen.queryByText('Resolution delivery failed')).not.toBeInTheDocument();
-
   });
 
   it('records the report as recently viewed once it loads', async () => {

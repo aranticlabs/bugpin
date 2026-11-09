@@ -312,11 +312,8 @@ it('anonymizes reporter messages when their table exists and leaves other author
   const target = login();
   const other = login();
   const first = await report();
-  getDb()
-    .exec(`CREATE TABLE report_messages (id TEXT PRIMARY KEY, report_id TEXT REFERENCES reports(id), author_kind TEXT,
-    reporter_id TEXT REFERENCES reporters(id) ON DELETE SET NULL, user_id TEXT, author_name TEXT, body TEXT);`);
   getDb().run(
-    "INSERT INTO report_messages VALUES ('target', ?, 'reporter', ?, NULL, 'Jane', 'Kept text'), ('other', ?, 'reporter', ?, NULL, 'Other', 'Other text'), ('staff', ?, 'staff', NULL, 'admin', 'Admin', 'Staff text')",
+    "INSERT INTO report_messages (id, report_id, author_kind, reporter_id, user_id, author_name, body) VALUES ('target', ?, 'reporter', ?, NULL, 'Jane', 'Kept text'), ('other', ?, 'reporter', ?, NULL, 'Other', 'Other text'), ('staff', ?, 'staff', NULL, 'admin', 'Admin', 'Staff text')",
     [first.id, target.reporter.id, first.id, other.reporter.id, first.id]
   );
   expect(reportersService.delete(target.reporter.id, 'admin').success).toBe(true);
@@ -339,12 +336,10 @@ it('rolls deletion, revocation, erasure, history, and message anonymization back
   const outstanding = Result.unwrap(
     reporterAuthService.mintLoginToken(target.reporter.email, 'confirmation')
   );
-  getDb().exec(
-    'CREATE TABLE report_messages (reporter_id TEXT, author_kind TEXT, author_name TEXT)'
+  getDb().run(
+    "INSERT INTO report_messages (id, report_id, reporter_id, author_kind, author_name, body) VALUES ('original', ?, ?, 'reporter', 'Original author', 'Kept text')",
+    [first.id, target.reporter.id]
   );
-  getDb().run("INSERT INTO report_messages VALUES (?, 'reporter', 'Original author')", [
-    target.reporter.id,
-  ]);
   getDb().exec(
     "CREATE TRIGGER refuse_reporter_delete BEFORE DELETE ON reporters BEGIN SELECT RAISE(ABORT, 'refused'); END;"
   );
