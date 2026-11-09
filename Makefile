@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := help
-.PHONY: help dev dev-server dev-admin dev-widget dev-portal build build-server build-admin build-widget build-portal typecheck typecheck-server typecheck-admin typecheck-widget typecheck-shared-ui typecheck-portal typecheck-ee typecheck-tests test test-server test-admin test-widget test-portal test-ee test-e2e check-ee knip format format-check check-widget-size check-portal-bundle check-dependency-age start migrate reset-password reset-two-factor repair-github-links
+.PHONY: help dev dev-server dev-admin dev-widget dev-portal build build-server build-admin build-widget build-portal typecheck typecheck-server typecheck-admin typecheck-widget typecheck-shared-ui typecheck-portal typecheck-ee typecheck-tests test test-server test-admin test-widget test-portal test-ee test-e2e check-ee knip format format-check check-widget-size check-portal-bundle check-dependency-age start migrate reset-password reset-two-factor reset-portal-origin repair-github-links
 
 help:
-	@echo "BugPin targets: dev dev-server dev-admin dev-widget dev-portal build build-server build-admin build-widget build-portal typecheck typecheck-server typecheck-admin typecheck-widget typecheck-shared-ui typecheck-portal typecheck-ee typecheck-tests test test-server test-admin test-widget test-portal test-ee test-e2e check-ee knip format format-check check-widget-size check-portal-bundle check-dependency-age start migrate reset-password reset-two-factor repair-github-links"
+	@echo "BugPin targets: dev dev-server dev-admin dev-widget dev-portal build build-server build-admin build-widget build-portal typecheck typecheck-server typecheck-admin typecheck-widget typecheck-shared-ui typecheck-portal typecheck-ee typecheck-tests test test-server test-admin test-widget test-portal test-ee test-e2e check-ee knip format format-check check-widget-size check-portal-bundle check-dependency-age start migrate reset-password reset-two-factor reset-portal-origin repair-github-links"
 
 dev:
 	bun run dev
@@ -112,6 +112,8 @@ reset-password:
 reset-two-factor:
 	bun run reset-two-factor
 
+reset-portal-origin:
+	bun run reset-portal-origin
+
 repair-github-links:
 	bun run repair-github-links
-

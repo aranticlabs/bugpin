@@ -5,7 +5,7 @@ The Reporter Portal lets people follow their own feedback at `/reporter-portal`.
 ## Enable a project
 
 1. Configure the public **Application URL** and SMTP in the Admin Console settings. Public URLs must use HTTPS. Loopback HTTP is supported for local development; `.local` and `.test` HTTP are allowed only in development mode.
-2. For production, configure a different HTTPS **Portal Base URL**, such as `https://feedback.example.com`, alongside `https://bugs.example.com` for the Application URL. Use origins without paths, queries or fragments. Route both hosts to the same BugPin instance and persistent data volume.
+2. For production, first configure a valid **Application URL**, then a different HTTPS **Portal Base URL**, such as `https://feedback.example.com`, alongside `https://bugs.example.com` for the Application URL. A Portal Base URL requires an Application URL; clear the Portal Base URL before clearing the Application URL. Use origins without paths, queries or fragments. Route both hosts to the same BugPin instance and persistent data volume.
 3. In the project's **Reporter Portal** tab, enable the portal and send a test login link. Enable **Allow new feedback from the portal** if reporters should be able to create more reports after they own one in the project.
 4. Check reporter notification preferences and messaging settings. Confirmation delivery depends on the project's reporter-email settings. A saved report stays saved if mail delivery fails.
 
@@ -22,6 +22,16 @@ This setting governs forwarded host, scheme and address handling. An existing Co
 In separate-origin mode, unknown effective hosts receive 421. Portal routes are unavailable on the Admin Console host, and staff APIs are unavailable on the portal host. A loopback Host alone does not bypass isolation. The local `/health` exception also requires a loopback socket peer. Reporter and staff session cookies are host-only; do not add a shared cookie domain at the proxy.
 
 If requests fail after an upgrade, check both configured URLs, the proxy's outgoing headers, and its socket address before changing trust. Redirect loops commonly indicate an untrusted or incorrect forwarded scheme. Incorrect hosts can produce 421, and mismatched browser origins can produce 403. `DISABLE_HTTPS_ENFORCEMENT=true` temporarily bypasses HTTPS enforcement so an administrator can correct that setting; it does not disable host isolation or mutation-origin checks. Remove it after recovery.
+
+If a restored or previously saved Portal Base URL blocks access to the Admin Console, clear that origin out of band. With the standard Compose service and its existing data volume:
+
+```sh
+docker compose stop bugpin
+docker compose run --rm --no-deps bugpin bun run reset-portal-origin
+docker compose up -d bugpin
+```
+
+For a source installation, stop BugPin, run `DATA_DIR=/path/to/existing/data make reset-portal-origin` as the instance's operating-system user, then restart it with the same configuration. The command requires an existing database, clears only the Portal Base URL, and does not run migrations. After restart, open the Admin Console at the Application URL or the same-origin host, correct the Application URL, and configure the separate portal origin again. This command restores same-origin routing; it does not bypass authentication. If HTTPS enforcement is also misconfigured, use its temporary recovery variable separately.
 
 ## Live updates and uploads
 

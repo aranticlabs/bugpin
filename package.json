@@ -40,6 +40,7 @@
     "repair-github-links": "bun run src/server/scripts/repair-github-links.ts",
     "reset-password": "bun run --cwd src/server reset-password",
     "reset-two-factor": "bun run --cwd src/server reset-two-factor",
+    "reset-portal-origin": "bun run --cwd src/server reset-portal-origin",
     "knip": "knip",
     "format": "prettier --no-error-on-unmatched-pattern --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\" \"docs-dev/**/*.{md,mdx}\"",
     "format:check": "prettier --no-error-on-unmatched-pattern --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\" \"docs-dev/**/*.{md,mdx}\"",

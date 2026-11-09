@@ -13,16 +13,25 @@ import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { submitForm } from '../../lib/submitForm';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
 
-const settingsSchema = z.object({
-  appName: z
-    .string()
-    .trim()
-    .min(1, 'Application name is required')
-    .max(100, 'Application name must be 100 characters or less'),
-  appUrl: z.string().url('Please enter a valid URL').or(z.literal('')),
-  portalBaseUrl: z.string().url('Please enter a valid URL').or(z.literal('')),
-  updateCheckEnabled: z.boolean(),
-});
+const settingsSchema = z
+  .object({
+    appName: z
+      .string()
+      .trim()
+      .min(1, 'Application name is required')
+      .max(100, 'Application name must be 100 characters or less'),
+    appUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
+    portalBaseUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
+    updateCheckEnabled: z.boolean(),
+  })
+  .superRefine((values, context) => {
+    if (values.portalBaseUrl && !/^https?:\/\//i.test(values.appUrl))
+      context.addIssue({
+        code: 'custom',
+        path: ['appUrl'],
+        message: 'A valid Application URL is required while a Portal Base URL is configured',
+      });
+  });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
 
@@ -147,7 +156,7 @@ export function Settings() {
           <SettingRow
             label="Portal Base URL"
             htmlFor="portal-base-url"
-            description="Optional separate origin for the Reporter Portal. Use a different host from the Application URL. Leave blank to use the Application URL."
+            description="Optional separate origin for the Reporter Portal. Requires an Application URL on a different host. Leave blank to use the Application URL."
             controlClassName="@sm:w-80"
           >
             <Input

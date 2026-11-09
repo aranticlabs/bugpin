@@ -9,6 +9,7 @@ import { servePortal } from '../../../src/server/routes/static';
 import { config } from '../../../src/server/config';
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
+import { settingsService } from '../../../src/server/services/settings.service';
 import { openPortalDatabase } from './helpers';
 
 let close: () => void;
@@ -207,12 +208,35 @@ it('preserves arbitrary hosts and both route trees in same-origin mode', async (
     expect((await app.request(`https://any.example.test${path}`)).status).toBe(200);
 });
 
-it('keeps portal routing usable before the Application URL has been configured', async () => {
-  await settingsRepo.updateAll({ appUrl: '' });
-  settingsCacheService.invalidate();
-  expect((await app.request('https://portal.example.test/reporter-portal')).status).toBe(200);
+it('rejects clearing the staff origin and restores Admin Console routing through offline portal-origin recovery', async () => {
+  expect(await settingsService.update({ appUrl: '' })).toMatchObject({
+    success: false,
+    code: 'INVALID_APP_URL',
+  });
+  expect((await app.request('https://staff.example.test/admin')).status).toBe(200);
   expect((await app.request('https://portal.example.test/admin')).status).toBe(404);
-  expect((await app.request('http://localhost/admin')).status).toBe(421);
+  await settingsRepo.updateAll({ appUrl: '', appName: 'Recovery fixture' });
+  settingsCacheService.invalidate();
+  expect((await app.request('https://staff.example.test/admin')).status).toBe(421);
+  const before = await settingsRepo.getAll();
+  const recovered = Bun.spawnSync(['make', 'reset-portal-origin'], {
+    env: { ...process.env, NODE_ENV: 'test', DATA_DIR: config.dataDir },
+  });
+  expect(recovered.exitCode).toBe(0);
+  expect(recovered.stdout.toString()).toContain('Portal Base URL cleared');
+  expect(await settingsRepo.getAll()).toEqual({ ...before, portalBaseUrl: '' });
+  settingsCacheService.invalidate();
+  expect((await app.request('https://staff.example.test/admin')).status).toBe(200);
+  expect(
+    (
+      await settingsService.update({
+        appUrl: 'https://staff.example.test',
+        portalBaseUrl: 'https://portal.example.test',
+      })
+    ).success
+  ).toBe(true);
+  expect((await app.request('https://portal.example.test/admin')).status).toBe(404);
+  expect((await app.request('https://unknown.example.test/admin')).status).toBe(421);
 });
 
 it('never treats loopback Host headers as a portal or Admin Console routing exemption', async () => {
