@@ -61,11 +61,12 @@ const fileColumns = `f.id, f.type, f.mime_type AS mimeType, f.size_bytes AS size
   f.width, f.height, f.message_id AS messageId`;
 
 export const portalReportsRepo = {
-  visibleIds(reporterId: string): string[] {
+  visibleScope(reporterId: string): { id: string; projectId: string }[] {
     return getDb()
-      .query<{ id: string }, [string]>(`SELECT r.id FROM ${reportTables} WHERE ${visibleReport}`)
-      .all(reporterId)
-      .map((row) => row.id);
+      .query<{ id: string; projectId: string }, [string]>(
+        `SELECT r.id, r.project_id AS projectId FROM ${reportTables} WHERE ${visibleReport}`
+      )
+      .all(reporterId);
   },
 
   eventOwner(reportId: string): { reporterId: string; projectId: string } | null {

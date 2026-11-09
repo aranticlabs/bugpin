@@ -94,7 +94,7 @@ export const reportersService = {
       reportersRepo.setSuspension(id, now, userId, now);
       return Result.ok(reportersRepo.findById(id)!);
     });
-    if (result.success) realtimeService.invalidatePortalAccess();
+    if (result.success) realtimeService.invalidatePortalAccess({ reporterId: id });
     return result;
   },
 
@@ -112,7 +112,7 @@ export const reportersService = {
       revoke(reporter, userId, new Date().toISOString());
       return Result.ok(reportersRepo.findById(id)!);
     });
-    if (result.success) realtimeService.invalidatePortalAccess();
+    if (result.success) realtimeService.invalidatePortalAccess({ reporterId: id });
     return result;
   },
 
@@ -146,7 +146,7 @@ export const reportersService = {
     });
     if (result.success) {
       reporterOwnershipService.announce(changes);
-      realtimeService.invalidatePortalAccess();
+      realtimeService.invalidatePortalAccess({ reporterId: id });
     }
     return result;
   },

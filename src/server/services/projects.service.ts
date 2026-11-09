@@ -215,7 +215,7 @@ export const projectsService = {
     }
 
     logger.info('Project updated', { projectId: id });
-    realtimeService.invalidatePortalAccess();
+    realtimeService.invalidatePortalAccess({ projectId: id });
     return Result.ok(project);
   },
 
@@ -233,7 +233,7 @@ export const projectsService = {
     // They can be cleaned up later if needed
 
     await projectsRepo.delete(id);
-    realtimeService.invalidatePortalAccess();
+    realtimeService.invalidatePortalAccess({ projectId: id });
 
     logger.info('Project deleted', { projectId: id });
     return Result.ok(undefined);

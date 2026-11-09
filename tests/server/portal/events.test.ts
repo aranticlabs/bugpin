@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, mock, spyOn } from 'bun:test';
 import { getDb } from '../../../src/server/database/database';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
+import { portalReportsRepo } from '../../../src/server/database/repositories/portal-reports.repo';
 import { reportsRepo } from '../../../src/server/database/repositories/reports.repo';
 import { reporterOwnershipRepo } from '../../../src/server/database/repositories/reporter-ownership.repo';
 import { reporterAuthService } from '../../../src/server/services/reporter-auth.service';
@@ -336,4 +337,104 @@ it('keeps a real Bun stream alive beyond the idle timeout and continues deliveri
   } finally {
     await server.stop(true);
   }
+});
+
+it('performs one check-only session validation and one scope query per hint or heartbeat', async () => {
+  const pulse = captureHeartbeat();
+  const reader = await open();
+  const validate = spyOn(reporterAuthService, 'validateSession');
+  const scope = spyOn(portalReportsRepo, 'visibleScope');
+  publish();
+  expect(decode(await reader.read())).toContain('event: report.updated');
+  expect(validate).toHaveBeenCalledTimes(1);
+  expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
+  expect(scope).toHaveBeenCalledTimes(1);
+  validate.mockClear();
+  scope.mockClear();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await pulse();
+  expect(decode(await reader.read())).toBe(': heartbeat\n\n');
+  expect(validate).toHaveBeenCalledTimes(1);
+  expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
+  expect(scope).toHaveBeenCalledTimes(1);
+});
+
+it('does not renew an idle stream on heartbeat or event delivery and closes at its existing expiry', async () => {
+  const pulse = captureHeartbeat();
+  const reader = await open();
+  const now = Date.now();
+  const lastUsedAt = new Date(now - 2 * 3600000).toISOString();
+  const expiresAt = new Date(now + 3600000).toISOString();
+  getDb().run('UPDATE reporter_sessions SET last_used_at = ?, expires_at = ? WHERE id = ?', [
+    lastUsedAt,
+    expiresAt,
+    owner.sessionId,
+  ]);
+  const clock = spyOn(Date, 'now').mockReturnValue(now + 30 * 60000);
+  await pulse();
+  expect(decode(await reader.read())).toBe(': heartbeat\n\n');
+  publish();
+  expect(decode(await reader.read())).toContain('event: report.updated');
+  expect(
+    getDb()
+      .query('SELECT last_used_at, expires_at FROM reporter_sessions WHERE id = ?')
+      .get(owner.sessionId)
+  ).toEqual({ last_used_at: lastUsedAt, expires_at: expiresAt });
+  clock.mockReturnValue(Date.parse(expiresAt) + 1);
+  await pulse();
+  expect((await reader.read()).done).toBe(true);
+});
+
+for (const target of ['session', 'reporter', 'project'] as const) {
+  it(`targets ${target} invalidation without revalidating unrelated streams`, async () => {
+    const foreignProject = await projectsRepo.create({
+      name: 'Other project',
+      settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+    });
+    const foreignReport = await reportsRepo.create({
+      projectId: foreignProject.id,
+      title: 'Other report',
+      metadata: { timestamp: new Date().toISOString() },
+    });
+    reporterOwnershipRepo.setOwner(foreignReport.id, other.id, null);
+    const affected = await open();
+    await open(other.cookie);
+    const validate = spyOn(reporterAuthService, 'validateSession');
+    const scope = spyOn(portalReportsRepo, 'visibleScope');
+    if (target === 'session') reporterAuthService.logout(owner.sessionId);
+    if (target === 'reporter') Result.unwrap(reportersService.suspend(owner.id, 'staff'));
+    if (target === 'project')
+      Result.unwrap(
+        await projectsService.update(projectId, {
+          settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+        })
+      );
+    if (target === 'project')
+      expect(decode(await affected.read())).toBe('event: access.changed\ndata: {}\n\n');
+    expect((await affected.read()).done).toBe(true);
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
+    expect(scope).toHaveBeenCalledTimes(target === 'project' ? 1 : 0);
+  });
+}
+
+it('deduplicates ownership invalidation per previous reporter and leaves unrelated reporters unchecked', async () => {
+  const reader = await open();
+  await open(other.cookie);
+  const validate = spyOn(reporterAuthService, 'validateSession');
+  reporterOwnershipRepo.setOwner(reportId, null, null);
+  reporterOwnershipService.announce(
+    Array.from({ length: 2 }, () => ({
+      reportId,
+      projectId,
+      action: 'owner_removed' as const,
+      oldReporterId: owner.id,
+      newReporterId: null,
+      actorUserId: 'staff',
+    }))
+  );
+  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+  expect((await reader.read()).done).toBe(true);
+  expect(validate).toHaveBeenCalledTimes(1);
+  expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
 });
