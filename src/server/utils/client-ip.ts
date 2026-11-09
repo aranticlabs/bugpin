@@ -17,7 +17,7 @@ function isRequestIpServer(value: unknown): value is RequestIpServer {
 }
 
 // Bun passes its server as the second `fetch` argument, which Hono exposes as `c.env`.
-function getSocketAddress(c: Context): string | undefined {
+export function getSocketAddress(c: Context): string | undefined {
   const env: unknown = c.env;
   if (!isRequestIpServer(env)) return undefined;
   try {
@@ -33,6 +33,12 @@ function normalizeAddress(address: string): string {
   // IPv4-mapped IPv6 (`::ffff:10.0.0.1`) as reported for dual-stack sockets
   const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(trimmed);
   return mapped ? mapped[1] : trimmed;
+}
+
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const ip = normalizeAddress(address);
+  return ip === '::1' || (isIP(ip) === 4 && ip.startsWith('127.'));
 }
 
 /**

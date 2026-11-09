@@ -1,7 +1,6 @@
-import { isIP } from 'node:net';
 import type { MiddlewareHandler } from 'hono';
 import { settingsCacheService } from '../services/settings-cache.service.js';
-import { getEffectiveOrigin } from '../utils/client-ip.js';
+import { getEffectiveOrigin, getSocketAddress, isLoopbackAddress } from '../utils/client-ip.js';
 
 declare module 'hono' {
   interface ContextVariableMap {
@@ -20,11 +19,12 @@ export const hostRouting: MiddlewareHandler = async (c, next) => {
   const path = c.req.path;
   if (!host || (host !== staffHost && host !== portalHost)) {
     const hostname = origin ? new URL(origin).hostname.replace(/^\[|\]$/g, '') : '';
-    const loopback =
-      hostname === 'localhost' ||
-      hostname === '::1' ||
-      (isIP(hostname) === 4 && hostname.startsWith('127.'));
-    if (loopback) return next();
+    if (
+      path === '/health' &&
+      (hostname === 'localhost' || isLoopbackAddress(hostname)) &&
+      isLoopbackAddress(getSocketAddress(c))
+    )
+      return next();
     return c.json({ success: false, error: 'MISDIRECTED_REQUEST', message: 'Unknown host' }, 421);
   }
 

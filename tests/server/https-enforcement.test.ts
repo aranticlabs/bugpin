@@ -35,7 +35,8 @@ beforeEach(() => {
   enforceHttps = true;
   config.trustProxy = 'auto';
   warnings = [];
-  settingsCacheService.getAll = async () => ({ enforceHttps }) as AppSettings;
+  settingsCacheService.getAll = async () =>
+    ({ enforceHttps, appUrl: 'https://bugpin.example.com', portalBaseUrl: '' }) as AppSettings;
   logger.warn = (message: string) => {
     warnings.push(message);
   };
@@ -69,10 +70,36 @@ describe('httpsEnforcement', () => {
 
   it('keeps loopback health checks available over HTTP when HTTPS is enforced', async () => {
     for (const host of ['localhost', '127.0.0.1', '127.0.0.2', '[::1]']) {
-      const response = await createApp().request(`http://${host}/health`);
+      const response = await createApp().request(
+        `http://${host}/health`,
+        {},
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      );
       expect(response.status).toBe(200);
       expect(response.headers.get('Location')).toBeNull();
     }
+  });
+
+  it('rejects an unconfigured forwarded host instead of issuing an external redirect', async () => {
+    const response = await createApp().request(
+      'http://internal.example/health?next=1',
+      {
+        headers: { 'X-Forwarded-Host': 'attacker.example', 'X-Forwarded-Proto': 'http' },
+      },
+      { requestIP: () => ({ address: '127.0.0.1' }) }
+    );
+    expect(response.status).toBe(421);
+    expect(response.headers.get('Location')).toBeNull();
+  });
+
+  it('rejects a forged loopback Host from a public peer', async () => {
+    const response = await createApp().request(
+      'http://localhost/health',
+      {},
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(response.status).toBe(421);
+    expect(response.headers.get('Location')).toBeNull();
   });
 
   it('skips the redirect and HSTS when DISABLE_HTTPS_ENFORCEMENT is set', async () => {

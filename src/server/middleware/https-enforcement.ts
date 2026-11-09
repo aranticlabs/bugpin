@@ -1,9 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
-import { isIP } from 'node:net';
 import { config } from '../config.js';
 import { settingsCacheService } from '../services/settings-cache.service.js';
 import { logger } from '../utils/logger.js';
-import { getEffectiveOrigin } from '../utils/client-ip.js';
+import { getEffectiveOrigin, getSocketAddress, isLoopbackAddress } from '../utils/client-ip.js';
 
 let overrideWarningLogged = false;
 
@@ -22,7 +21,7 @@ export async function warnIfHttpsEnforcementOverridden(): Promise<void> {
  * HTTPS enforcement middleware
  *
  * When enforceHttps is enabled in settings:
- * - Redirects HTTP requests to HTTPS (using x-forwarded-proto header from proxy)
+ * - Redirects recognized HTTP hosts to their configured HTTPS host
  * - Adds Strict-Transport-Security header to HTTPS responses
  *
  * The DISABLE_HTTPS_ENFORCEMENT environment variable turns both off regardless of the setting.
@@ -45,18 +44,22 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
 
   const origin = getEffectiveOrigin(c);
 
-  // Preserve the trusted external host when redirecting behind a proxy.
+  // Forwarded headers identify the request; only configured hosts can be redirect destinations.
   if (origin?.startsWith('http:')) {
     const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
     if (
       c.req.path === '/health' &&
-      (hostname === 'localhost' ||
-        hostname === '::1' ||
-        (isIP(hostname) === 4 && hostname.startsWith('127.')))
+      (hostname === 'localhost' || isLoopbackAddress(hostname)) &&
+      isLoopbackAddress(getSocketAddress(c))
     )
       return next();
+    const configured = [settings.appUrl, settings.portalBaseUrl].find(
+      (value) => value && new URL(value).host === new URL(origin).host
+    );
+    if (!configured)
+      return c.json({ success: false, error: 'MISDIRECTED_REQUEST', message: 'Unknown host' }, 421);
     const url = new URL(c.req.url);
-    url.host = new URL(origin).host;
+    url.host = new URL(configured).host;
     url.protocol = 'https:';
     return c.redirect(url.toString(), 301);
   }

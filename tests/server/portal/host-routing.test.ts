@@ -97,7 +97,15 @@ it('rejects unknown and malformed hosts before redirects while keeping loopback 
   await settingsRepo.updateAll({ enforceHttps: false });
   settingsCacheService.invalidate();
   for (const host of ['localhost', '127.0.0.2', '[::1]'])
-    expect((await app.request(`http://${host}/health`)).status).toBe(200);
+    expect(
+      (
+        await app.request(
+          `http://${host}/health`,
+          {},
+          { requestIP: () => ({ address: '127.0.0.1' }) }
+        )
+      ).status
+    ).toBe(200);
 });
 
 it('trusts forwarded host and protocol only under the existing proxy policy', async () => {
@@ -204,5 +212,36 @@ it('keeps portal routing usable before the Application URL has been configured',
   settingsCacheService.invalidate();
   expect((await app.request('https://portal.example.test/reporter-portal')).status).toBe(200);
   expect((await app.request('https://portal.example.test/admin')).status).toBe(404);
-  expect((await app.request('http://localhost/admin')).status).toBe(200);
+  expect((await app.request('http://localhost/admin')).status).toBe(421);
+});
+
+it('never treats loopback Host headers as a portal or Admin Console routing exemption', async () => {
+  const peers = ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.2', '203.0.113.7'];
+  for (const address of peers) {
+    const peer = { requestIP: () => ({ address }) };
+    for (const host of ['localhost', '127.0.0.1', '127.0.0.2', '[::1]']) {
+      for (const path of [
+        '/admin',
+        '/admin/test-widget',
+        '/test-widget',
+        '/api/reports',
+        '/api/portal/me',
+        '/reporter-portal',
+      ])
+        expect((await app.request(`http://${host}${path}`, {}, peer)).status).toBe(421);
+      expect((await app.request(`http://${host}/health`, {}, peer)).status).toBe(
+        address === '10.0.0.2' || address === '203.0.113.7' ? 421 : 200
+      );
+    }
+  }
+  config.trustProxy = 'auto';
+  expect(
+    (
+      await app.request(
+        'http://localhost/admin',
+        { headers: { 'X-Forwarded-Host': 'localhost' } },
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      )
+    ).status
+  ).toBe(421);
 });
