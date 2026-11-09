@@ -241,8 +241,10 @@ describe('ProjectSettingsPanel', () => {
     });
     const user = userEvent.setup();
     renderWithQuery(<Harness initial="reporter-portal" />);
-    await user.click(await screen.findByRole('switch', { name: 'Enable reporter portal' }));
-    await user.click(screen.getByRole('switch', { name: 'Allow new feedback' }));
+    await user.click(
+      await screen.findByRole('switch', { name: 'Let reporters see their feedback' })
+    );
+    await user.click(screen.getByRole('switch', { name: 'Allow new feedback from the portal' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() =>
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
@@ -254,6 +256,34 @@ describe('ProjectSettingsPanel', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
     );
+  });
+
+  it('saves unrelated General settings without resending an enabled portal after prerequisites fail', async () => {
+    setupMockResponses(notificationDefaults, false, {
+      ...baseProject,
+      reporterPortalPrerequisites: ['smtp'],
+      settings: {
+        ...baseProject.settings,
+        reporterPortal: { enabled: true, allowNewFeedback: false },
+      },
+    });
+    mockPatch.mockImplementation(async (path: string, body: { settings?: Project['settings'] }) => {
+      if (path === '/projects/project-1' && body.settings?.reporterPortal)
+        throw { response: { status: 409, data: { message: 'Portal prerequisites missing' } } };
+      return { data: { success: true } };
+    });
+    const user = userEvent.setup();
+    renderWithQuery(<Harness />);
+    await user.click(await screen.findByRole('combobox', { name: /default assignee/i }));
+    await user.click(screen.getByRole('option', { name: 'Admin User' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(mockToast.success).toHaveBeenCalledWith('Settings saved successfully')
+    );
+    const update = mockPatch.mock.calls.find(([path]) => path === '/projects/project-1')![1] as {
+      settings: Project['settings'];
+    };
+    expect(update.settings).not.toHaveProperty('reporterPortal');
   });
 
   it('saves project settings and notification defaults', async () => {

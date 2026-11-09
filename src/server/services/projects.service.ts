@@ -185,7 +185,10 @@ export const projectsService = {
     if (input.settings !== undefined) {
       const nextSettings = withoutClearedOverrides({ ...existing.settings, ...input.settings });
       if (input.settings.reporterPortal !== undefined) {
-        const portalSettings = await reporterPortalSettingsService.validate(nextSettings);
+        const portalSettings = await reporterPortalSettingsService.validate(
+          nextSettings,
+          existing.settings
+        );
         if (!portalSettings.success) return portalSettings;
       }
       const defaultAssigneeUserId = nextSettings.defaultAssigneeUserId;

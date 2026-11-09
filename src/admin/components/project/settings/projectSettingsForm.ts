@@ -45,6 +45,15 @@ export const hasDefinedValue = (settings: object) =>
 
 const hasKeys = (settings: object) => Object.keys(settings).length > 0;
 
+function normalizeReporterPortal(
+  settings: ProjectSettings['reporterPortal']
+): ReporterPortalProjectSettings {
+  return {
+    enabled: settings?.enabled ?? false,
+    allowNewFeedback: settings?.allowNewFeedback ?? false,
+  };
+}
+
 export function projectSettingsToForm(
   settings: ProjectSettings | undefined,
   notificationDefaults: ProjectNotificationDefaults | null | undefined
@@ -74,10 +83,7 @@ export function projectSettingsToForm(
   };
 
   return {
-    reporterPortal: {
-      enabled: settings?.reporterPortal?.enabled ?? false,
-      allowNewFeedback: settings?.reporterPortal?.allowNewFeedback ?? false,
-    },
+    reporterPortal: normalizeReporterPortal(settings?.reporterPortal),
     useCustomWidgetDialog: hasKeys(widgetDialog),
     widgetDialogSettings: widgetDialog,
     useCustomDialogContent: hasDefinedValue(widgetDialogContent),
@@ -153,7 +159,8 @@ export function buildProjectSettingsUpdate(
   form: ProjectSettingsForm,
   defaultDiagnostics: DiagnosticSettings | undefined
 ): ProjectSettingsUpdate {
-  const update: ProjectSettingsUpdate = { ...saved };
+  const { reporterPortal: savedPortal, ...otherSettings } = saved ?? {};
+  const update: ProjectSettingsUpdate = { ...otherSettings };
 
   const setOverride = <K extends OverrideKey>(key: K, value: ProjectSettings[K] | undefined) => {
     update[key] = value === undefined ? null : value;
@@ -206,8 +213,9 @@ export function buildProjectSettingsUpdate(
   );
 
   update.defaultAssigneeUserId = form.defaultAssigneeUserId;
-  if (saved?.reporterPortal || form.reporterPortal.enabled || form.reporterPortal.allowNewFeedback)
-    update.reporterPortal = form.reporterPortal;
+  const reporterPortal = normalizeReporterPortal(form.reporterPortal);
+  if (!sameValue(normalizeReporterPortal(savedPortal), reporterPortal))
+    update.reporterPortal = reporterPortal;
   update.language = form.useCustomLanguage ? form.languageSettings : null;
 
   return update;

@@ -53,8 +53,10 @@ describe('Project Reporter Portal', () => {
         settings={{ reporterNotifications: { emailEnabled: false } }}
       />
     );
-    expect(screen.getByRole('switch', { name: 'Enable reporter portal' })).toBeDisabled();
-    expect(screen.getByRole('switch', { name: 'Allow new feedback' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Let reporters see their feedback' })).toBeDisabled();
+    expect(
+      screen.getByRole('switch', { name: 'Allow new feedback from the portal' })
+    ).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send me a test login link' })).toBeDisabled();
     expect(screen.getAllByText('Missing')).toHaveLength(3);
     expect(screen.getByText(/Confirmation emails are disabled/)).toBeInTheDocument();
@@ -67,8 +69,8 @@ describe('Project Reporter Portal', () => {
   it('clears new-feedback permission when the portal is switched off', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Harness />);
-    const enabled = screen.getByRole('switch', { name: 'Enable reporter portal' });
-    const newFeedback = screen.getByRole('switch', { name: 'Allow new feedback' });
+    const enabled = screen.getByRole('switch', { name: 'Let reporters see their feedback' });
+    const newFeedback = screen.getByRole('switch', { name: 'Allow new feedback from the portal' });
     expect(enabled).not.toBeChecked();
     expect(newFeedback).toBeDisabled();
     await user.click(enabled);
@@ -79,6 +81,26 @@ describe('Project Reporter Portal', () => {
     expect(newFeedback).toBeDisabled();
     await user.click(enabled);
     expect(newFeedback).not.toBeChecked();
+  });
+
+  it('lets admins disable new submissions after prerequisites fail and blocks enabling them again', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        missing={['smtp']}
+        settings={{ reporterPortal: { enabled: true, allowNewFeedback: true } }}
+      />
+    );
+    const portal = screen.getByRole('switch', { name: 'Let reporters see their feedback' });
+    const feedback = screen.getByRole('switch', { name: 'Allow new feedback from the portal' });
+    expect(feedback).toBeEnabled();
+    expect(feedback).toBeChecked();
+    await user.click(feedback);
+    expect(portal).toBeChecked();
+    expect(feedback).not.toBeChecked();
+    expect(feedback).toBeDisabled();
+    await user.click(feedback);
+    expect(feedback).not.toBeChecked();
   });
 
   it('copies the portal URL and sends a test login without a user-selected recipient', async () => {
@@ -122,8 +144,10 @@ describe('Project Reporter Portal', () => {
     renderWithProviders(
       <Harness locked settings={{ reporterPortal: { enabled: true, allowNewFeedback: false } }} />
     );
-    expect(screen.getByRole('switch', { name: 'Enable reporter portal' })).toBeDisabled();
-    expect(screen.getByRole('switch', { name: 'Allow new feedback' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Let reporters see their feedback' })).toBeDisabled();
+    expect(
+      screen.getByRole('switch', { name: 'Allow new feedback from the portal' })
+    ).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send me a test login link' })).toBeDisabled();
   });
 });

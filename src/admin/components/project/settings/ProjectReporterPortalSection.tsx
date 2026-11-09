@@ -81,7 +81,7 @@ export function ProjectReporterPortalSection({
         <div className="min-w-0 space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <Label htmlFor="enable-reporter-portal">Enable reporter portal</Label>
+              <Label htmlFor="enable-reporter-portal">Let reporters see their feedback</Label>
               <p className="text-sm text-muted-foreground">
                 Reporters can access their owned reports in this project.
               </p>
@@ -99,7 +99,7 @@ export function ProjectReporterPortalSection({
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <Label htmlFor="allow-portal-feedback">Allow new feedback</Label>
+              <Label htmlFor="allow-portal-feedback">Allow new feedback from the portal</Label>
               <p className="text-sm text-muted-foreground">
                 Reporters who already own a report in this project can submit new feedback through
                 the portal.
@@ -108,7 +108,9 @@ export function ProjectReporterPortalSection({
             <Switch
               id="allow-portal-feedback"
               checked={portal.allowNewFeedback}
-              disabled={!portal.enabled || !ready || project?.licenseLocked}
+              disabled={
+                ((!portal.enabled || !ready) && !portal.allowNewFeedback) || project?.licenseLocked
+              }
               onCheckedChange={(allowNewFeedback) =>
                 update({ reporterPortal: { ...portal, allowNewFeedback } })
               }

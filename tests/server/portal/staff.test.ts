@@ -559,6 +559,39 @@ it('checks prerequisites for project enablement and sends test login only to the
   ).toBe(200);
 });
 
+for (const changes of [
+  { smtpEnabled: false },
+  { appUrl: '' },
+  { appUrl: 'http://public.example.com' },
+]) {
+  it(`allows unrelated settings and disabling new submissions with missing prerequisites ${JSON.stringify(changes)}`, async () => {
+    await projectsRepo.update(project.id, {
+      settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+    });
+    await settingsRepo.updateAll(changes);
+    settingsCacheService.invalidate();
+    expect(
+      (
+        await request(`/api/projects/${project.id}`, 'PATCH', {
+          settings: { widgetLauncherButton: { position: 'bottom-left' } },
+        })
+      ).status
+    ).toBe(200);
+    const off = { settings: { reporterPortal: { enabled: true, allowNewFeedback: false } } };
+    expect((await request(`/api/projects/${project.id}`, 'PATCH', off)).status).toBe(200);
+    expect((await projectsRepo.findById(project.id))!.settings.reporterPortal).toEqual(
+      off.settings.reporterPortal
+    );
+    expect(
+      (
+        await request(`/api/projects/${project.id}`, 'PATCH', {
+          settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+        })
+      ).status
+    ).toBe(409);
+  });
+}
+
 it('waits for test-login delivery and sends a usable request token to the acting admin', async () => {
   const delivery = Promise.withResolvers<{ success: boolean }>();
   const started = Promise.withResolvers<void>();

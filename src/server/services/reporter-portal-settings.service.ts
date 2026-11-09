@@ -28,13 +28,19 @@ export const reporterPortalSettingsService = {
       : Result.ok(undefined);
   },
 
-  async validate(settings: ProjectSettings): Promise<Result<void>> {
+  async validate(settings: ProjectSettings, previous?: ProjectSettings): Promise<Result<void>> {
     if (settings.reporterPortal?.allowNewFeedback && !settings.reporterPortal.enabled)
       return Result.fail(
         'Enable the reporter portal before allowing new feedback',
         'INVALID_REPORTER_PORTAL_SETTINGS'
       );
-    return settings.reporterPortal?.enabled ? this.checkPrerequisites() : Result.ok(undefined);
+    const disablingSubmissions =
+      previous?.reporterPortal?.enabled &&
+      previous.reporterPortal.allowNewFeedback &&
+      !settings.reporterPortal?.allowNewFeedback;
+    return settings.reporterPortal?.enabled && !disablingSubmissions
+      ? this.checkPrerequisites()
+      : Result.ok(undefined);
   },
 
   async testLogin(projectId: string, email: string): Promise<Result<void>> {
