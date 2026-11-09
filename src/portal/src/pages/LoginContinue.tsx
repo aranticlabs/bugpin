@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@shared-ui/components/ui/button';
 import type { PortalMe } from '@shared/portal-types';
@@ -13,14 +13,16 @@ type Preview =
   | { state: 'invalid' };
 
 export function LoginContinue({ token, clearToken }: { token: string; clearToken: () => void }) {
-  const { reporter, signIn } = useAuth();
+  const { reporter, signIn, reconcileSession } = useAuth();
   const { locale, t } = useI18n();
   const navigate = useNavigate();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [failed, setFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
+  const generation = useRef(0);
   useEffect(() => {
+    generation.current++;
     const abort = new AbortController();
     setPreview(null);
     setSent(false);
@@ -36,10 +38,15 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
       .catch(() => {
         if (!abort.signal.aborted) setFailed(true);
       });
-    return () => abort.abort();
+    return () => {
+      generation.current++;
+      abort.abort();
+    };
   }, [token]);
 
   async function proceed() {
+    const requestGeneration = generation.current;
+    const isCurrent = () => requestGeneration === generation.current;
     setPending(true);
     setFailed(false);
     try {
@@ -54,7 +61,15 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
           '/auth/exchange',
           { method: 'POST', body: JSON.stringify({ token }) }
         );
+        if (!isCurrent()) {
+          await reconcileSession();
+          return;
+        }
         await signIn(result.reporter);
+        if (!isCurrent()) {
+          await reconcileSession();
+          return;
+        }
         navigate(
           result.targetReportId
             ? `/reports/${encodeURIComponent(result.targetReportId)}`
@@ -64,11 +79,15 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
         clearToken();
       }
     } catch (error) {
+      if (!isCurrent()) {
+        if (preview?.state === 'valid') await reconcileSession();
+        return;
+      }
       if (error instanceof PortalApiError && error.code === 'INVALID_TOKEN')
         setPreview({ state: 'invalid' });
       else setFailed(true);
     } finally {
-      setPending(false);
+      if (isCurrent()) setPending(false);
     }
   }
 
