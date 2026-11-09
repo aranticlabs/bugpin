@@ -34,9 +34,11 @@ export function ReportDetail() {
   if (query.isPending) return <QueryState loading />;
   if (query.isError)
     return query.error instanceof PortalApiError && query.error.status === 404 ? (
-      <AuthCard title={t('notFound')}>
-        <Link to="/reports">{t('myFeedback')}</Link>
-      </AuthCard>
+      <div role="status">
+        <AuthCard title={t('notFound')}>
+          <Link to="/reports">{t('myFeedback')}</Link>
+        </AuthCard>
+      </div>
     ) : (
       <QueryState retry={() => void query.refetch()} />
     );
@@ -134,11 +136,12 @@ export function ReportDetail() {
             <Composer
               key={id}
               reportId={id}
+              refreshedAt={query.dataUpdatedAt}
               project={projects.data?.find((project) => project.id === report.project.id)}
             />
           ) : (
             <Card className="space-y-3 p-4">
-              <p>{t(report.status === 'closed' ? 'reportClosed' : 'messagingOff')}</p>
+              <p role="status">{t(report.status === 'closed' ? 'reportClosed' : 'messagingOff')}</p>
               {report.status === 'closed' && report.canSubmitNewFeedback && (
                 <Button asChild>
                   <Link to={`/new?projectId=${encodeURIComponent(report.project.id)}`}>

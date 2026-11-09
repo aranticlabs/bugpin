@@ -308,6 +308,7 @@ it.each([
       });
       await waitFor(() => expect(screen.queryByLabelText('Message')).not.toBeInTheDocument());
       expect(screen.getByText(message)).toBeVisible();
+      expect(screen.getByRole('status')).toHaveTextContent(message);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       state = 'restored';
       await act(async () => {
@@ -320,6 +321,149 @@ it.each([
     }
   }
 );
+
+it.each([
+  [409, 'REPORT_CLOSED', 'This report is closed.'],
+  [403, 'MESSAGING_DISABLED', 'The team answers through other channels.'],
+  [404, 'NOT_FOUND', 'Page not found'],
+] as const)(
+  'keeps one accessible replacement when a %s reply rejection refreshes immediately',
+  async (status, code, message) => {
+    let denied = false;
+    server.use(
+      http.get('/api/portal/reports/report', () => {
+        if (!denied) return HttpResponse.json({ success: true, report: detail });
+        return status === 404
+          ? HttpResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404 })
+          : HttpResponse.json({
+              success: true,
+              report: {
+                ...detail,
+                status: status === 409 ? 'closed' : 'resolved',
+                canReply: false,
+              },
+            });
+      }),
+      http.post('/api/portal/reports/report/messages', () => {
+        denied = true;
+        return HttpResponse.json({ success: false, error: code }, { status });
+      })
+    );
+    mount('/reports/report');
+    await userEvent.type(await screen.findByLabelText('Message'), 'Late reply');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(message);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  }
+);
+
+it.each([
+  [403, 'MESSAGING_DISABLED'],
+  [404, 'NOT_FOUND'],
+  [409, 'REPORT_CLOSED'],
+] as const)(
+  'clears only a %s mutation error after a same-permission refresh and retains the draft through live updates',
+  async (status, code) => {
+    let rejected = false;
+    let finishRefresh!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    server.use(
+      http.get('/api/portal/reports/report', async () => {
+        if (rejected) await pending;
+        return HttpResponse.json({ success: true, report: detail });
+      })
+    );
+    const originalFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/reports/report/messages') && init?.method === 'POST') {
+        rejected = true;
+        expect((init.body as FormData).get('body')).toBe('Keep this draft');
+        expect(((init.body as FormData).get('files[]') as File).name).toBe('draft.png');
+        return Response.json({ success: false, error: code }, { status });
+      }
+      return originalFetch(input, init);
+    });
+    const client = mount('/reports/report');
+    const user = userEvent.setup();
+    try {
+      await user.type(await screen.findByLabelText('Message'), 'Keep this draft');
+      await user.upload(
+        screen.getByLabelText('Files'),
+        new File(['png'], 'draft.png', { type: 'image/png' })
+      );
+      await user.click(screen.getByRole('button', { name: 'Send' }));
+      await screen.findByRole('alert');
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      await act(async () => {
+        finishRefresh();
+        await pending;
+      });
+      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+      expect(screen.getByLabelText('Message')).toHaveValue('Keep this draft');
+      expect(screen.getByText('draft.png')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+      const before = client.getQueryState(['portal', 'report', 'report'])!.dataUpdateCount;
+      act(() => {
+        TestEventSource.instances[0].dispatchEvent(new Event('report.updated'));
+      });
+      await waitFor(() =>
+        expect(
+          client.getQueryState(['portal', 'report', 'report'])!.dataUpdateCount
+        ).toBeGreaterThan(before)
+      );
+      expect(screen.getByLabelText('Message')).toHaveValue('Keep this draft');
+      expect(screen.getByText('draft.png')).toBeVisible();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } finally {
+      finishRefresh();
+    }
+  }
+);
+
+it('keeps a pending reply and its draft intact during an unrelated live refresh', async () => {
+  let finishReply!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finishReply = resolve;
+  });
+  const originalFetch = globalThis.fetch;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/reports/report/messages') && init?.method === 'POST') {
+      await pending;
+      return Response.json({ success: false, error: 'REPORT_CLOSED' }, { status: 409 });
+    }
+    return originalFetch(input, init);
+  });
+  const client = mount('/reports/report');
+  const user = userEvent.setup();
+  try {
+    await user.type(await screen.findByLabelText('Message'), 'Pending draft');
+    await user.upload(
+      screen.getByLabelText('Files'),
+      new File(['png'], 'pending.png', { type: 'image/png' })
+    );
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['portal', 'report', 'report'] });
+    });
+    expect(screen.getByLabelText('Message')).toBeDisabled();
+    expect(screen.getByLabelText('Message')).toHaveValue('Pending draft');
+    expect(screen.getByText('pending.png')).toBeVisible();
+    await act(async () => {
+      finishReply();
+      await pending;
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Message')).toHaveValue('Pending draft');
+    expect(screen.getByText('pending.png')).toBeVisible();
+  } finally {
+    finishReply();
+  }
+});
 
 it('submits new feedback only to an eligible owned project and opens its detail', async () => {
   server.use(

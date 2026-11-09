@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PortalProject } from '@shared/portal-types';
 import { Button } from '@shared-ui/components/ui/button';
@@ -9,11 +9,20 @@ import { portalFetch, PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
 import { errorKey } from '../i18n/error-key';
 
-export function Composer({ reportId, project }: { reportId: string; project?: PortalProject }) {
+export function Composer({
+  reportId,
+  project,
+  refreshedAt,
+}: {
+  reportId: string;
+  project?: PortalProject;
+  refreshedAt: number;
+}) {
   const { t } = useI18n();
   const client = useQueryClient();
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const failedRevision = useRef(refreshedAt);
   const mutation = useMutation({
     mutationFn: async () => {
       const form = new FormData();
@@ -30,11 +39,15 @@ export function Composer({ reportId, project }: { reportId: string; project?: Po
       await client.invalidateQueries({ queryKey: ['portal'] });
     },
     onError: (error) => {
+      failedRevision.current = refreshedAt;
       if (error instanceof PortalApiError && [403, 404, 409].includes(error.status)) {
         void client.invalidateQueries({ queryKey: ['portal'] });
       }
     },
   });
+  useEffect(() => {
+    if (mutation.isError && failedRevision.current !== refreshedAt) mutation.reset();
+  }, [refreshedAt, mutation.isError, mutation.reset]);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!mutation.isPending && (body.trim() || files.length)) mutation.mutate();
