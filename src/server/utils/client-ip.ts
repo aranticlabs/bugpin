@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { config } from '../config.js';
 
 export type TrustProxyMode = 'auto' | 'always' | 'never';
-export const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
+const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -75,12 +75,16 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
 export function getEffectiveOrigin(c: Context): string | null {
   try {
     const url = new URL(c.req.url);
-    let host = c.req.header('host') || url.host;
+    let host = c.req.header('host') ?? url.host;
     let protocol = url.protocol;
     if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
-      host = c.req.header('x-forwarded-host') || host;
+      host = c.req.header('x-forwarded-host') ?? host;
       const forwardedProtocol = c.req.header('x-forwarded-proto');
-      if (forwardedProtocol && forwardedProtocol !== 'http' && forwardedProtocol !== 'https')
+      if (
+        forwardedProtocol !== undefined &&
+        forwardedProtocol !== 'http' &&
+        forwardedProtocol !== 'https'
+      )
         return null;
       if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
     }

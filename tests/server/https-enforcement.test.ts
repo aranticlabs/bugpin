@@ -113,16 +113,16 @@ describe('httpsEnforcement', () => {
   );
 
   it.each([
-    ['', 'https://internal.example/health?next=1'],
+    ['', 'https://public.example/health?next=1'],
     ['https://bugpin.example.com', 'https://bugpin.example.com/health?next=1'],
   ])(
-    'ignores an unmatched forwarded redirect host in single-origin mode with appUrl=%s',
+    'selects the canonical or trusted origin in single-origin mode with appUrl=%s',
     async (configured, expected) => {
       appUrl = configured;
       const response = await createApp().request(
         'http://internal.example/health?next=1',
         {
-          headers: { 'X-Forwarded-Host': 'attacker.example', 'X-Forwarded-Proto': 'http' },
+          headers: { 'X-Forwarded-Host': 'public.example', 'X-Forwarded-Proto': 'http' },
         },
         { requestIP: () => ({ address: '127.0.0.1' }) }
       );
@@ -131,21 +131,41 @@ describe('httpsEnforcement', () => {
     }
   );
 
-  it('uses the unforwarded Host header when the Application URL is empty', async () => {
+  it.each(['internal.example:7300', 'bugpin_app:7300'])(
+    'uses the trusted public host instead of internal Host %s when no URL is configured',
+    async (host) => {
+      appUrl = '';
+      const response = await createApp().request(
+        `http://${host}/health?next=1`,
+        {
+          headers: {
+            Host: host,
+            'X-Forwarded-Host': 'public.example:8080',
+            'X-Forwarded-Proto': 'http',
+          },
+        },
+        { requestIP: () => ({ address: '127.0.0.1' }) }
+      );
+      expect(response.status).toBe(301);
+      expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
+    }
+  );
+
+  it('ignores forwarded origins from an untrusted peer when no URL is configured', async () => {
     appUrl = '';
     const response = await createApp().request(
       'http://internal.example/health?next=1',
       {
         headers: {
-          Host: 'request.example:8080',
+          Host: 'public.example:8080',
           'X-Forwarded-Host': 'attacker.example',
-          'X-Forwarded-Proto': 'http',
+          'X-Forwarded-Proto': 'https, http',
         },
       },
-      { requestIP: () => ({ address: '127.0.0.1' }) }
+      { requestIP: () => ({ address: '203.0.113.7' }) }
     );
     expect(response.status).toBe(301);
-    expect(response.headers.get('Location')).toBe('https://request.example:8080/health?next=1');
+    expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
   });
 
   it.each([
@@ -156,27 +176,58 @@ describe('httpsEnforcement', () => {
     'example.test,evil.test',
     'example.test:invalid',
     '[::1',
-  ])('rejects malformed unforwarded Host %s with a controlled 400', async (host) => {
+  ])('rejects malformed direct HTTP and HTTPS Host %s with a controlled 400', async (host) => {
     appUrl = '';
-    const response = await createApp().request(
-      'http://internal.example/health',
-      {
-        headers: {
-          Host: host,
-          'X-Forwarded-Host': 'bugpin.example.com',
-          'X-Forwarded-Proto': 'http',
+    for (const protocol of ['http', 'https']) {
+      const response = await createApp().request(
+        `${protocol}://internal.example/health`,
+        {
+          headers: {
+            Host: host,
+          },
         },
-      },
-      { requestIP: () => ({ address: '127.0.0.1' }) }
-    );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      success: false,
-      error: 'INVALID_HOST',
-      message: 'Invalid host',
-    });
-    expect(response.headers.get('Location')).toBeNull();
+        { requestIP: () => ({ address: '203.0.113.7' }) }
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        success: false,
+        error: 'INVALID_HOST',
+        message: 'Invalid host',
+      });
+      expect(response.headers.get('Location')).toBeNull();
+    }
   });
+
+  it.each([
+    ['https, http', 'bugpin.example.com'],
+    ['http, https', 'bugpin.example.com'],
+    ['ftp', 'bugpin.example.com'],
+    ['', 'bugpin.example.com'],
+    ['https', 'bugpin.example.com,other.example.com'],
+    ['http', 'bad host'],
+    ['https', 'bugpin.example.com:invalid'],
+    ['http', ''],
+  ])(
+    'rejects unreadable trusted origin proto=%s host=%s without redirecting',
+    async (proto, host) => {
+      for (const canonical of ['', 'https://bugpin.example.com']) {
+        appUrl = canonical;
+        const response = await createApp().request(
+          'http://bugpin.example.com/health',
+          { headers: { 'X-Forwarded-Proto': proto, 'X-Forwarded-Host': host } },
+          { requestIP: () => ({ address: '127.0.0.1' }) }
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          success: false,
+          error: 'INVALID_HOST',
+          message: 'Invalid host',
+        });
+        expect(response.headers.get('Location')).toBeNull();
+        expect(response.headers.get('Strict-Transport-Security')).toBeNull();
+      }
+    }
+  );
 
   it('uses the trusted forwarded protocol without redirecting an already secure single-origin request', async () => {
     appUrl = '';
