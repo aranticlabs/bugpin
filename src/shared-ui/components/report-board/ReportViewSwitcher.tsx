@@ -9,20 +9,22 @@ function isReportView(value: string): value is ReportView {
 export function ReportViewSwitcher({
   value,
   onChange,
+  labels = { view: 'Report view', list: 'List', board: 'Board' },
 }: {
   value: ReportView;
   onChange: (view: ReportView) => void;
+  labels?: { view: string; list: string; board: string };
 }) {
   return (
     <Tabs value={value} onValueChange={(next) => isReportView(next) && onChange(next)}>
-      <TabsList aria-label="Report view">
+      <TabsList aria-label={labels.view}>
         <TabsTrigger value="list" className="gap-1.5">
           <List className="h-4 w-4" />
-          List
+          {labels.list}
         </TabsTrigger>
         <TabsTrigger value="board" className="gap-1.5">
           <Columns3 className="h-4 w-4" />
-          Board
+          {labels.board}
         </TabsTrigger>
       </TabsList>
     </Tabs>

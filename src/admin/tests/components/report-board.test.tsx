@@ -6,7 +6,7 @@ import {
   ReportBoard,
   type BoardSelection,
   type ReportBoardColumnData,
-} from '../../components/report-board/ReportBoard';
+} from '@shared-ui/components/report-board/ReportBoard';
 import {
   DraggableReportBoard,
   moveGroupInOrder,
@@ -14,7 +14,7 @@ import {
   placementOf,
   type BoardOrder,
 } from '../../components/report-board/DraggableReportBoard';
-import { ReportViewSwitcher } from '../../components/report-board/ReportViewSwitcher';
+import { ReportViewSwitcher } from '@shared-ui/components/report-board/ReportViewSwitcher';
 
 interface Item {
   id: string;
@@ -147,6 +147,40 @@ describe('ReportBoard', () => {
 });
 
 describe('ReportBoard loading errors', () => {
+  it('uses caller text for counts, actions, pagination, and errors', async () => {
+    const user = userEvent.setup();
+    const props = boardProps([
+      column('open', [crash], { total: 3, hasMore: true }),
+      column('closed', [], { error: true, onRetry: vi.fn() }),
+    ]);
+    const labels = {
+      columnSummary: (label: string, total: number, collapsed: boolean) =>
+        `${label}: ${total}${collapsed ? ' zu' : ''}`,
+      collapseColumn: (label: string) => `${label} zuklappen`,
+      expandColumn: (label: string) => `${label} aufklappen`,
+      openCard: (label: string) => `${label} ansehen`,
+      loadMore: (remaining: number) => `${remaining} weitere`,
+      loadError: 'Laden fehlgeschlagen',
+      retry: 'Erneut versuchen',
+    };
+    const { rerender } = render(<ReportBoard {...props} labels={labels} />);
+
+    expect(screen.getByRole('region', { name: 'Open: 3' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Crash on save ansehen' }));
+    await user.click(screen.getByRole('button', { name: '2 weitere' }));
+    await user.click(screen.getByRole('button', { name: 'Open zuklappen' }));
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Laden fehlgeschlagen');
+    expect(props.onOpen).toHaveBeenCalledWith(crash);
+    expect(props.columns[0].onLoadMore).toHaveBeenCalledOnce();
+    expect(props.columns[1].onRetry).toHaveBeenCalledOnce();
+
+    rerender(<ReportBoard {...props} labels={labels} collapsed={['open']} />);
+    expect(screen.getByRole('region', { name: 'Open: 3 zu' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open aufklappen' }));
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(2);
+  });
+
   it('shows a retry instead of the empty text when a column fails to load', async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
@@ -395,6 +429,23 @@ describe('board order helpers', () => {
 });
 
 describe('ReportViewSwitcher', () => {
+  it('uses caller labels without changing view values', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ReportViewSwitcher
+        value="list"
+        onChange={onChange}
+        labels={{ view: 'Ansicht', list: 'Liste', board: 'Tafel' }}
+      />
+    );
+
+    expect(screen.getByRole('tablist', { name: 'Ansicht' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Liste' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('tab', { name: 'Tafel' }));
+    expect(onChange).toHaveBeenCalledWith('board');
+  });
+
   it('reports the chosen view', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

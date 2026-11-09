@@ -9,7 +9,8 @@
   "workspaces": [
     "src/server",
     "src/admin",
-    "src/widget"
+    "src/widget",
+    "src/shared-ui"
   ],
   "scripts": {
     "dev": "bun run dev:server & bun run dev:admin",

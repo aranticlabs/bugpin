@@ -22,7 +22,8 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+      "@shared-ui/*": ["../shared-ui/*"]
     }
   },
   "include": ["./**/*.ts", "./**/*.tsx"],

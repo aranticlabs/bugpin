@@ -15,8 +15,33 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Spinner } from '../ui/spinner';
 import { cn } from '../../lib/utils';
-import { ReportStatusIcon, ReportStatusLabel } from '../report/ReportStatusPriority';
+import { ReportStatusIcon, ReportStatusLabel } from '../../lib/status';
 import { useMarqueeSelection } from './useMarqueeSelection';
+
+export interface ReportBoardLabels {
+  columnSummary: (label: string, total: number, collapsed: boolean) => string;
+  selectAll: (label: string) => string;
+  deselectAll: (label: string) => string;
+  collapseColumn: (label: string) => string;
+  expandColumn: (label: string) => string;
+  openCard: (label: string, selected: boolean) => string;
+  loadMore: (remaining: number) => string;
+  loadError: string;
+  retry: string;
+}
+
+const DEFAULT_LABELS: ReportBoardLabels = {
+  columnSummary: (label, total, collapsed) =>
+    `${label}, ${total} ${total === 1 ? 'report' : 'reports'}${collapsed ? ', collapsed' : ''}`,
+  selectAll: (label) => `Select all in ${label}`,
+  deselectAll: (label) => `Deselect all in ${label}`,
+  collapseColumn: (label) => `Collapse ${label}`,
+  expandColumn: (label) => `Expand ${label}`,
+  openCard: (label, selected) => `Open ${label}${selected ? ', selected' : ''}`,
+  loadMore: (remaining) => `Show more (${remaining} remaining)`,
+  loadError: "Couldn't load reports",
+  retry: 'Retry',
+};
 
 export interface ReportBoardItem {
   id: string;
@@ -37,6 +62,7 @@ export interface ReportBoardColumnData<T extends ReportBoardItem> {
 }
 
 export interface ReportBoardColumnProps {
+  labels?: Partial<ReportBoardLabels>;
   status: ReportStatus;
   label: string;
   total: number;
@@ -49,6 +75,7 @@ export interface ReportBoardColumnProps {
 }
 
 export interface ReportBoardCardProps {
+  labels?: Partial<ReportBoardLabels>;
   id: string;
   status: ReportStatus;
   index: number;
@@ -83,6 +110,7 @@ export interface ReportBoardProps<T extends ReportBoardItem> {
   renderCardActions?: (item: T) => ReactNode;
   canMove?: (item: T) => boolean;
   emptyColumnText?: string;
+  labels?: Partial<ReportBoardLabels>;
   ColumnComponent?: ComponentType<ReportBoardColumnProps>;
   CardComponent?: ComponentType<ReportBoardCardProps>;
   /** Fixed board height; columns then scroll on their own instead of growing */
@@ -102,6 +130,7 @@ export function ReportBoard<T extends ReportBoardItem>({
   onOpen,
   renderCardActions,
   canMove,
+  labels,
   emptyColumnText = 'No reports',
   ColumnComponent = ReportBoardColumn,
   CardComponent = ReportBoardCard,
@@ -109,6 +138,7 @@ export function ReportBoard<T extends ReportBoardItem>({
   containerRef,
   selection,
 }: ReportBoardProps<T>) {
+  const text = { ...DEFAULT_LABELS, ...labels };
   const boardRef = useRef<HTMLDivElement | null>(null);
   const setBoardRef = (element: HTMLDivElement | null) => {
     boardRef.current = element;
@@ -171,6 +201,7 @@ export function ReportBoard<T extends ReportBoardItem>({
         {columns.map((column) => (
           <ColumnComponent
             key={column.status}
+            labels={text}
             status={column.status}
             label={statusLabels[column.status]}
             total={column.total}
@@ -190,12 +221,13 @@ export function ReportBoard<T extends ReportBoardItem>({
                 <Spinner size="sm" className="text-primary" />
               </div>
             ) : column.error && column.items.length === 0 ? (
-              <ColumnLoadError onRetry={column.onRetry} />
+              <ColumnLoadError onRetry={column.onRetry} labels={text} />
             ) : (
               <>
                 {column.items.map((item, index) => (
                   <CardComponent
                     key={item.id}
+                    labels={text}
                     id={item.id}
                     status={column.status}
                     index={index}
@@ -215,7 +247,7 @@ export function ReportBoard<T extends ReportBoardItem>({
                   </p>
                 )}
                 {column.error ? (
-                  <ColumnLoadError onRetry={column.onRetry} />
+                  <ColumnLoadError onRetry={column.onRetry} labels={text} />
                 ) : (
                   column.hasMore && (
                     <Button
@@ -226,7 +258,7 @@ export function ReportBoard<T extends ReportBoardItem>({
                       onClick={column.onLoadMore}
                     >
                       {column.loadingMore && <Spinner size="sm" />}
-                      Show more ({column.total - column.items.length} remaining)
+                      {text.loadMore(column.total - column.items.length)}
                     </Button>
                   )
                 )}
@@ -239,16 +271,16 @@ export function ReportBoard<T extends ReportBoardItem>({
   );
 }
 
-function ColumnLoadError({ onRetry }: { onRetry?: () => void }) {
+function ColumnLoadError({ onRetry, labels }: { onRetry?: () => void; labels: ReportBoardLabels }) {
   return (
     <div
       role="alert"
       className="flex flex-col items-center gap-2 rounded-md border border-dashed p-4 text-center"
     >
-      <p className="text-xs text-muted-foreground">Couldn't load reports</p>
+      <p className="text-xs text-muted-foreground">{labels.loadError}</p>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Retry
+          {labels.retry}
         </Button>
       )}
     </div>
@@ -272,8 +304,9 @@ export function ReportBoardColumn({
   children,
   ref,
   isDropTarget = false,
+  labels,
 }: ReportBoardColumnProps & { ref?: Ref<HTMLElement>; isDropTarget?: boolean }) {
-  const countLabel = `${total} ${total === 1 ? 'report' : 'reports'}`;
+  const text = { ...DEFAULT_LABELS, ...labels };
   // While the column shrinks, the expanded content keeps its old width and fades out as the
   // collapsed layout fades in on top of it; the expanded content unmounts once resizing is done.
   const [shownExpanded, setShownExpanded] = useState(!collapsed);
@@ -302,7 +335,7 @@ export function ReportBoardColumn({
   return (
     <section
       ref={ref}
-      aria-label={`${label}, ${countLabel}${collapsed ? ', collapsed' : ''}`}
+      aria-label={text.columnSummary(label, total, collapsed)}
       className={cn(
         'group/column relative flex min-w-0 flex-col overflow-hidden rounded-lg border bg-muted/50 transition-colors',
         shownExpanded ? 'min-h-48 p-2' : 'py-3',
@@ -335,7 +368,7 @@ export function ReportBoardColumn({
                     allSelected && 'text-primary md:opacity-100'
                   )}
                   onClick={onSelectAll}
-                  aria-label={`${allSelected ? 'Deselect' : 'Select'} all in ${label}`}
+                  aria-label={allSelected ? text.deselectAll(label) : text.selectAll(label)}
                   aria-pressed={allSelected}
                 >
                   <ListChecks />
@@ -346,7 +379,7 @@ export function ReportBoardColumn({
                 size="icon"
                 className="size-7 text-muted-foreground"
                 onClick={collapse}
-                aria-label={`Collapse ${label}`}
+                aria-label={text.collapseColumn(label)}
               >
                 <ChevronsLeftRight />
               </Button>
@@ -382,7 +415,7 @@ export function ReportBoardColumn({
             size="icon"
             className="size-8"
             onClick={onToggleCollapsed}
-            aria-label={`Expand ${label}`}
+            aria-label={text.expandColumn(label)}
           >
             <ChevronsLeftRight />
           </Button>
@@ -419,6 +452,7 @@ export function ReportBoardCard({
   isDragging = false,
   dimmed = false,
   groupCount,
+  labels,
 }: ReportBoardCardProps & {
   ref?: Ref<HTMLDivElement>;
   handleRef?: Ref<HTMLButtonElement>;
@@ -430,6 +464,7 @@ export function ReportBoardCard({
 }) {
   // Space picks a draggable card up and drops it; the click a button fires when Space is released
   // must not open the card as well.
+  const text = { ...DEFAULT_LABELS, ...labels };
   const releasedSpace = useRef(false);
   const draggableByKeyboard = movable && handleRef !== undefined;
 
@@ -460,7 +495,7 @@ export function ReportBoardCard({
         ref={handleRef}
         type="button"
         className="absolute inset-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Open ${label}${selected ? ', selected' : ''}`}
+        aria-label={text.openCard(label, selected)}
         onKeyUp={(event) => {
           if (!draggableByKeyboard || event.key !== ' ') return;
           releasedSpace.current = true;
