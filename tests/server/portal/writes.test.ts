@@ -72,6 +72,8 @@ beforeEach(async () => {
   ]);
   spyOn(notificationsService, 'notifyReporterActivity').mockResolvedValue();
   spyOn(notificationsService, 'notifyNewReport').mockResolvedValue();
+  spyOn(notificationsService, 'notifyAssignment').mockResolvedValue();
+  spyOn(notificationsService, 'notifyReporterAssignment').mockResolvedValue();
   spyOn(githubSyncService, 'getAutoSyncIntegration').mockResolvedValue(null);
 });
 afterEach(async () => {
@@ -156,8 +158,15 @@ it('creates owner-attributed feedback with original content, safe metadata, defa
   expect(saved.lastReporterActivityAt).toBe(saved.createdAt);
   expect(saved.updatedAt).toBe(saved.createdAt);
   expect(
-    getDb().query('SELECT action, user_id FROM report_history WHERE report_id = ?').all(dto.id)
-  ).toEqual([{ action: 'created', user_id: null }]);
+    getDb()
+      .query(
+        'SELECT action, user_id, old_value, new_value FROM report_history WHERE report_id = ? ORDER BY rowid'
+      )
+      .all(dto.id)
+  ).toEqual([
+    { action: 'created', user_id: null, old_value: null, new_value: null },
+    { action: 'assignee_changed', user_id: null, old_value: null, new_value: 'staff' },
+  ]);
   expect((await filesRepo.findByReportId(dto.id))[0]).toMatchObject({
     uploadedByReporterId: reporterId,
     messageId: null,
@@ -165,6 +174,17 @@ it('creates owner-attributed feedback with original content, safe metadata, defa
   await tick();
   expect(notificationsService.notifyReporterActivity).toHaveBeenCalledTimes(1);
   expect(notificationsService.notifyNewReport).not.toHaveBeenCalled();
+  expect(notificationsService.notifyAssignment).toHaveBeenCalledTimes(1);
+  expect(notificationsService.notifyAssignment).toHaveBeenCalledWith(
+    expect.objectContaining({ id: dto.id }),
+    'staff'
+  );
+  expect(notificationsService.notifyReporterAssignment).toHaveBeenCalledTimes(1);
+  expect(notificationsService.notifyReporterAssignment).toHaveBeenCalledWith(
+    expect.objectContaining({ id: dto.id }),
+    undefined,
+    'staff'
+  );
   expect(createdHook).toHaveBeenCalledWith(
     expect.objectContaining({ id: dto.id, source: 'portal' })
   );
@@ -472,3 +492,116 @@ it('preserves committed feedback when notification delivery fails and queues con
   expect(await reportsRepo.findById(dto.id)).not.toBeNull();
   expect(enqueue).toHaveBeenCalledWith(dto.id, 'integration');
 });
+
+it('normalizes optional descriptions before storing submitted and original content', async () => {
+  for (const [input, expected] of [
+    ['   \n\t ', null],
+    ['  Useful description \n ', 'Useful description'],
+  ] as const) {
+    const response = await submit({ description: input });
+    expect(response.status).toBe(201);
+    const dto = ((await response.json()) as { report: PortalReportDetail }).report;
+    expect(dto.description).toBe(expected);
+    const saved = (await reportsRepo.findById(dto.id))!;
+    expect(saved.description ?? null).toBe(expected);
+    expect(saved.originalDescription ?? null).toBe(expected);
+  }
+});
+
+it('omits assignment effects when no default assignee is eligible', async () => {
+  await project({
+    reporterPortal: { enabled: true, allowNewFeedback: true },
+    defaultAssigneeUserId: 'staff',
+  });
+  getDb().run("UPDATE users SET is_active = 0 WHERE id = 'staff'");
+  const response = await submit();
+  expect(response.status).toBe(201);
+  const dto = ((await response.json()) as { report: PortalReportDetail }).report;
+  await tick();
+  expect(
+    getDb().query('SELECT action FROM report_history WHERE report_id = ?').all(dto.id)
+  ).toEqual([{ action: 'created' }]);
+  expect(notificationsService.notifyAssignment).not.toHaveBeenCalled();
+  expect(notificationsService.notifyReporterAssignment).not.toHaveBeenCalled();
+  expect(notificationsService.notifyReporterActivity).toHaveBeenCalledTimes(1);
+});
+
+it('rolls back creation if assignment history fails and never sends assignment notifications', async () => {
+  const insert = reportHistoryRepo.insert;
+  spyOn(reportHistoryRepo, 'insert').mockImplementation((entry) => {
+    if (entry.action === 'assignee_changed') throw new Error('History unavailable');
+    return insert(entry);
+  });
+  expect((await submit({}, [image()])).status).toBe(500);
+  await tick();
+  expect(count('reports')).toBe(1);
+  expect(count('files')).toBe(0);
+  expect(count('report_history')).toBe(0);
+  expect(diskFiles()).toEqual([]);
+  expect(notificationsService.notifyAssignment).not.toHaveBeenCalled();
+  expect(notificationsService.notifyReporterAssignment).not.toHaveBeenCalled();
+  expect(notificationsService.notifyReporterActivity).not.toHaveBeenCalled();
+});
+
+for (const usedBytes of [1024 * 1024, 768 * 1024]) {
+  it(`rejects pre-buffer uploads against remaining quota after ${usedBytes} bytes for submissions and replies`, async () => {
+    await limits({ uploadMbPerReporterPerDay: 1 });
+    await project({
+      reporterPortal: { enabled: true, allowNewFeedback: true },
+      screenshot: { maxImageUploadSizeMb: 50, maxVideoUploadSizeMb: 100 },
+    });
+    await filesRepo.create({
+      reportId,
+      type: 'screenshot',
+      filename: 'existing.png',
+      path: 'existing.png',
+      mimeType: 'image/png',
+      sizeBytes: usedBytes,
+      uploadedByReporterId: reporterId,
+    });
+    const maximum = 1024 * 1024 - usedBytes + 64 * 1024;
+    expect(Result.unwrap(await portalSubmissionsService.uploadBodyLimit(reporterId))).toBe(maximum);
+    expect(Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId))).toBe(
+      maximum
+    );
+    expect(Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId))).toBe(
+      500 * 1024 * 1024 + 64 * 1024
+    );
+    const parse = spyOn(Request.prototype, 'formData');
+    for (const path of ['/reports', `/reports/${reportId}/messages`]) {
+      for (const contentLength of [true, false]) {
+        let pulls = 0;
+        let stop: () => void = () => {};
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            stop = () => controller.close();
+          },
+          pull(controller) {
+            pulls++;
+            controller.enqueue(new Uint8Array(16 * 1024));
+          },
+        });
+        const request = new Request(`${portalOrigin}/api/portal${path}`, {
+          method: 'POST',
+          headers: {
+            Cookie: cookie,
+            Origin: portalOrigin,
+            'X-BugPin-Portal': '1',
+            'content-type': 'multipart/form-data; boundary=boundary',
+            ...(contentLength ? { 'content-length': String(maximum + 1) } : {}),
+          },
+          body,
+        });
+        const response = await app.request(request);
+        expect(response.status).toBe(413);
+        expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+        expect(parse).not.toHaveBeenCalled();
+        expect(pulls).toBeLessThanOrEqual(contentLength ? 1 : Math.ceil(maximum / (16 * 1024)) + 2);
+        stop();
+      }
+    }
+    expect(count('files')).toBe(1);
+    expect(count('reports')).toBe(1);
+    expect(count('report_messages')).toBe(0);
+  });
+}

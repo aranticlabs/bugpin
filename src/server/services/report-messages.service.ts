@@ -298,7 +298,7 @@ async function writeMessage(
 }
 
 export const reportMessagesService = {
-  async uploadBodyLimit(reportId: string): Promise<Result<number>> {
+  async uploadBodyLimit(reportId: string, reporterId?: string): Promise<Result<number>> {
     const context = reportMessagesRepo.writeContext(reportId);
     if (!context) return Result.fail('Report not found', 'NOT_FOUND');
     const settings = await settingsCacheService.getAll();
@@ -306,9 +306,16 @@ export const reportMessagesService = {
       context.settings.screenshot?.maxImageUploadSizeMb ?? settings.screenshot.maxImageUploadSizeMb;
     const videoMb =
       context.settings.screenshot?.maxVideoUploadSizeMb ?? settings.screenshot.maxVideoUploadSizeMb;
-    return Result.ok(
-      MAX_MESSAGE_FILES * Math.max(imageMb, videoMb) * 1024 * 1024 + MESSAGE_BODY_OVERHEAD_BYTES
-    );
+    let fileBytes = MAX_MESSAGE_FILES * Math.max(imageMb, videoMb) * 1024 * 1024;
+    if (reporterId) {
+      const remaining = uploadQuotaService.remaining(
+        reporterId,
+        settings.reporterPortalLimits.uploadMbPerReporterPerDay
+      );
+      if (!remaining.success) return remaining;
+      fileBytes = Math.min(fileBytes, remaining.value);
+    }
+    return Result.ok(fileBytes + MESSAGE_BODY_OVERHEAD_BYTES);
   },
 
   async send(

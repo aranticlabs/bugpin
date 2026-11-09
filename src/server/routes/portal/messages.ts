@@ -21,7 +21,10 @@ portalMessagesRoutes.post(
         { success: false, error: access.code, message: access.error },
         errorStatus(access.code)
       );
-    const limit = await reportMessagesService.uploadBodyLimit(c.req.param('id'));
+    const limit = await reportMessagesService.uploadBodyLimit(
+      c.req.param('id'),
+      c.get('reporter').id
+    );
     if (!limit.success)
       return c.json(
         { success: false, error: limit.code, message: limit.error },

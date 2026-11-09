@@ -238,10 +238,15 @@ function summarizeResolveTime(
   };
 }
 
-/** Ownership can be automatic; widget attribution is limited to creation and its initial assignment. */
+/** Creation and initial assignment use source attribution; ownership can be automatic. */
 function actorOf(row: ActivityRow): DashboardActivityActor {
   if (row.userId) return 'user';
-  if (row.reportSource === 'portal' && row.action === 'created') return 'system';
+  const initialAssignment =
+    row.action === 'assignee_changed' &&
+    !row.oldValue &&
+    Date.parse(row.createdAt) - Date.parse(row.reportCreatedAt) <= CREATION_GRACE_MS;
+  if (row.reportSource === 'portal' && (row.action === 'created' || initialAssignment))
+    return 'system';
   if (
     row.action === 'owner_assigned' ||
     row.action === 'owner_removed' ||
@@ -250,11 +255,7 @@ function actorOf(row: ActivityRow): DashboardActivityActor {
     return 'system';
   if (row.reportSource !== 'widget') return 'deleted_user';
   if (row.action === 'created') return 'widget';
-  const atCreation =
-    Date.parse(row.createdAt) - Date.parse(row.reportCreatedAt) <= CREATION_GRACE_MS;
-  return row.action === 'assignee_changed' && !row.oldValue && atCreation
-    ? 'widget'
-    : 'deleted_user';
+  return initialAssignment ? 'widget' : 'deleted_user';
 }
 
 async function toActivityItem(row: ActivityRow): Promise<DashboardActivityItem> {

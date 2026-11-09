@@ -34,7 +34,16 @@ export const portalSubmissionsService = {
         .filter((p) => p.allowNewFeedback)
         .map((p) => Math.max(p.maxImageMb, p.maxVideoMb))
     );
-    return Result.ok(MAX_MESSAGE_FILES * sizeMb * 1024 * 1024 + MESSAGE_BODY_OVERHEAD_BYTES);
+    const settings = await settingsCacheService.getAll();
+    const remaining = uploadQuotaService.remaining(
+      reporterId,
+      settings.reporterPortalLimits.uploadMbPerReporterPerDay
+    );
+    if (!remaining.success) return remaining;
+    return Result.ok(
+      Math.min(MAX_MESSAGE_FILES * sizeMb * 1024 * 1024, remaining.value) +
+        MESSAGE_BODY_OVERHEAD_BYTES
+    );
   },
 
   async create(
@@ -176,6 +185,13 @@ export const portalSubmissionsService = {
         });
         for (const file of staged) filesRepo.insert(file);
         reportHistoryRepo.insert({ reportId: id, action: 'created' });
+        if (current.assignedTo)
+          reportHistoryRepo.insert({
+            reportId: id,
+            action: 'assignee_changed',
+            oldValue: null,
+            newValue: current.assignedTo,
+          });
         return Result.ok(undefined);
       });
       if (!result.success) return result;
@@ -192,6 +208,15 @@ export const portalSubmissionsService = {
       void Promise.resolve()
         .then(() => getEEHooks().onReportCreated(report))
         .catch(() => logger.warn('Report webhook dispatch failed', { reportId: id }));
+      if (report.assignedTo) {
+        const assigneeId = report.assignedTo;
+        void Promise.resolve()
+          .then(() => notificationsService.notifyAssignment(report, assigneeId))
+          .catch(() => logger.warn('Assignment notification failed', { reportId: id }));
+        void Promise.resolve()
+          .then(() => notificationsService.notifyReporterAssignment(report, undefined, assigneeId))
+          .catch(() => logger.warn('Reporter assignment notification failed', { reportId: id }));
+      }
       void githubSyncService
         .getAutoSyncIntegration(projectId)
         .then((integration) =>

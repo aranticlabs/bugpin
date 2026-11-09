@@ -44,7 +44,12 @@ export const portalSubmissionSchema = z
   .object({
     projectId: z.string().min(1).max(200),
     title: z.string().trim().min(4).max(500),
-    description: z.string().max(10000).optional(),
+    description: z
+      .string()
+      .trim()
+      .max(10000)
+      .transform((value) => value || undefined)
+      .optional(),
   })
   .strict();
 
