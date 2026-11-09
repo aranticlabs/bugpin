@@ -4,6 +4,7 @@ import { integrationsRepo } from '../database/repositories/integrations.repo.js'
 import { webhooksRepo } from '../database/repositories/webhooks.repo.js';
 import { usersService } from './users.service.js';
 import { reporterPortalSettingsService } from './reporter-portal-settings.service.js';
+import { realtimeService } from './realtime.service.js';
 import { Result } from '../utils/result.js';
 import { checkProjectLicense, ProjectLicenseError } from '../utils/project-license.js';
 import { logger } from '../utils/logger.js';
@@ -214,6 +215,7 @@ export const projectsService = {
     }
 
     logger.info('Project updated', { projectId: id });
+    realtimeService.invalidatePortalAccess({ projectId: id });
     return Result.ok(project);
   },
 
@@ -231,6 +233,7 @@ export const projectsService = {
     // They can be cleaned up later if needed
 
     await projectsRepo.delete(id);
+    realtimeService.invalidatePortalAccess({ projectId: id });
 
     logger.info('Project deleted', { projectId: id });
     return Result.ok(undefined);

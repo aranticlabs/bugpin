@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { ReportViewSwitcher } from '../report-board/ReportViewSwitcher';
+import { ReportViewSwitcher } from '@shared-ui/components/report-board/ReportViewSwitcher';
 import { AssigneeDisplay } from './ReportFields';
 
 export type ReportsFilterKey =

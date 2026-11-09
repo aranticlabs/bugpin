@@ -2,6 +2,12 @@ import { filesRepo } from '../database/repositories/files.repo.js';
 import { Result } from '../utils/result.js';
 
 export const uploadQuotaService = {
+  remaining(reporterId: string, limitMb: number): Result<number> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return Result.ok(
+      Math.max(0, limitMb * 1024 * 1024 - filesRepo.getSizeByReporterSince(reporterId, since))
+    );
+  },
   // Run the check and file inserts in the same synchronous transaction.
   check(reporterId: string, incomingBytes: number, limitMb: number): Result<void> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

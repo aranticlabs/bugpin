@@ -537,3 +537,40 @@ describe('validateFile', () => {
     expect(result.success).toBe(true);
   });
 });
+
+it('checks remote object existence through provider metadata without reading content', async () => {
+  const originalHooks = getEEHooks();
+  const paths: string[] = [];
+  let outcome: Result<boolean> = Result.ok(true);
+  const provider: StorageProvider = {
+    acceptsUploads: () => false,
+    upload: async () => Result.fail('unused'),
+    delete: async () => Result.ok(undefined),
+    exists: async (key) => {
+      paths.push(key);
+      return outcome;
+    },
+    testConnection: async () => Result.ok(undefined),
+    getStatus: async () => Result.ok({ enabled: true, configured: true }),
+    read: async () => {
+      throw new Error('Object content must not be read');
+    },
+    readRange: async () => {
+      throw new Error('Object content must not be read');
+    },
+  };
+  registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+  try {
+    const handle = createStoredFileHandle('s3://bucket/file');
+    expect(await handle.exists()).toBe(true);
+    outcome = Result.ok(false);
+    expect(await handle.exists()).toBe(false);
+    outcome = Result.fail('Metadata unavailable');
+    expect(await handle.exists()).toBe(false);
+    expect(paths).toEqual(['s3://bucket/file', 's3://bucket/file', 's3://bucket/file']);
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => null });
+    expect(await handle.exists()).toBe(false);
+  } finally {
+    registerEEHooks(originalHooks);
+  }
+});

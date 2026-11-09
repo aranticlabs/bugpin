@@ -366,7 +366,7 @@ it('revokes the previous browser session on exchange and logout invalidates the 
   ).toBe(401);
 });
 
-it('reads suppression state without blocking login emails or adding a profile mutation route', async () => {
+it('reads suppression state without blocking login emails and requires authentication for profile updates', async () => {
   reporterSuppressionsRepo.insert('jane@example.com', 'unsubscribe');
   const first = Result.unwrap(reporterAuthService.exchange(mint().secret));
   expect(first.reporter.emailUpdates).toBe(false);
@@ -383,7 +383,7 @@ it('reads suppression state without blocking login emails or adding a profile mu
         headers: { Origin: portalOrigin, 'X-BugPin-Portal': '1' },
       })
     ).status
-  ).toBe(404);
+  ).toBe(401);
 });
 
 it('validates bounded partial rate-limit settings and preserves the other defaults', async () => {

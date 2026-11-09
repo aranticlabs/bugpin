@@ -65,6 +65,27 @@ export const reportersRepo = {
     return this.findById(id)!;
   },
 
+  updateProfile(id: string, input: { displayName?: string; locale?: string }): Reporter {
+    const sets: string[] = [];
+    const values: string[] = [];
+    if (input.displayName !== undefined) {
+      sets.push('display_name = ?');
+      values.push(input.displayName);
+    }
+    if (input.locale !== undefined) {
+      sets.push('locale = ?');
+      values.push(input.locale);
+    }
+    if (sets.length) {
+      getDb().run(`UPDATE reporters SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`, [
+        ...values,
+        new Date().toISOString(),
+        id,
+      ]);
+    }
+    return this.findById(id)!;
+  },
+
   list(filter: {
     search?: string;
     status?: 'active' | 'suspended';

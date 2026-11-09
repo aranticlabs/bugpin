@@ -37,7 +37,7 @@ import {
   ReportBoard,
   type BoardSelection,
   type ReportBoardColumnData,
-} from '../../components/report-board/ReportBoard';
+} from '@shared-ui/components/report-board/ReportBoard';
 import {
   DraggableReportBoard,
   type BoardPlacement,

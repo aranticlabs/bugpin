@@ -1,4 +1,5 @@
 import { reporterOwnershipService } from './reporter-ownership.service.js';
+import { realtimeService } from './realtime.service.js';
 import type { ReportOwnerChangedEvent } from '@shared/types';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { reporterAuthTokensRepo } from '../database/repositories/reporter-auth-tokens.repo.js';
@@ -85,7 +86,7 @@ export const reportersService = {
   },
 
   suspend(id: string, userId: string): Result<Reporter> {
-    return reportersRepo.transaction(() => {
+    const result = reportersRepo.transaction<Result<Reporter>>(() => {
       const reporter = reportersRepo.findById(id);
       if (!reporter) return Result.fail('Reporter not found', 'NOT_FOUND');
       const now = new Date().toISOString();
@@ -93,6 +94,8 @@ export const reportersService = {
       reportersRepo.setSuspension(id, now, userId, now);
       return Result.ok(reportersRepo.findById(id)!);
     });
+    if (result.success) realtimeService.invalidatePortalAccess({ reporterId: id });
+    return result;
   },
 
   unsuspend(id: string): Result<Reporter> {
@@ -103,12 +106,14 @@ export const reportersService = {
   },
 
   revokeSessions(id: string, userId: string): Result<Reporter> {
-    return reportersRepo.transaction(() => {
+    const result = reportersRepo.transaction<Result<Reporter>>(() => {
       const reporter = reportersRepo.findById(id);
       if (!reporter) return Result.fail('Reporter not found', 'NOT_FOUND');
       revoke(reporter, userId, new Date().toISOString());
       return Result.ok(reportersRepo.findById(id)!);
     });
+    if (result.success) realtimeService.invalidatePortalAccess({ reporterId: id });
+    return result;
   },
 
   delete(id: string, userId: string | null, eraseContactDetails = false): Result<void> {
@@ -139,7 +144,10 @@ export const reportersService = {
       reportersRepo.delete(id);
       return Result.ok(undefined);
     });
-    if (result.success) reporterOwnershipService.announce(changes);
+    if (result.success) {
+      reporterOwnershipService.announce(changes);
+      realtimeService.invalidatePortalAccess({ reporterId: id });
+    }
     return result;
   },
 

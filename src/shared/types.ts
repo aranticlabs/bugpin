@@ -204,6 +204,7 @@ export interface ManualReportContext {
 }
 
 export interface ReportMetadata {
+  portal?: boolean;
   url?: string;
   title?: string;
   referrer?: string;

@@ -6,6 +6,7 @@ import { reporterSuppressionsRepo } from '../database/repositories/reporter-supp
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
+import { realtimeService } from './realtime.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { emailService } from './email.service.js';
 import { normalizeEmail } from '../utils/email-normalize.js';
@@ -163,6 +164,7 @@ export const reporterAuthService = {
     const previousHash = previousSessionSecret ? hashToken(previousSessionSecret) : null;
     const now = new Date().toISOString();
     const ownershipChanges: ReportOwnerChangedEvent[] = [];
+    let previousSessionId: string | undefined;
     const result = reportersRepo.transaction(() => {
       const token = reporterAuthTokensRepo.findByHash(tokenHash);
       if (
@@ -191,7 +193,10 @@ export const reporterAuthService = {
       });
       if (previousHash) {
         const previous = reporterSessionsRepo.findByHash(previousHash);
-        if (previous) reporterSessionsRepo.revoke(previous.id, now);
+        if (previous) {
+          previousSessionId = previous.id;
+          reporterSessionsRepo.revoke(previous.id, now);
+        }
       }
       const updated = reportersRepo.recordLogin(reporter.id, now);
       return Result.ok({
@@ -204,12 +209,17 @@ export const reporterAuthService = {
           : {}),
       });
     });
-    if (result.success) reporterOwnershipService.announce(ownershipChanges);
+    if (result.success) {
+      reporterOwnershipService.announce(ownershipChanges);
+      if (previousSessionId)
+        realtimeService.invalidatePortalAccess({ sessionId: previousSessionId });
+    }
     return result;
   },
 
   validateSession(
-    secret: string
+    secret: string,
+    renew = true
   ): Result<{ reporter: PortalMe; sessionId: string; expiresAt: string }> {
     const session = reporterSessionsRepo.findByHash(hashToken(secret));
     const now = Date.now();
@@ -223,7 +233,7 @@ export const reporterAuthService = {
     const reporter = reportersRepo.findById(session.reporterId);
     if (!reporter || reporter.suspendedAt)
       return Result.fail('Authentication required', 'UNAUTHORIZED');
-    if (now - Date.parse(session.lastUsedAt) >= 3600000) {
+    if (renew && now - Date.parse(session.lastUsedAt) >= 3600000) {
       session.expiresAt = new Date(
         Math.min(now + sessionLifetime, Date.parse(session.absoluteExpiresAt))
       ).toISOString();
@@ -238,6 +248,7 @@ export const reporterAuthService = {
 
   logout(sessionId: string): Result<void> {
     reporterSessionsRepo.revoke(sessionId, new Date().toISOString());
+    realtimeService.invalidatePortalAccess({ sessionId });
     return Result.ok(undefined);
   },
 };

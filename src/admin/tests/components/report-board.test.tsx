@@ -5,8 +5,9 @@ import type { ReportStatus } from '@shared/types';
 import {
   ReportBoard,
   type BoardSelection,
+  type ReportBoardLabels,
   type ReportBoardColumnData,
-} from '../../components/report-board/ReportBoard';
+} from '@shared-ui/components/report-board/ReportBoard';
 import {
   DraggableReportBoard,
   moveGroupInOrder,
@@ -14,7 +15,7 @@ import {
   placementOf,
   type BoardOrder,
 } from '../../components/report-board/DraggableReportBoard';
-import { ReportViewSwitcher } from '../../components/report-board/ReportViewSwitcher';
+import { ReportViewSwitcher } from '@shared-ui/components/report-board/ReportViewSwitcher';
 
 interface Item {
   id: string;
@@ -143,6 +144,69 @@ describe('ReportBoard', () => {
 
     expect(screen.getByRole('button', { name: 'Open Crash on save' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'In Progress, 1 report' })).toBeInTheDocument();
+  });
+});
+
+describe('ReportBoard localization', () => {
+  it('uses caller text for counts, actions, pagination, and errors', async () => {
+    const user = userEvent.setup();
+    const props = boardProps([
+      column('open', [crash], { total: 3, hasMore: true }),
+      column('in_progress', [typo]),
+      column('closed', [], { error: true, onRetry: vi.fn() }),
+    ]);
+    const select = selection(['r1']);
+    const labels: ReportBoardLabels = {
+      columnSummary: (label: string, total: number, collapsed: boolean) =>
+        `${label}: ${total}${collapsed ? ' zu' : ''}`,
+      selectAll: (label: string) => `Alle in ${label} auswählen`,
+      deselectAll: (label: string) => `Alle in ${label} abwählen`,
+      collapseColumn: (label: string) => `${label} zuklappen`,
+      expandColumn: (label: string) => `${label} aufklappen`,
+      openCard: (label: string, selected: boolean) =>
+        `${label} ansehen${selected ? ' (ausgewählt)' : ''}`,
+      loadMore: (remaining: number) => `${remaining} weitere`,
+      loadError: 'Laden fehlgeschlagen',
+      retry: 'Erneut versuchen',
+    };
+    const { rerender } = render(<ReportBoard {...props} labels={labels} selection={select} />);
+
+    expect(screen.getByRole('region', { name: 'Open: 3' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Crash on save ansehen (ausgewählt)' }));
+    await user.click(screen.getByRole('button', { name: '2 weitere' }));
+    await user.click(screen.getByRole('button', { name: 'Open zuklappen' }));
+    await user.click(screen.getByRole('button', { name: 'Alle in Open abwählen' }));
+    await user.click(screen.getByRole('button', { name: 'Alle in In Progress auswählen' }));
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Laden fehlgeschlagen');
+    expect(props.onOpen).toHaveBeenCalledWith(crash);
+    expect(props.columns[0].onLoadMore).toHaveBeenCalledOnce();
+    expect(props.columns[2].onRetry).toHaveBeenCalledOnce();
+    expect(select.onSelectColumn).toHaveBeenNthCalledWith(1, 'open');
+    expect(select.onSelectColumn).toHaveBeenNthCalledWith(2, 'in_progress');
+
+    rerender(<ReportBoard {...props} labels={labels} collapsed={['open']} />);
+    expect(screen.getByRole('region', { name: 'Open: 3 zu' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open aufklappen' }));
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps default labels when only the retry text is overridden', async () => {
+    const user = userEvent.setup();
+    const props = boardProps([
+      column('open', [crash], { total: 3, hasMore: true }),
+      column('closed', [], { error: true, onRetry: vi.fn() }),
+    ]);
+    render(<ReportBoard {...props} labels={{ retry: 'Erneut versuchen' }} />);
+
+    expect(screen.getByRole('region', { name: 'Open, 3 reports' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Crash on save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse Open' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load reports");
+    await user.click(screen.getByRole('button', { name: 'Show more (2 remaining)' }));
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(props.columns[0].onLoadMore).toHaveBeenCalledOnce();
+    expect(props.columns[1].onRetry).toHaveBeenCalledOnce();
   });
 });
 
@@ -395,6 +459,34 @@ describe('board order helpers', () => {
 });
 
 describe('ReportViewSwitcher', () => {
+  it('keeps default labels when only the board label is overridden', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ReportViewSwitcher value="list" onChange={onChange} labels={{ board: 'Tafel' }} />);
+
+    expect(screen.getByRole('tablist', { name: 'Report view' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('tab', { name: 'Tafel' }));
+    expect(onChange).toHaveBeenCalledWith('board');
+  });
+
+  it('uses caller labels without changing view values', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ReportViewSwitcher
+        value="list"
+        onChange={onChange}
+        labels={{ view: 'Ansicht', list: 'Liste', board: 'Tafel' }}
+      />
+    );
+
+    expect(screen.getByRole('tablist', { name: 'Ansicht' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Liste' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('tab', { name: 'Tafel' }));
+    expect(onChange).toHaveBeenCalledWith('board');
+  });
+
   it('reports the chosen view', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

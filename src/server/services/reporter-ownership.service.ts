@@ -13,6 +13,10 @@ import type { ReportOwner } from '@shared/reporter-types';
 
 export const reporterOwnershipService = {
   announce(changes: ReportOwnerChangedEvent[]): void {
+    const previousOwners = new Set(
+      changes.map((change) => change.oldReporterId).filter((id): id is string => id !== null)
+    );
+    for (const reporterId of previousOwners) realtimeService.invalidatePortalAccess({ reporterId });
     for (const change of changes) {
       realtimeService.publish('report.updated', {
         reportId: change.reportId,

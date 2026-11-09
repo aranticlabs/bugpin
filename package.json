@@ -9,7 +9,8 @@
   "workspaces": [
     "src/server",
     "src/admin",
-    "src/widget"
+    "src/widget",
+    "src/shared-ui"
   ],
   "scripts": {
     "dev": "bun run dev:server & bun run dev:admin",
@@ -22,8 +23,9 @@
     "build:widget": "bun run --cwd src/widget build",
     "check:widget-size": "bun run build:widget && bun run src/widget/scripts/check-bundle-size.ts",
     "start": "bun run src/server/index.ts",
-    "typecheck": "bun run typecheck:server && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee",
+    "typecheck": "bun run typecheck:server && bun run typecheck:shared-ui && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee",
     "typecheck:server": "bun run --cwd src/server typecheck",
+    "typecheck:shared-ui": "bun run --cwd src/shared-ui typecheck",
     "typecheck:admin": "bun run --cwd src/admin typecheck",
     "typecheck:widget": "bun run --cwd src/widget typecheck",
     "typecheck:ee": "bun run src/server/scripts/check-ee.ts typecheck",

@@ -3,6 +3,8 @@ import { filesRepo } from '../database/repositories/files.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { deleteReportFiles } from '../storage/files.js';
 import { logger } from '../utils/logger.js';
+import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
+import { realtimeService } from './realtime.service.js';
 import { reportersService } from './reporters.service.js';
 
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -51,13 +53,16 @@ async function deleteReportsByIds(
 ): Promise<{ deleted: number; errors: number }> {
   let deleted = 0;
   let errors = 0;
+  const owners = new Set<string>();
 
   for (const reportId of reportIds) {
     try {
       await deleteReportFiles(reportId);
       await filesRepo.deleteByReportId(reportId);
 
+      const owner = reporterOwnershipRepo.findByReportId(reportId);
       if (await reportsRepo.delete(reportId)) {
+        if (owner?.reporterId) owners.add(owner.reporterId);
         deleted++;
         logger.debug('Deleted report', { reportId });
       } else {
@@ -70,6 +75,7 @@ async function deleteReportsByIds(
     }
   }
 
+  for (const reporterId of owners) realtimeService.invalidatePortalAccess({ reporterId });
   return { deleted, errors };
 }
 

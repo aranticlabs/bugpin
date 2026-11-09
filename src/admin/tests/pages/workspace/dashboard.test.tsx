@@ -360,6 +360,42 @@ describe('Dashboard Page', () => {
     expect(await screen.findByText('Your queue is clear')).toBeInTheDocument();
   });
 
+  it('renders portal creation as System alongside deleted staff activity', async () => {
+    server.use(
+      http.get('/api/dashboard/overview', () =>
+        HttpResponse.json({
+          success: true,
+          overview: {
+            ...mockDashboardOverview,
+            activity: [
+              {
+                id: 'portal-created',
+                reportId: 'report-1',
+                reportTitle: 'Portal feedback',
+                action: 'created',
+                actor: 'system',
+                createdAt: new Date().toISOString(),
+              },
+              {
+                id: 'deleted-staff',
+                reportId: 'report-1',
+                reportTitle: 'Portal feedback',
+                action: 'status_changed',
+                newValue: 'resolved',
+                actor: 'deleted_user',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          },
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('System')).toBeInTheDocument();
+    expect(screen.getByText('Deleted user')).toBeInTheDocument();
+    expect(screen.getByText('reported')).toBeInTheDocument();
+  });
+
   it('names system ownership activity without a staff author', async () => {
     server.use(
       http.get('/api/dashboard/overview', () =>
