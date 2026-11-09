@@ -5,6 +5,10 @@ import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
 import { portalConfigService } from '../../services/portal-config.service.js';
 import { unsubscribeRoutes } from './unsubscribe.js';
 import { portalAuthRoutes } from './auth.js';
+import { portalMeRoutes } from './me.js';
+import { portalProjectsRoutes } from './projects.js';
+import { portalReportsRoutes } from './reports.js';
+import { portalFilesRoutes } from './files.js';
 
 export const portalRoutes = new Hono();
 
@@ -26,6 +30,10 @@ portalRoutes.use(
 );
 portalRoutes.route('/auth', portalAuthRoutes);
 portalRoutes.route('/unsubscribe', unsubscribeRoutes);
+portalRoutes.route('/', portalMeRoutes);
+portalRoutes.route('/', portalProjectsRoutes);
+portalRoutes.route('/', portalReportsRoutes);
+portalRoutes.route('/', portalFilesRoutes);
 portalRoutes.get('/me', reporterAuthMiddleware, (c) =>
   c.json({ success: true, reporter: c.get('reporter') })
 );

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
@@ -16,7 +18,14 @@ import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } fro
 let close: () => void;
 let app: ReturnType<typeof createPortalTestApp>;
 type Caller =
-  'owner' | 'other' | 'suspended' | 'deleted' | 'disabled-project' | 'staff' | 'anonymous';
+  | 'owner'
+  | 'other'
+  | 'suspended'
+  | 'deleted'
+  | 'disabled-project'
+  | 'staff'
+  | 'anonymous'
+  | 'bearer';
 const callers: Caller[] = [
   'owner',
   'other',
@@ -25,8 +34,15 @@ const callers: Caller[] = [
   'disabled-project',
   'staff',
   'anonymous',
+  'bearer',
 ];
-const matrix = [
+interface MatrixRow {
+  method: 'GET' | 'HEAD' | 'POST' | 'PATCH';
+  path: string;
+  publicStatus?: number | null;
+  resource?: boolean;
+}
+const matrix: MatrixRow[] = [
   { method: 'GET', path: '/config', publicStatus: 200 },
   { method: 'GET', path: '/unsubscribe', publicStatus: 400 },
   { method: 'POST', path: '/unsubscribe', publicStatus: 400 },
@@ -36,7 +52,13 @@ const matrix = [
   { method: 'POST', path: '/auth/exchange', publicStatus: 400 },
   { method: 'POST', path: '/auth/logout', publicStatus: null },
   { method: 'GET', path: '/me', publicStatus: null },
-] as const;
+  { method: 'PATCH', path: '/me' },
+  { method: 'GET', path: '/projects' },
+  { method: 'GET', path: '/reports' },
+  { method: 'GET', path: '/reports/:id', resource: true },
+  { method: 'GET', path: '/reports/:id/files/:fileId', resource: true },
+  { method: 'HEAD', path: '/reports/:id/files/:fileId', resource: true },
+];
 
 beforeEach(async () => {
   close = await openPortalDatabase();
@@ -49,6 +71,17 @@ beforeEach(async () => {
   getDb().run(
     "INSERT INTO users (id, email, name, password_hash, role) VALUES ('staff', 'staff@example.com', 'Staff', 'unused', 'admin')"
   );
+  getDb().run(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings)
+    VALUES ('matrix-project', 'Matrix project', 'matrix-key', 'matrix', '{"reporterPortal":{"enabled":true}}')`);
+  getDb().run(`INSERT INTO reports (id, project_id, title, metadata)
+    VALUES ('matrix-report', 'matrix-project', 'Owned report', '{}')`);
+  const path = join(config.dataDir, 'matrix.png');
+  writeFileSync(path, new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]));
+  getDb().run(
+    `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes)
+    VALUES ('matrix-file', 'matrix-report', 'screenshot', 'matrix.png', ?, 'image/png', 8)`,
+    [path]
+  );
   app = createPortalTestApp();
   app.route('/api/reports', reportsRoutes);
   app.route('/api/projects', projectsRoutes);
@@ -58,7 +91,7 @@ beforeEach(async () => {
 afterEach(() => close());
 
 async function credential(caller: Caller): Promise<string> {
-  if (caller === 'anonymous') return '';
+  if (caller === 'anonymous' || caller === 'bearer') return '';
   if (caller === 'staff') {
     const session = await sessionsRepo.create({
       userId: 'staff',
@@ -77,16 +110,15 @@ async function credential(caller: Caller): Promise<string> {
     ]);
   if (caller === 'deleted')
     getDb().run('DELETE FROM reporters WHERE id = ?', [session.reporter.id]);
-  if (caller === 'disabled-project') {
-    const id = crypto.randomUUID();
-    getDb().run(
-      "INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings) VALUES (?, 'Disabled project', ?, 'prefix', '{}')",
-      [id, id]
-    );
-    getDb().run(
-      "INSERT INTO reports (id, project_id, title, metadata, reporter_id) VALUES (?, ?, 'Owned report', '{}', ?)",
-      [crypto.randomUUID(), id, session.reporter.id]
-    );
+  if (caller === 'owner' || caller === 'disabled-project') {
+    getDb().run('UPDATE reports SET reporter_id = ? WHERE id = ?', [
+      session.reporter.id,
+      'matrix-report',
+    ]);
+    getDb().run('UPDATE projects SET settings = ? WHERE id = ?', [
+      JSON.stringify({ reporterPortal: { enabled: caller === 'owner', allowNewFeedback: false } }),
+      'matrix-project',
+    ]);
   }
   return `bugpin_reporter_session=${session.sessionSecret}`;
 }
@@ -104,28 +136,79 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
   for (const row of matrix) {
     for (const caller of callers) {
       const cookie = await credential(caller);
-      const response =
-        row.method === 'GET'
-          ? await app.request(`${portalOrigin}/api/portal${row.path}`, {
-              headers: { Cookie: cookie },
-            })
-          : await portalPost(
-              app,
-              row.path,
-              row.path === '/auth/request'
-                ? { email: 'request@example.com' }
-                : { token: 'invalid' },
-              cookie
-            );
-      const expected =
-        row.publicStatus ?? (['owner', 'other', 'disabled-project'].includes(caller) ? 200 : 401);
-      expect({ endpoint: `${row.method} ${row.path}`, caller, status: response.status }).toEqual({
-        endpoint: `${row.method} ${row.path}`,
-        caller,
-        status: expected,
-      });
-      expect(response.headers.get('cache-control')).toBe('no-store');
-      expect(response.headers.get('access-control-allow-origin')).toBeNull();
+      const path = row.path.replace(':id', 'matrix-report').replace(':fileId', 'matrix-file');
+      const variants = row.path.includes('/files/')
+        ? ['', 'bytes=0-3']
+        : row.path === '/reports'
+          ? ['', '?groupByStatus=true']
+          : [''];
+      for (const variant of variants) {
+        const fileRequest = row.path.includes('/files/');
+        const response = await app.request(
+          `${portalOrigin}/api/portal${path}${fileRequest ? '' : variant}`,
+          {
+            method: row.method,
+            headers: {
+              Cookie: cookie,
+              ...(caller === 'bearer' ? { Authorization: 'Bearer some-api-token' } : {}),
+              Origin: portalOrigin,
+              'X-BugPin-Portal': '1',
+              'content-type': 'application/json',
+              ...(fileRequest && variant ? { Range: variant } : {}),
+            },
+            ...(['POST', 'PATCH'].includes(row.method)
+              ? {
+                  body: JSON.stringify(
+                    row.path === '/auth/request'
+                      ? { email: 'request@example.com' }
+                      : row.method === 'PATCH'
+                        ? { displayName: 'Updated name' }
+                        : { token: 'invalid' }
+                  ),
+                }
+              : {}),
+          }
+        );
+        const authenticated = ['owner', 'other', 'disabled-project'].includes(caller);
+        const expected =
+          row.publicStatus ??
+          (!authenticated
+            ? 401
+            : row.resource
+              ? caller !== 'owner'
+                ? 404
+                : fileRequest && variant
+                  ? 206
+                  : 200
+              : 200);
+        expect({
+          endpoint: `${row.method} ${row.path}`,
+          caller,
+          variant,
+          status: response.status,
+        }).toEqual({
+          endpoint: `${row.method} ${row.path}`,
+          caller,
+          variant,
+          status: expected,
+        });
+        expect(response.headers.get('cache-control')).toBe(
+          fileRequest && caller === 'owner' ? 'private, no-store' : 'no-store'
+        );
+        expect(response.headers.get('access-control-allow-origin')).toBeNull();
+        if ((row.path === '/projects' || row.path === '/reports') && authenticated) {
+          const body = (await response.json()) as {
+            projects?: unknown[];
+            reports?: unknown[];
+            columns?: Record<string, { reports: unknown[]; total: number }>;
+          };
+          const items =
+            body.projects ??
+            body.reports ??
+            Object.values(body.columns!).flatMap((column) => column.reports);
+          expect(items.length).toBe(caller === 'owner' ? 1 : 0);
+        }
+      }
     }
   }
 });
