@@ -6,6 +6,9 @@ import { reportsRepo } from '../../../src/server/database/repositories/reports.r
 import { reporterOwnershipRepo } from '../../../src/server/database/repositories/reporter-ownership.repo';
 import { reporterAuthService } from '../../../src/server/services/reporter-auth.service';
 import { reporterOwnershipService } from '../../../src/server/services/reporter-ownership.service';
+import { reportsService } from '../../../src/server/services/reports.service';
+import { cleanupService } from '../../../src/server/services/cleanup.service';
+import { notificationsService } from '../../../src/server/services/notifications.service';
 import { reportersService } from '../../../src/server/services/reporters.service';
 import { projectsService } from '../../../src/server/services/projects.service';
 import { realtimeService } from '../../../src/server/services/realtime.service';
@@ -437,4 +440,55 @@ it('deduplicates ownership invalidation per previous reporter and leaves unrelat
   expect((await reader.read()).done).toBe(true);
   expect(validate).toHaveBeenCalledTimes(1);
   expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
+});
+
+it('delivers access.changed after a stalled ordinary write before closing the stream', async () => {
+  const reader = await open();
+  publish('report.updated');
+  publish('message.created');
+  publish('report.updated');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  Result.unwrap(reporterOwnershipService.set(reportId, { reporterId: other.id }, 'staff'));
+  expect(decode(await reader.read())).toContain('event: report.updated');
+  expect(decode(await reader.read())).toContain('event: message.created');
+  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+  expect((await reader.read()).done).toBe(true);
+});
+
+for (const mode of ['single', 'retention', 'all'] as const) {
+  it(`immediately sends access.changed after successful ${mode} report deletion`, async () => {
+    spyOn(notificationsService, 'notifyReportDeleted').mockResolvedValue();
+    const second = await reportsRepo.create({
+      projectId,
+      title: 'Another owned report',
+      metadata: { timestamp: new Date().toISOString() },
+    });
+    reporterOwnershipRepo.setOwner(second.id, owner.id, null);
+    const reader = await open();
+    await open(other.cookie);
+    const validate = spyOn(reporterAuthService, 'validateSession');
+    if (mode === 'single') Result.unwrap(await reportsService.delete(reportId));
+    if (mode === 'retention') {
+      await settingsRepo.updateAll({ retentionDays: 1 });
+      getDb().run("UPDATE reports SET created_at = '2000-01-01T00:00:00.000Z'");
+      expect(await cleanupService.cleanupOldReports()).toEqual({ deleted: 2, errors: 0 });
+    }
+    if (mode === 'all')
+      expect(await cleanupService.deleteAllReports()).toEqual({ deleted: 2, errors: 0 });
+    expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+    expect((await reader.read()).done).toBe(true);
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(validate).toHaveBeenCalledWith(owner.secret, false);
+    expect(await reportsRepo.findById(reportId)).toBeNull();
+  });
+}
+
+it('does not invalidate ownership when cleanup deletion fails', async () => {
+  await open();
+  const remove = spyOn(reportsRepo, 'delete').mockResolvedValue(false);
+  const invalidate = spyOn(realtimeService, 'invalidatePortalAccess');
+  expect(await cleanupService.deleteAllReports()).toEqual({ deleted: 0, errors: 1 });
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(await reportsRepo.findById(reportId)).not.toBeNull();
+  remove.mockRestore();
 });

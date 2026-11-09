@@ -54,7 +54,7 @@ portalEventsRoutes.get('/events', reporterAuthMiddleware, async (c) => {
             const event = queue.shift()!;
             await stream.writeSSE({ event: event.type, data: JSON.stringify(event.data) });
             completedWrites++;
-            if (closing) end();
+            if (closing && queue.length === 0) end();
           }
         } catch {
           end();

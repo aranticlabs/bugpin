@@ -26,6 +26,7 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
+import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { normalizeUrl } from '../utils/validators.js';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
@@ -1074,8 +1075,11 @@ export const reportsService = {
     // Delete file records (cascade will handle this, but be explicit)
     await filesRepo.deleteByReportId(id);
 
-    // Delete report
-    await reportsRepo.delete(id);
+    // Capture ownership immediately before the synchronous delete commits.
+    const owner = reporterOwnershipRepo.findByReportId(id);
+    const deleted = await reportsRepo.delete(id);
+    if (deleted && owner?.reporterId)
+      realtimeService.invalidatePortalAccess({ reporterId: owner.reporterId });
 
     // Trigger webhooks via EE hooks after deletion (async, don't block)
     getEEHooks()

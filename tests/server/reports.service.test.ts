@@ -4,6 +4,7 @@ import * as path from 'path';
 import { tmpdir } from 'os';
 import { reportsService } from '../../src/server/services/reports.service';
 import * as videoRemuxService from '../../src/server/services/video-remux.service';
+import { reporterOwnershipRepo } from '../../src/server/database/repositories/reporter-ownership.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
@@ -79,6 +80,7 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
+const originalOwnershipRepo = { ...reporterOwnershipRepo };
 const originalReportsRepo = { ...reportsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalFilesRepo = { ...filesRepo };
@@ -112,6 +114,7 @@ let fileCreateRecords: CreateFileData[] = [];
 let warningCalls: Array<{ message: string; context?: Record<string, unknown> }> = [];
 
 beforeEach(() => {
+  reporterOwnershipRepo.findByReportId = () => null;
   reportById = baseReport;
   projectByApiKey = baseProject;
   updatedReport = baseReport;
@@ -228,6 +231,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(reporterOwnershipRepo, originalOwnershipRepo);
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(filesRepo, originalFilesRepo);
