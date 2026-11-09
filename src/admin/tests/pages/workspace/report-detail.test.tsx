@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
 import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
@@ -16,7 +16,53 @@ vi.mock('sonner', () => ({
 
 import { toast } from 'sonner';
 
+afterEach(() => vi.clearAllMocks());
+
 describe('ReportDetail', () => {
+  it('shows the Owner field and refreshes it after removal', async () => {
+    let hasOwner = true;
+    server.use(
+      http.get('/api/reports/report-1', () =>
+        HttpResponse.json({
+          success: true,
+          report: {
+            ...mockReports[0],
+            reporterId: hasOwner ? 'rptr_jane' : undefined,
+            owner: {
+              reporterId: hasOwner ? 'rptr_jane' : null,
+              claimableEmail: null,
+              correspondentEmail: 'contact@example.com',
+              reporter: hasOwner
+                ? {
+                    id: 'rptr_jane',
+                    email: 'jane@example.com',
+                    displayName: 'Jane',
+                    lastLoginAt: null,
+                  }
+                : null,
+            },
+          },
+          files: [],
+        })
+      ),
+      http.delete('/api/reports/report-1/owner', () => {
+        hasOwner = false;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    expect(await screen.findByText('j***@example.com')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Remove owner' }));
+    expect(await screen.findByText('No owner')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove owner' })).not.toBeInTheDocument();
+  });
+
   it('records the report as recently viewed once it loads', async () => {
     const viewed: string[] = [];
     server.use(

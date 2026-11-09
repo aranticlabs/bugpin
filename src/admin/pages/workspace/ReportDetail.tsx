@@ -81,6 +81,7 @@ import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
 import { ActivityDialog } from '../../components/report/ActivityDialog';
 import { useReportHistory } from '../../hooks/useReportHistory';
+import { OwnerField } from '../../components/report/OwnerField';
 import {
   REPORT_STATUSES,
   type AppSettings,
@@ -1041,6 +1042,7 @@ export function ReportDetail() {
                       <AssigneeDisplay user={report.assignee} showEmail />
                     )}
                   </div>
+                  <OwnerField report={report} canEdit={canEdit} />
                   <Separator />
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-4">
