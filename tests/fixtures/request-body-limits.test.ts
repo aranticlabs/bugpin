@@ -52,25 +52,39 @@ for (const [path, method, contentType] of [
   });
 }
 
-it('rejects a streamed public widget request above the old budget without Content-Length', async () => {
-  projectsService.validateWidgetAccess = async () =>
-    Result.ok({ id: 'project', settings: {} } as Project);
-  const chunk = new Uint8Array(1024 * 1024);
-  let produced = 0;
-  const body = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (produced++ < 257) controller.enqueue(chunk);
-      else controller.close();
-    },
+for (const contentType of ['application/json', 'multipart/form-data; boundary=widget-upload']) {
+  it(`rejects a streamed public widget ${contentType} request above the old budget without Content-Length`, async () => {
+    projectsService.validateWidgetAccess = async () =>
+      Result.ok({ id: 'project', settings: {} } as Project);
+    const chunk = new Uint8Array(1024 * 1024);
+    let produced = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        if (contentType.startsWith('multipart/'))
+          controller.enqueue(
+            new TextEncoder().encode(
+              '--widget-upload\r\nContent-Disposition: form-data; name="files[]"; filename="screen.png"\r\nContent-Type: image/png\r\n\r\n'
+            )
+          );
+      },
+      pull(controller) {
+        if (produced++ < 257) controller.enqueue(chunk);
+        else {
+          if (contentType.startsWith('multipart/'))
+            controller.enqueue(new TextEncoder().encode('\r\n--widget-upload--\r\n'));
+          controller.close();
+        }
+      },
+    });
+    const response = await createApp().request('/api/widget/submit', {
+      method: 'POST',
+      body,
+      headers: { 'content-type': contentType, 'x-api-key': 'widget' },
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
   });
-  const response = await createApp().request('/api/widget/submit', {
-    method: 'POST',
-    body,
-    headers: { 'content-type': 'application/json', 'x-api-key': 'widget' },
-  });
-  expect(response.status).toBe(413);
-  expect(await response.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
-});
+}
 
 for (const path of [
   '/api/reports',

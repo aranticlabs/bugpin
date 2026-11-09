@@ -4,10 +4,10 @@ import { readReportOrigin } from '../../lib/reportOrigin';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ScrollArea } from '../../components/ui/scroll-area';
-import { api } from '../../api/client';
+import { api, getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
-import { useReporterMessages } from '../../hooks/useReporterMessages';
+import { useReporterMessages, useSendReporterMessage } from '../../hooks/useReporterMessages';
 import { ConversationCard } from '../../components/report-detail/ConversationCard';
 import { usePreference } from '../../hooks/useUserPreferences';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -208,7 +208,14 @@ export function ReportDetail() {
   });
 
   const conversation = useReporterMessages(id ?? '');
-  const { sendMessageAsync, isSending } = conversation;
+  const resolutionSend = useSendReporterMessage(id ?? '');
+
+  useEffect(() => {
+    setResolveMessage('');
+    setResolveCcSender(false);
+    setShowResolveMessage(false);
+    setJustResolved(false);
+  }, [id]);
 
   const { data: reportHistory = [], isLoading: historyLoading } = useReportHistory(id);
 
@@ -400,20 +407,19 @@ export function ReportDetail() {
     );
   };
 
-  const handleSendResolveMessage = async () => {
-    if (!resolveMessage.trim()) return;
-    try {
-      await sendMessageAsync({
-        message: resolveMessage.trim(),
-        ccSender: resolveCcSender,
-      });
-      setResolveMessage('');
-      setResolveCcSender(false);
-      setShowResolveMessage(false);
-      setJustResolved(false);
-    } catch {
-      // Toast error is handled by the hook
-    }
+  const handleSendResolveMessage = () => {
+    if (!resolveMessage.trim() || resolutionSend.isPending) return;
+    resolutionSend.mutate(
+      { message: resolveMessage.trim(), ccSender: resolveCcSender },
+      {
+        onSuccess: () => {
+          setResolveMessage('');
+          setResolveCcSender(false);
+          setShowResolveMessage(false);
+          setJustResolved(false);
+        },
+      }
+    );
   };
 
   const handleForward = async (integrationId: string, integrationName: string) => {
@@ -923,7 +929,10 @@ export function ReportDetail() {
                                 className="h-auto gap-1 p-0 [&_svg]:size-3"
                                 onClick={() => {
                                   setShowResolveMessage(!showResolveMessage);
-                                  if (showResolveMessage) setResolveMessage('');
+                                  if (showResolveMessage) {
+                                    setResolveMessage('');
+                                    resolutionSend.reset();
+                                  }
                                 }}
                               >
                                 <MessageSquare />
@@ -940,6 +949,14 @@ export function ReportDetail() {
                                     rows={3}
                                     className="text-sm"
                                   />
+                                  {resolutionSend.error && (
+                                    <p role="alert" className="text-sm text-destructive">
+                                      {getApiErrorMessage(
+                                        resolutionSend.error,
+                                        'Failed to send message'
+                                      )}
+                                    </p>
+                                  )}
                                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                                     <Checkbox
                                       checked={resolveCcSender}
@@ -952,9 +969,9 @@ export function ReportDetail() {
                                   <Button
                                     size="sm"
                                     onClick={handleSendResolveMessage}
-                                    disabled={!resolveMessage.trim() || isSending}
+                                    disabled={!resolveMessage.trim() || resolutionSend.isPending}
                                   >
-                                    {isSending ? (
+                                    {resolutionSend.isPending ? (
                                       <>
                                         <Spinner size="sm" className="mr-2" />
                                         Sending...

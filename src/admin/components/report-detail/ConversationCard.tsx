@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { Fragment, useId, useState, type FormEvent } from 'react';
 import { ChevronDown, Download, MessageSquare, Paperclip, Send } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -22,21 +22,28 @@ const ACCEPTED_MEDIA =
 function MessageText({ text }: { text: string }) {
   return (
     <p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
-      {text.split(/(https?:\/\/[^\s<>"']+)/g).map((part, index) =>
-        index % 2 === 1 ? (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            className="text-primary underline underline-offset-2"
-          >
-            {part}
-          </a>
-        ) : (
-          part
-        )
-      )}
+      {text.split(/(https?:\/\/[^\s<>"']+)/g).map((part, index) => {
+        if (index % 2 === 0) return part;
+        let href = part.replace(/[.,!?;:]+$/, '');
+        let excessClosing = (href.match(/\)/g)?.length ?? 0) - (href.match(/\(/g)?.length ?? 0);
+        while (href.endsWith(')') && excessClosing > 0) {
+          href = href.slice(0, -1).replace(/[.,!?;:]+$/, '');
+          excessClosing--;
+        }
+        return (
+          <Fragment key={index}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="text-primary underline underline-offset-2"
+            >
+              {href}
+            </a>
+            {part.slice(href.length)}
+          </Fragment>
+        );
+      })}
     </p>
   );
 }

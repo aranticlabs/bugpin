@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import { fireEvent, within } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import { api } from '../../api/client';
@@ -11,13 +12,14 @@ import type { ReporterMessage } from '@shared/types';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-function Harness(
-  props: Partial<Omit<React.ComponentProps<typeof ConversationCard>, 'conversation'>>
-) {
-  const conversation = useReporterMessages('report-1');
+function Harness({
+  reportId = 'report-1',
+  ...props
+}: Partial<Omit<React.ComponentProps<typeof ConversationCard>, 'conversation'>>) {
+  const conversation = useReporterMessages(reportId);
   return (
     <ConversationCard
-      reportId="report-1"
+      reportId={reportId}
       canEdit
       messagingEnabled
       hasRecipient
@@ -35,6 +37,7 @@ let originalCreate: typeof URL.createObjectURL;
 let originalRevoke: typeof URL.revokeObjectURL;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   window.localStorage.clear();
   messages = structuredClone(mockConversationMessages);
   sent = [];
@@ -124,6 +127,65 @@ describe('ConversationCard', () => {
     expect(article.querySelector('a[href^="javascript:"]')).toBeNull();
   });
 
+  it.each([
+    ['Visit https://example.com/page.,!?;:', 'https://example.com/page'],
+    ['See (https://example.com/page).', 'https://example.com/page'],
+    ['See https://example.com/wiki/Function_(math).', 'https://example.com/wiki/Function_(math)'],
+    ['See (https://example.com/a_(b)).', 'https://example.com/a_(b)'],
+    ['See https://example.com/a_(b(c))).', 'https://example.com/a_(b(c))'],
+  ])('keeps punctuation as text in %s', async (text, href) => {
+    messages[0].message = text;
+    renderWithProviders(<Harness />);
+    const article = await screen.findByRole('article', { name: 'Staff message from Anna Staff' });
+    expect(within(article).getByRole('link', { name: href })).toHaveAttribute('href', href);
+    expect(article.querySelector('p')).toHaveTextContent(text);
+  });
+
+  it('clears send and moderation failures when switching reports', async () => {
+    server.use(
+      http.post('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({ message: 'Send failed' }, { status: 400 })
+      ),
+      http.post('/api/reports/:id/reporter-messages/:messageId/hide', () =>
+        HttpResponse.json({ message: 'Hide failed' }, { status: 400 })
+      )
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<Harness />);
+    await user.type(screen.getByRole('textbox'), 'Reply');
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    await screen.findByText('Send failed');
+    await user.click(screen.getByRole('button', { name: 'Hide message from Anna Staff' }));
+    await screen.findByText('Hide failed');
+    rerender(<Harness reportId="report-2" />);
+    await screen.findByRole('article', { name: 'Staff message from Anna Staff' });
+    expect(screen.queryByText('Send failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hide failed')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeEnabled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('discards a pending send failure after switching reports', async () => {
+    let started = false;
+    server.use(
+      http.post('/api/reports/:id/reporter-messages', async () => {
+        started = true;
+        await delay(100);
+        return HttpResponse.json({ message: 'Old report failure' }, { status: 400 });
+      })
+    );
+    const user = userEvent.setup();
+    const { rerender, queryClient } = renderWithProviders(<Harness />);
+    await user.type(screen.getByRole('textbox'), 'Reply');
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    await waitFor(() => expect(started).toBe(true));
+    rerender(<Harness reportId="report-2" />);
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(screen.queryByText('Old report failure')).not.toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('sends trimmed text and the CC flag through the legacy JSON path', async () => {
     const user = userEvent.setup();
     const { queryClient } = renderWithProviders(<Harness />);
@@ -192,6 +254,7 @@ describe('ConversationCard', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.getByRole('button', { name: 'Attach files (1)' })).toBeInTheDocument();
     expect(screen.getByText('draft.png')).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('rejects a sixth file and oversized files before submitting', async () => {
@@ -237,6 +300,7 @@ describe('ConversationCard', () => {
     await user.click(await screen.findByRole('button', { name: 'Hide message from Anna Staff' }));
     expect(await screen.findByText('Cannot change visibility')).toBeInTheDocument();
     expect(screen.queryByText('Hidden from reporter')).not.toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('keeps history readable when messaging is disabled', async () => {
