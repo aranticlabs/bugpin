@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { usersRoutes } from '../../../src/server/routes/api/users';
 import { usersService } from '../../../src/server/services/users.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -365,7 +365,7 @@ describe('users routes', () => {
     const formData = new FormData();
     formData.append(
       'file',
-      new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' }),
+      new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' })
     );
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {

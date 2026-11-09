@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { renderWithProviders, screen, userEvent, waitFor } from '../utils';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../utils';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { server } from '../mocks/server';
 import { mockUsers } from '../mocks/handlers';
@@ -9,7 +9,10 @@ const RELEASE_URL = 'https://github.com/aranticlabs/bugpin/releases/tag/v1.0.7';
 const PACKAGE_URL = 'https://www.npmjs.com/package/@arantic/bugpin-widget?activeTab=versions';
 
 const STORAGE_KEY = 'bugpin.updateBanner.dismissedVersion';
+const SNOOZE_KEY = 'bugpin.updateBanner.snoozedUntil';
+const UPGRADE_GUIDE_URL = 'https://docs.bugpin.io/upgrading';
 const WIDGET_STORAGE_KEY = 'bugpin.widgetPackageWarning.dismissedId';
+const WIDGET_SNOOZE_KEY = 'bugpin.widgetPackageWarning.snoozedUntil';
 
 interface WidgetPackageResponseBody {
   minimumSupportedVersion: string;
@@ -87,14 +90,65 @@ beforeEach(() => {
 });
 
 describe('UpdateBanner', () => {
-  it('renders for admins when an update is available', async () => {
+  it.each([
+    ['1.3.0', '2.0.0', '2.0'],
+    ['1.3.0-beta.2', '2.0.0', '2.0'],
+    ['9.9.0', '10.0.0', '10.0'],
+  ])('shows the major notice from %s to %s', async (current, latest, label) => {
     mockUserRole('admin');
-    mockVersion();
+    const releaseUrl = `https://github.com/aranticlabs/bugpin/releases/tag/v${latest}`;
+    mockVersion({ current, latest, releaseUrl });
 
     renderWithProviders(<UpdateBanner />);
 
-    expect(await screen.findByText(/A new version of BugPin is available/i)).toBeInTheDocument();
-    expect(screen.getByText('v1.0.7')).toBeInTheDocument();
+    expect(await screen.findByText(`BugPin ${label} is available.`)).toBeInTheDocument();
+    expect(screen.getByText(/This major release includes breaking changes/i)).toBeInTheDocument();
+    expect(screen.getByText(/Back up your data before upgrading/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Upgrade guide/i })).toHaveAttribute(
+      'href',
+      UPGRADE_GUIDE_URL
+    );
+    expect(screen.getByRole('link', { name: /Release notes/i })).toHaveAttribute(
+      'href',
+      releaseUrl
+    );
+  });
+
+  it.each([
+    ['1.3.0', '1.4.0', '1.4'],
+    ['2.0.0', '2.1.0', '2.1'],
+    ['1.3.2', '1.4.0', '1.4'],
+  ])('shows the minor notice from %s to %s', async (current, latest, label) => {
+    mockUserRole('admin');
+    mockVersion({ current, latest });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(`BugPin ${label} is available.`)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /See what's new/i })).toHaveAttribute(
+      'href',
+      RELEASE_URL
+    );
+    expect(screen.queryByText(/breaking changes/i)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['1.3.0', '1.3.1'],
+    ['1.3.0-beta.2', '1.3.0'],
+  ])('shows the patch notice from %s to %s', async (current, latest) => {
+    mockUserRole('admin');
+    mockVersion({ current, latest });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(
+      await screen.findByText(new RegExp(`BugPin ${latest} is available`))
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Release notes/i })).toHaveAttribute(
+      'href',
+      RELEASE_URL
+    );
+    expect(screen.queryByText(/breaking changes/i)).not.toBeInTheDocument();
   });
 
   it('opens the release page in a new tab', async () => {
@@ -103,10 +157,20 @@ describe('UpdateBanner', () => {
 
     renderWithProviders(<UpdateBanner />);
 
-    const link = await screen.findByRole('link', { name: /View release notes/i });
+    const link = await screen.findByRole('link', { name: /Release notes/i });
     expect(link).toHaveAttribute('href', RELEASE_URL);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('omits release links when the release URL is unknown', async () => {
+    mockUserRole('admin');
+    mockVersion({ current: '1.3.0', latest: '1.4.0', releaseUrl: null });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText('BugPin 1.4 is available.')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('renders nothing for viewers', async () => {
@@ -160,27 +224,70 @@ describe('UpdateBanner', () => {
     const user = userEvent.setup();
     renderWithProviders(<UpdateBanner />);
 
-    const dismiss = await screen.findByRole('button', { name: /Dismiss/i });
-    await user.click(dismiss);
+    await user.click(await screen.findByRole('button', { name: 'Dismiss update notification' }));
 
     await waitFor(() => {
-      expect(screen.queryByText(/A new version of BugPin is available/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/BugPin 1\.0\.7 is available/i)).not.toBeInTheDocument();
     });
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('1.0.7');
   });
 
-  it('reappears when a newer version is published after dismissal', async () => {
-    window.localStorage.setItem(STORAGE_KEY, '1.0.7');
-    mockUserRole('admin');
-    mockVersion({ latest: '1.0.8', releaseUrl: RELEASE_URL.replace('1.0.7', '1.0.8') });
+  it.each([
+    ['major', '1.3.0', '2.0.0', '2.1.0'],
+    ['minor', '1.3.0', '1.4.0', '1.4.1'],
+    ['patch', '1.0.6', '1.0.7', '1.0.7'],
+  ])(
+    'keeps a dismissed %s notice hidden within the same release line',
+    async (_type, current, dismissed, latest) => {
+      window.localStorage.setItem(STORAGE_KEY, dismissed);
+      mockUserRole('admin');
+      mockVersion({ current, latest });
 
+      const { container } = renderWithProviders(<UpdateBanner />);
+
+      await waitFor(() => {
+        expect(container.firstChild).toBeNull();
+      });
+    }
+  );
+
+  it.each([
+    ['major', '1.3.0', '2.4.0', '3.0.0', 'BugPin 3.0 is available.'],
+    ['minor', '1.3.0', '1.4.2', '1.5.0', 'BugPin 1.5 is available.'],
+    ['patch', '1.0.6', '1.0.7', '1.0.8', /BugPin 1\.0\.8 is available/],
+  ])(
+    'shows the %s notice again for a new release line',
+    async (_type, current, dismissed, latest, text) => {
+      window.localStorage.setItem(STORAGE_KEY, dismissed);
+      mockUserRole('admin');
+      mockVersion({ current, latest });
+
+      renderWithProviders(<UpdateBanner />);
+
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    }
+  );
+
+  it('snoozes the notice for a day with Not now', async () => {
+    mockUserRole('admin');
+    mockVersion();
+
+    const user = userEvent.setup();
+    const before = Date.now();
     renderWithProviders(<UpdateBanner />);
 
-    expect(await screen.findByText('v1.0.8')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Not now' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+    const snoozedUntil = Number(window.localStorage.getItem(SNOOZE_KEY));
+    expect(snoozedUntil).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1000);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('stays hidden when the stored dismissal matches the current latest', async () => {
-    window.localStorage.setItem(STORAGE_KEY, '1.0.7');
+  it('stays hidden while snoozed', async () => {
+    window.localStorage.setItem(SNOOZE_KEY, String(Date.now() + 60_000));
     mockUserRole('admin');
     mockVersion();
 
@@ -189,6 +296,16 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       expect(container.firstChild).toBeNull();
     });
+  });
+
+  it('shows the notice again after the snooze expires', async () => {
+    window.localStorage.setItem(SNOOZE_KEY, String(Date.now() - 1));
+    mockUserRole('admin');
+    mockVersion();
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(/BugPin 1\.0\.7 is available/)).toBeInTheDocument();
   });
 
   it('shows widget compatibility when remote update checks are disabled', async () => {
@@ -265,9 +382,43 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       expect(screen.queryByText(/widget version unsupported/i)).not.toBeInTheDocument();
     });
-    expect(screen.getByText(/A new version of BugPin is available/i)).toBeInTheDocument();
+    expect(screen.getByText(/BugPin 1\.0\.7 is available/i)).toBeInTheDocument();
     expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBe('warning_1');
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('snoozes the widget warning for a day independently from the update notice', async () => {
+    mockUserRole('admin');
+    mockVersion({ widgetPackage: incompatibleWidgetPackage });
+
+    const user = userEvent.setup();
+    const before = Date.now();
+    renderWithProviders(<UpdateBanner />);
+
+    const warning = (await screen.findByText(/widget version unsupported/i)).closest(
+      '[role="status"]'
+    ) as HTMLElement;
+    await user.click(within(warning).getByRole('button', { name: 'Not now' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/widget version unsupported/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/BugPin 1\.0\.7 is available/i)).toBeInTheDocument();
+    expect(Number(window.localStorage.getItem(WIDGET_SNOOZE_KEY))).toBeGreaterThanOrEqual(
+      before + 24 * 60 * 60 * 1000
+    );
+    expect(window.localStorage.getItem(SNOOZE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBeNull();
+  });
+
+  it('shows the widget warning again after its snooze expires', async () => {
+    window.localStorage.setItem(WIDGET_SNOOZE_KEY, String(Date.now() - 1));
+    mockUserRole('admin');
+    mockVersion({ updateAvailable: false, widgetPackage: incompatibleWidgetPackage });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(/widget version unsupported/i)).toBeInTheDocument();
   });
 
   it('shows a changed widget warning after an earlier dismissal', async () => {

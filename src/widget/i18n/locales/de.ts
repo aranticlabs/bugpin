@@ -10,6 +10,8 @@ const de: WidgetCatalog = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
   'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
+  'dialog.tabs.recording': 'Aufnahmen',
+  'dialog.tabs.recordingWithCount': 'Aufnahmen ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Kurze Beschreibung des Problems',
@@ -50,6 +52,11 @@ const de: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Nicht mehr anzeigen',
   'screenCapture.back': 'Zurück',
   'screenCapture.confirm': 'Screenshot aufnehmen',
+  'screenCapture.confirmRecording': 'Recorder öffnen',
+  'screenCapture.recording.body':
+    'Dein Browser fragt, was geteilt werden soll. Alles Sichtbare wird aufgezeichnet.',
+  'screenCapture.recording.windowHint':
+    'Wähle das Fenster mit dieser Seite. Andere Apps können sichtbar sein.',
 
   'screenshot.privacyTip':
     'Tipp: Nutze das Anmerkungswerkzeug, um sensible Daten vor dem Senden zu verbergen.',
@@ -68,8 +75,11 @@ const de: WidgetCatalog = {
   'screenshot.action.annotate': 'Kommentieren',
   'screenshot.action.download': 'Herunterladen',
   'screenshot.action.remove': 'Entfernen',
-  'screenshot.helperText':
-    'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB) - MP4, WebM, MOV, AVI (max. {videoSize} MB)',
+  'screenshot.helperText': 'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB)',
+  'recording.quality.low': 'Niedrig',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Hoch',
+  'recording.helperText': 'Unterstützt: MP4, WebM, MOV (max. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Nicht unterstütztes Bildformat: {type}',
   'screenshot.error.imageTooLarge': 'Bild zu groß. Maximale Größe: {size} MB.',
@@ -80,9 +90,57 @@ const de: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Aktiviere „Aufnahmequalität reduzieren" oder verkleinere das Browserfenster.',
 
+  'recording.record': 'Aufnahme starten',
+  'recording.startShort': 'Starten',
+  'recording.start': 'Recorder öffnen',
+  'recording.microphone': 'Mikrofon einbeziehen',
+  'recording.privacyTip': 'Alles Sichtbare wird aufgezeichnet.',
+  'recording.countdown': 'Aufnahme startet in {seconds}',
+  'recording.stop': 'Stoppen',
+  'recording.discard': 'Verwerfen',
+  'recording.pause': 'Pausieren',
+  'recording.play': 'Abspielen',
+  'recording.expand': 'Video vergrößern',
+  'recording.resume': 'Fortsetzen',
+  'recording.tool.cursor': 'Mauszeiger',
+  'recording.tool.pen': 'Stift',
+  'recording.tool.laser': 'Laserpointer',
+  'recording.tool.clickEffects': 'Klickeffekte',
+  'recording.tool.undo': 'Rückgängig',
+  'recording.tool.clear': 'Zeichnung löschen',
+  'recording.color.red': 'Rot',
+  'recording.color.amber': 'Bernstein',
+  'recording.color.green': 'Grün',
+  'recording.color.blue': 'Blau',
+  'recording.color.white': 'Weiß',
+  'recording.warning.wholeScreen': 'Du teilst deinen gesamten Bildschirm.',
+  'recording.notice.noMicrophone': 'Aufnahme ohne Mikrofon.',
+  'recording.stopped.duration': 'Aufnahme nach {duration} gestoppt.',
+  'recording.stopped.size': 'Aufnahme beim Limit von {size} MB gestoppt.',
+  'recording.recovered': 'Aufnahme gespeichert. Öffne BugPin, um fortzufahren.',
+  'recording.error.unavailable': 'Bildschirmaufnahme ist nicht verfügbar.',
+  'recording.error.failed': 'Aufnahme fehlgeschlagen. Bitte versuche es erneut.',
+  'recording.error.empty': 'Die Aufnahme war leer. Bitte versuche es erneut.',
+  'recording.oversized': 'Die Aufnahme ist {size} MB groß (max. {limit} MB).',
+  'recording.oversizedHint': 'Lade sie herunter oder nimm einen kürzeren Clip auf.',
+  'recording.previewUnavailable': 'Vorschau nicht verfügbar.',
+
+  'submit.uploading': 'Wird hochgeladen: {percent} %',
+  'submit.cancelUpload': 'Hochladen abbrechen',
+  'submit.error.tooLarge':
+    'Der Upload ist zu groß für den Server. Entferne einige Medien und versuche es erneut.',
+  'submit.error.videoQuota':
+    'Video-Uploads sind für dieses Projekt pausiert. Entferne das Video, um den Bericht zu senden.',
+  'submit.error.rejected':
+    'Der Upload wurde abgelehnt. Möglicherweise sind deine Anhänge zu groß. Entferne oder verkleinere sie und versuche es erneut.',
+  'submit.queued':
+    'Bericht gespeichert. Er wird automatisch gesendet, sobald die Verbindung wieder steht.',
+
   'toast.success.submit': 'Fehlerbericht erfolgreich gesendet!',
   'toast.error.submit': 'Bericht konnte nicht gesendet werden',
   'toast.error.capture': 'Screenshot konnte nicht aufgenommen werden',
+  'toast.error.draftSave':
+    'Der Entwurf konnte nicht gespeichert werden. Lass das Widget geöffnet und versuche es erneut.',
 
   'annotation.toolbar.select': 'Auswählen',
   'annotation.toolbar.pan': 'Verschieben (oder Space gedrückt halten)',

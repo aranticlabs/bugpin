@@ -48,6 +48,12 @@ function applySettingsDefaults(settings: ProjectSettings): ProjectSettings {
   if (next.widgetLauncherButton) {
     next.widgetLauncherButton = applyLauncherButtonLegacyWrap(next.widgetLauncherButton);
   }
+  if (next.screenshot?.maxVideoUploadSizeMb !== undefined) {
+    next.screenshot = {
+      ...next.screenshot,
+      maxVideoUploadSizeMb: Math.min(next.screenshot.maxVideoUploadSizeMb, 100),
+    };
+  }
   return next;
 }
 

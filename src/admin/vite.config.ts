@@ -62,7 +62,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:7301',
-        changeOrigin: true,
+        changeOrigin: false,
+        xfwd: true,
       },
       '/branding': {
         target: 'http://localhost:7301',

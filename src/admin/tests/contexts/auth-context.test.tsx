@@ -1,14 +1,23 @@
 import { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, userEvent } from '../utils';
 import { AuthProvider, useAuth } from '../../contexts/AuthContext';
 import { api } from '../../api/client';
 import type { User } from '@shared/types';
 
+const setupRequiredListeners = vi.hoisted(() => new Set<() => void>());
+
 vi.mock('../../api/client', () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+  },
+  onSetupRequired: (listener: () => void) => {
+    setupRequiredListeners.add(listener);
+    return () => {
+      setupRequiredListeners.delete(listener);
+    };
   },
 }));
 
@@ -28,12 +37,13 @@ const baseUser: User = {
 };
 
 function AuthConsumer() {
-  const { user, isLoading, login, logout, refreshUser } = useAuth();
+  const { user, isLoading, canLoadData, login, logout, refreshUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   return (
     <div>
       <div data-testid="status">{isLoading ? 'loading' : (user?.email ?? 'guest')}</div>
+      <div data-testid="can-load-data">{String(canLoadData)}</div>
       {error && <div data-testid="error">{error}</div>}
       <button
         type="button"
@@ -67,11 +77,13 @@ function AuthConsumer() {
   );
 }
 
-function renderAuth() {
+function renderAuth(queryClient = new QueryClient()) {
   return render(
-    <AuthProvider>
-      <AuthConsumer />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -173,5 +185,75 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('status').textContent).toBe('guest');
     });
+  });
+
+  it('pauses data queries until a required password change is done', async () => {
+    const queryClient = new QueryClient();
+    apiMock.get
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          authenticated: true,
+          user: { ...baseUser, mustChangePassword: true },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          authenticated: true,
+          user: { ...baseUser, mustChangePassword: false },
+        },
+      });
+
+    const user = userEvent.setup();
+    renderAuth(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe(baseUser.email);
+    });
+    expect(screen.getByTestId('can-load-data').textContent).toBe('false');
+    expect(queryClient.getDefaultOptions().queries?.enabled).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('can-load-data').textContent).toBe('true');
+    });
+    expect(queryClient.getDefaultOptions().queries?.enabled).toBe(true);
+  });
+
+  it('reloads the user once when the server starts requiring a setup step mid-session', async () => {
+    let resolveRefresh: (value: unknown) => void = () => undefined;
+    apiMock.get
+      .mockResolvedValueOnce({
+        data: { success: true, authenticated: true, user: baseUser },
+      })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        })
+      );
+
+    renderAuth();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('can-load-data').textContent).toBe('true');
+    });
+
+    setupRequiredListeners.forEach((listener) => listener());
+    setupRequiredListeners.forEach((listener) => listener());
+    resolveRefresh({
+      data: {
+        success: true,
+        authenticated: true,
+        user: { ...baseUser, twoFactorSetupRequired: true },
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('can-load-data').textContent).toBe('false');
+    });
+    setupRequiredListeners.forEach((listener) => listener());
+    expect(apiMock.get).toHaveBeenCalledTimes(2);
   });
 });

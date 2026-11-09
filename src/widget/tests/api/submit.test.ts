@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { installMockXMLHttpRequest } from '../helpers/xhr';
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -39,9 +40,9 @@ afterEach(() => {
 
 describe('submit API', () => {
   it('submits report when online', async () => {
-    const mockFetch = async () =>
-      new Response(JSON.stringify({ success: true, reportId: 'rpt_1' }), { status: 200 });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const restoreXhr = installMockXMLHttpRequest((request) => {
+      request.respond(200, JSON.stringify({ success: true, reportId: 'rpt_1' }));
+    });
 
     const { submitReport } = await import('../../api/submit');
     globalThis.navigator = { onLine: true } as Navigator;
@@ -64,6 +65,7 @@ describe('submit API', () => {
     if (result.success) {
       expect(result.reportId).toBe('rpt_1');
     }
+    restoreXhr();
   });
 
   it('fetches widget config', async () => {

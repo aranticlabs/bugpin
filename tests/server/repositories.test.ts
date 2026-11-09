@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'bun:test';
+import type { ReportMetadata } from '../../src/shared/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -86,7 +87,7 @@ async function createUser(email = 'user@example.com') {
   });
 }
 
-const baseMetadata = {
+const baseMetadata: ReportMetadata = {
   url: 'https://example.com',
   browser: { name: 'Chrome', version: '1', userAgent: 'UA' },
   device: { type: 'desktop', os: 'macOS' },
@@ -295,7 +296,6 @@ describe('usersRepo', () => {
       name: 'Admin',
       isActive: false,
       email: 'Updated@Example.com',
-      avatarUrl: null,
       role: 'viewer',
     });
     expect(updated?.isActive).toBe(false);
@@ -322,6 +322,26 @@ describe('usersRepo', () => {
 
     const deleted = await usersRepo.delete(user.id);
     expect(deleted).toBe(true);
+  });
+
+  it('never issues or accepts an invitation for an account that was not invited', async () => {
+    const user = await usersRepo.create({
+      email: 'direct@example.com',
+      passwordHash: 'original-hash',
+      name: 'Direct',
+      role: 'admin',
+    });
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+
+    const reissued = await usersRepo.updateInvitationToken(user.id, 'planted-token', expiresAt);
+    expect(reissued).toBeNull();
+
+    getDb().run('UPDATE users SET invitation_token = ? WHERE id = ?', ['planted-token', user.id]);
+    const accepted = await usersRepo.acceptInvitation(user.id, 'planted-token', 'attacker-hash');
+    expect(accepted).toBeNull();
+
+    const withPassword = await usersRepo.findByEmailWithPassword('direct@example.com');
+    expect(withPassword?.passwordHash).toBe('original-hash');
   });
 
   it('accepts an invitation only once for a given token', async () => {
@@ -396,6 +416,10 @@ describe('settingsRepo', () => {
     expect(settings.appName).toBe('BugPin');
     expect(settings.notifications.notifyOnNewReport).toBe(true);
     expect(settings.privacy).toEqual({ euPrivacyMode: false });
+    expect(settings.screenshot.maxVideoUploadMbPerDay).toBe(2048);
+    expect(settings.screenshot.enableScreenRecording).toBe(false);
+    expect(settings.screenshot.allowRecordingMicrophone).toBe(false);
+    expect(settings.screenshot.maxRecordingDurationSeconds).toBe(180);
   });
 
   it('updates and reads settings', async () => {
@@ -408,6 +432,18 @@ describe('settingsRepo', () => {
 
     const merged = await settingsRepo.updateNested('branding', { primaryColor: '#123456' });
     expect(merged.branding.primaryColor).toBe('#123456');
+  });
+
+  it('clamps legacy video upload limits on read', async () => {
+    await settingsRepo.set('screenshot', { maxVideoUploadSizeMb: 500 });
+    const settings = await settingsRepo.getAll();
+    expect(settings.screenshot.maxVideoUploadSizeMb).toBe(100);
+
+    const project = await projectsRepo.create({
+      name: 'Legacy video limit',
+      settings: { screenshot: { maxVideoUploadSizeMb: 500 } },
+    });
+    expect(project.settings.screenshot?.maxVideoUploadSizeMb).toBe(100);
   });
 
   it('replaces legacy "Found a bug?" tooltip with null at the global layer', async () => {
@@ -506,6 +542,67 @@ describe('integrationsRepo', () => {
 });
 
 describe('reportsRepo', () => {
+  it('preserves the resolution time and resolver when saving an already resolved report', async () => {
+    const project = await createProject('Resolution history');
+    const resolver = await createUser('resolver@example.com');
+    const editor = await createUser('editor@example.com');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Resolved report',
+      metadata: baseMetadata,
+    });
+    const resolvedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?', [
+      'resolved',
+      resolvedAt,
+      resolver.id,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+      title: 'Updated title',
+    });
+    expect(saved).toMatchObject({ title: 'Updated title', resolvedAt, resolvedBy: resolver.id });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'in_progress' });
+    expect(reopened?.resolvedAt).toBeUndefined();
+    expect(reopened?.resolvedBy).toBeUndefined();
+
+    const resolved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+    });
+    expect(resolved?.resolvedAt).toBeTruthy();
+    expect(resolved?.resolvedAt).not.toBe(resolvedAt);
+    expect(resolved?.resolvedBy).toBe(editor.id);
+  });
+
+  it('preserves the closure time when saving an already closed report', async () => {
+    const project = await createProject('Closure history');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Closed report',
+      metadata: baseMetadata,
+    });
+    const closedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, closed_at = ? WHERE id = ?', [
+      'closed',
+      closedAt,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, { status: 'closed', priority: 'high' });
+    expect(saved).toMatchObject({ priority: 'high', closedAt });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'open' });
+    expect(reopened?.closedAt).toBeUndefined();
+    const closed = await reportsRepo.update(report.id, { status: 'closed' });
+    expect(closed?.closedAt).toBeTruthy();
+    expect(closed?.closedAt).not.toBe(closedAt);
+  });
+
   it('creates, updates, and deletes reports', async () => {
     const project = await createProject('Reports');
 
@@ -720,6 +817,67 @@ describe('filesRepo', () => {
     const deleted = await filesRepo.deleteByReportId(report.id);
     expect(deleted).toBe(2);
   });
+
+  it('sums recent video bytes for one project', async () => {
+    const project = await createProject('Quota');
+    const otherProject = await createProject('Other');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Quota report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+    const otherReport = await reportsRepo.create({
+      projectId: otherProject.id,
+      title: 'Other report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    await filesRepo.create({
+      reportId: report.id,
+      type: 'video',
+      filename: 'recent.mp4',
+      path: '/tmp/recent.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 300,
+    });
+    const oldVideo = await filesRepo.create({
+      reportId: report.id,
+      type: 'video',
+      filename: 'old.mp4',
+      path: '/tmp/old.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 500,
+    });
+    await filesRepo.create({
+      reportId: report.id,
+      type: 'screenshot',
+      filename: 'screen.png',
+      path: '/tmp/screen.png',
+      mimeType: 'image/png',
+      sizeBytes: 700,
+    });
+    await filesRepo.create({
+      reportId: otherReport.id,
+      type: 'video',
+      filename: 'other.mp4',
+      path: '/tmp/other.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: 900,
+    });
+    getDb().run('UPDATE files SET created_at = ? WHERE id = ?', [
+      new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      oldVideo.id,
+    ]);
+
+    const total = await filesRepo.getVideoSizeByProjectSince(
+      project.id,
+      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    );
+
+    expect(total).toBe(300);
+  });
 });
 
 describe('webhooksRepo', () => {
@@ -752,7 +910,6 @@ describe('webhooksRepo', () => {
 
     const updated = await webhooksRepo.update(secondary.id, {
       isActive: false,
-      secret: null,
       events: ['report.created'],
     });
     expect(updated?.isActive).toBe(false);

@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
+import { ForceTwoFactorSetupDialog } from './components/ForceTwoFactorSetupDialog';
 import { Spinner } from './components/ui/spinner';
 
 // Wrapper around React.lazy that reloads the page once when a chunk fails to load.
@@ -71,6 +73,9 @@ const WidgetDialog = lazyWithRetry(() =>
 const Screenshot = lazyWithRetry(() =>
   import('./pages/widget/Screenshot').then((m) => ({ default: m.Screenshot }))
 );
+const Recording = lazyWithRetry(() =>
+  import('./pages/widget/Recording').then((m) => ({ default: m.Recording }))
+);
 const Language = lazyWithRetry(() =>
   import('./pages/widget/Language').then((m) => ({ default: m.Language }))
 );
@@ -106,7 +111,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  // The console remounts once a required setup step is done so its paused queries start
+  // fresh. The password change comes first, then the two-factor setup.
+  const pendingStep = user.mustChangePassword
+    ? 'password'
+    : user.twoFactorSetupRequired
+      ? 'two-factor'
+      : 'ready';
+  return (
+    <>
+      <React.Fragment key={pendingStep}>{children}</React.Fragment>
+      {pendingStep === 'password' && <ForcePasswordChangeDialog />}
+      {pendingStep === 'two-factor' && <ForceTwoFactorSetupDialog />}
+    </>
+  );
 }
 
 // Admin-only route wrapper
@@ -182,7 +200,7 @@ export function App() {
               }
             />
             <Route
-              path="security-privacy"
+              path="security"
               element={
                 <AdminRoute>
                   <SecurityPrivacy />
@@ -226,6 +244,14 @@ export function App() {
               element={
                 <AdminRoute>
                   <Screenshot />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="recording"
+              element={
+                <AdminRoute>
+                  <Recording />
                 </AdminRoute>
               }
             />

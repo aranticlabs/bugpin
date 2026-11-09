@@ -1,6 +1,5 @@
-import { getEEProjectLicenseService } from '../../src/server/utils/ee';
-const projectLicenseService = getEEProjectLicenseService()!;
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import * as projectLicense from '../../src/server/utils/project-license';
+import { describe, it, expect, beforeEach, afterEach, spyOn, type Mock } from 'bun:test';
 import { githubSyncService } from '../../src/server/services/integrations/github-sync.service';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
@@ -12,6 +11,8 @@ import { Result } from '../../src/server/utils/result';
 import type { Integration, Report } from '../../src/shared/types';
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -51,7 +52,7 @@ const originalFilesRepo = { ...filesRepo };
 const originalGithubService = { ...githubService };
 const originalSettingsService = { ...settingsService };
 const originalLogger = { ...logger };
-const originalAccess = projectLicenseService.checkAccess;
+let checkAccess: Mock<typeof projectLicense.checkProjectLicense>;
 
 let reportById: Report | null = baseReport;
 let integrationById: Integration | null = baseIntegration;
@@ -63,7 +64,7 @@ let updatedIntegrationConfig: unknown;
 let createWebhookUrl: string | null = null;
 
 beforeEach(() => {
-  projectLicenseService.checkAccess = () => Result.ok(undefined);
+  checkAccess = spyOn(projectLicense, 'checkProjectLicense').mockReturnValue(Result.ok(undefined));
   reportById = baseReport;
   integrationById = baseIntegration;
   updateSyncPayload = undefined;
@@ -76,9 +77,9 @@ beforeEach(() => {
   reportsRepo.findById = async () => reportById;
   reportsRepo.updateGitHubSyncStatus = async (_id, payload) => {
     updateSyncPayload = payload;
-    return true;
+    return reportById;
   };
-  reportsRepo.markPendingSync = async () => true;
+  reportsRepo.markPendingSync = async () => {};
   reportsRepo.findByGitHubIssueNumber = async () => null;
   reportsRepo.update = async (_id, payload) => {
     updateStatusPayload = payload;
@@ -90,7 +91,6 @@ beforeEach(() => {
   integrationsRepo.findByProjectId = async () => [baseIntegration];
   integrationsRepo.updateLastUsed = async (id) => {
     updateLastUsedId = id;
-    return true;
   };
   integrationsRepo.update = async (_id, payload) => {
     updatedIntegrationConfig = payload.config;
@@ -133,7 +133,7 @@ afterEach(() => {
   Object.assign(githubService, originalGithubService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(logger, originalLogger);
-  projectLicenseService.checkAccess = originalAccess;
+  checkAccess.mockRestore();
 });
 
 describe('githubSyncService', () => {
@@ -141,7 +141,7 @@ describe('githubSyncService', () => {
     reportById = null;
     const result = await githubSyncService.syncReport('rpt_missing', 'int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toHaveProperty('code', 'NOT_FOUND');
   });
 
   it('syncs report by creating issue', async () => {
@@ -155,21 +155,21 @@ describe('githubSyncService', () => {
     integrationById = null;
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toHaveProperty('code', 'NOT_FOUND');
   });
 
   it('rejects sync for invalid integration type', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toHaveProperty('code', 'INVALID_TYPE');
   });
 
   it('rejects sync when integration is inactive', async () => {
     integrationById = { ...baseIntegration, isActive: false };
     const result = await githubSyncService.syncReport('rpt_1', 'int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INACTIVE');
+    expect(result).toHaveProperty('code', 'INACTIVE');
   });
 
   it('marks sync error when create issue fails', async () => {
@@ -224,10 +224,15 @@ describe('githubSyncService', () => {
     const originalTimeout = globalThis.setTimeout;
     let attempts = 0;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    spyOn(globalThis, 'setTimeout').mockImplementation(
+      Object.assign(
+        (...[handler]: Parameters<typeof setTimeout>) => {
+          handler();
+          return originalTimeout(() => {}, 0);
+        },
+        { __promisify__: originalTimeout.__promisify__ }
+      )
+    );
 
     githubSyncService.syncReport = async () => {
       attempts += 1;
@@ -255,10 +260,15 @@ describe('githubSyncService', () => {
     const originalTimeout = globalThis.setTimeout;
     let attempts = 0;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    spyOn(globalThis, 'setTimeout').mockImplementation(
+      Object.assign(
+        (...[handler]: Parameters<typeof setTimeout>) => {
+          handler();
+          return originalTimeout(() => {}, 0);
+        },
+        { __promisify__: originalTimeout.__promisify__ }
+      )
+    );
 
     githubSyncService.syncReport = async () => {
       attempts += 1;
@@ -279,10 +289,15 @@ describe('githubSyncService', () => {
 
   it('syncs reports in batch', async () => {
     const originalTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    spyOn(globalThis, 'setTimeout').mockImplementation(
+      Object.assign(
+        (...[handler]: Parameters<typeof setTimeout>) => {
+          handler();
+          return originalTimeout(() => {}, 0);
+        },
+        { __promisify__: originalTimeout.__promisify__ }
+      )
+    );
 
     const result = await githubSyncService.syncReports(['rpt_1'], 'int_1');
     expect(result.success).toBe(true);
@@ -297,10 +312,15 @@ describe('githubSyncService', () => {
     const originalSyncReport = githubSyncService.syncReport;
     const originalTimeout = globalThis.setTimeout;
 
-    globalThis.setTimeout = ((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler();
-      return 0 as never;
-    }) as typeof setTimeout;
+    spyOn(globalThis, 'setTimeout').mockImplementation(
+      Object.assign(
+        (...[handler]: Parameters<typeof setTimeout>) => {
+          handler();
+          return originalTimeout(() => {}, 0);
+        },
+        { __promisify__: originalTimeout.__promisify__ }
+      )
+    );
 
     let calls = 0;
     githubSyncService.syncReport = async () => {
@@ -334,28 +354,28 @@ describe('githubSyncService', () => {
     integrationById = null;
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toHaveProperty('code', 'NOT_FOUND');
   });
 
   it('returns INVALID_TYPE when enabling auto sync for non-github', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toHaveProperty('code', 'INVALID_TYPE');
   });
 
   it('returns SETTINGS_ERROR when settings lookup fails', async () => {
     settingsService.getAll = async () => Result.fail('fail', 'ERROR');
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('SETTINGS_ERROR');
+    expect(result).toHaveProperty('code', 'SETTINGS_ERROR');
   });
 
   it('returns error when app url is missing', async () => {
     settingsService.getAll = async () => Result.ok({ appUrl: '' } as never);
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('CONFIG_ERROR');
+    expect(result).toHaveProperty('code', 'CONFIG_ERROR');
   });
 
   it('strips trailing slash from app url for webhook', async () => {
@@ -385,14 +405,14 @@ describe('githubSyncService', () => {
     integrationById = null;
     const result = await githubSyncService.disableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toHaveProperty('code', 'NOT_FOUND');
   });
 
   it('returns INVALID_TYPE when disabling auto sync for non-github', async () => {
     integrationById = { ...baseIntegration, type: 'slack' } as Integration;
     const result = await githubSyncService.disableAutoSync('int_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_TYPE');
+    expect(result).toHaveProperty('code', 'INVALID_TYPE');
   });
 
   it('deletes webhook when disabling auto sync', async () => {
@@ -437,7 +457,7 @@ describe('githubSyncService', () => {
       state: 'closed',
     });
     expect(result.success).toBe(false);
-    expect(result.code).toBe('NOT_FOUND');
+    expect(result).toHaveProperty('code', 'NOT_FOUND');
   });
 
   it('does nothing when no report matches the issue', async () => {
@@ -514,20 +534,24 @@ describe('githubSyncService', () => {
 it('does not commit sync results or errors after the project is deselected during a request', async () => {
   for (const mode of ['create', 'update', 'failure', 'throw']) {
     reportById = { ...baseReport, ...(mode === 'update' ? { githubIssueNumber: 123 } : {}) };
-    updateSyncPayload = undefined; updateLastUsedId = null;
-    projectLicenseService.checkAccess = () => Result.ok(undefined);
+    updateSyncPayload = undefined;
+    updateLastUsedId = null;
+    checkAccess.mockReturnValue(Result.ok(undefined));
     const started = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     const remote = async () => {
-      started.resolve(); await finish.promise;
+      started.resolve();
+      await finish.promise;
       if (mode === 'throw') throw new Error('Remote error');
-      return mode === 'failure' ? { success: false, error: 'Remote error' } : { success: true, issueNumber: 123, issueUrl: 'https://example.com/123' };
+      return mode === 'failure'
+        ? { success: false, error: 'Remote error' }
+        : { success: true, issueNumber: 123, issueUrl: 'https://example.com/123' };
     };
     githubService.createIssue = remote;
     githubService.updateIssue = remote;
     const pending = githubSyncService.syncReport('rpt_1', 'int_1');
     await started.promise;
-    projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+    checkAccess.mockReturnValue(Result.fail('Locked', 'PROJECT_NOT_LICENSED'));
     finish.resolve();
     const result = await pending;
     expect(result.success).toBe(false);

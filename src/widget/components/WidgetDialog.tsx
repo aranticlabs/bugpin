@@ -1,9 +1,10 @@
 import { FunctionComponent } from 'preact';
 import { useState, useCallback } from 'preact/hooks';
-import { FileText, Image, X } from 'lucide-preact';
+import { FileText, Image, Video, X } from 'lucide-preact';
 import { ScreenshotManager, CapturedMedia } from './ScreenshotManager.js';
 import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
-import { ScreenCaptureConsentDialog } from './ScreenCaptureConsentDialog.js';
+import { ScreenCaptureConsentDialog, type ConsentMode } from './ScreenCaptureConsentDialog.js';
+import { ScreenRecordingPanel } from './ScreenRecordingPanel.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 
@@ -25,6 +26,8 @@ interface WidgetDialogProps {
   onAddMedia: (item: CapturedMedia) => void;
   onRemoveMedia: (id: string) => void;
   isSubmitting: boolean;
+  uploadProgress: number | null;
+  onCancelSubmit: () => void;
   isCapturing: boolean;
   enableAnnotation: boolean;
   // Controlled state props (lifted to App for persistence across capture)
@@ -33,6 +36,7 @@ interface WidgetDialogProps {
   formData: FormData;
   onFormDataChange: (data: FormData) => void;
   showScreenCaptureConsent: boolean;
+  consentMode?: ConsentMode;
   onConsentConfirm: () => void;
   onConsentCancel: () => void;
   maxImageSize?: number;
@@ -41,11 +45,22 @@ interface WidgetDialogProps {
   onReduceScreenshotQualityChange: (value: boolean) => void;
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
+  recordingEnabled?: boolean;
+  allowRecordingMicrophone?: boolean;
+  includeMicrophone?: boolean;
+  onIncludeMicrophoneChange?: (value: boolean) => void;
+  isRecordingStarting?: boolean;
+  onStartRecording?: () => void;
+  oversizedRecording?: { sizeMb: number; limitMb: number } | null;
+  onDismissOversizedRecording?: () => void;
 }
+
+const BYTES_PER_MB = 1024 * 1024;
 
 const TAB_ICONS = {
   details: <FileText />,
   media: <Image />,
+  recording: <Video />,
 };
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
@@ -58,6 +73,8 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onAddMedia,
   onRemoveMedia,
   isSubmitting,
+  uploadProgress,
+  onCancelSubmit,
   isCapturing,
   enableAnnotation,
   activeTab,
@@ -65,6 +82,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   formData,
   onFormDataChange,
   showScreenCaptureConsent,
+  consentMode = 'screenshot',
   onConsentConfirm,
   onConsentCancel,
   maxImageSize,
@@ -73,9 +91,31 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onReduceScreenshotQualityChange,
   oversizedCapture,
   onDismissOversizedCapture,
+  recordingEnabled = false,
+  allowRecordingMicrophone = false,
+  includeMicrophone = false,
+  onIncludeMicrophoneChange = () => undefined,
+  isRecordingStarting = false,
+  onStartRecording = () => undefined,
+  oversizedRecording = null,
+  onDismissOversizedRecording = () => undefined,
 }) => {
   useLocale();
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+
+  const images = media.filter((item) => item.mimeType.startsWith('image/'));
+  const videos = media.filter(
+    (item) =>
+      item.mimeType.startsWith('video/') && (recordingEnabled || item.source !== 'recording')
+  );
+  const oversizedClip =
+    maxVideoSize && videos.find((item) => (item.blob?.size ?? 0) > maxVideoSize);
+  const blockingOversize = oversizedClip
+    ? {
+        sizeMb: Math.round(((oversizedClip.blob?.size ?? 0) / BYTES_PER_MB) * 10) / 10,
+        limitMb: Math.round((maxVideoSize ?? 0) / BYTES_PER_MB),
+      }
+    : null;
 
   const handleInputChange = useCallback(
     (field: keyof FormData, value: string) => {
@@ -112,24 +152,36 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         onActiveTabChange('details');
         return;
       }
+      if (blockingOversize) {
+        onActiveTabChange('recording');
+        return;
+      }
 
       onSubmit(formData, media);
     },
-    [formData, media, validate, onSubmit, onActiveTabChange]
+    [formData, media, validate, onSubmit, onActiveTabChange, blockingOversize]
   );
 
-  const mediaCount = media.length;
   const tabs = [
     { id: 'details', label: t('dialog.tabs.details'), icon: TAB_ICONS.details },
     {
       id: 'media',
       label:
-        mediaCount > 0
-          ? t('dialog.tabs.mediaWithCount', { count: mediaCount })
+        images.length > 0
+          ? t('dialog.tabs.mediaWithCount', { count: images.length })
           : t('dialog.tabs.media'),
       icon: TAB_ICONS.media,
     },
+    {
+      id: 'recording',
+      label:
+        videos.length > 0
+          ? t('dialog.tabs.recordingWithCount', { count: videos.length })
+          : t('dialog.tabs.recording'),
+      icon: TAB_ICONS.recording,
+    },
   ];
+  const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'details';
 
   return (
     <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
@@ -148,18 +200,22 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         </div>
 
         {showScreenCaptureConsent ? (
-          <ScreenCaptureConsentDialog onConfirm={onConsentConfirm} onCancel={onConsentCancel} />
+          <ScreenCaptureConsentDialog
+            mode={consentMode}
+            onConfirm={onConsentConfirm}
+            onCancel={onConsentCancel}
+          />
         ) : (
           <>
             {/* Tabs */}
             <div class="shrink-0 p-4 pb-0 bg-transparent">
-              <Tabs tabs={tabs} activeTab={activeTab} onTabChange={onActiveTabChange} />
+              <Tabs tabs={tabs} activeTab={currentTab} onTabChange={onActiveTabChange} />
             </div>
 
             {/* Body */}
             <div class="flex-auto min-h-0 flex flex-col">
               {/* Details Tab */}
-              {activeTab === 'details' && (
+              {currentTab === 'details' && (
                 <form
                   class="flex-auto min-h-0 overflow-y-auto p-6 flex flex-col gap-4"
                   onSubmit={handleSubmit}
@@ -257,9 +313,9 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               )}
 
               {/* Media Tab */}
-              {activeTab === 'media' && (
+              {currentTab === 'media' && (
                 <ScreenshotManager
-                  media={media}
+                  media={images}
                   onCapture={onCaptureScreenshot}
                   onUpload={onAddMedia}
                   onRemove={onRemoveMedia}
@@ -267,27 +323,71 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   isCapturing={isCapturing}
                   enableAnnotation={enableAnnotation}
                   maxImageSize={maxImageSize}
-                  maxVideoSize={maxVideoSize}
                   reduceQuality={reduceScreenshotQuality}
                   onReduceQualityChange={onReduceScreenshotQualityChange}
                   oversizedCapture={oversizedCapture}
                   onDismissOversizedCapture={onDismissOversizedCapture}
                 />
               )}
+
+              {/* Videos Tab */}
+              {currentTab === 'recording' && (
+                <ScreenRecordingPanel
+                  clips={videos}
+                  recordingEnabled={recordingEnabled}
+                  onRecord={onStartRecording}
+                  onUpload={onAddMedia}
+                  onRemove={onRemoveMedia}
+                  isStarting={isRecordingStarting}
+                  maxVideoSize={maxVideoSize}
+                  allowMicrophone={allowRecordingMicrophone}
+                  includeMicrophone={includeMicrophone}
+                  onIncludeMicrophoneChange={onIncludeMicrophoneChange}
+                  oversizedRecording={blockingOversize ?? oversizedRecording}
+                  onDismissOversizedRecording={
+                    blockingOversize ? undefined : onDismissOversizedRecording
+                  }
+                />
+              )}
             </div>
 
             {/* Footer */}
-            <div class="shrink-0 flex gap-3 p-6 border-t border-solid border-border bg-muted">
-              <Button variant="outline" class="flex-1" onClick={onClose} disabled={isSubmitting}>
-                {t('dialog.buttons.cancel')}
-              </Button>
-              <Button class="flex-1" onClick={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <span class="w-4 h-4 border-2 border-solid border-white/30 border-t-white rounded-full animate-[spin_0.8s_linear_infinite]" />
-                ) : (
-                  t('dialog.buttons.submit')
-                )}
-              </Button>
+            <div class="shrink-0 flex flex-col gap-3 p-6 border-t border-solid border-border bg-muted">
+              {isSubmitting && uploadProgress !== null && (
+                <div
+                  class="h-1.5 overflow-hidden rounded-full bg-foreground/15"
+                  role="progressbar"
+                  aria-label={t('submit.uploading', {
+                    percent: Math.round(uploadProgress * 100),
+                  })}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(uploadProgress * 100)}
+                >
+                  <div
+                    class="h-full bg-[var(--button-color)] transition-[width]"
+                    style={{ width: `${Math.round(uploadProgress * 100)}%` }}
+                  />
+                </div>
+              )}
+              <div class="flex gap-3">
+                <Button
+                  variant="outline"
+                  class="flex-1"
+                  onClick={isSubmitting ? onCancelSubmit : onClose}
+                >
+                  {isSubmitting ? t('submit.cancelUpload') : t('dialog.buttons.cancel')}
+                </Button>
+                <Button
+                  class="flex-1"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !!blockingOversize}
+                >
+                  {isSubmitting && uploadProgress !== null
+                    ? t('submit.uploading', { percent: Math.round(uploadProgress * 100) })
+                    : t('dialog.buttons.submit')}
+                </Button>
+              </div>
             </div>
           </>
         )}

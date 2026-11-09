@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
 import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
+import { RECORDING_QUALITIES } from '@shared/recording-quality';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@shared/types';
 
 const webhookEventSchema = z.enum([
@@ -46,6 +47,15 @@ const localizedStringSchema = z
   .strict();
 
 const projectLocalizedTextField = z.union([z.null(), localizedStringSchema]).optional();
+
+// A WebAuthn credential as serialized by the browser; SimpleWebAuthn checks the details
+const webAuthnCredentialSchema = z.looseObject({
+  id: z.string().min(1).max(1024),
+  rawId: z.string().min(1).max(1024),
+  type: z.literal('public-key'),
+  response: z.record(z.string(), z.unknown()),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+});
 
 const positionEnum = z.enum(['bottom-right', 'bottom-left', 'top-right', 'top-left']);
 const buttonShapeEnum = z.enum(['rectangle', 'round']);
@@ -106,7 +116,12 @@ const projectScreenshotSchema = z
     useScreenCaptureAPI: z.boolean().optional(),
     maxScreenshotSize: z.number().int().min(1).max(50).optional(),
     maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-    maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+    maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
+    maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+    enableScreenRecording: z.boolean().optional(),
+    allowRecordingMicrophone: z.boolean().optional(),
+    maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+    recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
   })
   .strict();
 
@@ -209,6 +224,16 @@ interface ValidationOptions {
 }
 
 // Middleware
+
+// Updates do not carry the integration type, so typed keys are checked for every integration.
+// Only GitHub reads publicVideoLinks; it must be a real boolean because it grants public access.
+const integrationConfigSchema = z
+  .record(z.string(), z.unknown())
+  .refine(
+    (config) =>
+      config.publicVideoLinks === undefined || typeof config.publicVideoLinks === 'boolean',
+    { message: 'publicVideoLinks must be a boolean', path: ['publicVideoLinks'] }
+  );
 
 /**
  * Validation middleware factory
@@ -440,12 +465,53 @@ export const schemas = {
     isActive: z.boolean().optional(),
   }),
 
+  // Second login step: exactly one of an authenticator code or a recovery code
+  twoFactorLogin: z
+    .object({
+      challengeToken: z.string().min(1).max(200),
+      code: z.string().min(6).max(10).optional(),
+      recoveryCode: z.string().min(10).max(20).optional(),
+    })
+    .refine((data) => (data.code === undefined) !== (data.recoveryCode === undefined), {
+      message: 'Provide either code or recoveryCode',
+    }),
+
+  twoFactorPasskeyOptions: z.object({ challengeToken: z.string().min(1).max(200) }),
+  twoFactorPasskeyLogin: z.object({
+    challengeToken: z.string().min(1).max(200),
+    response: webAuthnCredentialSchema,
+  }),
+  passkeyLogin: z.object({
+    challengeId: z.string().min(1).max(200),
+    response: webAuthnCredentialSchema,
+  }),
+
+  // Two-factor management
+  twoFactorCode: z.object({ code: z.string().min(6).max(10) }),
+  passwordConfirmation: z.object({ password: z.string().min(1).max(200) }),
+  passkeyRegistration: z.object({
+    response: webAuthnCredentialSchema,
+    name: z.string().trim().max(100).optional(),
+  }),
+  passkeyRename: z.object({ name: z.string().trim().min(1).max(100) }),
+
   // Update settings request
   updateSettings: z
     .object({
       invitationExpirationDays: z.number().int().min(1).max(365).optional(),
       widgetDialog: themeColorsSchema.strict().optional(),
       enforceHttps: z.boolean().optional(),
+      twoFactorPolicy: z.enum(['off', 'admins', 'everyone']).optional(),
+      passwordPolicy: z
+        .object({
+          minLength: z.number().int().min(8).max(128),
+          requireUppercase: z.boolean(),
+          requireLowercase: z.boolean(),
+          requireNumber: z.boolean(),
+          requireSymbol: z.boolean(),
+        })
+        .strict()
+        .optional(),
       s3Enabled: z.boolean().optional(),
       s3Config: z
         .object({
@@ -548,12 +614,17 @@ export const schemas = {
           useScreenCaptureAPI: z.boolean().optional(),
           maxScreenshotSize: z.number().int().min(1).max(50).optional(),
           maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-          maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+          maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
+          maxVideoUploadMbPerDay: z.number().int().min(0).max(1048576).optional(),
+          enableScreenRecording: z.boolean().optional(),
+          allowRecordingMicrophone: z.boolean().optional(),
+          maxRecordingDurationSeconds: z.number().int().min(10).max(600).optional(),
+          recordingQuality: z.enum(RECORDING_QUALITIES).optional(),
         })
         .optional(),
       maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),
       maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-      maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+      maxVideoUploadSizeMb: z.number().int().min(1).max(100).optional(),
       rateLimitPerMinute: z.number().int().min(1).max(1000).optional(),
       sessionMaxAgeDays: z.number().int().min(1).max(365).optional(),
       updateCheckEnabled: z.boolean().optional(),
@@ -566,13 +637,13 @@ export const schemas = {
     projectId: z.string().min(1, 'Project ID is required'),
     type: z.enum(['github', 'jira', 'slack', 'linear', 'webhook']),
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    config: z.record(z.string(), z.unknown()),
+    config: integrationConfigSchema,
   }),
 
   // Update integration request
   updateIntegration: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
+    config: integrationConfigSchema.optional(),
     isActive: z.boolean().optional(),
   }),
 

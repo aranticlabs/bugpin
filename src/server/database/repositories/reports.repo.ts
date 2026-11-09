@@ -115,8 +115,8 @@ export const reportsRepo = {
       `INSERT INTO reports (
         id, project_id, source, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        submission_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.projectId,
@@ -131,6 +131,7 @@ export const reportsRepo = {
         data.reporterName ?? null,
         data.reporterLocale ?? 'en',
         data.assignedTo ?? null,
+        data.submissionId ?? null,
         now,
         now,
       ]
@@ -141,6 +142,14 @@ export const reportsRepo = {
       throw new Error('Failed to create report');
     }
     return report;
+  },
+
+  /** The report a widget submission created, used to answer retries of the same submission */
+  findIdBySubmission(projectId: string, submissionId: string): string | null {
+    const row = getDb()
+      .query('SELECT id FROM reports WHERE project_id = ? AND submission_id = ?')
+      .get(projectId, submissionId) as { id: string } | null;
+    return row?.id ?? null;
   },
 
   /**
@@ -286,16 +295,16 @@ export const reportsRepo = {
       sets.push('status = ?');
       params.push(updates.status);
 
-      // Track status change timestamps
+      // Preserve timestamps and the resolver when the status has not changed.
       if (updates.status === 'resolved') {
-        sets.push('resolved_at = ?');
+        sets.push("resolved_at = CASE WHEN status = 'resolved' THEN resolved_at ELSE ? END");
         params.push(now);
         if (updates.resolvedBy) {
-          sets.push('resolved_by = ?');
+          sets.push("resolved_by = CASE WHEN status = 'resolved' THEN resolved_by ELSE ? END");
           params.push(updates.resolvedBy);
         }
       } else if (updates.status === 'closed') {
-        sets.push('closed_at = ?');
+        sets.push("closed_at = CASE WHEN status = 'closed' THEN closed_at ELSE ? END");
         params.push(now);
       } else if (updates.status === 'open' || updates.status === 'in_progress') {
         // Reopen - clear resolved/closed timestamps

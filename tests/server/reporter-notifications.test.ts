@@ -39,6 +39,8 @@ const baseUser: User = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -69,7 +71,9 @@ const baseMessage: ReporterMessage = {
 let projectById: Project | null = baseProject;
 
 const sendReporterConfirmationEmail = mock(async () => ({ success: true }));
-const sendReporterStatusChangeEmail = mock(async () => ({ success: true }));
+const sendReporterStatusChangeEmail = mock<typeof emailService.sendReporterStatusChangeEmail>(
+  async () => ({ success: true })
+);
 const sendReporterMessageEmail = mock(async () => ({ success: true }));
 const sendReporterMessageCcEmail = mock(async () => ({ success: true }));
 const sendReporterPriorityChangeEmail = mock(async () => ({ success: true }));
@@ -126,7 +130,7 @@ describe('notificationsService.notifyReporterSubmission', () => {
       expect.objectContaining({
         report: baseReport,
         projectName: 'Project',
-      }),
+      })
     );
   });
 
@@ -171,7 +175,7 @@ describe('notificationsService.notifyReporterStatusChange', () => {
         projectName: 'Project',
         oldStatus: 'open',
         newStatus: 'resolved',
-      }),
+      })
     );
   });
 
@@ -214,7 +218,7 @@ describe('notificationsService.notifyReporterMessage', () => {
         projectName: 'Project',
         senderName: 'Admin User',
         message: 'Hello reporter',
-      }),
+      })
     );
   });
 
@@ -250,11 +254,11 @@ describe('notificationsService.notifyReporterMessage', () => {
     await notificationsService.notifyReporterMessage(baseReport, 'Hello', 'usr_1', true);
     expect(sendReporterMessageEmail).toHaveBeenCalledWith(
       'reporter@example.com',
-      expect.objectContaining({ message: 'Hello' }),
+      expect.objectContaining({ message: 'Hello' })
     );
     expect(sendReporterMessageCcEmail).toHaveBeenCalledWith(
       'admin@example.com',
-      expect.objectContaining({ message: 'Hello' }),
+      expect.objectContaining({ message: 'Hello' })
     );
   });
 
@@ -276,15 +280,15 @@ describe('notificationsService.notifyReporterMessage', () => {
 
 describe('notificationsService.notifyReporterPriorityChange', () => {
   it('sends priority change email to reporter', async () => {
-    await notificationsService.notifyReporterPriorityChange(baseReport, 'low', 'critical');
+    await notificationsService.notifyReporterPriorityChange(baseReport, 'low', 'highest');
     expect(sendReporterPriorityChangeEmail).toHaveBeenCalledWith(
       'reporter@example.com',
       expect.objectContaining({
         report: baseReport,
         projectName: 'Project',
         oldPriority: 'low',
-        newPriority: 'critical',
-      }),
+        newPriority: 'highest',
+      })
     );
   });
 
@@ -319,7 +323,7 @@ describe('notificationsService.notifyReporterAssignment', () => {
         report: baseReport,
         projectName: 'Project',
         assigneeName: 'Admin User',
-      }),
+      })
     );
   });
 

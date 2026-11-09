@@ -1,6 +1,7 @@
 import { toCanvas } from 'html-to-image';
 import { withCaptureClone } from './capture-clone';
 import { recordScrollbars } from './scrollbars';
+import { removeXmlUnsafeAttributes } from './xml-safe-serialization';
 
 type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
 
@@ -165,7 +166,8 @@ function shouldIncludeNode(node: Node): boolean {
 
 /**
  * Render `element` with html-to-image. BugPin's clone is prepared right before
- * serialization so its scrollbars match the live page.
+ * serialization: its scrollbars match the live page and its attribute names are
+ * valid XML.
  */
 function renderToCanvas(
   element: HTMLElement,
@@ -176,7 +178,10 @@ function renderToCanvas(
   const scrollbars = recordScrollbars(element, rootSizeLocked);
   return withCaptureClone(
     element,
-    (_svg, cloneRoot) => scrollbars.apply(cloneRoot),
+    (svg, cloneRoot) => {
+      scrollbars.apply(cloneRoot);
+      removeXmlUnsafeAttributes(svg);
+    },
     (style) => toCanvas(element, { ...options, style, filter: scrollbars.observe(options.filter) })
   );
 }
@@ -342,8 +347,8 @@ function getCaptureDefaults(): ToCanvasOptions {
 
 /**
  * Check whether the Screen Capture API is available in this context.
- * Requires HTTPS, the browser to support getDisplayMedia, and the
- * Permissions-Policy header to allow display-capture on the host page.
+ * Requires HTTPS, browser support for getDisplayMedia, and a host policy that
+ * does not restrict display-capture. Same-origin capture is allowed by default.
  */
 function isScreenCaptureAvailable(): boolean {
   return (
@@ -355,15 +360,15 @@ function isScreenCaptureAvailable(): boolean {
 
 /**
  * Capture screenshot using Screen Capture API.
- * Requires the host page to send the HTTP header:
- *   Permissions-Policy: display-capture=self
+ * Hosts that restrict display capture must allow the page with:
+ *   Permissions-Policy: display-capture=(self)
  * @returns Base64 data URL of the screenshot
  */
 async function captureWithScreenCaptureAPI(): Promise<string> {
   if (!isScreenCaptureAvailable()) {
     throw new Error(
-      'Screen Capture API is not available. The host page must be served over HTTPS ' +
-        'and include the header: Permissions-Policy: display-capture=self'
+      'Screen Capture API is not available. The page must be served over HTTPS, ' +
+        'supported by the browser, and allowed by the host permissions policy.'
     );
   }
 
@@ -511,17 +516,6 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       const captureWidth = scrollX + viewportWidth;
       const captureHeight = scrollY + viewportHeight;
 
-      // Debug logging
-      console.log('[BugPin] Capture debug:', {
-        scrollX,
-        scrollY,
-        viewportWidth,
-        viewportHeight,
-        captureWidth,
-        captureHeight,
-        dpr,
-      });
-
       // Capture from origin to the end of the visible viewport
       const toCanvasOptions: Parameters<typeof toCanvas>[1] = {
         ...getCaptureDefaults(),
@@ -534,14 +528,6 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       };
 
       const fullCanvas = await renderToCanvas(element, toCanvasOptions);
-
-      // Debug: log actual canvas dimensions
-      console.log('[BugPin] Canvas captured:', {
-        canvasWidth: fullCanvas.width,
-        canvasHeight: fullCanvas.height,
-        expectedWidth: captureWidth * dpr,
-        expectedHeight: captureHeight * dpr,
-      });
 
       // Crop to the visible viewport
       const croppedCanvas = document.createElement('canvas');
@@ -628,35 +614,4 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       }
     });
   }
-}
-
-/**
- * Convert data URL to Blob
- */
-export function dataUrlToBlob(dataUrl: string): Blob {
-  const parts = dataUrl.split(',');
-  const mimeMatch = parts[0].match(/:(.*?);/);
-  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-  const binaryString = atob(parts[1]);
-  const bytes = new Uint8Array(binaryString.length);
-
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  return new Blob([bytes], { type: mime });
-}
-
-/**
- * Get file extension from data URL
- */
-export function getExtensionFromDataUrl(dataUrl: string): string {
-  if (dataUrl.startsWith('data:image/webp')) {
-    return 'webp';
-  } else if (dataUrl.startsWith('data:image/jpeg')) {
-    return 'jpg';
-  } else if (dataUrl.startsWith('data:image/gif')) {
-    return 'gif';
-  }
-  return 'png';
 }

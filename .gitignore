@@ -51,6 +51,7 @@ Makefile
 
 # Development docs
 docs-dev/
+/src/admin/prototypes/
 
 # Testing
 coverage/

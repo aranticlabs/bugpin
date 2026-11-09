@@ -1,20 +1,37 @@
 import { FunctionComponent } from 'preact';
-import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks';
 import { WidgetConfig } from '../config.js';
 import { WidgetLauncherButton } from './WidgetLauncherButton.js';
 import { WidgetDialog, FormData } from './WidgetDialog.js';
+import { RecordingBar, type RecordingBarPosition } from './RecordingBar.js';
+import { shouldSkipRecordingConsent, type ConsentMode } from './ScreenCaptureConsentDialog.js';
 import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
-import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
+import { captureScreenshot } from '../capture/screenshot.js';
+import { dataUrlToBlob } from '../lib/data-url.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
+import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
+import { createSubmissionId } from '../api/submit-form.js';
 import { draftStorage } from '../storage/draft-storage.js';
+import { recordingStore } from '../storage/recording-store.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
+import { useScreenRecording, type RecordingDependencies } from '../hooks/use-screen-recording.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 
-type WidgetStep = 'closed' | 'form' | 'annotating';
+type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording';
+
+const BYTES_PER_MB = 1024 * 1024;
+const RECORDING_ID_PREFIX = 'recording-';
+const MAX_RECOVERIES_PER_RUN = 5;
+
+function recordingSessionId(item: CapturedMedia): string | null {
+  return item.source === 'recording' && item.id.startsWith(RECORDING_ID_PREFIX)
+    ? item.id.slice(RECORDING_ID_PREFIX.length)
+    : null;
+}
 
 const INITIAL_FORM_DATA: FormData = {
   title: '',
@@ -39,7 +56,8 @@ type AppDependencies = {
   captureContext: typeof captureContext;
   submitReport: typeof submitReport;
   clearUserActivity: typeof clearUserActivity;
-};
+  isRecordingSupported: typeof isRecordingSupported;
+} & RecordingDependencies;
 
 interface AppProps {
   config: WidgetConfig;
@@ -53,19 +71,31 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const captureContextFn = deps?.captureContext ?? captureContext;
   const submitReportFn = deps?.submitReport ?? submitReport;
   const clearUserActivityFn = deps?.clearUserActivity ?? clearUserActivity;
+  const isRecordingSupportedFn = deps?.isRecordingSupported ?? isRecordingSupported;
+  const recordingStoreFn = deps?.recordingStore ?? recordingStore;
   useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const effectiveTheme = useEffectiveTheme(config.theme);
   const [step, setStep] = useState<WidgetStep>('closed');
+  const stepRef = useRef<WidgetStep>('closed');
+  stepRef.current = step;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [media, setMedia] = useState<CapturedMedia[]>([]);
+  const mediaRef = useRef(media);
+  mediaRef.current = media;
   const [annotatingMediaId, setAnnotatingMediaId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
   const [formData, setFormData] = useState<FormData>(() => getInitialFormData(config));
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftLoadedRef = useRef(draftLoaded);
+  draftLoadedRef.current = draftLoaded;
+  const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showScreenCaptureConsent, setShowScreenCaptureConsent] = useState(false);
   const [reduceScreenshotQuality, setReduceScreenshotQuality] = useState(false);
@@ -73,20 +103,219 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     sizeMb: number;
     limitMb: number;
   } | null>(null);
+  const [consentMode, setConsentMode] = useState<ConsentMode>('screenshot');
+  const [includeMicrophone, setIncludeMicrophone] = useState(false);
+  const [hasPendingRecording, setHasPendingRecording] = useState(false);
+  const [recordingBarPosition, setRecordingBarPosition] = useState<RecordingBarPosition | null>(
+    null
+  );
+  const [oversizedRecording, setOversizedRecording] = useState<{
+    id: string;
+    sizeMb: number;
+    limitMb: number;
+  } | null>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
+  const submissionIdRef = useRef<string | null>(null);
+  const isRecordingStep = step === 'recording';
+  const recordingEnabled = useMemo(
+    () => config.enableScreenRecording && isRecordingSupportedFn(),
+    [config.enableScreenRecording, isRecordingSupportedFn]
+  );
+
+  const handleRecordingExit = async (
+    result: RecordingResult | null,
+    failed: boolean,
+    sessionId?: string
+  ) => {
+    setStep('form');
+    setActiveTab('recording');
+    setIncludeMicrophone(false);
+    if (!result) return;
+
+    if (result.blob.size === 0) {
+      if (!failed) setToast({ message: t('recording.error.empty'), type: 'error' });
+      return;
+    }
+
+    const id = sessionId
+      ? `${RECORDING_ID_PREFIX}${sessionId}`
+      : `${RECORDING_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const item: CapturedMedia = {
+      id,
+      blob: result.blob,
+      timestamp: result.capturedAt ? new Date(result.capturedAt) : new Date(),
+      annotated: false,
+      mimeType: result.mimeType,
+      width: result.width,
+      height: result.height,
+      durationMs: result.durationMs,
+      recordingQuality: result.recordingQuality,
+      source: 'recording',
+    };
+    const nextMedia = [...mediaRef.current, item];
+    mediaRef.current = nextMedia;
+    setMedia(nextMedia);
+
+    if (result.blob.size > config.maxVideoUploadSize) {
+      setOversizedRecording({
+        id,
+        sizeMb: Math.round((result.blob.size / BYTES_PER_MB) * 10) / 10,
+        limitMb: Math.round(config.maxVideoUploadSize / BYTES_PER_MB),
+      });
+    }
+
+    try {
+      await draftStorage.save(
+        config.apiKey,
+        formDataRef.current,
+        'recording',
+        nextMedia,
+        config.reporterEmail
+      );
+    } catch (error) {
+      setToast({ message: t('toast.error.draftSave'), type: 'error' });
+      throw error;
+    }
+  };
+
+  const recording = useScreenRecording({
+    apiKey: config.apiKey,
+    ownerEmail: config.reporterEmail,
+    maxDurationMs: config.maxRecordingDurationSeconds * 1000,
+    maxVideoSize: config.maxVideoUploadSize,
+    quality: config.recordingQuality,
+    dependencies: deps,
+    prepare: async () => {
+      try {
+        await draftStorage.save(config.apiKey, formData, 'recording', media, config.reporterEmail);
+        return true;
+      } catch (error) {
+        console.error('[BugPin] Failed to save draft:', error);
+        setToast({ message: t('toast.error.draftSave'), type: 'error' });
+        return false;
+      }
+    },
+    onEnter: () => {
+      setOversizedRecording(null);
+      setStep('recording');
+    },
+    onExit: handleRecordingExit,
+    onNotice: (message, type) => setToast({ message, type }),
+  });
+  const { start: startRecordingFlow, stop: stopRecordingFlow } = recording;
+
+  const recoveryGenerationRef = useRef(0);
+  const recoveryRunningRef = useRef(false);
+
+  const recoverPendingRecordings = useCallback(async () => {
+    if (!recordingEnabled || recoveryRunningRef.current) return;
+    recoveryRunningRef.current = true;
+    const generation = recoveryGenerationRef.current;
+    const isCancelled = () => generation !== recoveryGenerationRef.current;
+
+    try {
+      for (let attempt = 0; attempt < MAX_RECOVERIES_PER_RUN; attempt += 1) {
+        const recovered = await recordingStoreFn.recover(config.apiKey, config.reporterEmail);
+        if (!recovered || isCancelled()) return;
+
+        const draft = draftLoadedRef.current
+          ? { formData: formDataRef.current, media: mediaRef.current }
+          : await draftStorage.load(config.apiKey, config.reporterEmail);
+        if (isCancelled()) return;
+        const recoveredId = `${RECORDING_ID_PREFIX}${recovered.sessionId}`;
+        const recoveredItem: CapturedMedia = {
+          id: recoveredId,
+          blob: recovered.blob,
+          timestamp: new Date(recovered.startedAt),
+          annotated: false,
+          mimeType: recovered.mimeType,
+          durationMs: recovered.durationMs,
+          recordingQuality: recovered.recordingQuality,
+          width: recovered.width,
+          height: recovered.height,
+          source: 'recording',
+          recovered: true,
+        };
+        const existingMedia = draft?.media ?? [];
+        const alreadyPresent = existingMedia.some((item) => item.id === recoveredId);
+        const nextMedia = alreadyPresent ? existingMedia : [...existingMedia, recoveredItem];
+        const nextFormData = draft?.formData ?? getInitialFormData(config);
+        formDataRef.current = nextFormData;
+        mediaRef.current = nextMedia;
+        draftLoadedRef.current = true;
+        setFormData(nextFormData);
+        setMedia(nextMedia);
+        setActiveTab('recording');
+        setDraftLoaded(true);
+        setHasPendingRecording(stepRef.current === 'closed');
+
+        try {
+          await draftStorage.save(
+            config.apiKey,
+            nextFormData,
+            'recording',
+            nextMedia,
+            config.reporterEmail
+          );
+        } catch (error) {
+          console.error('[BugPin] Failed to save recovered recording:', error);
+          if (!isCancelled()) setToast({ message: t('toast.error.draftSave'), type: 'error' });
+          return;
+        }
+        await recordingStoreFn.remove(config.apiKey, recovered.sessionId);
+        if (isCancelled()) return;
+        if (!alreadyPresent) setToast({ message: t('recording.recovered'), type: 'info' });
+      }
+    } finally {
+      if (!isCancelled()) recoveryRunningRef.current = false;
+    }
+  }, [config, recordingEnabled, recordingStoreFn]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDraftStorageReady(false);
+
+    void (async () => {
+      await Promise.all([draftStorage.expireMedia(config.apiKey), recordingStoreFn.expire()]);
+      if (cancelled) return;
+      setDraftStorageReady(true);
+      await recoverPendingRecordings();
+    })();
+
+    return () => {
+      cancelled = true;
+      recoveryGenerationRef.current += 1;
+      recoveryRunningRef.current = false;
+    };
+  }, [config.apiKey, recordingStoreFn, recoverPendingRecordings]);
+
+  const forgetStoredRecordings = useCallback(
+    (items: CapturedMedia[]) => {
+      items.forEach((item) => {
+        const sessionId = recordingSessionId(item);
+        if (sessionId) void recordingStoreFn.remove(config.apiKey, sessionId);
+      });
+    },
+    [config.apiKey, recordingStoreFn]
+  );
 
   // Load draft when widget opens
   useEffect(() => {
-    if (step === 'form' && !draftLoaded) {
+    if (step === 'form' && draftStorageReady && !draftLoaded) {
       draftStorage.load(config.apiKey, config.reporterEmail).then((draft) => {
+        if (draftLoadedRef.current) return;
         if (draft) {
+          formDataRef.current = draft.formData;
+          mediaRef.current = draft.media;
           setFormData(draft.formData);
           setActiveTab(draft.activeTab);
           setMedia(draft.media);
         }
+        draftLoadedRef.current = true;
         setDraftLoaded(true);
       });
     }
-  }, [step, draftLoaded, config.apiKey, config.reporterEmail]);
+  }, [step, draftLoaded, draftStorageReady, config.apiKey, config.reporterEmail]);
 
   // Apply theme-based CSS variables for dialog styling (uses dialog colors, not launcher colors)
   useEffect(() => {
@@ -133,8 +362,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   ]);
 
   const handleOpenWidget = useCallback(() => {
+    if (isRecordingStep) return;
+    setHasPendingRecording(false);
     setStep('form');
-  }, []);
+    if (draftStorageReady) void recoverPendingRecordings();
+  }, [draftStorageReady, isRecordingStep, recoverPendingRecordings]);
 
   // Check if there's any content in the form
   const hasContent =
@@ -162,27 +394,45 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   }, [hasContent, resetUserActivity]);
 
   // Close and keep draft
-  const handleCloseKeepDraft = useCallback(() => {
-    draftStorage.save(config.apiKey, formData, activeTab, media, config.reporterEmail);
-    resetUserActivity();
-    setShowCloseConfirm(false);
-    setStep('closed');
-    setAnnotatingMediaId(null);
-    setDraftLoaded(false);
+  const handleCloseKeepDraft = useCallback(async () => {
+    try {
+      await draftStorage.save(config.apiKey, formData, activeTab, media, config.reporterEmail);
+      resetUserActivity();
+      setShowCloseConfirm(false);
+      setStep('closed');
+      setAnnotatingMediaId(null);
+      setDraftLoaded(false);
+    } catch (error) {
+      console.error('[BugPin] Failed to save draft:', error);
+      setToast({
+        message: t('toast.error.draftSave'),
+        type: 'error',
+      });
+    }
   }, [config.apiKey, config.reporterEmail, formData, activeTab, media, resetUserActivity]);
 
   // Close and discard draft
   const handleCloseDiscardDraft = useCallback(() => {
+    uploadControllerRef.current?.abort();
     resetUserActivity();
+    forgetStoredRecordings(mediaRef.current);
+    setOversizedRecording(null);
     setMedia([]);
     setActiveTab('details');
     setFormData(getInitialFormData(config));
     draftStorage.clear(config.apiKey);
+    submissionIdRef.current = null;
     setShowCloseConfirm(false);
     setStep('closed');
     setAnnotatingMediaId(null);
     setDraftLoaded(false);
-  }, [config.apiKey, config.reporterEmail, config.reporterName, resetUserActivity]);
+  }, [
+    config.apiKey,
+    config.reporterEmail,
+    config.reporterName,
+    forgetStoredRecordings,
+    resetUserActivity,
+  ]);
 
   // Direct close (used after successful submission)
   const handleCloseWidget = useCallback(
@@ -190,10 +440,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       resetUserActivity();
       if (clearDraftData === true) {
         // Clear state and draft (after successful submission)
+        setOversizedRecording(null);
         setMedia([]);
         setActiveTab('details');
         setFormData(getInitialFormData(config));
         draftStorage.clear(config.apiKey);
+        submissionIdRef.current = null;
       }
       setShowCloseConfirm(false);
       setStep('closed');
@@ -206,7 +458,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   // Listen for external open/close events
   useEffect(() => {
     const handleOpen = () => handleOpenWidget();
-    const handleClose = () => handleRequestClose();
+    const handleClose = () => (isRecordingStep ? stopRecordingFlow() : handleRequestClose());
 
     document.addEventListener('bugpin:open', handleOpen);
     document.addEventListener('bugpin:close', handleClose);
@@ -215,7 +467,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       document.removeEventListener('bugpin:open', handleOpen);
       document.removeEventListener('bugpin:close', handleClose);
     };
-  }, [handleOpenWidget, handleRequestClose]);
+  }, [handleOpenWidget, handleRequestClose, isRecordingStep, stopRecordingFlow]);
 
   const handleCaptureScreenshot = useCallback(async () => {
     if (!config.enableScreenshot) return;
@@ -263,11 +515,6 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       const img = new Image();
 
       img.onload = () => {
-        // Debug: Log captured image info
-        console.log(
-          `[BugPin] Captured screenshot: ${img.width}x${img.height}, dataUrl length=${dataUrl.length}`
-        );
-
         const newMedia: CapturedMedia = {
           id: `capture-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           dataUrl,
@@ -312,11 +559,27 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     }
   }, [config, captureScreenshotFn, showScreenCaptureConsent, reduceScreenshotQuality]);
 
+  const handleStartRecording = useCallback(() => {
+    if (!shouldSkipRecordingConsent()) {
+      setConsentMode('recording');
+      setShowScreenCaptureConsent(true);
+      return;
+    }
+    void startRecordingFlow(includeMicrophone);
+  }, [includeMicrophone, startRecordingFlow]);
+
   const handleConsentConfirm = useCallback(() => {
+    if (consentMode === 'recording') {
+      setConsentMode('screenshot');
+      setShowScreenCaptureConsent(false);
+      void startRecordingFlow(includeMicrophone);
+      return;
+    }
     handleCaptureScreenshot();
-  }, [handleCaptureScreenshot]);
+  }, [consentMode, handleCaptureScreenshot, includeMicrophone, startRecordingFlow]);
 
   const handleConsentCancel = useCallback(() => {
+    setConsentMode('screenshot');
     setShowScreenCaptureConsent(false);
   }, []);
 
@@ -324,9 +587,19 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     setMedia((prev) => [...prev, item]);
   }, []);
 
-  const handleRemoveMedia = useCallback((id: string) => {
-    setMedia((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const handleRemoveMedia = useCallback(
+    (id: string) => {
+      forgetStoredRecordings(mediaRef.current.filter((item) => item.id === id));
+      const nextMedia = mediaRef.current.filter((item) => item.id !== id);
+      mediaRef.current = nextMedia;
+      setMedia(nextMedia);
+      setOversizedRecording((current) => (current?.id === id ? null : current));
+      draftStorage.replaceMedia(config.apiKey, nextMedia).catch(() => {
+        setToast({ message: t('toast.error.draftSave'), type: 'error' });
+      });
+    },
+    [config.apiKey, forgetStoredRecordings]
+  );
 
   const handleAnnotateMedia = useCallback((id: string) => {
     setAnnotatingMediaId(id);
@@ -342,6 +615,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
               ? {
                   ...item,
                   dataUrl: annotatedImage,
+                  blob: undefined,
                   annotated: true,
                   annotations: annotationData,
                 }
@@ -363,6 +637,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const handleSubmit = useCallback(
     async (formData: FormData, mediaItems: CapturedMedia[]) => {
       setIsSubmitting(true);
+      setUploadProgress(0);
+      const controller = new AbortController();
+      uploadControllerRef.current = controller;
 
       try {
         // Capture context
@@ -373,44 +650,71 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           userActivityCapture: config.userActivityCapture === 'automatic',
         });
 
-        // Submit report with all media
-        await submitReportFn({
-          apiKey: config.apiKey,
-          serverUrl: config.serverUrl,
-          title: formData.title,
-          description: formData.description,
-          priority: formData.priority,
-          reporterEmail: formData.reporterEmail || undefined,
-          reporterName: formData.reporterName || undefined,
-          locale: getLocale(),
-          media: mediaItems.map((item) => ({
-            dataUrl: item.dataUrl,
-            mimeType: item.mimeType,
-            annotations: item.annotations,
-          })),
-          metadata,
-        });
+        // Retries of the same report reuse its ID so the server can recognize a repeat.
+        submissionIdRef.current ??= createSubmissionId();
+        const result = await submitReportFn(
+          {
+            submissionId: submissionIdRef.current,
+            apiKey: config.apiKey,
+            serverUrl: config.serverUrl,
+            title: formData.title,
+            description: formData.description,
+            priority: formData.priority,
+            reporterEmail: formData.reporterEmail || undefined,
+            reporterName: formData.reporterName || undefined,
+            locale: getLocale(),
+            media: recordingEnabled
+              ? mediaItems
+              : mediaItems.filter((item) => item.source !== 'recording'),
+            metadata,
+          },
+          {
+            signal: controller.signal,
+            onProgress: setUploadProgress,
+          }
+        );
 
-        // Show success toast
-        setToast({ message: t('toast.success.submit'), type: 'success' });
+        forgetStoredRecordings(mediaItems);
+
+        setToast(
+          result?.queued
+            ? { message: t('submit.queued'), type: 'info' }
+            : { message: t('toast.success.submit'), type: 'success' }
+        );
 
         // Close modal and clear draft
         handleCloseWidget(true);
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('[BugPin] Failed to submit report:', error);
         setToast({
           message: error instanceof Error ? error.message : t('toast.error.submit'),
           type: 'error',
         });
       } finally {
+        uploadControllerRef.current = null;
+        setUploadProgress(null);
         setIsSubmitting(false);
       }
     },
-    [config, handleCloseWidget, captureContextFn, submitReportFn]
+    [
+      config,
+      handleCloseWidget,
+      captureContextFn,
+      submitReportFn,
+      recordingEnabled,
+      forgetStoredRecordings,
+    ]
   );
 
   const handleToastClose = useCallback(() => {
     setToast(null);
+  }, []);
+
+  const handleCancelSubmit = useCallback(() => {
+    uploadControllerRef.current?.abort();
   }, []);
 
   // Get the media item being annotated
@@ -420,29 +724,52 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   return (
     <div ref={containerRef} class={`bugpin-container bugpin-theme-${effectiveTheme}`}>
-      <WidgetLauncherButton
-        position={config.position}
-        buttonText={config.buttonText}
-        buttonShape={config.buttonShape}
-        buttonIcon={config.buttonIcon}
-        buttonIconSize={config.buttonIconSize}
-        buttonIconStroke={config.buttonIconStroke}
-        theme={config.theme}
-        lightButtonColor={config.lightButtonColor}
-        lightTextColor={config.lightTextColor}
-        lightButtonHoverColor={config.lightButtonHoverColor}
-        lightTextHoverColor={config.lightTextHoverColor}
-        darkButtonColor={config.darkButtonColor}
-        darkTextColor={config.darkTextColor}
-        darkButtonHoverColor={config.darkButtonHoverColor}
-        darkTextHoverColor={config.darkTextHoverColor}
-        enableHoverScaleEffect={config.enableHoverScaleEffect}
-        tooltipEnabled={config.tooltipEnabled}
-        tooltipText={config.tooltipText}
-        onClick={handleOpenWidget}
-      />
+      {!isRecordingStep && (
+        <WidgetLauncherButton
+          position={config.position}
+          buttonText={config.buttonText}
+          buttonShape={config.buttonShape}
+          buttonIcon={config.buttonIcon}
+          buttonIconSize={config.buttonIconSize}
+          buttonIconStroke={config.buttonIconStroke}
+          theme={config.theme}
+          lightButtonColor={config.lightButtonColor}
+          lightTextColor={config.lightTextColor}
+          lightButtonHoverColor={config.lightButtonHoverColor}
+          lightTextHoverColor={config.lightTextHoverColor}
+          darkButtonColor={config.darkButtonColor}
+          darkTextColor={config.darkTextColor}
+          darkButtonHoverColor={config.darkButtonHoverColor}
+          darkTextHoverColor={config.darkTextHoverColor}
+          enableHoverScaleEffect={config.enableHoverScaleEffect}
+          tooltipEnabled={config.tooltipEnabled}
+          tooltipText={config.tooltipText}
+          hasPendingRecording={hasPendingRecording}
+          onClick={handleOpenWidget}
+        />
+      )}
 
-      {step === 'annotating' && annotatingMedia && (
+      {isRecordingStep && (
+        <RecordingBar
+          isReady={recording.status === 'ready'}
+          isCountingDown={recording.status === 'countdown'}
+          countdown={recording.countdown}
+          elapsedMs={recording.elapsedMs}
+          maxDurationMs={config.maxRecordingDurationSeconds * 1000}
+          isPaused={recording.isPaused}
+          hasMicrophone={recording.hasMicrophone}
+          isWholeScreen={recording.isWholeScreen}
+          position={recordingBarPosition}
+          onPositionChange={setRecordingBarPosition}
+          onStart={recording.startCountdown}
+          onPause={recording.pause}
+          onResume={recording.resume}
+          onStop={recording.stop}
+          onDiscard={recording.discard}
+        />
+      )}
+
+      {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
         <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
           <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
             <AnnotationCanvasComponent
@@ -465,6 +792,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           onAddMedia={handleAddMedia}
           onRemoveMedia={handleRemoveMedia}
           isSubmitting={isSubmitting}
+          uploadProgress={uploadProgress}
+          onCancelSubmit={handleCancelSubmit}
           isCapturing={isCapturing}
           enableAnnotation={config.enableAnnotation}
           maxImageSize={config.maxImageUploadSize}
@@ -474,12 +803,21 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           formData={formData}
           onFormDataChange={setFormData}
           showScreenCaptureConsent={showScreenCaptureConsent}
+          consentMode={consentMode}
           onConsentConfirm={handleConsentConfirm}
           onConsentCancel={handleConsentCancel}
           reduceScreenshotQuality={reduceScreenshotQuality}
           onReduceScreenshotQualityChange={setReduceScreenshotQuality}
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
+          recordingEnabled={recordingEnabled}
+          allowRecordingMicrophone={config.allowRecordingMicrophone}
+          includeMicrophone={includeMicrophone}
+          onIncludeMicrophoneChange={setIncludeMicrophone}
+          isRecordingStarting={recording.status !== 'idle'}
+          onStartRecording={handleStartRecording}
+          oversizedRecording={oversizedRecording}
+          onDismissOversizedRecording={() => setOversizedRecording(null)}
         />
       )}
 
@@ -518,7 +856,15 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={handleToastClose} />}
+      {toast && (
+        <Toast
+          key={isRecordingStep ? 'recording-toast' : 'toast'}
+          message={toast.message}
+          type={toast.type}
+          topLayer={isRecordingStep}
+          onClose={handleToastClose}
+        />
+      )}
     </div>
   );
 };

@@ -10,6 +10,8 @@ const fr: WidgetCatalog = {
   'dialog.tabs.details': 'Détails',
   'dialog.tabs.media': "Captures d'écran",
   'dialog.tabs.mediaWithCount': "Captures d'écran ({count})",
+  'dialog.tabs.recording': 'Enregistrements',
+  'dialog.tabs.recordingWithCount': 'Enregistrements ({count})',
 
   'dialog.fields.title.label': 'Titre',
   'dialog.fields.title.placeholder': 'Brève description du problème',
@@ -50,6 +52,11 @@ const fr: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Ne plus afficher',
   'screenCapture.back': 'Retour',
   'screenCapture.confirm': 'Prendre la capture',
+  'screenCapture.confirmRecording': 'Ouvrir l’enregistreur',
+  'screenCapture.recording.body':
+    'Votre navigateur vous demandera quoi partager. Tout ce qui est visible sera enregistré.',
+  'screenCapture.recording.windowHint':
+    "Choisissez la fenêtre contenant cette page. D'autres applications peuvent être visibles.",
 
   'screenshot.privacyTip':
     "Conseil : utilisez l'outil d'annotation pour masquer les données sensibles avant d'envoyer.",
@@ -68,8 +75,11 @@ const fr: WidgetCatalog = {
   'screenshot.action.annotate': 'Annoter',
   'screenshot.action.download': 'Télécharger',
   'screenshot.action.remove': 'Supprimer',
-  'screenshot.helperText':
-    'Formats acceptés : PNG, JPG, GIF, WebP (max. {imageSize} Mo) - MP4, WebM, MOV, AVI (max. {videoSize} Mo)',
+  'screenshot.helperText': 'Formats acceptés : PNG, JPG, GIF, WebP (max. {imageSize} Mo)',
+  'recording.quality.low': 'Faible',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Élevée',
+  'recording.helperText': 'Formats acceptés : MP4, WebM, MOV (max. {videoSize} Mo)',
 
   'screenshot.error.unsupportedImage': "Format d'image non pris en charge : {type}",
   'screenshot.error.imageTooLarge': 'Image trop volumineuse. Taille maximale : {size} Mo.',
@@ -80,9 +90,57 @@ const fr: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Activez « Réduire la qualité de capture » ou redimensionnez la fenêtre du navigateur.',
 
+  'recording.record': 'Démarrer l’enregistrement',
+  'recording.startShort': 'Démarrer',
+  'recording.start': 'Ouvrir l’enregistreur',
+  'recording.microphone': 'Inclure le microphone',
+  'recording.privacyTip': 'Tout ce qui est visible sera enregistré.',
+  'recording.countdown': "L'enregistrement démarre dans {seconds}",
+  'recording.stop': 'Arrêter',
+  'recording.discard': 'Supprimer',
+  'recording.pause': 'Pause',
+  'recording.play': 'Lire',
+  'recording.expand': 'Agrandir la vidéo',
+  'recording.resume': 'Reprendre',
+  'recording.tool.cursor': 'Curseur',
+  'recording.tool.pen': 'Stylo',
+  'recording.tool.laser': 'Pointeur laser',
+  'recording.tool.clickEffects': 'Effets de clic',
+  'recording.tool.undo': 'Annuler',
+  'recording.tool.clear': 'Effacer le dessin',
+  'recording.color.red': 'Rouge',
+  'recording.color.amber': 'Ambre',
+  'recording.color.green': 'Vert',
+  'recording.color.blue': 'Bleu',
+  'recording.color.white': 'Blanc',
+  'recording.warning.wholeScreen': 'Vous partagez tout votre écran.',
+  'recording.notice.noMicrophone': 'Enregistrement sans microphone.',
+  'recording.stopped.duration': 'Enregistrement arrêté après {duration}.',
+  'recording.stopped.size': 'Enregistrement arrêté à la limite de {size} Mo.',
+  'recording.recovered': 'Enregistrement sauvegardé. Ouvrez BugPin pour continuer.',
+  'recording.error.unavailable': "L'enregistrement d'écran n'est pas disponible.",
+  'recording.error.failed': "L'enregistrement a échoué. Veuillez réessayer.",
+  'recording.error.empty': "L'enregistrement était vide. Veuillez réessayer.",
+  'recording.oversized': "L'enregistrement fait {size} Mo (max. {limit} Mo).",
+  'recording.oversizedHint': 'Téléchargez-le ou enregistrez un clip plus court.',
+  'recording.previewUnavailable': 'Aperçu indisponible.',
+
+  'submit.uploading': 'Téléversement : {percent} %',
+  'submit.cancelUpload': 'Annuler le téléversement',
+  'submit.error.tooLarge':
+    'Le téléversement est trop volumineux pour le serveur. Supprimez des médias et réessayez.',
+  'submit.error.videoQuota':
+    'Les téléversements vidéo sont suspendus pour ce projet. Supprimez la vidéo pour envoyer le rapport.',
+  'submit.error.rejected':
+    'Le téléversement a été refusé. Vos pièces jointes sont peut-être trop volumineuses. Supprimez-les ou réduisez leur taille, puis réessayez.',
+  'submit.queued':
+    'Rapport enregistré. Il sera envoyé automatiquement dès le retour de la connexion.',
+
   'toast.success.submit': 'Rapport de bug envoyé avec succès !',
   'toast.error.submit': "Échec de l'envoi du rapport",
   'toast.error.capture': "Échec de la capture d'écran",
+  'toast.error.draftSave':
+    "Impossible d'enregistrer le brouillon. Gardez le widget ouvert et réessayez.",
 
   'annotation.toolbar.select': 'Sélectionner',
   'annotation.toolbar.pan': 'Déplacer (ou maintenir Space)',

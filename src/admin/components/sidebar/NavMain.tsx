@@ -8,6 +8,7 @@ import {
   Bug,
   AppWindow,
   Camera,
+  Video,
   Languages,
   SlidersHorizontal,
   Bell,
@@ -68,6 +69,7 @@ const widgetItems: NavItem[] = [
   { title: 'Button', url: '/button', icon: Bug },
   { title: 'Dialog', url: '/dialog', icon: AppWindow },
   { title: 'Screenshot', url: '/screenshot', icon: Camera },
+  { title: 'Recording', url: '/recording', icon: Video },
   { title: 'Language', url: '/language', icon: Languages },
 ];
 
@@ -75,7 +77,7 @@ const consoleItems: NavItem[] = [
   { title: 'Settings', url: '/settings', icon: SlidersHorizontal },
   { title: 'Notifications', url: '/notifications', icon: Bell },
   { title: 'Users', url: '/users', icon: UsersRound },
-  { title: 'Security & Privacy', url: '/security-privacy', icon: Shield },
+  { title: 'Security', url: '/security', icon: Shield },
   { title: 'Branding', url: '/branding', icon: Palette },
   { title: 'License', url: '/license', icon: KeyRound },
 ];
@@ -124,7 +126,7 @@ function NavGroup({ label, items, location, onItemClick }: NavGroupProps) {
 }
 
 export function NavMain() {
-  const { user } = useAuth();
+  const { user, canLoadData } = useAuth();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const showAdminGroups = !!user && user.role === 'admin';
@@ -137,7 +139,7 @@ export function NavMain() {
       );
       return response.data.stats;
     },
-    enabled: !!user,
+    enabled: canLoadData,
     refetchInterval: 10000,
     refetchIntervalInBackground: false,
   });
@@ -150,7 +152,7 @@ export function NavMain() {
       );
       return response.data.projects;
     },
-    enabled: showAdminGroups,
+    enabled: showAdminGroups && canLoadData,
   });
 
   const closeSidebarOnMobile = () => {

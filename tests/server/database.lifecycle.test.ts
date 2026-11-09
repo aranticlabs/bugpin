@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { config } from '../../src/server/config';
+import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import {
   closeDatabase,
   getDb,
@@ -154,6 +155,154 @@ describe('database lifecycle', () => {
     }
   });
 
+  it('upgrades file metadata without changing older attachments and persists recording quality', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-media-'));
+    Object.assign(config, { dataDir: baseDir, dbPath: path.join(baseDir, 'bugpin.db') });
+    try {
+      await initDatabase();
+      await initSchema();
+      const db = getDb();
+      db.exec(`
+        ALTER TABLE files DROP COLUMN captured_at;
+        ALTER TABLE files DROP COLUMN duration_ms;
+        ALTER TABLE files DROP COLUMN recording_quality;
+        INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('media-project', 'Media', 'media-hash', 'media-key');
+        INSERT INTO reports (id, project_id, title, metadata) VALUES ('media-report', 'media-project', 'Media report', '{}');
+        INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes) VALUES ('legacy', 'media-report', 'video', 'old.webm', 'old.webm', 'video/webm', 1);
+      `);
+      await runMigrations();
+      expect(await filesRepo.findById('legacy')).toMatchObject({
+        recordingQuality: undefined,
+        durationMs: undefined,
+        capturedAt: undefined,
+      });
+      const metadata = {
+        recordingQuality: 'high' as const,
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        durationMs: 24000,
+        width: 1920,
+        height: 1080,
+      };
+      const file = await filesRepo.create({
+        reportId: 'media-report',
+        type: 'video',
+        filename: 'clip.webm',
+        path: 'clip.webm',
+        mimeType: 'video/webm',
+        sizeBytes: 1024,
+        ...metadata,
+      });
+      expect(await filesRepo.findById(file.id)).toMatchObject(metadata);
+      await runMigrations();
+      expect(await filesRepo.findById(file.id)).toMatchObject(metadata);
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('rolls back a partially applied metadata migration without marking it complete', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-media-partial-'));
+    Object.assign(config, { dataDir: baseDir, dbPath: path.join(baseDir, 'bugpin.db') });
+    try {
+      await initDatabase();
+      await initSchema();
+      const db = getDb();
+      db.exec(`
+        ALTER TABLE files DROP COLUMN captured_at;
+        ALTER TABLE files DROP COLUMN recording_quality;
+      `);
+      await expect(runMigrations()).rejects.toThrow('duplicate column name: duration_ms');
+      const columns = (db.query('PRAGMA table_info(files)').all() as { name: string }[]).map(
+        ({ name }) => name
+      );
+      expect(columns).not.toContain('captured_at');
+      expect(columns).not.toContain('recording_quality');
+      expect(
+        db.query('SELECT name FROM migrations WHERE name = ?').get('008_add_media_metadata.sql')
+      ).toBeNull();
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  describe('database changed by a newer version', () => {
+    const newerMigration = '999_from_a_newer_version.sql';
+
+    async function withNewerDatabase(
+      run: (baseDir: string) => Promise<void>,
+      overrides: Partial<typeof config> = {}
+    ): Promise<void> {
+      const snapshot = { ...config };
+      const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-newer-'));
+      Object.assign(config, {
+        dataDir: baseDir,
+        dbPath: path.join(baseDir, 'bugpin.db'),
+        ...overrides,
+      });
+      try {
+        await initDatabase();
+        await initSchema();
+        await runMigrations();
+        getDb().run('INSERT INTO migrations (name) VALUES (?)', [newerMigration]);
+        await run(baseDir);
+      } finally {
+        closeDatabase();
+        fs.rmSync(baseDir, { recursive: true, force: true });
+        Object.assign(config, snapshot);
+      }
+    }
+
+    it('refuses to initialize the schema or run migrations', async () => {
+      await withNewerDatabase(async () => {
+        const expected = `Migrations unknown to this version: ${newerMigration}.`;
+        await expect(initSchema()).rejects.toThrow(expected);
+        await expect(runMigrations()).rejects.toThrow(expected);
+        await expect(initSchema()).rejects.toThrow(`cannot be used with BugPin ${config.version}`);
+      });
+    });
+
+    it('names the pre-upgrade snapshots stored beside the database', async () => {
+      await withNewerDatabase(async (baseDir) => {
+        const snapshotPath = path.join(baseDir, 'bugpin.db.pre-upgrade-008-example-first.bak');
+        fs.writeFileSync(snapshotPath, '');
+        fs.writeFileSync(path.join(baseDir, 'unrelated.bak'), '');
+
+        const error = await initSchema().then(
+          () => null,
+          (reason: unknown) => reason
+        );
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(`Pre-upgrade snapshots found: ${snapshotPath}.`);
+        expect((error as Error).message).not.toContain('unrelated.bak');
+      });
+    });
+
+    it('leaves the database untouched when it refuses to start', async () => {
+      await withNewerDatabase(async () => {
+        const db = getDb();
+        db.exec("DELETE FROM settings WHERE key = 'app_name'");
+        await expect(initSchema()).rejects.toThrow();
+        expect(db.query("SELECT 1 FROM settings WHERE key = 'app_name'").get()).toBeNull();
+      });
+    });
+
+    it('continues with a warning in development', async () => {
+      await withNewerDatabase(
+        async () => {
+          await initSchema();
+          await runMigrations();
+        },
+        { isDev: true }
+      );
+    });
+  });
+
   it('runs migrations when none exist', async () => {
     await initDatabase();
     await initSchema();
@@ -186,6 +335,8 @@ describe('database lifecycle', () => {
       const db = getDb();
       db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE users (id TEXT PRIMARY KEY);
+        CREATE TABLE files (id TEXT PRIMARY KEY);
         CREATE TABLE migrations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,
@@ -209,6 +360,77 @@ describe('database lifecycle', () => {
         )
         .get() as { name?: string } | undefined;
       expect(table?.name).toBe('widget_version_observations');
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('adds the password fields to existing users without requiring a change', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-migration-'));
+
+    Object.assign(config, {
+      dataDir: baseDir,
+      dbPath: path.join(baseDir, 'bugpin.db'),
+    });
+
+    try {
+      await initDatabase();
+      const db = getDb();
+      db.exec(`
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE users (id TEXT PRIMARY KEY);
+        INSERT INTO users (id) VALUES ('usr_existing');
+        CREATE TABLE files (id TEXT PRIMARY KEY);
+        CREATE TABLE migrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          applied_at TEXT DEFAULT (datetime('now')) NOT NULL
+        );
+      `);
+      for (const name of [
+        '001_add_reporter_messages.sql',
+        '002_add_report_source.sql',
+        '003_add_reporter_locale.sql',
+        '004_add_report_history.sql',
+        '005_add_widget_version_observations.sql',
+      ]) {
+        db.run('INSERT INTO migrations (name) VALUES (?)', [name]);
+      }
+
+      await runMigrations();
+
+      const row = db
+        .query('SELECT must_change_password FROM users WHERE id = ?')
+        .get('usr_existing') as { must_change_password: number };
+      expect(row.must_change_password).toBe(0);
+    } finally {
+      closeDatabase();
+      fs.rmSync(baseDir, { recursive: true, force: true });
+      Object.assign(config, snapshot);
+    }
+  });
+
+  it('records the password fields migration when the schema already has the columns', async () => {
+    const snapshot = { ...config };
+    const baseDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-db-password-bootstrap-'));
+
+    Object.assign(config, {
+      dataDir: baseDir,
+      dbPath: path.join(baseDir, 'bugpin.db'),
+    });
+
+    try {
+      await initDatabase();
+      await initSchema();
+      await runMigrations();
+
+      const applied = getDb()
+        .query('SELECT name FROM migrations WHERE name = ?')
+        .get('006_add_user_password_fields.sql') as { name?: string } | undefined;
+      expect(applied?.name).toBe('006_add_user_password_fields.sql');
     } finally {
       closeDatabase();
       fs.rmSync(baseDir, { recursive: true, force: true });

@@ -8,8 +8,9 @@ import {
   fireEvent,
 } from '../../utils';
 import { Settings } from '../../../pages/console/Settings';
+import { Recording } from '../../../pages/widget/Recording';
 import { Screenshot } from '../../../pages/widget/Screenshot';
-import { Security } from '../../../pages/console/Security';
+import { PasswordPolicySettings, Security, TwoFactor } from '../../../pages/console/Security';
 import { Privacy } from '../../../pages/console/Privacy';
 import { SMTP } from '../../../pages/console/SMTP';
 import { api } from '../../../api/client';
@@ -98,6 +99,7 @@ describe('Settings sections', () => {
     renderWithQuery(<Screenshot />);
 
     await screen.findByLabelText(/max\.? screenshot size/i);
+    expect(screen.queryByLabelText(/max\.? video upload size/i)).not.toBeInTheDocument();
 
     const screenCaptureSwitch = screen.getByRole('switch', { name: /use screen capture api/i });
     await user.click(screenCaptureSwitch);
@@ -110,10 +112,47 @@ describe('Settings sections', () => {
           maxScreenshotSize: 5,
           maxImageUploadSizeMb: 10,
           maxVideoUploadSizeMb: 50,
+          maxVideoUploadMbPerDay: 2048,
+          enableScreenRecording: false,
+          allowRecordingMicrophone: false,
+          maxRecordingDurationSeconds: 180,
+          recordingQuality: 'standard',
           useScreenCaptureAPI: true,
         },
       });
     });
+  });
+
+  it('submits recording settings without touching screenshot settings', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<Recording />);
+
+    const uploadSizeInput = await screen.findByLabelText(/max\.? video upload size/i);
+    expect(uploadSizeInput).toHaveAttribute('max', '100');
+    expect(screen.queryByLabelText(/max\.? screenshot size/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
+    await user.click(screen.getByRole('switch', { name: /allow microphone recording/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        screenshot: {
+          useScreenCaptureAPI: false,
+          maxScreenshotSize: 5,
+          maxImageUploadSizeMb: 10,
+          maxVideoUploadSizeMb: 50,
+          maxVideoUploadMbPerDay: 2048,
+          enableScreenRecording: true,
+          allowRecordingMicrophone: true,
+          maxRecordingDurationSeconds: 180,
+          recordingQuality: 'standard',
+        },
+      });
+    });
+    expect(toast.success).toHaveBeenCalledWith('Recording settings saved successfully');
   });
 
   it('submits security settings updates', async () => {
@@ -128,7 +167,7 @@ describe('Settings sections', () => {
     fireEvent.change(rateLimitInput, { target: { value: '120' } });
     fireEvent.change(sessionInput, { target: { value: '14' } });
 
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getAllByRole('button', { name: /save changes/i })[0]);
 
     await waitFor(() => {
       expect(putSpy).toHaveBeenCalledWith(
@@ -138,6 +177,45 @@ describe('Settings sections', () => {
           sessionMaxAgeDays: 14,
         })
       );
+    });
+  });
+
+  it('saves the password policy on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<PasswordPolicySettings />);
+
+    const minLength = await screen.findByLabelText(/minimum length/i);
+    await waitFor(() => expect(minLength).toHaveValue(12));
+    fireEvent.change(minLength, { target: { value: '16' } });
+    await user.click(screen.getByLabelText(/special character/i));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        passwordPolicy: {
+          minLength: 16,
+          requireUppercase: true,
+          requireLowercase: false,
+          requireNumber: true,
+          requireSymbol: true,
+        },
+      });
+    });
+  });
+
+  it('saves the two-factor policy on its own', async () => {
+    const user = userEvent.setup();
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);
+
+    renderWithQuery(<TwoFactor />);
+
+    await screen.findAllByText('Admins only');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', { twoFactorPolicy: 'admins' });
     });
   });
 

@@ -10,6 +10,8 @@ const it: WidgetCatalog = {
   'dialog.tabs.details': 'Dettagli',
   'dialog.tabs.media': 'Screenshot',
   'dialog.tabs.mediaWithCount': 'Screenshot ({count})',
+  'dialog.tabs.recording': 'Registrazioni',
+  'dialog.tabs.recordingWithCount': 'Registrazioni ({count})',
 
   'dialog.fields.title.label': 'Titolo',
   'dialog.fields.title.placeholder': 'Breve descrizione del problema',
@@ -49,6 +51,11 @@ const it: WidgetCatalog = {
   'screenCapture.dontShowAgain': 'Non mostrare più',
   'screenCapture.back': 'Indietro',
   'screenCapture.confirm': 'Acquisisci screenshot',
+  'screenCapture.confirmRecording': 'Apri registratore',
+  'screenCapture.recording.body':
+    'Il browser chiederà cosa condividere. Tutto ciò che è visibile verrà registrato.',
+  'screenCapture.recording.windowHint':
+    'Scegli la finestra con questa pagina. Altre app potrebbero essere visibili.',
 
   'screenshot.privacyTip':
     'Suggerimento: usa lo strumento di annotazione per nascondere i dati sensibili prima di inviare.',
@@ -67,8 +74,11 @@ const it: WidgetCatalog = {
   'screenshot.action.annotate': 'Annota',
   'screenshot.action.download': 'Scarica',
   'screenshot.action.remove': 'Rimuovi',
-  'screenshot.helperText':
-    'Supportati: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV, AVI (max {videoSize}MB)',
+  'screenshot.helperText': 'Supportati: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Bassa',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Alta',
+  'recording.helperText': 'Supportati: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Formato immagine non supportato: {type}',
   'screenshot.error.imageTooLarge': 'Immagine troppo grande. La dimensione massima è {size}MB.',
@@ -79,9 +89,56 @@ const it: WidgetCatalog = {
   'screenshot.error.captureTooLargeHint':
     'Attiva "Riduci qualità di acquisizione" o ridimensiona la finestra del browser.',
 
+  'recording.record': 'Avvia registrazione',
+  'recording.startShort': 'Avvia',
+  'recording.start': 'Apri registratore',
+  'recording.microphone': 'Includi microfono',
+  'recording.privacyTip': 'Tutto ciò che è visibile verrà registrato.',
+  'recording.countdown': 'La registrazione inizia tra {seconds}',
+  'recording.stop': 'Interrompi',
+  'recording.discard': 'Scarta',
+  'recording.pause': 'Pausa',
+  'recording.play': 'Riproduci',
+  'recording.expand': 'Ingrandisci video',
+  'recording.resume': 'Riprendi',
+  'recording.tool.cursor': 'Cursore',
+  'recording.tool.pen': 'Penna',
+  'recording.tool.laser': 'Puntatore laser',
+  'recording.tool.clickEffects': 'Effetti clic',
+  'recording.tool.undo': 'Annulla',
+  'recording.tool.clear': 'Cancella disegno',
+  'recording.color.red': 'Rosso',
+  'recording.color.amber': 'Ambra',
+  'recording.color.green': 'Verde',
+  'recording.color.blue': 'Blu',
+  'recording.color.white': 'Bianco',
+  'recording.warning.wholeScreen': "Stai condividendo l'intero schermo.",
+  'recording.notice.noMicrophone': 'Registrazione senza microfono.',
+  'recording.stopped.duration': 'Registrazione interrotta dopo {duration}.',
+  'recording.stopped.size': 'Registrazione interrotta al limite di {size}MB.',
+  'recording.recovered': 'Registrazione salvata. Apri BugPin per continuare.',
+  'recording.error.unavailable': 'La registrazione dello schermo non è disponibile.',
+  'recording.error.failed': 'Registrazione non riuscita. Riprova.',
+  'recording.error.empty': 'La registrazione era vuota. Riprova.',
+  'recording.oversized': 'La registrazione è di {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Scaricala o registra una clip più breve.',
+  'recording.previewUnavailable': 'Anteprima non disponibile.',
+
+  'submit.uploading': 'Caricamento: {percent}%',
+  'submit.cancelUpload': 'Annulla caricamento',
+  'submit.error.tooLarge':
+    'Il caricamento è troppo grande per il server. Rimuovi alcuni file multimediali e riprova.',
+  'submit.error.videoQuota':
+    'I caricamenti video sono sospesi per questo progetto. Rimuovi il video per inviare la segnalazione.',
+  'submit.error.rejected':
+    'Il caricamento è stato rifiutato. Gli allegati potrebbero essere troppo grandi. Rimuovili o riducili e riprova.',
+  'submit.queued':
+    'Segnalazione salvata. Verrà inviata automaticamente quando la connessione sarà ripristinata.',
+
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',
   'toast.error.capture': 'Cattura dello screenshot non riuscita',
+  'toast.error.draftSave': 'Impossibile salvare la bozza. Tieni aperto il widget e riprova.',
 
   'annotation.toolbar.select': 'Seleziona',
   'annotation.toolbar.pan': 'Sposta (o tieni premuto Spazio)',

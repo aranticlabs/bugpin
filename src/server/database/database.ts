@@ -55,6 +55,48 @@ export async function initDatabase(): Promise<void> {
 }
 
 /**
+ * Refuses a database that records migrations this build does not ship. Such a database was
+ * changed by a newer BugPin version, and its schema can no longer be read or written safely
+ * by this one. Development continues with a warning so branches can share a data directory.
+ */
+function assertNoUnknownMigrations(database: Database): void {
+  const migrationsDir = path.join(import.meta.dir, 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+
+  const hasMigrationsTable = database
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migrations'")
+    .get();
+  if (!hasMigrationsTable) return;
+
+  const known = new Set(fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')));
+  const unknown = (
+    database.query('SELECT name FROM migrations ORDER BY id').all() as { name: string }[]
+  )
+    .map(({ name }) => name)
+    .filter((name) => !known.has(name));
+  if (unknown.length === 0) return;
+
+  const dataDir = path.dirname(config.dbPath);
+  const snapshotPrefix = `${path.basename(config.dbPath)}.pre-upgrade-`;
+  const snapshots = fs
+    .readdirSync(dataDir)
+    .filter((name) => name.startsWith(snapshotPrefix) && name.endsWith('.bak'))
+    .map((name) => path.join(dataDir, name));
+
+  const message =
+    `This database was changed by a newer BugPin version and cannot be used with BugPin ${config.version}. ` +
+    `Migrations unknown to this version: ${unknown.join(', ')}. ` +
+    'Start the newer version again, or stop BugPin and restore the database backup taken before the upgrade.' +
+    (snapshots.length > 0 ? ` Pre-upgrade snapshots found: ${snapshots.join(', ')}.` : '');
+
+  if (config.isDev) {
+    logger.warn(message);
+    return;
+  }
+  throw new Error(message);
+}
+
+/**
  * Initialize database schema
  * Creates all tables if they don't exist
  */
@@ -62,6 +104,9 @@ export async function initSchema(): Promise<void> {
   if (!db) {
     throw new Error('Database not initialized');
   }
+
+  // Checked before the bootstrap below touches the schema.
+  assertNoUnknownMigrations(db);
 
   logger.info('Initializing database schema');
 
@@ -110,6 +155,8 @@ export async function initSchema(): Promise<void> {
       avatar_url TEXT,
       role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin', 'editor', 'viewer')),
       is_active INTEGER DEFAULT 1 NOT NULL CHECK(is_active IN (0, 1)),
+      must_change_password INTEGER DEFAULT 0 NOT NULL CHECK(must_change_password IN (0, 1)),
+      password_changed_at TEXT,
       created_at TEXT DEFAULT (datetime('now')) NOT NULL,
       updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
       last_login_at TEXT,
@@ -140,6 +187,43 @@ export async function initSchema(): Promise<void> {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
 
+  // Two-factor authentication: authenticator apps, recovery codes and passkeys
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_totp (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      secret_encrypted TEXT NOT NULL,
+      confirmed_at TEXT,
+      last_used_step INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_recovery_codes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_recovery_codes_user ON user_recovery_codes(user_id);
+
+    CREATE TABLE IF NOT EXISTS user_passkeys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      credential_id TEXT NOT NULL UNIQUE,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT,
+      device_type TEXT,
+      backed_up INTEGER NOT NULL DEFAULT 0 CHECK(backed_up IN (0, 1)),
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_used_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_passkeys_user ON user_passkeys(user_id);
+  `);
+
   // Reports table
   db.exec(`
     CREATE TABLE IF NOT EXISTS reports (
@@ -167,7 +251,8 @@ export async function initSchema(): Promise<void> {
       github_issue_number INTEGER NULL,
       github_issue_url TEXT NULL,
       github_synced_at TEXT NULL,
-      reporter_locale TEXT NOT NULL DEFAULT 'en'
+      reporter_locale TEXT NOT NULL DEFAULT 'en',
+      submission_id TEXT
     )
   `);
 
@@ -184,6 +269,12 @@ export async function initSchema(): Promise<void> {
     // Column already exists
   }
 
+  try {
+    db.exec(`ALTER TABLE reports ADD COLUMN submission_id TEXT`);
+  } catch {
+    // Column already exists
+  }
+
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_priority ON reports(priority)`);
@@ -196,6 +287,9 @@ export async function initSchema(): Promise<void> {
   );
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_reports_github_sync_status ON reports(github_sync_status) WHERE github_sync_status IS NOT NULL`
+  );
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_submission ON reports(project_id, submission_id) WHERE submission_id IS NOT NULL`
   );
 
   // Report history table
@@ -227,6 +321,9 @@ export async function initSchema(): Promise<void> {
       size_bytes INTEGER NOT NULL,
       width INTEGER,
       height INTEGER,
+      captured_at TEXT,
+      duration_ms INTEGER,
+      recording_quality TEXT CHECK(recording_quality IN ('low', 'standard', 'high')),
       created_at TEXT DEFAULT (datetime('now')) NOT NULL
     )
   `);
@@ -431,6 +528,9 @@ export async function runMigrations(): Promise<void> {
   if (!db) {
     throw new Error('Database not initialized');
   }
+  const database = db;
+
+  assertNoUnknownMigrations(database);
 
   // Create migrations table if it doesn't exist
   db.exec(`
@@ -470,13 +570,24 @@ export async function runMigrations(): Promise<void> {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
 
       try {
-        db.exec(sql);
-        db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
+        database.transaction(() => {
+          database.exec(sql);
+          database.run('INSERT INTO migrations (name) VALUES (?)', [file]);
+        })();
         logger.info('Migration applied successfully', { file });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const isBootstrapSchemaConflict =
           (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
+          (file === '006_add_user_password_fields.sql' &&
+            message.includes('duplicate column name')) ||
+          (file === '008_add_media_metadata.sql' &&
+            message.includes('duplicate column name') &&
+            ['captured_at', 'duration_ms', 'recording_quality'].every((column) =>
+              (database.query('PRAGMA table_info(files)').all() as { name: string }[]).some(
+                ({ name }) => name === column
+              )
+            )) ||
           (file === '004_add_report_history.sql' && message.includes('already exists'));
         if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);

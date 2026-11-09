@@ -1,7 +1,7 @@
 {
   "name": "bugpin",
   "description": "Self-hosted visual bug reporting tool",
-  "version": "1.2.6",
+  "version": "1.3.0",
   "packageManager": "bun@1.4.4",
   "license": "AGPL-3.0-only",
   "private": false,
@@ -20,6 +20,7 @@
     "build:server": "bun run --cwd src/server build",
     "build:admin": "bun run --cwd src/admin build",
     "build:widget": "bun run --cwd src/widget build",
+    "check:widget-size": "bun run build:widget && bun run src/widget/scripts/check-bundle-size.ts",
     "start": "bun run src/server/index.ts",
     "typecheck": "bun run typecheck:server && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee",
     "typecheck:server": "bun run --cwd src/server typecheck",
@@ -35,16 +36,17 @@
     "migrate": "bun run --cwd src/server migrate",
     "repair-github-links": "bun run src/server/scripts/repair-github-links.ts",
     "reset-password": "bun run --cwd src/server reset-password",
+    "reset-two-factor": "bun run --cwd src/server reset-two-factor",
     "knip": "knip",
-    "format": "prettier --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format": "prettier --ignore-path .gitignore --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --ignore-path .gitignore --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "check:dependency-age": "bun run src/server/scripts/check-dependency-age.ts bun.lock ee/bun.lock"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "@types/node": "^26.2.0",
-    "knip": "^6.32.2",
-    "prettier": "^3.9.6",
+    "@types/node": "^26.6.6",
+    "knip": "^6.44.1",
+    "prettier": "^3.9.10",
     "typescript": "^7.0.2"
   },
   "overrides": {

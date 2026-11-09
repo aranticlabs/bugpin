@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
 import { settingsService } from '../../../src/server/services/settings.service';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { emailService } from '../../../src/server/services/email.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
@@ -27,6 +28,7 @@ const baseSession: Session = {
 
 const originalAuthService = { ...authService };
 const originalSettingsService = { ...settingsService };
+const originalSettingsCacheService = { ...settingsCacheService };
 const originalEmailService = { ...emailService };
 
 beforeEach(() => {
@@ -45,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(authService, originalAuthService);
   Object.assign(settingsService, originalSettingsService);
+  Object.assign(settingsCacheService, originalSettingsCacheService);
   Object.assign(emailService, originalEmailService);
 });
 
@@ -61,6 +64,39 @@ describe('settings routes', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
+  });
+
+  it('reports the Application URL and the request origin as BugPin derives it', async () => {
+    settingsCacheService.getAll = async () => ({ appUrl: 'https://bugs.example.com' }) as never;
+    const app = createApp();
+    const res = await app.request(
+      'http://localhost/settings/address-check',
+      {
+        headers: {
+          cookie: 'session=sess_1',
+          host: 'bugs.example.com',
+          'x-forwarded-proto': 'https',
+        },
+      },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      appUrl: 'https://bugs.example.com',
+      requestOrigin: 'http://bugs.example.com',
+      requiredTrustProxy: 'true',
+    });
+  });
+
+  it('refuses the address check to non-admins', async () => {
+    authService.validateSession = async () =>
+      Result.ok({ user: { ...baseUser, role: 'editor' }, session: baseSession });
+    const app = createApp();
+    const res = await app.request('http://localhost/settings/address-check', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(403);
   });
 
   it('returns 400 when settings fetch fails', async () => {

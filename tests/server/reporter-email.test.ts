@@ -10,6 +10,8 @@ const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -29,7 +31,7 @@ const baseReport: Report = {
 
 function createSendEmailSpy() {
   return mock<(options: SendEmailOptions) => Promise<{ success: boolean }>>(() =>
-    Promise.resolve({ success: true }),
+    Promise.resolve({ success: true })
   );
 }
 

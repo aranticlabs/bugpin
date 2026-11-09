@@ -1,10 +1,10 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { MediaItem } from '../api/submit.js';
-import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
+import { buildSubmitFormData, createSubmissionId, type MediaItem } from '../api/submit-form.js';
 
 const DB_NAME = 'bugpin-reports';
 const DB_VERSION = 2; // Bump version for schema change
 const STORE_NAME = 'pending-reports';
+const SYNC_LOCK_NAME = 'bugpin-report-sync';
 
 // Retry configuration
 const MAX_RETRIES = 5;
@@ -14,6 +14,7 @@ const BACKOFF_MULTIPLIER = 2;
 
 interface PendingReport {
   id: string;
+  submissionId: string;
   apiKey: string;
   serverUrl: string;
   title: string;
@@ -30,6 +31,16 @@ interface PendingReport {
   error?: string;
 }
 
+class BufferedSubmissionError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message);
+    this.name = 'BufferedSubmissionError';
+  }
+}
+
 interface ReportBufferDB extends DBSchema {
   'pending-reports': {
     key: string;
@@ -42,22 +53,11 @@ interface ReportBufferDB extends DBSchema {
 
 let db: IDBPDatabase<ReportBufferDB> | null = null;
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let syncInFlight = false;
 
-/**
- * Get file extension from mime type
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeMap: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/quicktime': 'mov',
-    'video/x-msvideo': 'avi',
-  };
-  return mimeMap[mimeType] || 'bin';
+interface SyncResult {
+  synced: number;
+  failed: number;
 }
 
 /**
@@ -189,37 +189,7 @@ async function submitReport(report: PendingReport): Promise<boolean> {
     // Build URL
     const url = new URL('/api/widget/submit', report.serverUrl);
 
-    // Create form data
-    const formData = new FormData();
-
-    // Add JSON data
-    formData.append(
-      'data',
-      JSON.stringify({
-        title: report.title,
-        description: report.description,
-        priority: report.priority,
-        reporterEmail: report.reporterEmail,
-        reporterName: report.reporterName,
-        locale: report.locale,
-        metadata: report.metadata,
-        mediaCount: report.media?.length || 0,
-        mediaAnnotations: report.media?.map((item) => item.annotations).filter(Boolean),
-      })
-    );
-
-    // Add media files
-    if (report.media && report.media.length > 0) {
-      for (let i = 0; i < report.media.length; i++) {
-        const item = report.media[i];
-        const blob = dataUrlToBlob(item.dataUrl);
-        const ext =
-          getExtensionFromDataUrl(item.dataUrl) || getExtensionFromMimeType(item.mimeType);
-        const isVideo = item.mimeType.startsWith('video/');
-        const prefix = isVideo ? 'video' : 'screenshot';
-        formData.append('media', blob, `${prefix}-${i}.${ext}`);
-      }
-    }
+    const { formData } = buildSubmitFormData(report);
 
     const serverResponse = await fetch(url.toString(), {
       method: 'POST',
@@ -230,9 +200,13 @@ async function submitReport(report: PendingReport): Promise<boolean> {
     });
 
     if (!serverResponse.ok) {
-      const errorData = await serverResponse.json().catch(() => ({}));
-      throw new Error(
-        (errorData as { message?: string }).message || `HTTP ${serverResponse.status}`
+      const errorData = (await serverResponse.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      throw new BufferedSubmissionError(
+        errorData.message || `HTTP ${serverResponse.status}`,
+        errorData.error
       );
     }
 
@@ -244,14 +218,43 @@ async function submitReport(report: PendingReport): Promise<boolean> {
 }
 
 /**
- * Sync all pending reports to the server
+ * Sync all pending reports to the server. Runs never overlap, within this tab or across tabs,
+ * so a slow upload is not posted a second time while it is still in flight.
  */
-export async function syncPendingReports(): Promise<{ synced: number; failed: number }> {
+export async function syncPendingReports(): Promise<SyncResult> {
   if (!isOnline()) {
     console.log('[BugPin] Offline, skipping sync');
     return { synced: 0, failed: 0 };
   }
+  if (syncInFlight) return { synced: 0, failed: 0 };
 
+  syncInFlight = true;
+  try {
+    return await withSyncLock(syncAll);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function withSyncLock(task: () => Promise<SyncResult>): Promise<SyncResult> {
+  const locks = navigator.locks;
+  if (typeof locks?.request !== 'function') return task();
+
+  let granted = false;
+  try {
+    return await locks.request(SYNC_LOCK_NAME, { ifAvailable: true }, (lock) => {
+      if (!lock) return { synced: 0, failed: 0 };
+      granted = true;
+      return task();
+    });
+  } catch (error) {
+    // Opaque origins (sandboxed iframes) reject lock requests; sync without the lock there.
+    if (granted) throw error;
+    return task();
+  }
+}
+
+async function syncAll(): Promise<SyncResult> {
   const pending = await getPendingReports();
 
   if (pending.length === 0) {
@@ -273,18 +276,42 @@ export async function syncPendingReports(): Promise<{ synced: number; failed: nu
       }
     }
 
+    if (!report.submissionId) {
+      report.submissionId = createSubmissionId();
+      await updateBufferedReport(report);
+    }
+
     try {
       await submitReport(report);
       await removeBufferedReport(report.id);
       synced++;
       console.log('[BugPin] Successfully synced report:', report.id);
     } catch (error) {
+      let retryError = error;
+      if (
+        error instanceof BufferedSubmissionError &&
+        error.code === 'VIDEO_QUOTA_EXCEEDED' &&
+        report.media?.some((item) => item.mimeType.startsWith('video/'))
+      ) {
+        report.media = report.media.filter((item) => !item.mimeType.startsWith('video/'));
+        await updateBufferedReport(report);
+
+        try {
+          await submitReport(report);
+          await removeBufferedReport(report.id);
+          synced++;
+          continue;
+        } catch (withoutVideoError) {
+          retryError = withoutVideoError;
+        }
+      }
+
       failed++;
 
       // Update retry count
       report.retryCount++;
       report.lastRetryAt = new Date().toISOString();
-      report.error = error instanceof Error ? error.message : 'Unknown error';
+      report.error = retryError instanceof Error ? retryError.message : 'Unknown error';
 
       // If max retries exceeded, remove the report
       if (report.retryCount >= MAX_RETRIES) {

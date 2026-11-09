@@ -1,20 +1,59 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { api, onSetupRequired } from '../api/client';
+import { signInWithPasskey, verifyPasskeySecondFactor } from '../lib/passkeys';
 import type { User } from '@shared/types';
+
+export interface TwoFactorMethods {
+  totp: boolean;
+  passkey: boolean;
+  recoveryCode: boolean;
+}
+
+export type LoginStep =
+  | { status: 'signed-in' }
+  | { status: 'two-factor'; challengeToken: string; methods: TwoFactorMethods };
+
+export type SecondFactorInput = { code: string } | { recoveryCode: string };
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** False while the user has no session or must finish a required setup step first */
+  canLoadData: boolean;
+  login: (email: string, password: string) => Promise<LoginStep>;
+  completeTwoFactor: (challengeToken: string, input: SecondFactorInput) => Promise<void>;
+  loginWithPasskey: () => Promise<void>;
+  completeTwoFactorWithPasskey: (challengeToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+}
+
+// The server refuses data requests until these setup steps are done
+function hasPendingSetup(user: User | null): boolean {
+  return !!user?.mustChangePassword || !!user?.twoFactorSetupRequired;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const queryClient = useQueryClient();
+  const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Queries are paused by default while a setup step is pending, before the user state
+  // reaches any component.
+  const setUser = useCallback(
+    (nextUser: User | null) => {
+      const defaults = queryClient.getDefaultOptions();
+      queryClient.setDefaultOptions({
+        ...defaults,
+        queries: { ...defaults.queries, enabled: !hasPendingSetup(nextUser) },
+      });
+      setUserState(nextUser);
+    },
+    [queryClient]
+  );
 
   // Fetch current user on mount
   useEffect(() => {
@@ -35,17 +74,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUser();
-  }, []);
+  }, [setUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password });
+  const login = useCallback(
+    async (email: string, password: string): Promise<LoginStep> => {
+      const response = await api.post('/auth/login', { email, password });
 
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Login failed');
-    }
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Login failed');
+      }
 
-    setUser(response.data.user);
-  }, []);
+      if (response.data.twoFactorRequired) {
+        return {
+          status: 'two-factor',
+          challengeToken: response.data.challengeToken,
+          methods: response.data.methods,
+        };
+      }
+
+      setUser(response.data.user);
+      return { status: 'signed-in' };
+    },
+    [setUser]
+  );
+
+  const completeTwoFactor = useCallback(
+    async (challengeToken: string, input: SecondFactorInput) => {
+      const response = await api.post('/auth/login/two-factor', { challengeToken, ...input });
+      setUser(response.data.user);
+    },
+    [setUser]
+  );
+
+  const loginWithPasskey = useCallback(async () => {
+    setUser(await signInWithPasskey());
+  }, [setUser]);
+
+  const completeTwoFactorWithPasskey = useCallback(
+    async (challengeToken: string) => {
+      setUser(await verifyPasskeySecondFactor(challengeToken));
+    },
+    [setUser]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -54,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore errors during logout
     }
     setUser(null);
-  }, []);
+  }, [setUser]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -67,10 +137,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null);
     }
-  }, []);
+  }, [setUser]);
+
+  // Several requests can be refused at once, and queries that set their own `enabled`
+  // keep running while the setup dialog is open, so one refresh at a time is enough.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  const setupRefresh = useRef<Promise<void> | null>(null);
+  useEffect(
+    () =>
+      onSetupRequired(() => {
+        if (setupRefresh.current || hasPendingSetup(userRef.current)) return;
+        setupRefresh.current = refreshUser().finally(() => {
+          setupRefresh.current = null;
+        });
+      }),
+    [refreshUser]
+  );
+
+  const canLoadData = !!user && !hasPendingSetup(user);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        canLoadData,
+        login,
+        completeTwoFactor,
+        loginWithPasskey,
+        completeTwoFactorWithPasskey,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

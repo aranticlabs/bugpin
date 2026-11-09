@@ -282,9 +282,10 @@ export function TestWidgetPage() {
     }
 
     localStorage.setItem(STORAGE_KEY, trimmedKey);
-    setApiKey(trimmedKey);
-    setShowApiKeyModal(false);
-    setApiKeyInput('');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('apiKey');
+    window.history.replaceState(window.history.state, '', url);
+    window.location.reload();
   };
 
   const handleChangeApiKey = () => {

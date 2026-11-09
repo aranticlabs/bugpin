@@ -11,7 +11,7 @@ import type { FileType } from '@shared/types';
 
 // Allowed MIME types per file category
 
-export const ALLOWED_IMAGE_MIME_TYPES = [
+const ALLOWED_IMAGE_MIME_TYPES = [
   'image/png',
   'image/jpeg',
   'image/jpg',
@@ -19,9 +19,9 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/webp',
 ] as const;
 
-export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm'] as const;
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'] as const;
 
-export const ALLOWED_ATTACHMENT_MIME_TYPES = [
+const ALLOWED_ATTACHMENT_MIME_TYPES = [
   'application/pdf',
   'text/plain',
   'application/json',
@@ -49,6 +49,7 @@ const MAGIC_BYTES: Record<string, { bytes: number[]; offset: number }[]> = {
   ],
   'video/mp4': [{ bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }], // ftyp at offset 4
   'video/webm': [{ bytes: [0x1a, 0x45, 0xdf, 0xa3], offset: 0 }], // EBML header
+  'video/quicktime': [{ bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }], // ftyp at offset 4
 };
 
 function matchesMagicBytes(
@@ -68,10 +69,10 @@ export interface ValidateFileOptions {
   maxSizeMb?: number;
 }
 
-export function validateFile(options: ValidateFileOptions): Result<void> {
-  const { data, mimeType, type, maxSizeMb } = options;
+export type ValidateFileContentOptions = Omit<ValidateFileOptions, 'maxSizeMb'>;
 
-  // Check MIME type against allowlist
+export function validateFileContent(options: ValidateFileContentOptions): Result<void> {
+  const { data, mimeType, type } = options;
   const allowedTypes: readonly string[] =
     type === 'attachment'
       ? ALLOWED_ATTACHMENT_MIME_TYPES
@@ -87,23 +88,30 @@ export function validateFile(options: ValidateFileOptions): Result<void> {
       'INVALID_MIME_TYPE'
     );
   }
-
-  // Check file size
-  const sizeMb = data.length / (1024 * 1024);
-  const limit = maxSizeMb ?? (type === 'video' ? MAX_VIDEO_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB);
-  if (sizeMb > limit) {
-    return Result.fail(
-      `File size ${sizeMb.toFixed(1)}MB exceeds the ${limit}MB limit`,
-      'FILE_TOO_LARGE'
-    );
-  }
-
-  // Validate magic bytes for types that have signatures
   const signatures = MAGIC_BYTES[mimeType];
   if (signatures && !matchesMagicBytes(data, signatures)) {
     return Result.fail(
       `File content does not match declared MIME type "${mimeType}"`,
       'INVALID_FILE_CONTENT'
+    );
+  }
+
+  return Result.ok(undefined);
+}
+
+export function validateFile(options: ValidateFileOptions): Result<void> {
+  const contentValidation = validateFileContent(options);
+  if (!contentValidation.success) {
+    return contentValidation;
+  }
+
+  const sizeMb = options.data.length / (1024 * 1024);
+  const limit =
+    options.maxSizeMb ?? (options.type === 'video' ? MAX_VIDEO_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB);
+  if (sizeMb > limit) {
+    return Result.fail(
+      `File size ${sizeMb.toFixed(1)}MB exceeds the ${limit}MB limit`,
+      'FILE_TOO_LARGE'
     );
   }
 
@@ -203,7 +211,9 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
   const fileId = generateFileId();
   const ext = getExtension(mimeType);
   const storedFilename = `${fileId}.${ext}`;
-  const buffer = Buffer.from(data);
+  const buffer = Buffer.isBuffer(data)
+    ? data
+    : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
   // Get image dimensions if applicable (needed for both local and S3)
   let width: number | undefined;
@@ -375,6 +385,55 @@ export function readFile(filePath: string): Buffer | null {
  */
 function isS3Url(path: string): boolean {
   return path.startsWith('https://') || path.startsWith('http://') || path.startsWith('s3://');
+}
+
+export interface StoredFileHandle {
+  kind: 'local' | 'remote';
+  read(): Promise<Blob | Uint8Array | null>;
+  readRange(start: number, end: number): Promise<Blob | Uint8Array | null>;
+}
+
+export function createStoredFileHandle(filePath: string): StoredFileHandle {
+  if (!isS3Url(filePath)) {
+    const resolvedPath = path.resolve(config.projectRoot, filePath);
+    return {
+      kind: 'local',
+      async read() {
+        const file = Bun.file(resolvedPath);
+        return (await file.exists()) ? file : null;
+      },
+      async readRange(start, end) {
+        const file = Bun.file(resolvedPath);
+        return (await file.exists()) ? file.slice(start, end + 1) : null;
+      },
+    };
+  }
+
+  return {
+    kind: 'remote',
+    async read() {
+      const provider = getEEHooks().getStorageProvider();
+      if (!provider) return null;
+      const result = await provider.read(filePath);
+      if (!result.success) {
+        logger.error('Failed to read stored object', { path: filePath, error: result.error });
+        return null;
+      }
+      return result.value;
+    },
+    async readRange(start, end) {
+      const provider = getEEHooks().getStorageProvider();
+      if (!provider) return null;
+      const result = provider.readRange
+        ? await provider.readRange(filePath, start, end)
+        : await provider.read(filePath);
+      if (!result.success) {
+        logger.error('Failed to read stored object', { path: filePath, error: result.error });
+        return null;
+      }
+      return provider.readRange ? result.value : result.value.subarray(start, end + 1);
+    },
+  };
 }
 
 export async function readStoredFile(filePath: string): Promise<Buffer | null> {

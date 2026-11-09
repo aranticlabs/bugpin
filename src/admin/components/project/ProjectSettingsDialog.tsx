@@ -31,6 +31,7 @@ import { WidgetDialogSettingsForm } from '../WidgetDialogSettingsForm';
 import type { ThemeColors } from '@shared/types';
 import { WidgetLauncherButtonSettingsForm } from '../WidgetLauncherButtonSettingsForm';
 import { ScreenshotSettingsForm } from '../ScreenshotSettingsForm';
+import { RecordingSettingsForm } from '../RecordingSettingsForm';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -48,6 +49,7 @@ interface ProjectSettingsDialogProps {
     | 'widgetDialog'
     | 'widgetLauncherButton'
     | 'screenshot'
+    | 'recording'
     | 'diagnostics'
     | 'notifications'
     | 'whitelists'
@@ -74,6 +76,9 @@ import type { NotificationDefaultSettings } from '@shared/types';
 
 const UNASSIGNED_VALUE = '__unassigned__';
 
+const hasDefinedValue = (settings: object) =>
+  Object.values(settings).some((value) => value !== undefined);
+
 export function ProjectSettingsDialog({
   project,
   open,
@@ -94,6 +99,10 @@ export function ProjectSettingsDialog({
   // Screenshot settings state
   const [useCustomScreenshot, setUseCustomScreenshot] = useState(false);
   const [screenshotSettings, setScreenshotSettings] = useState<Partial<ScreenshotSettings>>({});
+
+  // Recording settings state
+  const [useCustomRecording, setUseCustomRecording] = useState(false);
+  const [recordingSettings, setRecordingSettings] = useState<Partial<ScreenshotSettings>>({});
 
   const [diagnosticSettings, setDiagnosticSettings] = useState({
     activityCapture: true,
@@ -194,14 +203,23 @@ export function ProjectSettingsDialog({
 
       // Screenshot settings - using new nested structure
       const screenshotConf = projectDetail.settings?.screenshot;
-      const hasCustomScreenshot = screenshotConf && Object.keys(screenshotConf).length > 0;
-      setUseCustomScreenshot(!!hasCustomScreenshot);
-      setScreenshotSettings({
+      const nextScreenshotSettings = {
         useScreenCaptureAPI: screenshotConf?.useScreenCaptureAPI,
         maxScreenshotSize: screenshotConf?.maxScreenshotSize,
         maxImageUploadSizeMb: screenshotConf?.maxImageUploadSizeMb,
+      };
+      const nextRecordingSettings = {
         maxVideoUploadSizeMb: screenshotConf?.maxVideoUploadSizeMb,
-      });
+        maxVideoUploadMbPerDay: screenshotConf?.maxVideoUploadMbPerDay,
+        enableScreenRecording: screenshotConf?.enableScreenRecording,
+        allowRecordingMicrophone: screenshotConf?.allowRecordingMicrophone,
+        maxRecordingDurationSeconds: screenshotConf?.maxRecordingDurationSeconds,
+        recordingQuality: screenshotConf?.recordingQuality,
+      };
+      setUseCustomScreenshot(hasDefinedValue(nextScreenshotSettings));
+      setScreenshotSettings(nextScreenshotSettings);
+      setUseCustomRecording(hasDefinedValue(nextRecordingSettings));
+      setRecordingSettings(nextRecordingSettings);
 
       setDiagnosticSettings({
         activityCapture: projectDetail.settings?.activityCapture ?? true,
@@ -308,12 +326,14 @@ export function ProjectSettingsDialog({
         newSettings.widgetLauncherButton = undefined;
       }
 
-      // Screenshot settings
-      if (useCustomScreenshot && Object.keys(screenshotSettings).length > 0) {
-        newSettings.screenshot = screenshotSettings as ScreenshotSettings;
-      } else {
-        newSettings.screenshot = undefined;
-      }
+      // Screenshot and recording settings are stored together
+      const customCaptureSettings: ScreenshotSettings = {
+        ...(useCustomScreenshot ? screenshotSettings : {}),
+        ...(useCustomRecording ? recordingSettings : {}),
+      };
+      newSettings.screenshot = hasDefinedValue(customCaptureSettings)
+        ? customCaptureSettings
+        : undefined;
 
       newSettings.activityCapture = diagnosticSettings.activityCapture;
       newSettings.consoleCapture = diagnosticSettings.consoleCapture;
@@ -418,6 +438,9 @@ export function ProjectSettingsDialog({
               </TabsTrigger>
               <TabsTrigger value="screenshot" className="justify-start px-3 py-2">
                 Screenshot
+              </TabsTrigger>
+              <TabsTrigger value="recording" className="justify-start px-3 py-2">
+                Recording
               </TabsTrigger>
               <TabsTrigger value="diagnostics" className="justify-start px-3 py-2">
                 Diagnostics
@@ -549,6 +572,18 @@ export function ProjectSettingsDialog({
                   showCustomToggle
                   useCustomSettings={useCustomScreenshot}
                   onCustomToggle={setUseCustomScreenshot}
+                />
+              </TabsContent>
+
+              {/* Recording Tab */}
+              <TabsContent value="recording" className="mt-0">
+                <RecordingSettingsForm
+                  value={recordingSettings}
+                  onChange={setRecordingSettings}
+                  globalSettings={globalSettings}
+                  showCustomToggle
+                  useCustomSettings={useCustomRecording}
+                  onCustomToggle={setUseCustomRecording}
                 />
               </TabsContent>
 

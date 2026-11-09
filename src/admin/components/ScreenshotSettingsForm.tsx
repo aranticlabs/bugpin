@@ -1,8 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import { Label } from './ui/label';
-import { Input } from './ui/input';
+import { SettingsNumberInput } from './SettingsNumberInput';
 import { Switch } from './ui/switch';
-import { Alert, AlertDescription } from './ui/alert';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
 interface ScreenshotSettingsFormProps {
@@ -32,8 +31,6 @@ export function ScreenshotSettingsForm({
     value.maxScreenshotSize ?? globalSettings?.screenshot.maxScreenshotSize ?? 10;
   const effectiveMaxImageUploadSizeMb =
     value.maxImageUploadSizeMb ?? globalSettings?.screenshot.maxImageUploadSizeMb ?? 10;
-  const effectiveMaxVideoUploadSizeMb =
-    value.maxVideoUploadSizeMb ?? globalSettings?.screenshot.maxVideoUploadSizeMb ?? 50;
 
   return (
     <div className="space-y-4">
@@ -53,15 +50,23 @@ export function ScreenshotSettingsForm({
             checked={useCustomSettings}
             onCheckedChange={(checked) => {
               onCustomToggle?.(checked);
-              if (!checked) {
-                // Reset to undefined when switching to global defaults
-                onChange({
-                  useScreenCaptureAPI: undefined,
-                  maxScreenshotSize: undefined,
-                  maxImageUploadSizeMb: undefined,
-                  maxVideoUploadSizeMb: undefined,
-                });
-              }
+              // Turning custom settings on copies the inherited values, so the project keeps
+              // them even when nothing else is changed before saving.
+              onChange(
+                checked
+                  ? {
+                      ...value,
+                      useScreenCaptureAPI: effectiveUseScreenCaptureAPI,
+                      maxScreenshotSize: effectiveMaxScreenshotSize,
+                      maxImageUploadSizeMb: effectiveMaxImageUploadSizeMb,
+                    }
+                  : {
+                      ...value,
+                      useScreenCaptureAPI: undefined,
+                      maxScreenshotSize: undefined,
+                      maxImageUploadSizeMb: undefined,
+                    }
+              );
             }}
           />
         </div>
@@ -73,15 +78,12 @@ export function ScreenshotSettingsForm({
           {/* Max Screenshot Size */}
           <div className="space-y-2">
             <Label htmlFor="max-screenshot-size">Max. Screenshot Size (MB)</Label>
-            <Input
+            <SettingsNumberInput
               id="max-screenshot-size"
-              type="number"
               min={1}
               max={50}
               value={effectiveMaxScreenshotSize}
-              onChange={(e) =>
-                onChange({ ...value, maxScreenshotSize: parseInt(e.target.value) || 10 })
-              }
+              onChange={(sizeMb) => onChange({ ...value, maxScreenshotSize: sizeMb })}
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">
@@ -92,38 +94,16 @@ export function ScreenshotSettingsForm({
           {/* Max Upload File Size */}
           <div className="space-y-2">
             <Label htmlFor="max-image-upload-size">Max. Image Upload Size (MB)</Label>
-            <Input
+            <SettingsNumberInput
               id="max-image-upload-size"
-              type="number"
               min={1}
               max={50}
               value={effectiveMaxImageUploadSizeMb}
-              onChange={(e) =>
-                onChange({ ...value, maxImageUploadSizeMb: parseInt(e.target.value) || 10 })
-              }
+              onChange={(sizeMb) => onChange({ ...value, maxImageUploadSizeMb: sizeMb })}
               disabled={disabled}
             />
             <p className="text-xs text-muted-foreground">
               Maximum allowed size for uploaded images (1-50 MB)
-            </p>
-          </div>
-
-          {/* Max Video Upload File Size */}
-          <div className="space-y-2">
-            <Label htmlFor="max-video-upload-size">Max. Video Upload Size (MB)</Label>
-            <Input
-              id="max-video-upload-size"
-              type="number"
-              min={1}
-              max={500}
-              value={effectiveMaxVideoUploadSizeMb}
-              onChange={(e) =>
-                onChange({ ...value, maxVideoUploadSizeMb: parseInt(e.target.value) || 50 })
-              }
-              disabled={disabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              Maximum allowed size for uploaded videos (1-500 MB)
             </p>
           </div>
 
@@ -143,33 +123,25 @@ export function ScreenshotSettingsForm({
                 disabled={disabled}
               />
             </div>
-            <Alert className="mt-3">
-              <AlertDescription className="text-sm space-y-2">
-                <p>
-                  <strong>Default (DOM Capture):</strong> Captures the page without requiring user
-                  permission. Fast, seamless, and works for most layouts. Does not capture videos,
-                  canvas, or WebGL content accurately.
-                </p>
-                <p>
-                  <strong>Screen Capture API:</strong> Enable for websites (WordPress, Wix, etc.)
-                  that load stylesheets or fonts from external domains (CDNs, Google Fonts, etc.).
-                  These cross-origin resources cannot be captured automatically, resulting in
-                  missing fonts and blank images. Also captures videos, canvas, and WebGL. The
-                  browser will prompt the user for permission before each capture.
-                </p>
-                <p>
-                  <a
-                    href="https://docs.bugpin.io/configuration/widget#screen-capture-api"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
-                    View documentation
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </p>
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>
+                Enable for websites (WordPress, Wix, etc.) that load stylesheets or fonts from
+                external domains (CDNs, Google Fonts, etc.). These cross-origin resources cannot be
+                captured automatically, resulting in missing fonts and blank images. It also shows
+                embedded videos, canvas, and WebGL content correctly in screenshots. The browser
+                will prompt the user for permission before each screenshot. This setting does not
+                affect screen recordings.
+              </p>
+              <a
+                href="https://docs.bugpin.io/widget/configuration#screen-capture-api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                View documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </>
       )}

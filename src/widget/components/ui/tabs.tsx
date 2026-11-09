@@ -16,7 +16,7 @@ interface TabsProps {
 export const Tabs: FunctionComponent<TabsProps> = ({ tabs, activeTab, onTabChange }) => {
   return (
     <div
-      class="inline-flex p-1 bg-muted rounded gap-1"
+      class="inline-flex max-w-full flex-wrap p-1 bg-muted rounded gap-1"
       role="tablist"
       aria-orientation="horizontal"
     >

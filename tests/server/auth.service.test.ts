@@ -7,11 +7,14 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { logger } from '../../src/server/utils/logger';
 import { config } from '../../src/server/config';
 import type { Session, User } from '../../src/shared/types';
+import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
+import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 
 const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
+const originalTwoFactorRepo = { ...twoFactorRepo };
 
 const baseUser: User = {
   id: 'usr_1',
@@ -45,7 +48,8 @@ let deletedUserSessionsExceptId: { userId: string; exceptSessionId: string } | n
 let updatedActivitySessionId: string | null = null;
 let createdSessionPayload: { userId: string; expiresAt: string } | null = null;
 let deletedExpiredCount = 0;
-let createdUserPayload: { email: string } | null = null;
+let createdUserPayload: { email: string; mustChangePassword?: boolean } | null = null;
+let mustChangePasswordUpdate: { id: string; value: boolean } | null = null;
 
 beforeAll(async () => {
   validHash = await Bun.password.hash(validPassword, { algorithm: 'bcrypt', cost: 4 });
@@ -64,6 +68,7 @@ beforeEach(() => {
   createdSessionPayload = null;
   deletedExpiredCount = 0;
   createdUserPayload = null;
+  mustChangePasswordUpdate = null;
 
   // Invalidate settings cache so mocked settingsRepo.getAll takes effect
   settingsCacheService.invalidate();
@@ -75,10 +80,14 @@ beforeEach(() => {
   };
   usersRepo.updatePassword = async (id) => {
     updatedPasswordId = id;
+    return true;
   };
   usersRepo.count = async () => 1;
+  usersRepo.setMustChangePassword = async (id, value) => {
+    mustChangePasswordUpdate = { id, value };
+  };
   usersRepo.create = async (payload) => {
-    createdUserPayload = { email: payload.email };
+    createdUserPayload = { email: payload.email, mustChangePassword: payload.mustChangePassword };
     return { ...baseUser, id: 'usr_admin', email: payload.email };
   };
 
@@ -93,6 +102,7 @@ beforeEach(() => {
   };
   sessionsRepo.deleteByUserId = async (id) => {
     deletedUserSessionsId = id;
+    return 1;
   };
   sessionsRepo.deleteByUserIdExcept = async (userId, exceptSessionId) => {
     deletedUserSessionsExceptId = { userId, exceptSessionId };
@@ -103,7 +113,12 @@ beforeEach(() => {
   settingsRepo.getAll = async () =>
     ({
       sessionMaxAgeDays: 7,
+      twoFactorPolicy: 'off',
+      passwordPolicy: DEFAULT_PASSWORD_POLICY,
     }) as never;
+
+  twoFactorRepo.getTotp = async () => null;
+  twoFactorRepo.countPasskeys = async () => 0;
 
   logger.info = () => undefined;
   logger.warn = () => undefined;
@@ -115,6 +130,7 @@ afterEach(() => {
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);
+  Object.assign(twoFactorRepo, originalTwoFactorRepo);
 });
 
 describe('authService.login', () => {
@@ -122,26 +138,28 @@ describe('authService.login', () => {
     userWithPassword = null;
     const result = await authService.login('missing@example.com', 'password');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_CREDENTIALS');
+    expect(result).toHaveProperty('code', 'INVALID_CREDENTIALS');
   });
 
   it('rejects when user is inactive', async () => {
     userWithPassword = { ...baseUser, isActive: false, passwordHash: validHash };
     const result = await authService.login(baseUser.email, validPassword);
     expect(result.success).toBe(false);
-    expect(result.code).toBe('ACCOUNT_DISABLED');
+    expect(result).toHaveProperty('code', 'ACCOUNT_DISABLED');
   });
 
   it('rejects invalid password', async () => {
     const result = await authService.login(baseUser.email, 'wrong-password');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_CREDENTIALS');
+    expect(result).toHaveProperty('code', 'INVALID_CREDENTIALS');
   });
 
   it('creates a session on success', async () => {
     const result = await authService.login(baseUser.email, validPassword, '127.0.0.1', 'UA');
     expect(result.success).toBe(true);
     if (result.success) {
+      expect(result.value).toHaveProperty('user');
+      if (!('user' in result.value)) throw new Error('Expected a completed login');
       expect(result.value.user).toMatchObject({ id: baseUser.id, email: baseUser.email });
       expect(result.value.user).not.toHaveProperty('passwordHash');
       expect(result.value.session.id).toBe(baseSession.id);
@@ -157,7 +175,7 @@ describe('authService.logout', () => {
     deleteSessionResult = false;
     const result = await authService.logout('sess_missing');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('SESSION_NOT_FOUND');
+    expect(result).toHaveProperty('code', 'SESSION_NOT_FOUND');
   });
 
   it('returns ok when session is deleted', async () => {
@@ -171,21 +189,21 @@ describe('authService.validateSession', () => {
     sessionById = null;
     const result = await authService.validateSession('sess_missing');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_SESSION');
+    expect(result).toHaveProperty('code', 'INVALID_SESSION');
   });
 
   it('deletes session when user is missing', async () => {
     userById = null;
     const result = await authService.validateSession('sess_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('USER_NOT_FOUND');
+    expect(result).toHaveProperty('code', 'USER_NOT_FOUND');
   });
 
   it('rejects inactive users', async () => {
     userById = { ...baseUser, isActive: false };
     const result = await authService.validateSession('sess_1');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('ACCOUNT_DISABLED');
+    expect(result).toHaveProperty('code', 'ACCOUNT_DISABLED');
   });
 
   it('updates session activity on success', async () => {
@@ -200,19 +218,26 @@ describe('authService.changePassword', () => {
     userById = null;
     const result = await authService.changePassword('usr_missing', 'old', 'newpass123');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('USER_NOT_FOUND');
+    expect(result).toHaveProperty('code', 'USER_NOT_FOUND');
   });
 
   it('rejects invalid current password', async () => {
     const result = await authService.changePassword(baseUser.id, 'bad', 'newpass123');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('INVALID_PASSWORD');
+    expect(result).toHaveProperty('code', 'INVALID_PASSWORD');
   });
 
   it('rejects weak passwords', async () => {
     const result = await authService.changePassword(baseUser.id, validPassword, 'short');
     expect(result.success).toBe(false);
-    expect(result.code).toBe('WEAK_PASSWORD');
+    expect(result).toHaveProperty('code', 'WEAK_PASSWORD');
+  });
+
+  it('rejects a new password equal to the current one', async () => {
+    const result = await authService.changePassword(baseUser.id, validPassword, validPassword);
+    expect(result.success).toBe(false);
+    expect(result).toHaveProperty('code', 'PASSWORD_UNCHANGED');
+    expect(updatedPasswordId).toBeNull();
   });
 
   it('updates password and clears sessions', async () => {
@@ -227,7 +252,7 @@ describe('authService.changePassword', () => {
       baseUser.id,
       validPassword,
       'newpass123',
-      'sess_current',
+      'sess_current'
     );
     expect(result.success).toBe(true);
     expect(updatedPasswordId).toBe(baseUser.id);
@@ -249,11 +274,70 @@ describe('authService.bootstrapAdmin', () => {
     }
   });
 
-  it('creates the first admin user', async () => {
+  it('creates the first admin user with a required password change', async () => {
     usersRepo.count = async () => 0;
     const result = await authService.bootstrapAdmin();
     expect(result.success).toBe(true);
     expect(createdUserPayload?.email).toBe(config.adminEmail);
+    expect(createdUserPayload?.mustChangePassword).toBe(true);
+  });
+
+  it('requires a change when the existing admin still uses the initial password', async () => {
+    usersRepo.count = async () => 1;
+    const initialHash = await Bun.password.hash(config.adminPassword, {
+      algorithm: 'bcrypt',
+      cost: 4,
+    });
+    userWithPassword = { ...baseUser, email: config.adminEmail, passwordHash: initialHash };
+
+    await authService.bootstrapAdmin();
+
+    expect(mustChangePasswordUpdate).toEqual({ id: baseUser.id, value: true });
+  });
+
+  it('does not require a change for a new admin in development', async () => {
+    const wasDev = config.isDev;
+    Object.assign(config, { isDev: true });
+    try {
+      usersRepo.count = async () => 0;
+      await authService.bootstrapAdmin();
+      expect(createdUserPayload?.mustChangePassword).toBe(false);
+    } finally {
+      Object.assign(config, { isDev: wasDev });
+    }
+  });
+
+  it('clears a pending change for the admin in development', async () => {
+    const wasDev = config.isDev;
+    Object.assign(config, { isDev: true });
+    try {
+      usersRepo.count = async () => 1;
+      const initialHash = await Bun.password.hash(config.adminPassword, {
+        algorithm: 'bcrypt',
+        cost: 4,
+      });
+      userWithPassword = {
+        ...baseUser,
+        email: config.adminEmail,
+        mustChangePassword: true,
+        passwordHash: initialHash,
+      };
+
+      await authService.bootstrapAdmin();
+
+      expect(mustChangePasswordUpdate).toEqual({ id: baseUser.id, value: false });
+    } finally {
+      Object.assign(config, { isDev: wasDev });
+    }
+  });
+
+  it('leaves the existing admin alone after the initial password was changed', async () => {
+    usersRepo.count = async () => 1;
+    userWithPassword = { ...baseUser, email: config.adminEmail, passwordHash: validHash };
+
+    await authService.bootstrapAdmin();
+
+    expect(mustChangePasswordUpdate).toBeNull();
   });
 });
 

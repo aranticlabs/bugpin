@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { SettingsCacheService } from '../../src/server/services/settings-cache.service';
 import type { ISettingsRepository } from '../../src/server/database/repositories/interfaces';
+import { createAppSettings } from '../fixtures/settings';
 import type { AppSettings } from '../../src/shared/types';
 
 // Mock settings data
 const mockSettings: AppSettings = {
+  ...createAppSettings(),
   appName: 'BugPin Test',
   appUrl: 'http://localhost:3000',
   retentionDays: 90,
@@ -16,12 +18,6 @@ const mockSettings: AppSettings = {
   smtpConfig: {},
   s3Enabled: false,
   s3Config: {},
-  widgetLauncherButton: {} as any,
-  widgetDialog: {} as any,
-  screenshot: {} as any,
-  notifications: {} as any,
-  branding: {} as any,
-  adminButton: {} as any,
 };
 
 describe('SettingsCacheService', () => {

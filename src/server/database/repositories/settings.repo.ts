@@ -1,6 +1,9 @@
+import { DEFAULT_RECORDING_QUALITY } from '@shared/recording-quality';
 import { getDb } from '../database.js';
+import { normalizePasswordPolicy, type PasswordPolicy } from '@shared/password-policy';
 import type {
   AppSettings,
+  TwoFactorPolicy,
   GlobalWidgetLauncherButtonSettings,
   ThemeColors,
   GlobalScreenshotSettings,
@@ -72,6 +75,11 @@ const DEFAULT_SCREENSHOT: GlobalScreenshotSettings = {
   maxScreenshotSize: 10,
   maxImageUploadSizeMb: 10,
   maxVideoUploadSizeMb: 50,
+  maxVideoUploadMbPerDay: 2048,
+  enableScreenRecording: false,
+  allowRecordingMicrophone: false,
+  maxRecordingDurationSeconds: 180,
+  recordingQuality: DEFAULT_RECORDING_QUALITY,
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
@@ -132,6 +140,8 @@ const KEY_MAP: Record<string, string> = {
   invitationExpirationDays: 'invitation_expiration_days',
   updateCheckEnabled: 'update_check_enabled',
   enforceHttps: 'enforce_https',
+  twoFactorPolicy: 'two_factor_policy',
+  passwordPolicy: 'password_policy',
   privacy: 'privacy',
   smtpEnabled: 'smtp_enabled',
   smtpConfig: 'smtp_config',
@@ -230,6 +240,8 @@ export const settingsRepo = {
       updateCheckEnabled: (settings.updateCheckEnabled as boolean) ?? true,
       // Security settings
       enforceHttps: (settings.enforceHttps as boolean) ?? false,
+      twoFactorPolicy: (settings.twoFactorPolicy as TwoFactorPolicy) ?? 'off',
+      passwordPolicy: normalizePasswordPolicy(settings.passwordPolicy as Partial<PasswordPolicy>),
       // Privacy settings
       privacy: {
         ...DEFAULT_PRIVACY,
@@ -250,6 +262,11 @@ export const settingsRepo = {
       screenshot: {
         ...DEFAULT_SCREENSHOT,
         ...(settings.screenshot as Partial<GlobalScreenshotSettings>),
+        maxVideoUploadSizeMb: Math.min(
+          (settings.screenshot as Partial<GlobalScreenshotSettings>)?.maxVideoUploadSizeMb ??
+            DEFAULT_SCREENSHOT.maxVideoUploadSizeMb,
+          100
+        ),
       },
       // Notification defaults
       notifications: {

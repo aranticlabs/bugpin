@@ -8,6 +8,8 @@ const en = {
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
   'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
+  'dialog.tabs.recording': 'Recordings',
+  'dialog.tabs.recordingWithCount': 'Recordings ({count})',
 
   'dialog.fields.title.label': 'Title',
   'dialog.fields.title.placeholder': 'Brief description of the issue',
@@ -48,6 +50,11 @@ const en = {
   'screenCapture.dontShowAgain': "Don't show this again",
   'screenCapture.back': 'Back',
   'screenCapture.confirm': 'Take Screenshot',
+  'screenCapture.confirmRecording': 'Open Recorder',
+  'screenCapture.recording.body':
+    'Your browser will ask what to share. Everything visible will be recorded.',
+  'screenCapture.recording.windowHint':
+    'Choose the window with this page. Other apps may be visible.',
 
   'screenshot.privacyTip':
     'Tip: Use the annotation tool to hide any sensitive data before submitting.',
@@ -66,8 +73,11 @@ const en = {
   'screenshot.action.annotate': 'Annotate',
   'screenshot.action.download': 'Download',
   'screenshot.action.remove': 'Remove',
-  'screenshot.helperText':
-    'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB) - MP4, WebM, MOV, AVI (max {videoSize}MB)',
+  'screenshot.helperText': 'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Low',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'High',
+  'recording.helperText': 'Supported: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Unsupported image format: {type}',
   'screenshot.error.imageTooLarge': 'Image too large. Maximum size is {size}MB.',
@@ -78,9 +88,55 @@ const en = {
   'screenshot.error.captureTooLargeHint':
     'Enabling "Reduce capture quality" or resize the browser window.',
 
+  'recording.record': 'Start Recording',
+  'recording.startShort': 'Start',
+  'recording.start': 'Open Recorder',
+  'recording.microphone': 'Include microphone',
+  'recording.privacyTip': 'Everything visible will be recorded.',
+  'recording.countdown': 'Recording starts in {seconds}',
+  'recording.stop': 'Stop',
+  'recording.discard': 'Discard',
+  'recording.pause': 'Pause',
+  'recording.play': 'Play',
+  'recording.expand': 'Expand video',
+  'recording.resume': 'Resume',
+  'recording.tool.cursor': 'Cursor',
+  'recording.tool.pen': 'Pen',
+  'recording.tool.laser': 'Laser pointer',
+  'recording.tool.clickEffects': 'Click effects',
+  'recording.tool.undo': 'Undo',
+  'recording.tool.clear': 'Clear drawing',
+  'recording.color.red': 'Red',
+  'recording.color.amber': 'Amber',
+  'recording.color.green': 'Green',
+  'recording.color.blue': 'Blue',
+  'recording.color.white': 'White',
+  'recording.warning.wholeScreen': 'You are sharing your whole screen.',
+  'recording.notice.noMicrophone': 'Recording without microphone.',
+  'recording.stopped.duration': 'Recording stopped after {duration}.',
+  'recording.stopped.size': 'Recording stopped at the {size}MB limit.',
+  'recording.recovered': 'Recording saved. Open BugPin to continue.',
+  'recording.error.unavailable': 'Screen recording is not available.',
+  'recording.error.failed': 'Recording failed. Please try again.',
+  'recording.error.empty': 'The recording was empty. Please try again.',
+  'recording.oversized': 'Recording is {size}MB (max. {limit}MB).',
+  'recording.oversizedHint': 'Download it, or record a shorter clip.',
+  'recording.previewUnavailable': 'Preview unavailable.',
+
+  'submit.uploading': 'Uploading {percent}%',
+  'submit.cancelUpload': 'Cancel upload',
+  'submit.error.tooLarge':
+    'The upload is too large for the server. Remove some media and try again.',
+  'submit.error.videoQuota':
+    'Video uploads are paused for this project. Remove the video to submit.',
+  'submit.error.rejected':
+    'The upload was rejected. Your attachments may be too large. Remove or shrink them and try again.',
+  'submit.queued': 'Report saved. It will be sent automatically once the connection is back.',
+
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',
   'toast.error.capture': 'Failed to capture screenshot',
+  'toast.error.draftSave': 'Failed to save the draft. Keep the widget open and try again.',
 
   'annotation.toolbar.select': 'Select',
   'annotation.toolbar.pan': 'Pan (or hold Space)',

@@ -11,6 +11,7 @@ export interface StorageProvider {
   // False while the provider only serves reads and deletes of existing objects
   acceptsUploads(): boolean;
   read(path: string): Promise<Result<Uint8Array>>;
+  readRange?(path: string, start: number, end: number): Promise<Result<Uint8Array>>;
   upload(options: StorageUploadOptions): Promise<Result<StorageUploadResult>>;
   delete(key: string): Promise<Result<void>>;
   exists(key: string): Promise<Result<boolean>>;

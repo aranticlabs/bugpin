@@ -1,69 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { settingsService } from '../../src/server/services/settings.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { createAppSettings } from '../fixtures/settings';
 import type { AppSettings } from '../../src/shared/types';
-
-function createBaseSettings(): AppSettings {
-  const baseColors = {
-    lightButtonColor: '#111111',
-    lightTextColor: '#ffffff',
-    lightButtonHoverColor: '#222222',
-    lightTextHoverColor: '#ffffff',
-    darkButtonColor: '#111111',
-    darkTextColor: '#ffffff',
-    darkButtonHoverColor: '#222222',
-    darkTextHoverColor: '#ffffff',
-  };
-
-  return {
-    appName: 'BugPin',
-    appUrl: 'https://example.com',
-    retentionDays: 90,
-    rateLimitPerMinute: 10,
-    sessionMaxAgeDays: 7,
-    privacy: { euPrivacyMode: false },
-    smtpEnabled: false,
-    smtpConfig: {},
-    s3Enabled: false,
-    s3Config: {},
-    widgetLauncherButton: {
-      position: 'bottom-right',
-      buttonText: 'Report a bug',
-      buttonShape: 'round',
-      buttonIcon: 'bug',
-      buttonIconSize: 24,
-      buttonIconStroke: 2,
-      theme: 'auto',
-      enableHoverScaleEffect: true,
-      tooltipEnabled: true,
-      tooltipText: 'Found a bug?',
-      ...baseColors,
-    },
-    widgetDialog: baseColors,
-    screenshot: {
-      useScreenCaptureAPI: false,
-      maxScreenshotSize: 10,
-    },
-    notifications: {
-      emailEnabled: true,
-      notifyOnNewReport: true,
-      notifyOnStatusChange: true,
-      notifyOnPriorityChange: true,
-      notifyOnAssignment: true,
-      notifyOnDeletion: true,
-    },
-    branding: {
-      primaryColor: '#02658D',
-      logoLightUrl: null,
-      logoDarkUrl: null,
-      iconLightUrl: null,
-      iconDarkUrl: null,
-      faviconLightVersion: 'default',
-      faviconDarkVersion: 'default',
-    },
-    adminButton: baseColors,
-  };
-}
 
 const originalGetAll = settingsRepo.getAll;
 const originalUpdateAll = settingsRepo.updateAll;
@@ -73,7 +12,7 @@ let baseSettings: AppSettings;
 let lastUpdates: Partial<AppSettings> | null;
 
 beforeEach(() => {
-  baseSettings = createBaseSettings();
+  baseSettings = createAppSettings();
   lastUpdates = null;
 
   settingsRepo.getAll = async () => baseSettings;
@@ -120,10 +59,22 @@ describe('settingsService.update', () => {
     expect(retention.success).toBe(false);
     const screenshot = await settingsService.update({ screenshot: { maxScreenshotSize: 0 } });
     expect(screenshot.success).toBe(false);
+    const videoSize = await settingsService.update({
+      screenshot: { maxVideoUploadSizeMb: 101 },
+    });
+    expect(videoSize.success).toBe(false);
     const rateLimit = await settingsService.update({ rateLimitPerMinute: 0 });
     expect(rateLimit.success).toBe(false);
     const sessionMax = await settingsService.update({ sessionMaxAgeDays: 0 });
     expect(sessionMax.success).toBe(false);
+    const videoQuota = await settingsService.update({
+      screenshot: { maxVideoUploadMbPerDay: 1048577 },
+    });
+    expect(videoQuota.success).toBe(false);
+    const recordingDuration = await settingsService.update({
+      screenshot: { maxRecordingDurationSeconds: 9 },
+    });
+    expect(recordingDuration.success).toBe(false);
   });
 
   it('rejects invalid branding color', async () => {
@@ -158,6 +109,21 @@ describe('settingsService.update', () => {
 
     expect(result.success).toBe(true);
     expect(lastUpdates?.privacy).toEqual(privacy);
+  });
+
+  it('passes the two-factor and password policies to the repository', async () => {
+    const passwordPolicy = {
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: false,
+      requireNumber: true,
+      requireSymbol: true,
+    };
+    const result = await settingsService.update({ twoFactorPolicy: 'everyone', passwordPolicy });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.twoFactorPolicy).toBe('everyone');
+    expect(lastUpdates?.passwordPolicy).toEqual(passwordPolicy);
   });
 
   it('persists the global widget language setting', async () => {

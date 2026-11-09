@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
@@ -26,6 +26,7 @@ const baseSession: Session = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
   id: 'rpt_1',
   projectId: 'prj_1',
   source: 'widget',
@@ -98,7 +99,13 @@ beforeEach(() => {
   reportsService.bulkUpdate = async () => Result.ok(2);
   reportsService.createManual = async (body) => {
     createManualPayload = body;
-    return Result.ok({ ...baseReport, ...body, id: 'rpt_new', source: 'manual' });
+    return Result.ok({
+      ...baseReport,
+      ...body,
+      assignedTo: body.assignedTo ?? undefined,
+      id: 'rpt_new',
+      source: 'manual',
+    });
   };
   reportsService.getStats = async () =>
     Result.ok({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } } as never);
@@ -125,8 +132,8 @@ describe('reports routes', () => {
     const res = await app.request(
       'http://localhost/reports?status=open,closed&assignedTo=usr_2&source=manual&limit=10',
       {
-      headers: { cookie: 'session=sess_1' },
-      },
+        headers: { cookie: 'session=sess_1' },
+      }
     );
     expect(res.status).toBe(200);
     expect(listFilter).toMatchObject({
@@ -149,7 +156,7 @@ describe('reports routes', () => {
         priority: 'medium',
         channel: 'email',
         url: 'bugpin.io',
-      }),
+      })
     );
 
     const res = await app.request('http://localhost/reports', {
@@ -164,6 +171,31 @@ describe('reports routes', () => {
       title: 'Manual report',
       channel: 'email',
       url: 'https://bugpin.io',
+    });
+  });
+
+  it('normalizes MIME parameters on manual report files', async () => {
+    const formData = new FormData();
+    formData.append(
+      'data',
+      JSON.stringify({ projectId: 'prj_1', title: 'Manual report', priority: 'medium' })
+    );
+    formData.append(
+      'files',
+      new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])], 'clip.mp4', {
+        type: 'video/mp4;codecs=avc1.64001f',
+      })
+    );
+
+    const res = await createApp().request('http://localhost/reports', {
+      method: 'POST',
+      headers: { cookie: 'session=sess_1' },
+      body: formData,
+    });
+
+    expect(res.status).toBe(201);
+    expect(createManualPayload).toMatchObject({
+      files: [{ mimeType: 'video/mp4' }],
     });
   });
 

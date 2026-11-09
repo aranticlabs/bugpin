@@ -1,12 +1,17 @@
-import { getEEProjectLicenseService } from '../../src/server/utils/ee';
-const projectLicenseService = getEEProjectLicenseService()!;
+import * as projectLicense from '../../src/server/utils/project-license';
 import { Result } from '../../src/server/utils/result';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn, type Mock } from 'bun:test';
 import { usersService } from '../../src/server/services/users.service';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import type { Project, User } from '../../src/shared/types';
+import { passwordPolicyService } from '../../src/server/services/password-policy.service';
+import { twoFactorRepo } from '../../src/server/database/repositories/two-factor.repo';
+import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
+
+const originalPasswordPolicyService = { ...passwordPolicyService };
+const originalTwoFactorRepo = { ...twoFactorRepo };
 
 const baseUser: User = {
   id: 'usr_1',
@@ -22,7 +27,7 @@ const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalHash = Bun.password.hash;
-const originalCheckAccess = projectLicenseService.checkAccess;
+let checkAccess: Mock<typeof projectLicense.checkProjectLicense>;
 
 let lastCreateInput: unknown;
 let lastUpdateInput: unknown;
@@ -35,7 +40,9 @@ let usersByRole: User[] = [baseUser];
 let projects: Project[] = [];
 
 beforeEach(() => {
-  projectLicenseService.checkAccess = () => Result.ok(undefined);
+  passwordPolicyService.getPolicy = async () => DEFAULT_PASSWORD_POLICY;
+  twoFactorRepo.listUserIdsWithTwoFactor = async () => new Set(['usr_1']);
+  checkAccess = spyOn(projectLicense, 'checkProjectLicense').mockReturnValue(Result.ok(undefined));
   lastCreateInput = undefined;
   lastUpdateInput = undefined;
   deletedUserId = null;
@@ -80,11 +87,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(passwordPolicyService, originalPasswordPolicyService);
+  Object.assign(twoFactorRepo, originalTwoFactorRepo);
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Bun.password.hash = originalHash;
-  projectLicenseService.checkAccess = originalCheckAccess;
+  checkAccess.mockRestore();
 });
 
 describe('usersService.create', () => {
@@ -393,6 +402,7 @@ describe('usersService lookups', () => {
     if (result.success) {
       expect(result.value.length).toBe(1);
       expect(result.value[0].defaultProjects).toEqual([{ id: 'prj_1', name: 'Alpha' }]);
+      expect(result.value[0].twoFactorEnabled).toBe(true);
     }
   });
 
@@ -403,7 +413,7 @@ describe('usersService lookups', () => {
 });
 
 it('rejects changing or clearing defaults on a locked project before any user or project writes', async () => {
-  projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+  checkAccess.mockReturnValue(Result.fail('Locked', 'PROJECT_NOT_LICENSED'));
   let writes = 0;
   projectsRepo.update = async () => {
     writes++;

@@ -118,6 +118,7 @@ export function IntegrationDialog({
   const [assigneesError, setAssigneesError] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [fileTransferMode, setFileTransferMode] = useState<'link' | 'upload'>('link');
+  const [publicVideoLinks, setPublicVideoLinks] = useState(false);
   const [syncMode, setSyncMode] = useState<GitHubSyncMode>('manual');
   const [showSyncDialog, setShowSyncDialog] = useState(false);
   const [pendingUnsyncedCount, setPendingUnsyncedCount] = useState(0);
@@ -142,6 +143,7 @@ export function IntegrationDialog({
         setEnableLabels(hasLabels);
         setEnableAssignees(hasAssignees);
         setFileTransferMode(config.fileTransferMode || 'link');
+        setPublicVideoLinks(config.publicVideoLinks === true);
         setSyncMode(config.syncMode || 'manual');
 
         // Auto-fetch labels and assignees for editing when toggles are enabled
@@ -180,6 +182,7 @@ export function IntegrationDialog({
         setEnableLabels(false);
         setEnableAssignees(false);
         setFileTransferMode('link');
+        setPublicVideoLinks(false);
         setSyncMode('manual');
       }
       setRepositories([]);
@@ -349,6 +352,7 @@ export function IntegrationDialog({
       labels: selectedLabels.length > 0 ? selectedLabels : undefined,
       assignees: selectedAssignees.length > 0 ? selectedAssignees : undefined,
       fileTransferMode,
+      ...(publicVideoLinks ? { publicVideoLinks: true } : {}),
     };
 
     try {
@@ -746,6 +750,20 @@ export function IntegrationDialog({
                     or <code className="px-1 py-0.5 bg-muted rounded">repo</code> scope (classic).
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2 border rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="public-video-links">Public video links</Label>
+                  <Switch
+                    id="public-video-links"
+                    checked={publicVideoLinks}
+                    onCheckedChange={setPublicVideoLinks}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  Anyone with the link can watch videos attached to GitHub issues.
+                </p>
               </div>
 
               {/* Automatic Sync Toggle */}

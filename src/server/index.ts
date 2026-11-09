@@ -8,6 +8,7 @@ import { initDefaultBrandingUrls } from './storage/files.js';
 import { initializeEE } from './utils/ee.js';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
+import { MAX_REQUEST_BODY_SIZE } from './utils/request-limits.js';
 
 async function main(): Promise<void> {
   logger.info('Starting BugPin server...');
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
 
   const server = Bun.serve({
     idleTimeout: 60,
+    maxRequestBodySize: MAX_REQUEST_BODY_SIZE,
     port: config.port,
     hostname: config.host,
     fetch: app.fetch,

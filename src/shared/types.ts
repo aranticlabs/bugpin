@@ -1,3 +1,7 @@
+import type { RecordingQuality } from './recording-quality';
+import type { MediaMetadata } from './media-metadata';
+import type { PasswordPolicy } from './password-policy';
+
 // Locale Types
 
 export type LocaleCode = 'en' | 'de' | 'fr' | 'nl' | 'es' | 'it' | 'ja' | 'zh';
@@ -225,6 +229,11 @@ export interface ScreenshotSettings {
   maxScreenshotSize?: number;
   maxImageUploadSizeMb?: number;
   maxVideoUploadSizeMb?: number;
+  maxVideoUploadMbPerDay?: number;
+  enableScreenRecording?: boolean;
+  allowRecordingMicrophone?: boolean;
+  maxRecordingDurationSeconds?: number;
+  recordingQuality?: RecordingQuality;
 }
 
 // Project language settings
@@ -316,12 +325,36 @@ export interface User {
   avatarUrl?: string;
   role: UserRole;
   isActive: boolean;
+  mustChangePassword?: boolean;
+  passwordChangedAt?: string;
+  /** True when the user has a confirmed authenticator app or at least one passkey */
+  twoFactorEnabled?: boolean;
+  /** True when the two-factor policy covers the user and no second factor is set up yet */
+  twoFactorSetupRequired?: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
   invitationSentAt?: string;
   invitationAcceptedAt?: string;
   defaultProjects?: DefaultProjectReference[];
+}
+
+export type TwoFactorPolicy = 'off' | 'admins' | 'everyone';
+
+export interface Passkey {
+  id: string;
+  name: string;
+  backedUp: boolean;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export interface TwoFactorStatus {
+  totpEnabled: boolean;
+  passkeys: Passkey[];
+  recoveryCodesRemaining: number;
+  policy: TwoFactorPolicy;
+  setupRequired: boolean;
 }
 
 export interface Session {
@@ -336,7 +369,7 @@ export interface Session {
 
 // File Types
 
-export interface FileRecord {
+export interface FileRecord extends MediaMetadata {
   id: string;
   reportId: string;
   type: FileType;
@@ -344,8 +377,6 @@ export interface FileRecord {
   path: string;
   mimeType: string;
   sizeBytes: number;
-  width?: number;
-  height?: number;
   createdAt: string;
 }
 
@@ -374,6 +405,8 @@ export interface Webhook {
   createdAt: string;
   updatedAt: string;
 }
+
+export type WebhookResponse = Omit<Webhook, 'secret'> & { secretSet: boolean };
 
 // API Request/Response Types
 
@@ -492,6 +525,11 @@ export interface GlobalScreenshotSettings {
   maxScreenshotSize: number;
   maxImageUploadSizeMb: number;
   maxVideoUploadSizeMb: number;
+  maxVideoUploadMbPerDay: number;
+  enableScreenRecording: boolean;
+  allowRecordingMicrophone: boolean;
+  maxRecordingDurationSeconds: number;
+  recordingQuality: RecordingQuality;
 }
 
 // Settings Types
@@ -507,6 +545,8 @@ export interface AppSettings {
   updateCheckEnabled: boolean;
   // Security settings
   enforceHttps: boolean;
+  twoFactorPolicy: TwoFactorPolicy;
+  passwordPolicy: PasswordPolicy;
   // Privacy settings
   privacy: PrivacySettings;
   // SMTP settings
@@ -574,6 +614,7 @@ export interface GitHubIntegrationConfig {
   webhookId?: string; // GitHub webhook ID for bi-directional sync
   webhookSecret?: string; // Secret for verifying GitHub webhook payloads
   fileTransferMode?: 'link' | 'upload'; // 'link' (default) or 'upload' files to GitHub repo
+  publicVideoLinks?: boolean;
 }
 
 export interface JiraIntegrationConfig {

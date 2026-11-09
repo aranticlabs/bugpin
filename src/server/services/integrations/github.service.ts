@@ -13,6 +13,7 @@ export interface GitHubConfig {
   labels?: string[];
   assignees?: string[];
   fileTransferMode?: 'link' | 'upload';
+  publicVideoLinks?: boolean;
 }
 
 export interface GitHubIssueResult {
@@ -51,7 +52,7 @@ export async function createGitHubIssue(
     }
 
     // Build issue body
-    const body = await buildIssueBody(report, uploadResult);
+    const body = await buildIssueBody(report, githubConfig, uploadResult);
 
     // Merge labels and assignees
     const labels = [...(githubConfig.labels || []), ...(options?.labels || [])];
@@ -279,6 +280,7 @@ async function uploadReportFiles(
 
 async function buildIssueBody(
   report: ReportWithFiles,
+  githubConfig: GitHubConfig,
   uploadResult?: UploadFilesResult
 ): Promise<string> {
   const uploadedUrls = uploadResult?.uploadedUrls;
@@ -425,11 +427,11 @@ ${metadata.userActivity
         if (githubUrl) {
           body += `\n${githubFileMarkdown(screenshot.filename, githubUrl, screenshot.mimeType.startsWith('image/'))}\n`;
         } else if (screenshot.mimeType.startsWith('video/')) {
-          const videoUrl = appUrl
-            ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
-            : '';
-          if (videoUrl) {
+          if (githubConfig.publicVideoLinks === true && appUrl) {
+            const videoUrl = `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`;
             body += `\n[${screenshot.filename}](${videoUrl}) _(Video)_\n`;
+          } else if (reportUrl) {
+            body += `\n[Video attached: ${screenshot.filename}](${reportUrl})\n`;
           }
         } else {
           const imageUrl = appUrl
@@ -456,11 +458,11 @@ ${metadata.userActivity
         if (githubUrl) {
           body += `\n${githubFileMarkdown(attachment.filename, githubUrl, attachment.mimeType.startsWith('image/'))}\n`;
         } else if (attachment.mimeType.startsWith('video/')) {
-          const videoUrl = appUrl
-            ? `${appUrl}/api/public/files/${report.id}/${attachment.filename}`
-            : '';
-          if (videoUrl) {
+          if (githubConfig.publicVideoLinks === true && appUrl) {
+            const videoUrl = `${appUrl}/api/public/files/${report.id}/${attachment.filename}`;
             body += `\n[${attachment.filename}](${videoUrl}) _(Video)_\n`;
+          } else if (reportUrl) {
+            body += `\n[Video attached: ${attachment.filename}](${reportUrl})\n`;
           }
         } else {
           const fileUrl = appUrl
@@ -712,7 +714,7 @@ export async function updateGitHubIssue(
     }
 
     // Build updated issue body
-    const body = await buildIssueBody(report, uploadResult);
+    const body = await buildIssueBody(report, githubConfig, uploadResult);
 
     // Map report status to GitHub issue state
     const state = report.status === 'resolved' || report.status === 'closed' ? 'closed' : 'open';

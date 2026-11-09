@@ -1,14 +1,17 @@
-import { getEELicenseService } from '../../src/server/utils/ee';
-const licenseService = getEELicenseService()!;
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'bun:test';
-import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import * as ee from '../../src/server/utils/ee';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, spyOn, type Mock } from 'bun:test';
+import {
+  settingsRepo,
+  DEFAULT_BRANDING,
+  DEFAULT_ADMIN_BUTTON,
+} from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
 
 let brandingService: typeof import('../../src/server/services/branding.service').brandingService;
 
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
-const originalHasFeature = licenseService.hasFeature;
+let hasFeature: Mock<typeof ee.hasEEFeature>;
 
 let updateNestedCalls: Array<{ key: string; payload: unknown }> = [];
 
@@ -18,12 +21,12 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  licenseService.hasFeature = () => true;
+  hasFeature = spyOn(ee, 'hasEEFeature').mockReturnValue(true);
   updateNestedCalls = [];
 
   settingsRepo.updateNested = async (key, payload) => {
     updateNestedCalls.push({ key, payload });
-    return true;
+    return settingsRepo.getAll();
   };
   settingsRepo.getAll = async () =>
     ({
@@ -65,7 +68,7 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);
-  licenseService.hasFeature = originalHasFeature;
+  hasFeature.mockRestore();
 });
 
 describe('brandingService.getBrandingConfig', () => {
@@ -77,13 +80,29 @@ describe('brandingService.getBrandingConfig', () => {
     }
   });
 
+  it('uses default branding without a license and preserves saved customization', async () => {
+    hasFeature.mockReturnValue(false);
+    const settings = await settingsRepo.getAll();
+    const snapshot = structuredClone(settings);
+    settingsRepo.getAll = async () => settings;
+    const result = await brandingService.getBrandingConfig();
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.primaryColor).toBe(DEFAULT_BRANDING.primaryColor);
+      expect(result.value.logoLightUrl).toBeNull();
+      expect(result.value.adminThemeColors).toEqual(DEFAULT_ADMIN_BUTTON);
+      expect(result.value.widgetPrimaryColors).toEqual(settings.widgetDialog);
+    }
+    expect(settings).toEqual(snapshot);
+  });
+
   it('returns GET_FAILED when settings fetch throws', async () => {
     settingsRepo.getAll = async () => {
       throw new Error('boom');
     };
     const result = await brandingService.getBrandingConfig();
     expect(result.success).toBe(false);
-    expect(result.code).toBe('GET_FAILED');
+    expect(result).toHaveProperty('code', 'GET_FAILED');
   });
 });
 
@@ -105,6 +124,6 @@ describe('brandingService.updateWidgetPrimaryColors', () => {
     };
     const result = await brandingService.updateWidgetPrimaryColors({ lightButtonColor: '#112233' });
     expect(result.success).toBe(false);
-    expect(result.code).toBe('UPDATE_FAILED');
+    expect(result).toHaveProperty('code', 'UPDATE_FAILED');
   });
 });
