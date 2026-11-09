@@ -45,6 +45,7 @@ Capture screenshots, record the screen, and annotate issues from any page on you
 - **Automated Metadata Collection** - Failed network requests (4xx, 5xx), console errors, and OS/browser/device info captured automatically
 - **Offline Support** - Reports are buffered and sent when back online
 - **Self-Hosted** - Your data stays on your servers
+- **Reporter Portal** - Email sign-in, private feedback history, conversations and progress tracking; see the [setup and deployment guide](docs/reporter-portal.md)
 - **Multi-Project** - Manage multiple projects with separate API keys
 - **Multilingual Widget** - Widget and reporter emails translated into 8 languages, with per-project language settings
 - **Export Diagnostics** - Export a report's full context as Markdown, plain text, an AI prompt, or JSON, with section toggles and redactions
@@ -72,6 +73,8 @@ services:
       - '7300:7300'
     volumes:
       - ./data:/data
+    environment:
+      TRUST_PROXY: 'false'
 ```
 
 Then run:
