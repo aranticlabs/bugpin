@@ -85,7 +85,7 @@ describe('settings routes', () => {
       success: true,
       appUrl: 'https://bugs.example.com',
       requestOrigin: 'http://bugs.example.com',
-      forwardedHeadersIgnored: true,
+      requiredTrustProxy: 'true',
     });
   });
 

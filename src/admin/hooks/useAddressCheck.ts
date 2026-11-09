@@ -15,7 +15,7 @@ interface AddressCheckResponse {
   success: boolean;
   appUrl: string;
   requestOrigin: string | null;
-  forwardedHeadersIgnored: boolean;
+  requiredTrustProxy: 'auto' | 'true' | null;
 }
 
 export interface AppUrlMismatch {
@@ -26,7 +26,7 @@ export interface AppUrlMismatch {
 export interface ProxyMismatch {
   requestOrigin: string | null;
   browserOrigin: string;
-  forwardedHeadersIgnored: boolean;
+  requiredTrustProxy: 'auto' | 'true' | null;
 }
 
 function toOrigin(url: string): string | null {
@@ -76,7 +76,7 @@ export function useAddressCheck() {
       ? {
           requestOrigin: query.data.requestOrigin,
           browserOrigin,
-          forwardedHeadersIgnored: query.data.forwardedHeadersIgnored,
+          requiredTrustProxy: query.data.requiredTrustProxy,
         }
       : null;
 
@@ -85,7 +85,7 @@ export function useAddressCheck() {
     ? `${appUrlMismatch.configuredOrigin}|${appUrlMismatch.browserOrigin}`
     : null;
   const proxyId = proxyMismatch
-    ? `${proxyMismatch.requestOrigin}|${proxyMismatch.browserOrigin}|${proxyMismatch.forwardedHeadersIgnored}`
+    ? `${proxyMismatch.requestOrigin}|${proxyMismatch.browserOrigin}|${proxyMismatch.requiredTrustProxy}`
     : null;
 
   const dismissAppUrlMismatch = () => {

@@ -537,7 +537,7 @@ export const handlers = [
       success: true,
       appUrl: '',
       requestOrigin: new URL(request.url).origin,
-      forwardedHeadersIgnored: false,
+      requiredTrustProxy: null,
     });
   }),
 

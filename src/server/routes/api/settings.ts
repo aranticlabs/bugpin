@@ -14,7 +14,7 @@ import {
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { requireEEFeature, hasEEFeature } from '../../utils/ee.js';
-import { getEffectiveOrigin, ignoresForwardedHeaders } from '../../utils/client-ip.js';
+import { getEffectiveOrigin, requiredTrustProxy } from '../../utils/client-ip.js';
 import type { EmailTemplateType } from '@shared/types';
 
 // Email template routes require 'custom-templates' EE feature
@@ -34,7 +34,7 @@ settings.get('/address-check', authorize(['admin']), async (c) => {
     success: true,
     appUrl,
     requestOrigin: getEffectiveOrigin(c),
-    forwardedHeadersIgnored: ignoresForwardedHeaders(c),
+    requiredTrustProxy: requiredTrustProxy(c),
   });
 });
 

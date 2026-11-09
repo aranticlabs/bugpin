@@ -14,7 +14,7 @@ const BROWSER_ORIGIN = window.location.origin;
 interface AddressCheckBody {
   appUrl?: string;
   requestOrigin?: string | null;
-  forwardedHeadersIgnored?: boolean;
+  requiredTrustProxy?: 'auto' | 'true' | null;
 }
 
 let addressCheckRequests = 0;
@@ -27,7 +27,7 @@ function mockAddressCheck(overrides: AddressCheckBody = {}) {
         success: true,
         appUrl: '',
         requestOrigin: BROWSER_ORIGIN,
-        forwardedHeadersIgnored: false,
+        requiredTrustProxy: null,
         ...overrides,
       });
     })
@@ -87,7 +87,7 @@ describe('AddressNotice', () => {
 
   it('warns about TRUST_PROXY when forwarded headers are ignored', async () => {
     mockUserRole('admin');
-    mockAddressCheck({ requestOrigin: 'http://bugpin:7300', forwardedHeadersIgnored: true });
+    mockAddressCheck({ requestOrigin: 'http://bugpin:7300', requiredTrustProxy: 'auto' });
 
     renderWithProviders(<AddressNotice />);
 
@@ -99,6 +99,20 @@ describe('AddressNotice', () => {
       'href',
       'https://docs.bugpin.io/installation/reverse-proxy#client-ip-addresses-and-trust_proxy'
     );
+  });
+
+  it('asks for TRUST_PROXY=true when the proxy connects from a public address', async () => {
+    mockUserRole('admin');
+    mockAddressCheck({ requestOrigin: 'http://bugpin:7300', requiredTrustProxy: 'true' });
+
+    renderWithProviders(<AddressNotice />);
+
+    expect(
+      await screen.findByText('BugPin is behind a reverse proxy but ignores its forwarded headers.')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Set TRUST_PROXY=true/)).toBeInTheDocument();
+    expect(screen.getByText(/trusts every connecting client/)).toBeInTheDocument();
+    expect(screen.queryByText(/Set TRUST_PROXY=auto/)).not.toBeInTheDocument();
   });
 
   it('warns about proxy headers when the request origin differs', async () => {
@@ -135,7 +149,7 @@ describe('AddressNotice', () => {
     mockAddressCheck({
       appUrl: 'https://old.example.com',
       requestOrigin: 'http://bugpin:7300',
-      forwardedHeadersIgnored: true,
+      requiredTrustProxy: 'auto',
     });
 
     renderWithProviders(<AddressNotice />);
@@ -162,7 +176,7 @@ describe('AddressNotice', () => {
     mockAddressCheck({
       appUrl: 'https://old.example.com',
       requestOrigin: 'http://bugpin:7300',
-      forwardedHeadersIgnored: true,
+      requiredTrustProxy: 'auto',
     });
 
     const before = Date.now();
@@ -196,7 +210,7 @@ describe('AddressNotice', () => {
     mockAddressCheck({
       appUrl: 'https://old.example.com',
       requestOrigin: 'http://bugpin:7300',
-      forwardedHeadersIgnored: true,
+      requiredTrustProxy: 'auto',
     });
 
     renderWithProviders(<AddressNotice />);

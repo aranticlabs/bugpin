@@ -90,15 +90,19 @@ export function getEffectiveOrigin(c: Context): string | null {
 }
 
 /**
- * Whether the request carries forwarded headers from a peer that TRUST_PROXY does not
- * trust: the usual sign of a reverse proxy in front of an instance configured for direct
- * access.
+ * The TRUST_PROXY value that would make BugPin honor this request's forwarded headers, or
+ * null when it already honors them or the request carries none. Ignored forwarded headers
+ * are the usual sign of a reverse proxy in front of an instance that does not trust it: a
+ * proxy on a private network only needs `auto`, one with a public address needs `true`.
  */
-export function ignoresForwardedHeaders(c: Context): boolean {
-  if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) return false;
-  return ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'].some(
+export function requiredTrustProxy(c: Context): 'auto' | 'true' | null {
+  const peer = getSocketAddress(c);
+  if (peerIsTrustedProxy(peer, config.trustProxy)) return null;
+  const hasForwardedHeaders = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'].some(
     (header) => c.req.header(header) !== undefined
   );
+  if (!hasForwardedHeaders) return null;
+  return peer !== undefined && isPrivateAddress(peer) ? 'auto' : 'true';
 }
 
 /**

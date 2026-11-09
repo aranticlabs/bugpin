@@ -73,28 +73,43 @@ export function AddressNotice() {
           onSnooze={snoozeAppUrlMismatch}
           onDismiss={dismissAppUrlMismatch}
         >
-          Links in emails and GitHub issues use the Application URL, and BugPin 2.0 only accepts
-          changes made from it.{' '}
+          Links in emails and GitHub issues use the Application URL, and future BugPin versions only
+          accept changes made from it.{' '}
           <Link to="/settings" className={linkClass}>
             Open Settings
           </Link>
         </Notice>
       )}
 
-      {proxyMismatch && proxyMismatch.forwardedHeadersIgnored && (
+      {proxyMismatch && proxyMismatch.requiredTrustProxy === 'auto' && (
         <Notice
           title="BugPin is behind a reverse proxy but ignores its forwarded headers."
           dismissLabel="Dismiss reverse proxy warning"
           onSnooze={snoozeProxyMismatch}
           onDismiss={dismissProxyMismatch}
         >
-          TRUST_PROXY does not trust the proxy, so all visitors share one rate limit, and BugPin 2.0
-          relies on the forwarded host and protocol. Set TRUST_PROXY=auto and recreate the
-          container. <GuideLink href={TRUST_PROXY_GUIDE_URL} />
+          TRUST_PROXY does not trust the proxy, so all visitors share one rate limit, and future
+          BugPin versions rely on the forwarded host and protocol. Set TRUST_PROXY=auto and recreate
+          the container. <GuideLink href={TRUST_PROXY_GUIDE_URL} />
         </Notice>
       )}
 
-      {proxyMismatch && !proxyMismatch.forwardedHeadersIgnored && (
+      {proxyMismatch && proxyMismatch.requiredTrustProxy === 'true' && (
+        <Notice
+          title="BugPin is behind a reverse proxy but ignores its forwarded headers."
+          dismissLabel="Dismiss reverse proxy warning"
+          onSnooze={snoozeProxyMismatch}
+          onDismiss={dismissProxyMismatch}
+        >
+          The proxy connects from a public address, which TRUST_PROXY does not trust, so all
+          visitors share one rate limit, and future BugPin versions rely on the forwarded host and
+          protocol. Set TRUST_PROXY=true and recreate the container, but only if BugPin can be
+          reached through the proxy alone: this setting trusts every connecting client.{' '}
+          <GuideLink href={TRUST_PROXY_GUIDE_URL} />
+        </Notice>
+      )}
+
+      {proxyMismatch && proxyMismatch.requiredTrustProxy === null && (
         <Notice
           title={
             proxyMismatch.requestOrigin ? (
@@ -111,7 +126,7 @@ export function AddressNotice() {
           onDismiss={dismissProxyMismatch}
         >
           Configure your reverse proxy to pass the original Host and X-Forwarded-Proto headers.
-          BugPin 2.0 relies on them for HTTPS redirects and request checks.{' '}
+          Future BugPin versions rely on them for HTTPS redirects and request checks.{' '}
           <GuideLink href={REVERSE_PROXY_GUIDE_URL} />
         </Notice>
       )}

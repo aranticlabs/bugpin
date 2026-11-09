@@ -3,7 +3,7 @@ import { config } from '../../../src/server/config';
 import {
   getClientIp,
   getEffectiveOrigin,
-  ignoresForwardedHeaders,
+  requiredTrustProxy,
   isPrivateAddress,
   rateLimitAddress,
   type TrustProxyMode,
@@ -147,7 +147,7 @@ describe('request origin', () => {
     setTrustProxy('auto');
     const c = createContext({ peer: '203.0.113.7', headers: { host: 'bugs.example.com:7300' } });
     expect(getEffectiveOrigin(c)).toBe('http://bugs.example.com:7300');
-    expect(ignoresForwardedHeaders(c)).toBe(false);
+    expect(requiredTrustProxy(c)).toBe(null);
   });
 
   it('honors forwarded host and protocol from a trusted proxy', () => {
@@ -157,7 +157,7 @@ describe('request origin', () => {
       headers: { ...proxied, 'x-forwarded-proto': 'https' },
     });
     expect(getEffectiveOrigin(c)).toBe('https://bugs.example.com');
-    expect(ignoresForwardedHeaders(c)).toBe(false);
+    expect(requiredTrustProxy(c)).toBe(null);
   });
 
   it('ignores forwarded host and protocol when no proxy is trusted', () => {
@@ -167,7 +167,7 @@ describe('request origin', () => {
       headers: { ...proxied, 'x-forwarded-proto': 'https' },
     });
     expect(getEffectiveOrigin(c)).toBe('http://bugpin:7300');
-    expect(ignoresForwardedHeaders(c)).toBe(true);
+    expect(requiredTrustProxy(c)).toBe('auto');
   });
 
   it('ignores forwarded headers from a public peer in auto mode', () => {
@@ -177,7 +177,7 @@ describe('request origin', () => {
       headers: { host: 'bugs.example.com', 'x-forwarded-for': '198.51.100.1' },
     });
     expect(getEffectiveOrigin(c)).toBe('http://bugs.example.com');
-    expect(ignoresForwardedHeaders(c)).toBe(true);
+    expect(requiredTrustProxy(c)).toBe('true');
   });
 
   it('trusts forwarded headers from any peer when always trusting', () => {
@@ -187,7 +187,25 @@ describe('request origin', () => {
       headers: { ...proxied, 'x-forwarded-proto': 'https' },
     });
     expect(getEffectiveOrigin(c)).toBe('https://bugs.example.com');
-    expect(ignoresForwardedHeaders(c)).toBe(false);
+    expect(requiredTrustProxy(c)).toBe(null);
+  });
+
+  it('asks for auto when a private proxy is not trusted at all', () => {
+    setTrustProxy('never');
+    const c = createContext({ peer: '10.0.0.5', headers: { 'x-forwarded-proto': 'https' } });
+    expect(requiredTrustProxy(c)).toBe('auto');
+  });
+
+  it('asks for true when a public proxy is not trusted', () => {
+    setTrustProxy('never');
+    const c = createContext({ peer: '203.0.113.7', headers: { 'x-forwarded-proto': 'https' } });
+    expect(requiredTrustProxy(c)).toBe('true');
+  });
+
+  it('asks for nothing when an untrusted peer sends no forwarded headers', () => {
+    setTrustProxy('never');
+    const c = createContext({ peer: '203.0.113.7', headers: { host: 'bugs.example.com' } });
+    expect(requiredTrustProxy(c)).toBeNull();
   });
 
   it('returns null for an unknown forwarded protocol or a malformed host', () => {
