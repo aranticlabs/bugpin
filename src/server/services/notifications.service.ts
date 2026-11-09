@@ -5,10 +5,11 @@ import {
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
+import { reporterCorrespondenceService } from './reporter-correspondence.service.js';
+import type { ReporterEmailOptions } from './email.service.js';
 import { emailService } from './email.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
-import { isValidEmail } from '../utils/validators.js';
 import type {
   NotificationDefaultSettings,
   NotificationPreferences,
@@ -92,16 +93,15 @@ interface ReporterContext {
   project: Project;
   settings: AppSettings;
   effective: ReporterNotificationSettings;
+  recipient: string;
+  correspondence: ReporterEmailOptions;
 }
 
 async function getReporterContext(
   report: Report,
-  flag: keyof ReporterNotificationSettings
+  flag: keyof ReporterNotificationSettings,
+  source?: 'confirmation' | 'invitation'
 ): Promise<ReporterContext | null> {
-  if (!report.reporterEmail || !isValidEmail(report.reporterEmail)) {
-    return null;
-  }
-
   const project = await projectsRepo.findById(report.projectId);
   if (!project) {
     logger.error('Project not found for reporter notification', { projectId: report.projectId });
@@ -114,7 +114,19 @@ async function getReporterContext(
     return null;
   }
 
-  return { project, settings, effective };
+  const correspondence = reporterCorrespondenceService.prepare(report, project, settings, source);
+  if (!correspondence.success) {
+    logger.warn('Could not prepare reporter email', { reportId: report.id });
+    return null;
+  }
+  if (!correspondence.value) return null;
+  return {
+    project,
+    settings,
+    effective,
+    recipient: correspondence.value.recipient,
+    correspondence: correspondence.value.options,
+  };
 }
 
 // Service
@@ -596,20 +608,21 @@ export const notificationsService = {
    */
   async notifyReporterSubmission(report: Report): Promise<void> {
     try {
-      const ctx = await getReporterContext(report, 'notifyOnNewReport');
+      const ctx = await getReporterContext(report, 'notifyOnNewReport', 'confirmation');
       if (!ctx) return;
 
-      const result = await emailService.sendReporterConfirmationEmail(report.reporterEmail!, {
+      const result = await emailService.sendReporterConfirmationEmail(ctx.recipient, {
         report,
         projectName: ctx.project.name,
         appName: ctx.settings.appName || 'BugPin',
         appUrl: ctx.settings.appUrl || '',
+        correspondence: ctx.correspondence,
       });
 
       if (result.success) {
         logger.info('Reporter submission confirmation sent', {
           reportId: report.id,
-          reporterEmail: report.reporterEmail,
+          reporterEmail: ctx.recipient,
         });
       } else {
         logger.warn('Reporter submission confirmation failed', {
@@ -620,7 +633,7 @@ export const notificationsService = {
     } catch (error) {
       logger.error('Failed to send reporter submission confirmation', {
         reportId: report.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Reporter email delivery failed',
       });
     }
   },
@@ -637,11 +650,12 @@ export const notificationsService = {
       const ctx = await getReporterContext(report, 'notifyOnStatusChange');
       if (!ctx) return;
 
-      const result = await emailService.sendReporterStatusChangeEmail(report.reporterEmail!, {
+      const result = await emailService.sendReporterStatusChangeEmail(ctx.recipient, {
         report,
         projectName: ctx.project.name,
         appName: ctx.settings.appName || 'BugPin',
         appUrl: ctx.settings.appUrl || '',
+        correspondence: ctx.correspondence,
         oldStatus,
         newStatus,
       });
@@ -649,7 +663,7 @@ export const notificationsService = {
       if (result.success) {
         logger.info('Reporter status change notification sent', {
           reportId: report.id,
-          reporterEmail: report.reporterEmail,
+          reporterEmail: ctx.recipient,
         });
       } else {
         logger.warn('Reporter status change notification failed', {
@@ -660,7 +674,7 @@ export const notificationsService = {
     } catch (error) {
       logger.error('Failed to send reporter status change notification', {
         reportId: report.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Reporter email delivery failed',
       });
     }
   },
@@ -690,11 +704,12 @@ export const notificationsService = {
         return;
       }
 
-      const result = await emailService.sendReporterAssignmentEmail(report.reporterEmail!, {
+      const result = await emailService.sendReporterAssignmentEmail(ctx.recipient, {
         report,
         projectName: ctx.project.name,
         appName: ctx.settings.appName || 'BugPin',
         appUrl: ctx.settings.appUrl || '',
+        correspondence: ctx.correspondence,
         assigneeName: newAssignee.name,
         previousAssigneeName: previousAssignee?.name,
       });
@@ -702,7 +717,7 @@ export const notificationsService = {
       if (result.success) {
         logger.info('Reporter assignment notification sent', {
           reportId: report.id,
-          reporterEmail: report.reporterEmail,
+          reporterEmail: ctx.recipient,
           assignedTo: newAssignedToUserId,
         });
       } else {
@@ -714,7 +729,7 @@ export const notificationsService = {
     } catch (error) {
       logger.error('Failed to send reporter assignment notification', {
         reportId: report.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Reporter email delivery failed',
       });
     }
   },
@@ -726,10 +741,11 @@ export const notificationsService = {
     report: Report,
     message: string,
     senderUserId: string,
-    ccSender?: boolean
+    ccSender?: boolean,
+    files: { filename: string }[] = []
   ): Promise<void> {
     try {
-      const ctx = await getReporterContext(report, 'messagingEnabled');
+      const ctx = await getReporterContext(report, 'messagingEnabled', 'invitation');
       if (!ctx) return;
 
       const sender = await usersRepo.findById(senderUserId);
@@ -745,16 +761,18 @@ export const notificationsService = {
         projectName: ctx.project.name,
         appName: ctx.settings.appName || 'BugPin',
         appUrl: ctx.settings.appUrl || '',
+        correspondence: ctx.correspondence,
         senderName: sender.name,
         message,
+        files,
       };
 
-      const result = await emailService.sendReporterMessageEmail(report.reporterEmail!, emailData);
+      const result = await emailService.sendReporterMessageEmail(ctx.recipient, emailData);
 
       if (result.success) {
         logger.info('Reporter message notification sent', {
           reportId: report.id,
-          reporterEmail: report.reporterEmail,
+          reporterEmail: ctx.recipient,
         });
       } else {
         logger.warn('Reporter message notification failed', {
@@ -782,7 +800,7 @@ export const notificationsService = {
     } catch (error) {
       logger.error('Failed to send reporter message notification', {
         reportId: report.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Reporter email delivery failed',
       });
     }
   },
@@ -877,11 +895,12 @@ export const notificationsService = {
       const ctx = await getReporterContext(report, 'notifyOnPriorityChange');
       if (!ctx) return;
 
-      const result = await emailService.sendReporterPriorityChangeEmail(report.reporterEmail!, {
+      const result = await emailService.sendReporterPriorityChangeEmail(ctx.recipient, {
         report,
         projectName: ctx.project.name,
         appName: ctx.settings.appName || 'BugPin',
         appUrl: ctx.settings.appUrl || '',
+        correspondence: ctx.correspondence,
         oldPriority,
         newPriority,
       });
@@ -889,7 +908,7 @@ export const notificationsService = {
       if (result.success) {
         logger.info('Reporter priority change notification sent', {
           reportId: report.id,
-          reporterEmail: report.reporterEmail,
+          reporterEmail: ctx.recipient,
         });
       } else {
         logger.warn('Reporter priority change notification failed', {
@@ -900,7 +919,7 @@ export const notificationsService = {
     } catch (error) {
       logger.error('Failed to send reporter priority change notification', {
         reportId: report.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Reporter email delivery failed',
       });
     }
   },

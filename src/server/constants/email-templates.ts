@@ -74,6 +74,16 @@ export function getSampleDataForTemplate(
   appUrl: string = 'https://example.com'
 ): Record<string, unknown> {
   const baseData = {
+    portal: { url: `${appUrl}/reporter-portal` },
+    reporter: {
+      loginUrl: `${appUrl}/reporter-portal/login#sample-login-token`,
+      updateUrl: `${appUrl}/reporter-portal/login#sample-login-token`,
+      unsubscribeUrl: `${appUrl}/api/portal/unsubscribe?t=sample-unsubscribe-token`,
+      actionLabel: 'View update',
+      portalDisplay: 'block',
+      unsubscribeLabel: 'Unsubscribe from update emails',
+      unsubscribeDisplay: 'block',
+    },
     app: {
       name: appName,
       url: appUrl,
@@ -154,6 +164,7 @@ export function getSampleDataForTemplate(
           name: 'Sample Project',
         },
         report: {
+          portalUrl: `${appUrl}/reporter-portal/reports/sample-123`,
           title: 'Button not working on checkout page',
           description:
             'When clicking the "Complete Purchase" button, nothing happens. The page stays the same and no error is shown.',
@@ -172,6 +183,7 @@ export function getSampleDataForTemplate(
           name: 'Sample Project',
         },
         report: {
+          portalUrl: `${appUrl}/reporter-portal/reports/sample-123`,
           title: 'Button not working on checkout page',
           description:
             'When clicking the "Complete Purchase" button, nothing happens. The page stays the same and no error is shown.',
@@ -194,6 +206,7 @@ export function getSampleDataForTemplate(
           name: 'Sample Project',
         },
         report: {
+          portalUrl: `${appUrl}/reporter-portal/reports/sample-123`,
           title: 'Button not working on checkout page',
           description:
             'When clicking the "Complete Purchase" button, nothing happens. The page stays the same and no error is shown.',
@@ -213,6 +226,7 @@ export function getSampleDataForTemplate(
           name: 'Sample Project',
         },
         report: {
+          portalUrl: `${appUrl}/reporter-portal/reports/sample-123`,
           title: 'Button not working on checkout page',
           description:
             'When clicking the "Complete Purchase" button, nothing happens. The page stays the same and no error is shown.',
@@ -235,6 +249,7 @@ export function getSampleDataForTemplate(
           name: 'Sample Project',
         },
         report: {
+          portalUrl: `${appUrl}/reporter-portal/reports/sample-123`,
           title: 'Button not working on checkout page',
           status: 'in_progress',
           statusFormatted: 'In Progress',
@@ -243,9 +258,10 @@ export function getSampleDataForTemplate(
           name: 'John Doe',
         },
         message:
-          'Thank you for reporting this issue. Could you please provide more details about which browser you were using?',
+          'Thank you for reporting this issue. Please review the files in the portal.\nAttachments:\nscreenshot.png\nrecording.webm',
       };
 
+    case 'reporterLogin':
     case 'testEmail':
       return baseData;
 

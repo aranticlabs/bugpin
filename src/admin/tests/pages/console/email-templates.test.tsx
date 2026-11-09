@@ -127,6 +127,23 @@ describe('EmailTemplates', () => {
     });
   });
 
+  it('offers reporter login templates and hints when confirmation has no sign-in link', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('button', { name: 'Reporter Login' }));
+    await waitFor(() => expect(screen.getByLabelText('Email Body')).toHaveValue('<p>def</p>'));
+    await user.click(screen.getByRole('button', { name: 'Reporter Confirmation' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'This confirmation template has no reporter.loginUrl.'
+    );
+    await user.clear(screen.getByLabelText('Email Body'));
+    await user.type(screen.getByLabelText('Email Body'), 'reporter.loginUrl');
+    expect(
+      screen.queryByText(/This confirmation template has no reporter.loginUrl/)
+    ).not.toBeInTheDocument();
+  });
+
   it('preserves draft state when switching between locale tabs', async () => {
     mockApi();
     const user = userEvent.setup();

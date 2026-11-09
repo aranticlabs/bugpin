@@ -63,7 +63,8 @@ portalAuthRoutes.post(
   validate({ body: requestSchema }),
   loginEmailLimit(false),
   async (c) => {
-    await reporterAuthService.requestLogin(validatedBody(c, requestSchema).email);
+    const { email, locale } = validatedBody(c, requestSchema);
+    await reporterAuthService.requestLogin(email, locale);
     return c.json({ success: true });
   }
 );

@@ -7,13 +7,14 @@ import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { emailService } from './email.service.js';
 import { normalizeEmail } from '../utils/email-normalize.js';
+import { normalizeLocale } from '../utils/locale.js';
 import { maskEmail } from '../utils/mask-email.js';
 import { generateSecureToken, hashToken } from '../utils/secure-token.js';
 import { isValidEmail } from '../utils/validators.js';
 import { isSecurePortalUrl } from '../utils/portal-url.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
-import type { Reporter, ReporterAuthTokenSource } from '@shared/types';
+import type { Reporter, ReporterAuthTokenSource, LocaleCode } from '@shared/types';
 import type { PortalMe } from '@shared/portal-types';
 
 function toPortalMe(reporter: Reporter): PortalMe {
@@ -56,7 +57,7 @@ export const reporterAuthService = {
     return Result.ok({ email, secret, expiresAt });
   },
 
-  async requestLogin(email: string): Promise<Result<void>> {
+  async requestLogin(email: string, locale: LocaleCode = 'en'): Promise<Result<void>> {
     try {
       const settings = await settingsCacheService.getAll();
       if (
@@ -68,7 +69,7 @@ export const reporterAuthService = {
       )
         return Result.ok(undefined);
       // SMTP latency and delivery failures must not reveal whether an account exists.
-      void this.sendLoginLink(email)
+      void this.sendLoginLink(email, locale)
         .then((sent) => {
           if (!sent.success && sent.code === 'EMAIL_DELIVERY_FAILED')
             logger.warn('Reporter login email delivery failed');
@@ -80,18 +81,17 @@ export const reporterAuthService = {
     return Result.ok(undefined);
   },
 
-  async sendLoginLink(email: string): Promise<Result<void>> {
+  async sendLoginLink(email: string, locale: LocaleCode = 'en'): Promise<Result<void>> {
     const minted = this.mintLoginToken(email, 'request');
     if (!minted.success) return minted;
     try {
       const settings = await settingsCacheService.getAll();
       const loginUrl = new URL('/reporter-portal/login', settings.portalBaseUrl || settings.appUrl);
       loginUrl.hash = minted.value.secret;
-      const sent = await emailService.sendEmail({
-        to: [{ email: minted.value.email }],
-        subject: 'Sign in to your feedback',
-        html: `<p><a href="${loginUrl.href}">Sign in to your feedback</a></p><p>This link expires in 15 minutes.</p>`,
-        text: `Sign in to your feedback: ${loginUrl.href}\nThis link expires in 15 minutes.`,
+      const sent = await emailService.sendReporterLoginEmail(minted.value.email, {
+        loginUrl: loginUrl.href,
+        loginToken: minted.value,
+        locale: normalizeLocale(reportersRepo.findByEmail(minted.value.email)?.locale) ?? locale,
       });
       if (sent.success) return Result.ok(undefined);
     } catch {

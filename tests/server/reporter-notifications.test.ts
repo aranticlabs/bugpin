@@ -4,6 +4,7 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { emailService } from '../../src/server/services/email.service';
+import { reporterSuppressionsRepo } from '../../src/server/database/repositories/reporter-suppressions.repo';
 import { logger } from '../../src/server/utils/logger';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import type { Project, Report, User } from '../../src/shared/types';
@@ -12,6 +13,7 @@ const originalProjectsRepo = { ...projectsRepo };
 const originalUsersRepo = { ...usersRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalEmailService = { ...emailService };
+const originalSuppressionHas = reporterSuppressionsRepo.has;
 const originalLogger = { ...logger };
 
 const baseProject: Project = {
@@ -68,6 +70,7 @@ const sendReporterPriorityChangeEmail = mock(async () => ({ success: true }));
 const sendReporterAssignmentEmail = mock(async () => ({ success: true }));
 
 beforeEach(() => {
+  reporterSuppressionsRepo.has = () => false;
   projectById = baseProject;
   settingsCacheService.invalidate();
 
@@ -101,6 +104,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reporterSuppressionsRepo.has = originalSuppressionHas;
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(settingsRepo, originalSettingsRepo);

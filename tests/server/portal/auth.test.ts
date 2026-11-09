@@ -13,6 +13,7 @@ import { hashToken } from '../../../src/server/utils/secure-token';
 import { Result } from '../../../src/server/utils/result';
 import { logger } from '../../../src/server/utils/logger';
 import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../../src/shared/types';
+import { reporterCopy } from '../../../src/server/i18n/reporter-copy';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
 
 let close: () => void;
@@ -39,6 +40,19 @@ function mint(
 ) {
   return Result.unwrap(reporterAuthService.mintLoginToken(email, source));
 }
+
+it('carries requesting-page locale through public login delivery and prefers an existing account locale', async () => {
+  await portalPost(app, '/auth/request', { email: 'new@example.com', locale: 'de' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(sent[0].subject).toBe(reporterCopy.de.login);
+  expect(sent[0].html).toContain(reporterCopy.de.loginExpiry);
+  const reporter = reportersRepo.resolve('known@example.com', 'Known', new Date().toISOString());
+  getDb().run("UPDATE reporters SET locale = 'fr' WHERE id = ?", [reporter.id]);
+  await portalPost(app, '/auth/request', { email: reporter.email, locale: 'ja' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(sent[1].subject).toBe(reporterCopy.fr.login);
+  expect(sent[1].html).toContain(reporterCopy.fr.loginExpiry);
+});
 
 function count(table: 'reporters' | 'reporter_auth_tokens' | 'reporter_sessions'): number {
   return getDb().query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()!
@@ -208,7 +222,7 @@ it('resolves one account for normalized email and rejects a suspended account to
 it('puts requested secrets only in link fragments and stores only their hashes', async () => {
   await portalPost(app, '/auth/request', { email: ' Jane+Tag@Example.COM ', locale: 'de' });
   expect(sent[0].to).toEqual([{ email: 'jane+tag@example.com' }]);
-  const url = new URL(sent[0].text!.split(' ')[5].split('\n')[0]);
+  const url = new URL(sent[0].text!.match(/https?:\/\/[^\s]+/)![0]);
   expect(url.pathname).toBe('/reporter-portal/login');
   expect(url.search).toBe('');
   const secret = url.hash.slice(1);
@@ -258,7 +272,7 @@ it('resends expired email links only to the stored email with a fresh requested 
   });
   expect(sent[0].to[0].email).toBe('jane@example.com');
   expect(count('reporter_auth_tokens')).toBe(2);
-  const replacementSecret = new URL(sent[0].text!.split(' ')[5].split('\n')[0]).hash.slice(1);
+  const replacementSecret = new URL(sent[0].text!.match(/https?:\/\/[^\s]+/)![0]).hash.slice(1);
   const replacement = reporterAuthTokensRepo.findByHash(hashToken(replacementSecret))!;
   expect(replacement.source).toBe('request');
   expect(Date.parse(replacement.expiresAt) - Date.now()).toBeWithin(899000, 900001);

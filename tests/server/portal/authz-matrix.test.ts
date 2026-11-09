@@ -28,6 +28,8 @@ const callers: Caller[] = [
 ];
 const matrix = [
   { method: 'GET', path: '/config', publicStatus: 200 },
+  { method: 'GET', path: '/unsubscribe', publicStatus: 400 },
+  { method: 'POST', path: '/unsubscribe', publicStatus: 400 },
   { method: 'POST', path: '/auth/request', publicStatus: 200 },
   { method: 'POST', path: '/auth/preview', publicStatus: 200 },
   { method: 'POST', path: '/auth/resend', publicStatus: 200 },

@@ -3,6 +3,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { portalOriginCheck } from '../../middleware/origin-check.js';
 import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
 import { portalConfigService } from '../../services/portal-config.service.js';
+import { unsubscribeRoutes } from './unsubscribe.js';
 import { portalAuthRoutes } from './auth.js';
 
 export const portalRoutes = new Hono();
@@ -24,6 +25,7 @@ portalRoutes.use(
   })
 );
 portalRoutes.route('/auth', portalAuthRoutes);
+portalRoutes.route('/unsubscribe', unsubscribeRoutes);
 portalRoutes.get('/me', reporterAuthMiddleware, (c) =>
   c.json({ success: true, reporter: c.get('reporter') })
 );

@@ -9,6 +9,7 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { emailService } from '../../src/server/services/email.service';
+import { reporterSuppressionsRepo } from '../../src/server/database/repositories/reporter-suppressions.repo';
 import { logger } from '../../src/server/utils/logger';
 import type {
   NotificationDefaultSettings,
@@ -25,6 +26,7 @@ const originalUsersRepo = { ...usersRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalEmailService = { ...emailService };
+const originalSuppressionHas = reporterSuppressionsRepo.has;
 const originalLogger = { ...logger };
 
 const baseProject: Project = {
@@ -121,6 +123,7 @@ const sendReportDeletedNotification = mock(async () => ({ success: true }));
 const sendEmail = mock(async () => ({ success: true }));
 
 beforeEach(() => {
+  reporterSuppressionsRepo.has = () => false;
   projectById = baseProject;
   preferencesByProject = [basePreferences];
   userById = baseUser;
@@ -172,6 +175,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reporterSuppressionsRepo.has = originalSuppressionHas;
   Object.assign(notificationPreferencesRepo, originalNotificationPreferencesRepo);
   Object.assign(projectNotificationDefaultsRepo, originalProjectDefaultsRepo);
   Object.assign(usersRepo, originalUsersRepo);

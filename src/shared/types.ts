@@ -977,6 +977,7 @@ export interface ApiToken {
 // Email Template Types
 
 export type ReporterTemplateType =
+  | 'reporterLogin'
   | 'reporterConfirmation'
   | 'reporterStatusChange'
   | 'reporterPriorityChange'
@@ -1015,6 +1016,7 @@ export type CustomEmailTemplates = Partial<{
 }>;
 
 export interface EmailTemplates {
+  reporterLogin: EmailTemplate;
   newReport: EmailTemplate;
   statusChange: EmailTemplate;
   priorityChange: EmailTemplate;

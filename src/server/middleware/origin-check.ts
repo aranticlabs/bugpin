@@ -35,6 +35,7 @@ export async function portalOrigin(c: Context): Promise<string | null> {
 }
 
 export const portalOriginCheck: MiddlewareHandler = async (c, next) => {
+  if (c.req.method === 'POST' && c.req.path === '/api/portal/unsubscribe') return next();
   if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next();
   const expected = await portalOrigin(c);
   if (!matchesOrigin(c, expected) || c.req.header('X-BugPin-Portal') !== '1')
