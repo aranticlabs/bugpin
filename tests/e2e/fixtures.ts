@@ -1,10 +1,11 @@
 import { test as base, expect } from '@playwright/test';
 import { spawn, execFileSync } from 'node:child_process';
-import { createServer } from 'node:net';
+import { createServer, type Socket } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { once } from 'node:events';
+import { stopChild } from './stop-child';
 
 export interface Runtime {
   staffOrigin: string;
@@ -23,7 +24,10 @@ export const test = base.extend<object, { runtime: Runtime }>({
       const directory = mkdtempSync(join(tmpdir(), 'bugpin-e2e-'));
       const messages: { email: string; body: string }[] = [];
       const events = new EventTarget();
+      const sockets = new Set<Socket>();
       const smtp = createServer((socket) => {
+        sockets.add(socket);
+        socket.once('close', () => sockets.delete(socket));
         socket.setEncoding('utf8');
         socket.write('220 localhost ESMTP\r\n');
         let buffer = '';
@@ -147,10 +151,16 @@ export const test = base.extend<object, { runtime: Runtime }>({
           waitForUnsubscribeLink: (email) => waitForEmailLink(email, 'unsubscribe'),
         });
       } finally {
-        child.kill('SIGTERM');
-        if (child.exitCode === null) await once(child, 'exit');
-        await new Promise<void>((resolveClose) => smtp.close(() => resolveClose()));
-        rmSync(directory, { recursive: true, force: true });
+        try {
+          await stopChild(child);
+        } finally {
+          for (const socket of sockets) socket.destroy();
+          try {
+            await new Promise<void>((resolveClose) => smtp.close(() => resolveClose()));
+          } finally {
+            rmSync(directory, { recursive: true, force: true });
+          }
+        }
       }
     },
     { scope: 'worker' },
