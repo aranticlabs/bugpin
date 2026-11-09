@@ -45,6 +45,37 @@ afterEach(() => {
 });
 
 describe('SettingsRouter', () => {
+  it('opens Reporters for admins', async () => {
+    server.use(
+      http.get('/api/reporters', () =>
+        HttpResponse.json({ reporters: [], total: 0, nextCursor: null })
+      )
+    );
+    renderSettings('/settings/reporters');
+    expect(await screen.findByRole('heading', { name: 'Reporters' })).toBeInTheDocument();
+    expect(await screen.findByText('No reporters yet', {}, { timeout: 5000 })).toBeInTheDocument();
+  });
+
+  it.each(['editor', 'viewer'] as const)(
+    'denies the Reporters page to %s users before fetching reporters',
+    async (role) => {
+      signInAs(mockUsers[role]);
+      let requested = false;
+      server.use(
+        http.get('/api/reporters', () => {
+          requested = true;
+          return HttpResponse.json({ reporters: [] });
+        })
+      );
+      renderSettings('/settings/reporters');
+      expect(
+        await screen.findByRole('heading', { name: 'Profile' }, { timeout: 5000 })
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Current path')).toHaveTextContent('/settings/account/profile');
+      expect(requested).toBe(false);
+    }
+  );
+
   it('opens General for admins at /settings', async () => {
     renderSettings('/settings');
 

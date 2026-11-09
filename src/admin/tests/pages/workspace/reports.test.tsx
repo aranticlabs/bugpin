@@ -11,6 +11,39 @@ import { Reports } from '../../../pages/workspace/Reports';
 import { api } from '../../../api/client';
 
 describe('Reports Page', () => {
+  it.each(['list', 'board'])(
+    'keeps the reporter filter in the %s view and lets staff clear it',
+    async (view) => {
+      const requests: URLSearchParams[] = [];
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          requests.push(new URL(request.url).searchParams);
+          return HttpResponse.json({
+            success: true,
+            data: [],
+            total: 0,
+            page: 1,
+            limit: 20,
+            totalPages: 0,
+          });
+        })
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<Reports />, {
+        initialEntries: [`/reports?reporterId=rptr_jane&view=${view}`],
+      });
+      await waitFor(() => expect(requests.length).toBeGreaterThanOrEqual(view === 'board' ? 4 : 1));
+      expect(requests.every((params) => params.get('reporterId') === 'rptr_jane')).toBe(true);
+      if (view === 'board')
+        expect(new Set(requests.map((params) => params.get('status')))).toEqual(
+          new Set(['open', 'in_progress', 'resolved', 'closed'])
+        );
+      await user.click(screen.getByRole('button', { name: 'Clear reporter filter' }));
+      await waitFor(() => expect(requests.some((params) => !params.has('reporterId'))).toBe(true));
+      expect(screen.queryByText('Filtered by reporter')).not.toBeInTheDocument();
+    }
+  );
+
   it('renders reports page heading', async () => {
     renderWithProviders(<Reports />);
 

@@ -56,6 +56,7 @@ const BOARD_PAGE_SIZE = 20;
 const NO_COLLAPSED_COLUMNS: ReportStatus[] = [];
 
 export interface ReportsBoardFilters {
+  reporterId?: string;
   priority: string;
   projectId: string;
   assignedTo: string;
@@ -88,6 +89,7 @@ function boardScope(
   const priority = filters.priority.split(',').filter(isReportPriority);
   return {
     projectId: filters.projectId || undefined,
+    reporterId: filters.reporterId || undefined,
     status: [...statuses],
     priority: priority.length > 0 ? priority : undefined,
     assignedTo: filters.assignedTo || undefined,
@@ -123,6 +125,7 @@ function useBoardColumn(
       if (filters.priority) params.priority = filters.priority;
       if (filters.projectId) params.projectId = filters.projectId;
       if (filters.assignedTo) params.assignedTo = filters.assignedTo;
+      if (filters.reporterId) params.reporterId = filters.reporterId;
       if (filters.search) params.search = filters.search;
       const response = await api.get<ReportPage>('/reports', { params });
       return response.data;

@@ -34,6 +34,16 @@ describe('settings navigation', () => {
     expect(match?.item.adminOnly).toBeFalsy();
   });
 
+  it('places Reporters under Access for admins only', () => {
+    expect(findSettingsNavItem('/settings/reporters')).toMatchObject({
+      group: { label: 'Access', adminOnly: true },
+      item: { title: 'Reporters' },
+    });
+    expect(canOpenSettingsPage({ role: 'admin' }, '/settings/reporters')).toBe(true);
+    for (const role of ['editor', 'viewer'] as const)
+      expect(canOpenSettingsPage({ role }, '/settings/reporters')).toBe(false);
+  });
+
   it('finds the group and page for a path', () => {
     expect(findSettingsNavItem('/settings/authentication')).toMatchObject({
       group: { label: 'Access' },

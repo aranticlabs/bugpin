@@ -212,6 +212,7 @@ export function Reports({
   const priority = searchParams.get('priority') || '';
   const projectId = fixedProjectId ?? (searchParams.get('projectId') || '');
   const assignedTo = searchParams.get('assignedTo') || '';
+  const reporterId = searchParams.get('reporterId') || '';
   const requestedSort = parseReportSort(searchParams);
   // Manual order exists only on the board; the list falls back to its default sort.
   const sort = requestedSort.key === 'position' ? DEFAULT_REPORT_SORT : requestedSort;
@@ -255,6 +256,7 @@ export function Reports({
         priority,
         projectId,
         assignedTo,
+        reporterId,
         sort,
         search: searchParams.get('search'),
       },
@@ -265,6 +267,7 @@ export function Reports({
       if (priority) params.priority = priority;
       if (projectId) params.projectId = projectId;
       if (assignedTo) params.assignedTo = assignedTo;
+      if (reporterId) params.reporterId = reporterId;
       params.sortBy = sort.key;
       params.sortOrder = sort.direction;
       if (searchParams.get('search')) params.search = searchParams.get('search')!;
@@ -593,6 +596,24 @@ export function Reports({
         onCreate={openCreateDialog}
       />
 
+      {reporterId && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>Filtered by reporter</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('reporterId');
+              next.delete('page');
+              setSearchParams(next);
+            }}
+          >
+            Clear reporter filter
+          </Button>
+        </div>
+      )}
+
       {selectedIds.size > 0 && (
         <ReportsBulkActionBar
           selectedCount={selectedIds.size}
@@ -852,6 +873,7 @@ export function Reports({
             priority,
             projectId,
             assignedTo,
+            reporterId,
             search: searchParams.get('search') || '',
             sortBy: boardSort.key,
             sortOrder: boardSort.direction,
