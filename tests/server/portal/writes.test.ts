@@ -561,7 +561,10 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
       uploadedByReporterId: reporterId,
     });
     const maximum = 1024 * 1024 - usedBytes + 64 * 1024;
-    expect(Result.unwrap(await portalSubmissionsService.uploadBodyLimit(reporterId))).toBe(maximum);
+    expect(Result.unwrap(await portalSubmissionsService.uploadBodyLimit(reporterId))).toEqual({
+      maxSize: maximum,
+      errorCode: 'UPLOAD_QUOTA_EXCEEDED',
+    });
     expect(
       Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId))
     ).toEqual({
@@ -601,7 +604,7 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
         expect(response.status).toBe(413);
         expect(await response.json()).toMatchObject({
           success: false,
-          error: path === '/reports' ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_QUOTA_EXCEEDED',
+          error: 'UPLOAD_QUOTA_EXCEEDED',
         });
         expect(parse).not.toHaveBeenCalled();
         expect(pulls).toBeLessThanOrEqual(contentLength ? 1 : Math.ceil(maximum / (16 * 1024)) + 2);
@@ -619,7 +622,7 @@ it.each([
   [5, 'PAYLOAD_TOO_LARGE'],
   [6, 'PAYLOAD_TOO_LARGE'],
 ] as const)(
-  'reports the binding reply upload limit with a %s MB daily quota',
+  'reports the binding feedback and reply upload limit with a %s MB daily quota',
   async (quota, error) => {
     await limits({ uploadMbPerReporterPerDay: quota });
     await project({
@@ -631,21 +634,25 @@ it.each([
       maxSize: Math.min(5, quota) * 1024 * 1024 + 64 * 1024,
       errorCode: error,
     });
-    for (const contentType of ['multipart/form-data; boundary=boundary', 'application/json']) {
-      const response = await app.request(
-        `${portalOrigin}/api/portal/reports/${reportId}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            Cookie: cookie,
-            Origin: portalOrigin,
-            'X-BugPin-Portal': '1',
-            'content-type': contentType,
-            'content-length': String(limit.maxSize + 1),
-          },
-          body: 'x',
-        }
-      );
+    expect(Result.unwrap(await portalSubmissionsService.uploadBodyLimit(reporterId))).toEqual(
+      limit
+    );
+    for (const [path, contentType] of [
+      ['/reports', 'multipart/form-data; boundary=boundary'],
+      [`/reports/${reportId}/messages`, 'multipart/form-data; boundary=boundary'],
+      [`/reports/${reportId}/messages`, 'application/json'],
+    ]) {
+      const response = await app.request(`${portalOrigin}/api/portal${path}`, {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          Origin: portalOrigin,
+          'X-BugPin-Portal': '1',
+          'content-type': contentType,
+          'content-length': String(limit.maxSize + 1),
+        },
+        body: 'x',
+      });
       expect(response.status).toBe(413);
       expect(await response.json()).toMatchObject({
         error: contentType.startsWith('multipart/') ? error : 'PAYLOAD_TOO_LARGE',
@@ -757,7 +764,7 @@ it('rejects real chunked multipart overflows without persisting reports, message
     expect(response.status).toBe(413);
     expect(await response.json()).toMatchObject({
       success: false,
-      error: path === '/reports' ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_QUOTA_EXCEEDED',
+      error: 'UPLOAD_QUOTA_EXCEEDED',
     });
     await reader.cancel();
   }

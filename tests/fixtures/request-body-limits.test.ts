@@ -166,7 +166,8 @@ for (const path of ['/api/portal/reports', '/api/portal/reports/report/messages'
         expiresAt: new Date(Date.now() + 86400000).toISOString(),
       });
     portalReportsService.access = () => Result.ok(undefined);
-    portalSubmissionsService.uploadBodyLimit = async () => Result.ok(300 * 1024 * 1024);
+    portalSubmissionsService.uploadBodyLimit = async () =>
+      Result.ok({ maxSize: 300 * 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
     reportMessagesService.uploadBodyLimit = async () =>
       Result.ok({ maxSize: 300 * 1024 * 1024, errorCode: 'PAYLOAD_TOO_LARGE' });
     const create = spyOn(portalSubmissionsService, 'create').mockResolvedValue(
