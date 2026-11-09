@@ -264,26 +264,62 @@ it.each([
   expect(screen.queryByRole('link', { name: 'New feedback' }) !== null).toBe(state === 'closed');
 });
 
-it('rejects a stale composer after closure and refreshes into the closed state', async () => {
-  let closed = false;
-  server.use(
-    http.get('/api/portal/reports/report', () =>
-      HttpResponse.json({
-        success: true,
-        report: closed ? { ...detail, status: 'closed', canReply: false } : detail,
+it.each([
+  [409, 'REPORT_CLOSED', 'This report is closed.'],
+  [403, 'MESSAGING_DISABLED', 'The team answers through other channels.'],
+  [404, 'NOT_FOUND', 'Page not found'],
+] as const)(
+  'announces a %s reply failure once and recovers after permissions change',
+  async (status, code, message) => {
+    let state: 'initial' | 'denied' | 'restored' = 'initial';
+    let finishRefetch!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finishRefetch = resolve;
+    });
+    server.use(
+      http.get('/api/portal/reports/report', async () => {
+        if (state !== 'denied') return HttpResponse.json({ success: true, report: detail });
+        await pending;
+        return status === 404
+          ? HttpResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404 })
+          : HttpResponse.json({
+              success: true,
+              report: {
+                ...detail,
+                status: status === 409 ? 'closed' : 'resolved',
+                canReply: false,
+              },
+            });
+      }),
+      http.post('/api/portal/reports/report/messages', () => {
+        state = 'denied';
+        return HttpResponse.json({ success: false, error: code }, { status });
       })
-    ),
-    http.post('/api/portal/reports/report/messages', () => {
-      closed = true;
-      return HttpResponse.json({ success: false, error: 'REPORT_CLOSED' }, { status: 409 });
-    })
-  );
-  mount('/reports/report');
-  await userEvent.type(await screen.findByLabelText('Message'), 'Late reply');
-  await userEvent.click(screen.getByRole('button', { name: 'Send' }));
-  await waitFor(() => expect(screen.queryByLabelText('Message')).not.toBeInTheDocument());
-  expect(screen.getAllByText('This report is closed.').length).toBeGreaterThan(0);
-});
+    );
+    const client = mount('/reports/report');
+    try {
+      await userEvent.type(await screen.findByLabelText('Message'), 'Late reply');
+      await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(message);
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      await act(async () => {
+        finishRefetch();
+        await pending;
+      });
+      await waitFor(() => expect(screen.queryByLabelText('Message')).not.toBeInTheDocument());
+      expect(screen.getByText(message)).toBeVisible();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      state = 'restored';
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['portal', 'report', 'report'] });
+      });
+      expect(await screen.findByLabelText('Message')).toBeEnabled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } finally {
+      finishRefetch();
+    }
+  }
+);
 
 it('submits new feedback only to an eligible owned project and opens its detail', async () => {
   server.use(

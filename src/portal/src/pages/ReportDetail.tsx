@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared-ui/components/ui/card';
@@ -12,7 +12,6 @@ import { Button } from '@shared-ui/components/ui/button';
 import { portalApi } from '../api/reports';
 import { PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
-import { errorKey } from '../i18n/error-key';
 import { useProjects } from '../hooks/useProjects';
 import { FilePreview } from '../components/FilePreview';
 import { PlainText } from '../components/PlainText';
@@ -25,8 +24,6 @@ export function ReportDetail() {
   const { t, locale } = useI18n();
   const projects = useProjects();
   const client = useQueryClient();
-  const [writeError, setWriteError] = useState<unknown>(null);
-  useEffect(() => setWriteError(null), [id]);
   const query = useQuery({
     queryKey: ['portal', 'report', id],
     queryFn: ({ signal }) => portalApi.detail(id, signal),
@@ -133,17 +130,11 @@ export function ReportDetail() {
               </li>
             ))}
           </ol>
-          {writeError !== null && (
-            <p role="alert" className="text-destructive">
-              {t(errorKey(writeError))}
-            </p>
-          )}
           {report.canReply ? (
             <Composer
               key={id}
               reportId={id}
               project={projects.data?.find((project) => project.id === report.project.id)}
-              onRejected={setWriteError}
             />
           ) : (
             <Card className="space-y-3 p-4">

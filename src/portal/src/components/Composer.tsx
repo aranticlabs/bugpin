@@ -9,15 +9,7 @@ import { portalFetch, PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
 import { errorKey } from '../i18n/error-key';
 
-export function Composer({
-  reportId,
-  project,
-  onRejected,
-}: {
-  reportId: string;
-  project?: PortalProject;
-  onRejected: (error: unknown) => void;
-}) {
+export function Composer({ reportId, project }: { reportId: string; project?: PortalProject }) {
   const { t } = useI18n();
   const client = useQueryClient();
   const [body, setBody] = useState('');
@@ -39,7 +31,6 @@ export function Composer({
     },
     onError: (error) => {
       if (error instanceof PortalApiError && [403, 404, 409].includes(error.status)) {
-        onRejected(error);
         void client.invalidateQueries({ queryKey: ['portal'] });
       }
     },
