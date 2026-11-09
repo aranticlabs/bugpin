@@ -57,6 +57,25 @@ beforeEach(() => {
     http.get('/api/portal/me', () =>
       HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 })
     ),
+    http.get('/api/portal/reports/:id', ({ params }) =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          id: params.id,
+          title: `Report ${params.id}`,
+          status: 'open',
+          project: { id: 'project', name: 'Shop' },
+          description: '',
+          files: [],
+          messages: [],
+          canReply: false,
+          canSubmitNewFeedback: false,
+          createdAt: '2026-11-01T10:00:00Z',
+          updatedAt: '2026-11-01T10:00:00Z',
+          assigneeName: null,
+        },
+      })
+    ),
     http.get('/api/portal/config', () => HttpResponse.json({ success: true, config })),
     http.post('/api/portal/auth/preview', () =>
       HttpResponse.json({ success: true, state: 'valid', maskedEmail: 'j***@example.com' })
@@ -105,7 +124,7 @@ it('removes the fragment before the first request and exchanges only after Conti
   await screen.findByRole('heading', { name: 'Sign in as j***@example.com?' });
   expect(exchanges).toBe(0);
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  await screen.findByRole('heading', { name: 'My feedback' });
+  await screen.findByRole('heading', { name: 'Report owned' });
   expect(screen.getByText('Jane')).toBeInTheDocument();
   expect(exchanges).toBe(1);
 });
@@ -347,7 +366,7 @@ it('reconciles a superseded exchange without navigating away from or consuming t
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My feedback' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    await screen.findByRole('heading', { name: 'My feedback' });
+    await screen.findByRole('heading', { name: 'Report new-report' });
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(exchanged).toEqual([tokenA, tokenB]);
   } finally {
@@ -387,7 +406,8 @@ it('signs out on the server before removing the local account and cached data', 
   const client = mount('/reports');
   await screen.findByText('Jane');
   client.setQueryData(['portal', 'private'], 'secret');
-  await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   await screen.findByLabelText('Email address');
   expect(loggedOut).toBe(true);
   expect(client.getQueryData(['portal', 'private'])).toBeUndefined();
@@ -401,7 +421,8 @@ it('keeps a failed logout retryable instead of pretending the session ended', as
     )
   );
   mount('/reports');
-  await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Please try again');
   expect(screen.getByText('Jane')).toBeInTheDocument();
 });
@@ -416,7 +437,8 @@ it('treats logout from an expired session as successful and clears private data 
   const client = mount('/reports');
   await screen.findByText('Jane');
   client.setQueryData(['portal', 'private'], 'Old account data');
-  await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   await screen.findByLabelText('Email address');
   expect(client.getQueryData(['portal', 'private'])).toBeUndefined();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -427,6 +449,25 @@ it('uses the account locale and respects white-label footer suppression', async 
   server.use(
     http.get('/api/portal/me', () =>
       HttpResponse.json({ success: true, reporter: { ...reporter, locale: 'de' } })
+    ),
+    http.get('/api/portal/reports/:id', ({ params }) =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          id: params.id,
+          title: `Report ${params.id}`,
+          status: 'open',
+          project: { id: 'project', name: 'Shop' },
+          description: '',
+          files: [],
+          messages: [],
+          canReply: false,
+          canSubmitNewFeedback: false,
+          createdAt: '2026-11-01T10:00:00Z',
+          updatedAt: '2026-11-01T10:00:00Z',
+          assigneeName: null,
+        },
+      })
     ),
     http.get('/api/portal/config', () =>
       HttpResponse.json({ success: true, config: { ...config, hideFooterBranding: true } })
@@ -440,6 +481,25 @@ it('uses the account locale and respects white-label footer suppression', async 
 
 it('keeps button text readable with a bright custom brand color', async () => {
   server.use(
+    http.get('/api/portal/reports/:id', ({ params }) =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          id: params.id,
+          title: `Report ${params.id}`,
+          status: 'open',
+          project: { id: 'project', name: 'Shop' },
+          description: '',
+          files: [],
+          messages: [],
+          canReply: false,
+          canSubmitNewFeedback: false,
+          createdAt: '2026-11-01T10:00:00Z',
+          updatedAt: '2026-11-01T10:00:00Z',
+          assigneeName: null,
+        },
+      })
+    ),
     http.get('/api/portal/config', () =>
       HttpResponse.json({
         success: true,

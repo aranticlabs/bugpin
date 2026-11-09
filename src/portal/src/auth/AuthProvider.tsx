@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PortalMe } from '@shared/portal-types';
+import { portalApi } from '../api/reports';
 import { PortalApiError, portalFetch } from '../api/client';
 
 const AuthContext = createContext<{
@@ -12,6 +13,9 @@ const AuthContext = createContext<{
   reconcileSession: () => Promise<void>;
   signIn: (reporter: PortalMe) => Promise<void>;
   signOut: () => Promise<void>;
+  updateProfile: (
+    changes: Partial<Pick<PortalMe, 'displayName' | 'locale' | 'emailUpdates'>>
+  ) => Promise<void>;
 } | null>(null);
 
 async function loadReporter(signal?: AbortSignal): Promise<PortalMe | null> {
@@ -95,6 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refresh: () => setAttempt((value) => value + 1),
         reconcileSession,
         signIn: replaceSession,
+        updateProfile: async (changes) => {
+          const generation = sessionGeneration.current;
+          const updated = await portalApi.profile(changes);
+          if (generation === sessionGeneration.current) setReporter(updated);
+        },
         signOut: async () => {
           try {
             await portalFetch('/auth/logout', { method: 'POST' });

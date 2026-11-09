@@ -15,24 +15,18 @@ import { useI18n } from './i18n/I18nProvider';
 import { normalizeLocale } from './i18n/catalog';
 import { AuthCard } from './components/AuthCard';
 import { LoginRequest } from './pages/LoginRequest';
+import { ProfileMenu, languages } from './components/ProfileMenu';
+import { MyFeedback } from './pages/MyFeedback';
+import { ReportDetail } from './pages/ReportDetail';
+import { NewFeedback } from './pages/NewFeedback';
+import { Unsubscribe } from './pages/Unsubscribe';
+import { usePortalEvents } from './hooks/usePortalEvents';
 import { LoginContinue } from './pages/LoginContinue';
-
-const languages = {
-  en: 'English',
-  de: 'Deutsch',
-  es: 'Español',
-  fr: 'Français',
-  it: 'Italiano',
-  ja: '日本語',
-  nl: 'Nederlands',
-  zh: '中文',
-};
 
 export function App({ initialToken = '' }: { initialToken?: string }) {
   const [token, setToken] = useState(initialToken);
   const [tokenGeneration, setTokenGeneration] = useState(0);
-  const [logoutFailed, setLogoutFailed] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
+  const offline = usePortalEvents();
   const auth = useAuth();
   const branding = useBranding();
   const { locale, setLocale, t } = useI18n();
@@ -50,19 +44,9 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
   }, []);
   useEffect(() => {
     document.getElementById('main-content')?.focus();
-    document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
+    if (location.pathname !== '/reports')
+      document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
   }, [location.pathname, branding?.appName, locale]);
-  async function logout() {
-    setSigningOut(true);
-    setLogoutFailed(false);
-    try {
-      await auth.signOut();
-    } catch {
-      setLogoutFailed(true);
-    } finally {
-      setSigningOut(false);
-    }
-  }
   const logo = branding?.branding;
   return (
     <div className="flex min-h-dvh flex-col">
@@ -85,17 +69,7 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
             </picture>
           </Link>
           {auth.reporter ? (
-            <div className="flex min-w-0 max-w-full items-center gap-3">
-              <span className="truncate">{auth.reporter.displayName}</span>
-              <Button
-                variant="outline"
-                className="h-11 shrink-0"
-                disabled={signingOut}
-                onClick={() => void logout()}
-              >
-                {t('signOut')}
-              </Button>
-            </div>
+            <ProfileMenu />
           ) : (
             <Select
               value={locale}
@@ -123,12 +97,14 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
         tabIndex={-1}
         className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 outline-none sm:px-6 sm:py-12"
       >
-        {logoutFailed && (
-          <p role="alert" className="mb-4 text-destructive">
-            {t('requestFailed')}
+        {offline && (
+          <p role="status" className="mb-4 rounded-md border p-3">
+            {t('reconnecting')}
           </p>
         )}
-        {auth.loading ? (
+        {location.pathname === '/unsubscribe' ? (
+          <Unsubscribe key={location.search} />
+        ) : auth.loading ? (
           <p role="status">{t('loading')}</p>
         ) : auth.error ? (
           <AuthCard title={t('requestFailed')}>
@@ -156,16 +132,12 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
               path="/"
               element={auth.reporter ? <Navigate to="/reports" replace /> : <LoginRequest />}
             />
+            <Route path="/reports" element={auth.reporter ? <MyFeedback /> : <LoginRequest />} />
             <Route
-              path="/reports/*"
-              element={
-                auth.reporter ? (
-                  <h1 className="text-2xl font-semibold">{t('myFeedback')}</h1>
-                ) : (
-                  <LoginRequest />
-                )
-              }
+              path="/reports/:id"
+              element={auth.reporter ? <ReportDetail /> : <LoginRequest />}
             />
+            <Route path="/new" element={auth.reporter ? <NewFeedback /> : <LoginRequest />} />
             <Route
               path="*"
               element={
