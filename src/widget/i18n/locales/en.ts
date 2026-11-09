@@ -74,6 +74,10 @@ const en = {
   'screenshot.action.download': 'Download',
   'screenshot.action.remove': 'Remove',
   'screenshot.helperText': 'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Low',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'High',
+  'recording.quality.setting': 'Recording quality: {quality}',
   'recording.helperText': 'Supported: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Unsupported image format: {type}',
@@ -126,6 +130,9 @@ const en = {
     'The upload is too large for the server. Remove some media and try again.',
   'submit.error.videoQuota':
     'Video uploads are paused for this project. Remove the video to submit.',
+  'submit.error.rejected':
+    'The upload was rejected. Your attachments may be too large. Remove or shrink them and try again.',
+  'submit.queued': 'Report saved. It will be sent automatically once the connection is back.',
 
   'toast.success.submit': 'Bug report submitted successfully!',
   'toast.error.submit': 'Failed to submit report',

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { authService } from '../../../src/server/services/auth.service';
 import { integrationsService } from '../../../src/server/services/integrations.service';
@@ -30,6 +30,8 @@ const baseSession: Session = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -62,13 +64,13 @@ const baseIntegration: Integration = {
   updatedAt: new Date().toISOString(),
 };
 
-let forwardResult = Result.ok({ externalId: '123' });
+let forwardResult = Result.ok({ type: 'github', id: '123' });
 let retryReport: Report | null = baseReport;
 let retryIntegrations: Integration[] = [];
 
 // Overrides go on the shared service objects and are restored after each test. Replacing
 // whole modules with mock.module would leak into every test file that runs later.
-const enqueueMock = mock(async () => undefined);
+const enqueueMock = mock<typeof syncQueueService.enqueue>(async () => Result.ok(undefined));
 
 let tempDir: string | null = null;
 let storedFilePath = '';
@@ -81,7 +83,7 @@ const originalSyncQueueService = { ...syncQueueService };
 beforeEach(() => {
   integrationsService.forwardReport = async () => forwardResult;
 
-  forwardResult = Result.ok({ externalId: '123' });
+  forwardResult = Result.ok({ type: 'github', id: '123' });
   retryReport = baseReport;
   retryIntegrations = [];
   enqueueMock.mockClear();
@@ -98,6 +100,7 @@ beforeEach(() => {
   filesRepo.findById = async () => ({
     id: 'file_1',
     reportId: 'rpt_1',
+    type: 'screenshot',
     filename: 'file.png',
     path: storedFilePath,
     mimeType: 'image/png',

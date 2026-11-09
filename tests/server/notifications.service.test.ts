@@ -28,6 +28,8 @@ const originalEmailService = { ...emailService };
 const originalLogger = { ...logger };
 
 const baseProject: Project = {
+  isActive: true,
+  position: 0,
   id: 'prj_1',
   name: 'Project',
   apiKey: 'proj_key',
@@ -75,6 +77,8 @@ const baseDefaults: ProjectNotificationDefaults = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',
@@ -140,7 +144,7 @@ beforeEach(() => {
 
   projectNotificationDefaultsRepo.findByProject = async () => defaultsByProject;
   projectNotificationDefaultsRepo.upsert = async () => baseDefaults;
-  projectNotificationDefaultsRepo.delete = async () => undefined;
+  projectNotificationDefaultsRepo.delete = async () => true;
 
   usersRepo.findById = async () => userById;
   projectsRepo.findById = async () => projectById;

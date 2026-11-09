@@ -6,16 +6,18 @@ import { Button } from './ui';
 import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
 import {
   downloadMedia,
-  formatVideoMeta,
+  formatMediaMeta,
   VideoPreview,
   type CapturedMedia,
 } from './ScreenshotManager.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import { DEFAULT_RECORDING_QUALITY, type RecordingQuality } from '@shared/recording-quality';
 
 interface ScreenRecordingPanelProps {
   clips: CapturedMedia[];
   recordingEnabled: boolean;
+  recordingQuality?: RecordingQuality;
   onRecord: () => void;
   onUpload: (item: CapturedMedia) => void;
   onRemove: (id: string) => void;
@@ -34,6 +36,7 @@ const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> = ({
   clips,
   recordingEnabled,
+  recordingQuality = DEFAULT_RECORDING_QUALITY,
   onRecord,
   onUpload,
   onRemove,
@@ -138,6 +141,11 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                 </Button>
               </div>
 
+              <p class="text-xs text-muted-foreground">
+                {t('recording.quality.setting', {
+                  quality: t(`recording.quality.${recordingQuality}`),
+                })}
+              </p>
               <p class="text-xs text-muted-foreground">{t('recording.privacyTip')}</p>
             </>
           )}
@@ -225,7 +233,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                   </div>
                   <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(clip.timestamp)}</span>
-                    <span class="tabular-nums">{formatVideoMeta(clip)}</span>
+                    <span class="min-w-0 break-words tabular-nums">{formatMediaMeta(clip)}</span>
                   </div>
                   <div class="flex gap-1 px-2 py-1.5 border-t border-solid border-border bg-muted">
                     <Button

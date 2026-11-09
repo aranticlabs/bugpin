@@ -35,10 +35,11 @@ import type {
   LocaleCode,
   Project,
 } from '@shared/types';
+import type { MediaMetadata } from '@shared/media-metadata';
 
 // Types
 
-export interface MediaFile {
+export interface MediaFile extends MediaMetadata {
   data: Buffer | Uint8Array;
   filename: string;
   mimeType: string;
@@ -56,6 +57,7 @@ export interface CreateReportInput {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  submissionId?: string;
 }
 
 export interface CreateManualReportInput {
@@ -301,8 +303,11 @@ async function saveSubmittedFiles(
         path: savedFile.path,
         mimeType: savedFile.mimeType,
         sizeBytes: savedFile.sizeBytes,
-        width: savedFile.width,
-        height: savedFile.height,
+        width: savedFile.width ?? file.width,
+        height: savedFile.height ?? file.height,
+        capturedAt: file.capturedAt,
+        durationMs: fileType === 'video' ? file.durationMs : undefined,
+        recordingQuality: file.isRecording ? file.recordingQuality : undefined,
       });
 
       logger.info('Submitted file saved for report', {
@@ -339,6 +344,7 @@ async function createForProject(
     reporterName?: string;
     reporterLocale?: LocaleCode;
     files?: MediaFile[];
+    submissionId?: string;
   },
   options: {
     source: ReportSource;
@@ -390,6 +396,7 @@ async function createForProject(
     reporterEmail: normalizeOptionalText(input.reporterEmail),
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
+    submissionId: input.submissionId,
   };
 
   const report = await reportsRepo.create(reportData);
@@ -484,6 +491,11 @@ async function createForProject(
 // Service
 
 export const reportsService = {
+  /** The report an earlier widget submission with this id created, if any */
+  findIdByWidgetSubmission(projectId: string, submissionId: string): string | null {
+    return reportsRepo.findIdBySubmission(projectId, submissionId);
+  },
+
   /**
    * Create a new bug report (from widget submission)
    */
@@ -506,6 +518,7 @@ export const reportsService = {
         reporterName: input.reporterName,
         reporterLocale: input.reporterLocale,
         files: input.files,
+        submissionId: input.submissionId,
       },
       {
         source: 'widget',

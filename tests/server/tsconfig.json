@@ -23,9 +23,8 @@
     "noEmit": true,
     "typeRoots": ["../../src/server/node_modules/@types", "../../src/server/node_modules"],
     "types": ["bun-types"],
-    "baseUrl": "../../src",
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["../../src/shared/*"]
     }
   },
   "include": ["./**/*.ts", "../../src/shared/**/*.ts"],

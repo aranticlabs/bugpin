@@ -2,6 +2,12 @@ export const RECORDING_QUALITIES = ['low', 'standard', 'high'] as const;
 
 export type RecordingQuality = (typeof RECORDING_QUALITIES)[number];
 
+export const RECORDING_QUALITY_LABELS: Record<RecordingQuality, string> = {
+  low: 'Low',
+  standard: 'Standard',
+  high: 'High',
+};
+
 export const DEFAULT_RECORDING_QUALITY: RecordingQuality = 'standard';
 
 export interface RecordingQualityPreset {

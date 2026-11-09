@@ -11,7 +11,15 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    secrets:
+      EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
+
   release:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

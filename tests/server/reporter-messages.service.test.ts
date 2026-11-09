@@ -12,6 +12,8 @@ const originalNotificationsService = { ...notificationsService };
 const originalLogger = { ...logger };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
   title: 'Bug report',

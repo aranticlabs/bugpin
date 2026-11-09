@@ -2,20 +2,33 @@ import { initDatabase, initSchema, runMigrations, closeDatabase } from '../datab
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { usersService } from '../services/users.service.js';
 import { isValidEmail } from '../utils/validators.js';
+import { passwordPolicyService } from '../services/password-policy.service.js';
+import { describePasswordPolicyViolation, type PasswordPolicy } from '@shared/password-policy';
 
 // Unambiguous alphabet (no 0/O/1/I/l) so a temporary password can be read
 // aloud or copied from a terminal without transcription errors.
 const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-const PASSWORD_LENGTH = 18;
+const GROUP_LENGTH = 6;
 
-function generateTemporaryPassword(): string {
-  const bytes = new Uint8Array(PASSWORD_LENGTH);
+function randomGroup(): string {
+  const bytes = new Uint8Array(GROUP_LENGTH);
   crypto.getRandomValues(bytes);
-  let password = '';
-  for (const byte of bytes) {
-    password += PASSWORD_ALPHABET[byte % PASSWORD_ALPHABET.length];
+  return Array.from(bytes, (byte) => PASSWORD_ALPHABET[byte % PASSWORD_ALPHABET.length]).join('');
+}
+
+// Dash-separated groups satisfy every rule of the password policy: the dashes are
+// special characters, and groups are drawn until upper, lower and digits all appear.
+function generateTemporaryPassword(policy: PasswordPolicy): string {
+  for (;;) {
+    const groups: string[] = [];
+    while (groups.length < 3 || groups.join('-').length < policy.minLength) {
+      groups.push(randomGroup());
+    }
+    const password = groups.join('-');
+    if (!describePasswordPolicyViolation(password, { ...policy, requireSymbol: true })) {
+      return password;
+    }
   }
-  return password;
 }
 
 async function main(): Promise<void> {
@@ -38,8 +51,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const temporaryPassword = generateTemporaryPassword();
+  const temporaryPassword = generateTemporaryPassword(await passwordPolicyService.getPolicy());
   const result = await usersService.resetPassword(user.id, temporaryPassword);
+  if (result.success) await usersRepo.setMustChangePassword(user.id, true);
 
   closeDatabase();
 
@@ -51,7 +65,7 @@ async function main(): Promise<void> {
   console.log('Password reset successful.');
   console.log(`  Email:    ${user.email}`);
   console.log(`  Password: ${temporaryPassword}`);
-  console.log('Log in with this temporary password and change it immediately.');
+  console.log('The temporary password works once: BugPin asks for a new one after login.');
 }
 
 main().catch((error) => {

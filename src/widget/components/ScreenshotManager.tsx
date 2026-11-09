@@ -8,7 +8,8 @@ import { useLocale } from '../hooks/use-locale.js';
 import { useObjectUrl } from '../hooks/use-object-url.js';
 import { getLocale, t } from '../i18n/index.js';
 import { getExtensionFromMimeType, type MediaData } from '../api/submit-form.js';
-import { formatDuration } from './RecordingBar.js';
+import { formatMediaDetails } from '@shared/media-metadata';
+import type { RecordingQuality } from '@shared/recording-quality';
 
 interface CapturedMediaBase {
   id: string;
@@ -18,6 +19,7 @@ interface CapturedMediaBase {
   width?: number;
   height?: number;
   durationMs?: number;
+  recordingQuality?: RecordingQuality;
   annotations?: object;
   source?: 'recording';
   recovered?: boolean;
@@ -43,26 +45,13 @@ interface ScreenshotManagerProps {
 const DEFAULT_MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
-export function formatVideoMeta(item: CapturedMedia): string {
-  const details: string[] = [];
-  if (item.durationMs !== undefined) details.push(formatDuration(item.durationMs));
-  if (item.blob) {
-    const sizeMb = Math.max(item.blob.size / (1024 * 1024), 0.1);
-    try {
-      details.push(
-        new Intl.NumberFormat(getLocale(), {
-          style: 'unit',
-          unit: 'megabyte',
-          unitDisplay: 'short',
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        }).format(sizeMb)
-      );
-    } catch {
-      details.push(`${sizeMb.toFixed(1)} MB`);
-    }
-  }
-  return details.join(' · ');
+export function formatMediaMeta(item: CapturedMedia): string {
+  return [
+    item.recordingQuality && t(`recording.quality.${item.recordingQuality}`),
+    formatMediaDetails({ ...item, sizeBytes: item.blob?.size }, getLocale()),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export function downloadMedia(item: CapturedMedia): void {
@@ -375,11 +364,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                   </div>
                   <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(item.timestamp)}</span>
-                    {item.width && item.height ? (
-                      <span>
-                        {item.width} x {item.height}
-                      </span>
-                    ) : null}
+                    <span class="min-w-0 break-words tabular-nums">{formatMediaMeta(item)}</span>
                   </div>
                   <div class="flex gap-1 px-2 py-1.5 border-t border-solid border-border bg-muted">
                     {enableAnnotation && (

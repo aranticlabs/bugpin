@@ -1,17 +1,18 @@
-import { Privacy } from './Privacy';
-import { Security } from './Security';
+import { PasswordPolicySettings, Security, TwoFactor } from './Security';
 import { SubPageTabs } from './SubPageTabs';
 
 const SUB_TABS = [
-  { hash: 'security', label: 'Security' },
-  { hash: 'privacy', label: 'Privacy' },
+  { hash: 'general', label: 'General' },
+  { hash: 'two-factor', label: 'Two-Factor' },
+  { hash: 'password-policy', label: 'Password Policy' },
 ];
 
 export function SecurityPrivacy() {
   return (
-    <SubPageTabs subTabs={SUB_TABS} defaultHash="security">
+    <SubPageTabs subTabs={SUB_TABS} defaultHash="general">
       <Security />
-      <Privacy />
+      <TwoFactor />
+      <PasswordPolicySettings />
     </SubPageTabs>
   );
 }

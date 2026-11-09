@@ -210,6 +210,19 @@ async function saveDraft(
 }
 
 /**
+ * Replace the media of an existing draft, so items removed in the dialog cannot come back
+ * when the draft is restored. Without a saved draft there is nothing to keep in sync.
+ */
+async function replaceDraftMedia(apiKey: string, media: CapturedMedia[]): Promise<void> {
+  if (!loadFormDraft(apiKey)) return;
+  if (media.length > 0) {
+    await saveMediaDraft(apiKey, media);
+  } else if (!(await clearMediaDraft(apiKey))) {
+    throw new Error('Failed to clear media draft');
+  }
+}
+
+/**
  * Load complete draft (form data + media)
  */
 async function loadDraft(
@@ -247,6 +260,7 @@ export const draftStorage = {
   save: saveDraft,
   load: loadDraft,
   clear: clearDraft,
+  replaceMedia: replaceDraftMedia,
   has: hasDraft,
   expireMedia,
 };

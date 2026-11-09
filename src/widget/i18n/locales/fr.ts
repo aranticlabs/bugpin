@@ -76,6 +76,10 @@ const fr: WidgetCatalog = {
   'screenshot.action.download': 'Télécharger',
   'screenshot.action.remove': 'Supprimer',
   'screenshot.helperText': 'Formats acceptés : PNG, JPG, GIF, WebP (max. {imageSize} Mo)',
+  'recording.quality.low': 'Faible',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Élevée',
+  'recording.quality.setting': 'Qualité d’enregistrement : {quality}',
   'recording.helperText': 'Formats acceptés : MP4, WebM, MOV (max. {videoSize} Mo)',
 
   'screenshot.error.unsupportedImage': "Format d'image non pris en charge : {type}",
@@ -128,6 +132,10 @@ const fr: WidgetCatalog = {
     'Le téléversement est trop volumineux pour le serveur. Supprimez des médias et réessayez.',
   'submit.error.videoQuota':
     'Les téléversements vidéo sont suspendus pour ce projet. Supprimez la vidéo pour envoyer le rapport.',
+  'submit.error.rejected':
+    'Le téléversement a été refusé. Vos pièces jointes sont peut-être trop volumineuses. Supprimez-les ou réduisez leur taille, puis réessayez.',
+  'submit.queued':
+    'Rapport enregistré. Il sera envoyé automatiquement dès le retour de la connexion.',
 
   'toast.success.submit': 'Rapport de bug envoyé avec succès !',
   'toast.error.submit': "Échec de l'envoi du rapport",

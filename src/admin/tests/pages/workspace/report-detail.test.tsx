@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
 import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
@@ -75,8 +76,26 @@ describe('ReportDetail', () => {
           success: true,
           report,
           files: [
-            { id: 'file-1', mimeType: 'image/png', filename: 'screen.png' },
-            { id: 'file-2', mimeType: 'video/mp4', filename: 'clip.mp4' },
+            {
+              id: 'file-1',
+              mimeType: 'image/png',
+              filename: 'screen.png',
+              width: 800,
+              height: 600,
+              sizeBytes: 1048576,
+              capturedAt: '2026-11-08T14:00:00Z',
+            },
+            {
+              id: 'file-2',
+              mimeType: 'video/mp4',
+              filename: 'clip.mp4',
+              width: 1920,
+              height: 1080,
+              durationMs: 24000,
+              sizeBytes: 2097152,
+              recordingQuality: 'high',
+              capturedAt: '2026-11-08T14:01:00Z',
+            },
           ],
         });
       })
@@ -95,6 +114,25 @@ describe('ReportDetail', () => {
     expect(video).toHaveAttribute('preload', 'metadata');
     expect(video).toHaveStyle({ maxHeight: '200px' });
     expect(video).toHaveClass('object-contain');
+    const imageFooter = screen.getByText('800 x 600 · 1.0 MB').parentElement;
+    const videoFooter = screen.getByText('High · 1920 x 1080 · 0:24 · 2.0 MB').parentElement;
+    expect(imageFooter).toHaveClass('text-xs', 'text-muted-foreground', 'border-t', 'flex-wrap');
+    expect(videoFooter?.className).toBe(imageFooter?.className);
+    const imageButton = screen.getByRole('img', { name: 'screen.png' }).closest('button');
+    expect(imageButton).toHaveClass(
+      'relative',
+      'block',
+      'focus-visible:outline-2',
+      'focus-visible:-outline-offset-2',
+      'focus-visible:outline-primary'
+    );
+    Object.defineProperties(video, {
+      videoWidth: { value: 1280, configurable: true },
+      videoHeight: { value: 720, configurable: true },
+      duration: { value: 65, configurable: true },
+    });
+    fireEvent.loadedMetadata(video!);
+    expect(screen.getByText('High · 1280 x 720 · 1:05 · 2.0 MB')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'screen.png' })).toHaveStyle({ maxHeight: '200px' });
 
     await user.click(screen.getByRole('img', { name: 'screen.png' }));

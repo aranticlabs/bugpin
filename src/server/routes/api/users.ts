@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { usersService } from '../../services/users.service.js';
+import { twoFactorService } from '../../services/two-factor.service.js';
 import { invitationsService } from '../../services/invitations.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
@@ -165,6 +166,22 @@ users.patch(
       success: true,
       user: result.value,
     });
+  }
+);
+
+// Reset a user's two-factor authentication (Admin only)
+
+users.delete(
+  '/:id/two-factor',
+  authorize(['admin']),
+  validate({ params: schemas.id }),
+  async (c) => {
+    const result = await twoFactorService.resetForUser(c.req.param('id'));
+    if (!result.success) {
+      const status = result.code === 'USER_NOT_FOUND' ? 404 : 400;
+      return c.json({ success: false, error: result.code, message: result.error }, status);
+    }
+    return c.json({ success: true, message: 'Two-factor authentication reset' });
   }
 );
 

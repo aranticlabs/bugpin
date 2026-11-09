@@ -15,6 +15,9 @@ interface FileRow {
   size_bytes: number;
   width: number | null;
   height: number | null;
+  captured_at: string | null;
+  duration_ms: number | null;
+  recording_quality: FileRecord['recordingQuality'] | null;
   created_at: string;
 }
 
@@ -31,6 +34,9 @@ function mapRowToFile(row: FileRow): FileRecord {
     sizeBytes: row.size_bytes,
     width: row.width ?? undefined,
     height: row.height ?? undefined,
+    capturedAt: row.captured_at ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    recordingQuality: row.recording_quality ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -49,8 +55,8 @@ export const filesRepo = {
     const now = new Date().toISOString();
 
     db.run(
-      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (id, report_id, type, filename, path, mime_type, size_bytes, width, height, captured_at, duration_ms, recording_quality, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.reportId,
@@ -61,6 +67,9 @@ export const filesRepo = {
         data.sizeBytes,
         data.width ?? null,
         data.height ?? null,
+        data.capturedAt ?? null,
+        data.durationMs ?? null,
+        data.recordingQuality ?? null,
         now,
       ]
     );

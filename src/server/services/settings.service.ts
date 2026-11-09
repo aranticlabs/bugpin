@@ -20,7 +20,9 @@ import type {
   ProjectLanguageSettings,
   ThemeColors,
   PrivacySettings,
+  TwoFactorPolicy,
 } from '@shared/types';
+import type { PasswordPolicy } from '@shared/password-policy';
 
 // Types
 
@@ -37,6 +39,8 @@ export interface UpdateSettingsInput {
   updateCheckEnabled?: boolean;
   // Security settings
   enforceHttps?: boolean;
+  twoFactorPolicy?: TwoFactorPolicy;
+  passwordPolicy?: PasswordPolicy;
   // Privacy settings
   privacy?: Partial<PrivacySettings>;
   // SMTP settings
@@ -254,6 +258,12 @@ export const settingsService = {
     // Security settings
     if (input.enforceHttps !== undefined) {
       updates.enforceHttps = input.enforceHttps;
+    }
+    if (input.twoFactorPolicy !== undefined) {
+      updates.twoFactorPolicy = input.twoFactorPolicy;
+    }
+    if (input.passwordPolicy !== undefined) {
+      updates.passwordPolicy = input.passwordPolicy;
     }
     if (input.privacy !== undefined) {
       const currentSettings = await settingsRepo.getAll();

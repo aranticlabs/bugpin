@@ -1,28 +1,48 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
-import { authService } from '../../services/auth.service.js';
+import { authService, type LoginResult } from '../../services/auth.service.js';
 import { authMiddleware, optionalAuth } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
 import { rateLimiter } from '../../middleware/rate-limit.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
+import { getClientIp } from '../../utils/client-ip.js';
+import { passwordPolicyService } from '../../services/password-policy.service.js';
+import { passkeyService } from '../../services/passkey.service.js';
+import { settingsCacheService } from '../../services/settings-cache.service.js';
+import { resolveRelyingParty, type RelyingParty } from '../../utils/relying-party.js';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
 const auth = new Hono();
 
 // Login
 
+async function startSession(c: Context, result: LoginResult) {
+  // Get session max age from settings
+  const settings = await settingsRepo.getAll();
+  const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
+
+  // Set session cookie
+  setCookie(c, 'session', result.session.id, {
+    httpOnly: true,
+    secure: config.isProd,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: sessionMaxAgeSeconds,
+  });
+
+  return c.json({ success: true, user: result.user });
+}
+
 auth.post(
   '/login',
-  rateLimiter({ max: 5, window: 60 }), // 5 attempts per minute
+  rateLimiter({ name: 'login', max: 5, window: 60 }), // 5 attempts per minute
   validate({ body: schemas.login }),
   async (c) => {
     const { email, password } = await c.req.json();
 
     // Get IP and user agent for session
-    const ipAddress =
-      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-      c.req.header('x-real-ip') ||
-      undefined;
+    const ipAddress = getClientIp(c);
     const userAgent = c.req.header('user-agent');
 
     const result = await authService.login(email, password, ipAddress, userAgent);
@@ -31,25 +51,139 @@ auth.post(
       return c.json({ success: false, error: result.code, message: result.error }, 401);
     }
 
-    // Get session max age from settings
-    const settings = await settingsRepo.getAll();
-    const sessionMaxAgeSeconds = settings.sessionMaxAgeDays * 24 * 60 * 60;
+    if ('twoFactorRequired' in result.value) {
+      const { challengeToken, methods } = result.value;
+      return c.json({ success: true, twoFactorRequired: true, challengeToken, methods });
+    }
 
-    // Set session cookie
-    setCookie(c, 'session', result.value.session.id, {
-      httpOnly: true,
-      secure: config.isProd,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: sessionMaxAgeSeconds,
-    });
-
-    return c.json({
-      success: true,
-      user: result.value.user,
-    });
+    return startSession(c, result.value);
   }
 );
+
+function secondFactorFailureStatus(code: string | undefined): 401 | 429 {
+  return code === 'TOO_MANY_ATTEMPTS' ? 429 : 401;
+}
+
+// Second login step (authenticator code or recovery code)
+
+auth.post(
+  '/login/two-factor',
+  rateLimiter({ name: 'login-two-factor', max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorLogin }),
+  async (c) => {
+    const body = await c.req.json();
+    const input = body.recoveryCode ? { recoveryCode: body.recoveryCode } : { code: body.code };
+    const result = await authService.completeTwoFactorLogin(body.challengeToken, input);
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        secondFactorFailureStatus(result.code)
+      );
+    }
+    return startSession(c, result.value);
+  }
+);
+
+// Passkeys
+
+async function relyingParty(c: Context): Promise<RelyingParty | null> {
+  return resolveRelyingParty(c, await settingsCacheService.getAll());
+}
+
+function originRejected(c: Context) {
+  return c.json(
+    {
+      success: false,
+      error: 'PASSKEY_ORIGIN_MISMATCH',
+      message: 'Passkeys only work on the address BugPin is configured for',
+    },
+    400
+  );
+}
+
+auth.post(
+  '/login/two-factor/passkey/options',
+  rateLimiter({ name: 'login-two-factor-passkey-options', max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorPasskeyOptions }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const { challengeToken } = await c.req.json();
+    const result = await authService.passkeySecondFactorOptions(rp, challengeToken);
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return c.json({ success: true, options: result.value });
+  }
+);
+
+auth.post(
+  '/login/two-factor/passkey',
+  rateLimiter({ name: 'login-two-factor-passkey', max: 10, window: 60 }),
+  validate({ body: schemas.twoFactorPasskeyLogin }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const body = (await c.req.json()) as {
+      challengeToken: string;
+      response: AuthenticationResponseJSON;
+    };
+    const result = await authService.completePasskeySecondFactor(
+      rp,
+      body.challengeToken,
+      body.response
+    );
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        secondFactorFailureStatus(result.code)
+      );
+    }
+    return startSession(c, result.value);
+  }
+);
+
+auth.post(
+  '/login/passkey/options',
+  rateLimiter({ name: 'login-passkey-options', max: 10, window: 60 }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const { challengeId, options } = await passkeyService.loginOptions(rp);
+    return c.json({ success: true, challengeId, options });
+  }
+);
+
+auth.post(
+  '/login/passkey',
+  rateLimiter({ name: 'login-passkey', max: 10, window: 60 }),
+  validate({ body: schemas.passkeyLogin }),
+  async (c) => {
+    const rp = await relyingParty(c);
+    if (!rp) return originRejected(c);
+    const body = (await c.req.json()) as {
+      challengeId: string;
+      response: AuthenticationResponseJSON;
+    };
+    const result = await authService.loginWithPasskey(
+      rp,
+      body.challengeId,
+      body.response,
+      getClientIp(c),
+      c.req.header('user-agent')
+    );
+    if (!result.success) {
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    }
+    return startSession(c, result.value);
+  }
+);
+
+// Password policy (public, so the invitation page can show the rules before sign-in)
+
+auth.get('/password-policy', async (c) => {
+  return c.json({ success: true, policy: await passwordPolicyService.getPolicy() });
+});
 
 // Logout
 

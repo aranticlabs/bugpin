@@ -157,7 +157,9 @@ See [docs/CODING-PRINCIPLES.md](docs/CODING-PRINCIPLES.md) for complete naming c
 ### Development Commands
 
 Dependency ranges may use `^`; commit the updated `bun.lock` with dependency changes.
-CI checks that npm releases are at least 72 hours old. Run
+CI checks that npm releases are at least 72 hours old for PRs targeting `dev` or
+`main` and pushes to those branches. PRs targeting other branches do not run this
+policy. Docker releases also use the same policy. Run
 `bun run check:dependency-age` with EE initialized, or
 `bun run src/server/scripts/check-dependency-age.ts bun.lock` for a CE-only check.
 
@@ -168,7 +170,18 @@ EE access. CE dependency, manifest, or check configuration changes validate the
 public CE lockfile. Changes to the EE revision or submodule configuration require
 both lockfiles; fork PRs making those changes need a trusted maintainer branch
 with EE access. Pushes to `dev`/`main`, manual runs, and Docker builds always
-validate both lockfiles.
+validate both lockfiles. Download or network failures require rerunning failed
+jobs; they do not create an age exception approval request.
+
+The policy has three jobs: **Check dependency ages**, optional **Approve age
+exception**, and **Dependency policy**, which reports the final decision and
+next steps. Package ages and eligibility times are listed in the workflow summary.
+Approvals apply only to that workflow run and revision.
+
+After publishing the simplified workflow, maintainers must require only
+`age-policy / Dependency policy` for the dependency policy in both branch rulesets,
+replacing the previous `dependency-age` and `age-policy / validate` requirements.
+Leave other required checks, such as DCO, in place.
 
 ```bash
 # Install dependencies

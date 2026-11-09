@@ -18,6 +18,8 @@ interface UserRow {
   avatar_url: string | null;
   role: UserRole;
   is_active: number;
+  must_change_password: number;
+  password_changed_at: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -37,6 +39,8 @@ function mapRowToUser(row: UserRow): User {
     avatarUrl: row.avatar_url ?? undefined,
     role: row.role,
     isActive: row.is_active === 1,
+    mustChangePassword: row.must_change_password === 1,
+    passwordChangedAt: row.password_changed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at ?? undefined,
@@ -74,8 +78,8 @@ export const usersRepo = {
     const now = new Date().toISOString();
 
     db.run(
-      `INSERT INTO users (id, email, password_hash, name, avatar_url, role, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (id, email, password_hash, name, avatar_url, role, is_active, must_change_password, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.email.toLowerCase(),
@@ -84,6 +88,7 @@ export const usersRepo = {
         data.avatarUrl ?? null,
         data.role ?? 'viewer',
         1,
+        data.mustChangePassword ? 1 : 0,
         now,
         now,
       ]
@@ -213,12 +218,23 @@ export const usersRepo = {
   async updatePassword(id: string, passwordHash: string): Promise<boolean> {
     const db = getDb();
     const now = new Date().toISOString();
-    const result = db.run('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [
-      passwordHash,
-      now,
+    const result = db.run(
+      'UPDATE users SET password_hash = ?, must_change_password = 0, password_changed_at = ?, updated_at = ? WHERE id = ?',
+      [passwordHash, now, now, id]
+    );
+    return result.changes > 0;
+  },
+
+  /**
+   * Require (or stop requiring) a password change before the user can use the API
+   */
+  async setMustChangePassword(id: string, mustChangePassword: boolean): Promise<void> {
+    const db = getDb();
+    db.run('UPDATE users SET must_change_password = ?, updated_at = ? WHERE id = ?', [
+      mustChangePassword ? 1 : 0,
+      new Date().toISOString(),
       id,
     ]);
-    return result.changes > 0;
   },
 
   /**
@@ -347,6 +363,7 @@ export const usersRepo = {
       `UPDATE users SET ${sets.join(', ')}
        WHERE id = ?
          AND invitation_token = ?
+         AND invitation_sent_at IS NOT NULL
          AND invitation_accepted_at IS NULL`,
       params
     );
@@ -365,10 +382,17 @@ export const usersRepo = {
     const db = getDb();
     const now = new Date().toISOString();
 
-    db.run(
-      `UPDATE users SET invitation_token = ?, invitation_token_expires_at = ?, invitation_sent_at = ?, updated_at = ? WHERE id = ?`,
+    const result = db.run(
+      `UPDATE users SET invitation_token = ?, invitation_token_expires_at = ?, invitation_sent_at = ?, updated_at = ?
+       WHERE id = ?
+         AND invitation_sent_at IS NOT NULL
+         AND invitation_accepted_at IS NULL`,
       [token, expiresAt, now, now, id]
     );
+
+    if (result.changes === 0) {
+      return null;
+    }
 
     return this.findById(id);
   },

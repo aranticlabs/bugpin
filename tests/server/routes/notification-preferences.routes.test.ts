@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { notificationPreferences } from '../../../src/server/routes/api/notification-preferences';
 import { notificationsService } from '../../../src/server/services/notifications.service';
 import { authService } from '../../../src/server/services/auth.service';
@@ -107,8 +107,8 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.preferences).toHaveLength(1);
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('preferences.length', 1);
     });
 
     it('returns 400 when service fails', async () => {
@@ -133,8 +133,8 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.preferences.projectId).toBe('prj_1');
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('preferences.projectId', 'prj_1');
     });
 
     it('returns 404 when project not found', async () => {
@@ -170,7 +170,7 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect(body).toHaveProperty('success', true);
     });
 
     it('returns 404 when project not found', async () => {
@@ -208,8 +208,8 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.defaults.projectId).toBe('prj_1');
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('defaults.projectId', 'prj_1');
     });
 
     it('returns 403 for viewer', async () => {
@@ -261,7 +261,7 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect(body).toHaveProperty('success', true);
     });
 
     it('returns 403 for viewer', async () => {
@@ -299,7 +299,7 @@ describe('notification-preferences routes', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect(body).toHaveProperty('success', true);
     });
 
     it('returns 403 for viewer', async () => {

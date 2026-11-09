@@ -76,6 +76,10 @@ const de: WidgetCatalog = {
   'screenshot.action.download': 'Herunterladen',
   'screenshot.action.remove': 'Entfernen',
   'screenshot.helperText': 'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB)',
+  'recording.quality.low': 'Niedrig',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Hoch',
+  'recording.quality.setting': 'Aufnahmequalität: {quality}',
   'recording.helperText': 'Unterstützt: MP4, WebM, MOV (max. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Nicht unterstütztes Bildformat: {type}',
@@ -128,6 +132,10 @@ const de: WidgetCatalog = {
     'Der Upload ist zu groß für den Server. Entferne einige Medien und versuche es erneut.',
   'submit.error.videoQuota':
     'Video-Uploads sind für dieses Projekt pausiert. Entferne das Video, um den Bericht zu senden.',
+  'submit.error.rejected':
+    'Der Upload wurde abgelehnt. Möglicherweise sind deine Anhänge zu groß. Entferne oder verkleinere sie und versuche es erneut.',
+  'submit.queued':
+    'Bericht gespeichert. Er wird automatisch gesendet, sobald die Verbindung wieder steht.',
 
   'toast.success.submit': 'Fehlerbericht erfolgreich gesendet!',
   'toast.error.submit': 'Bericht konnte nicht gesendet werden',

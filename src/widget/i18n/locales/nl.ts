@@ -77,6 +77,10 @@ const nl: WidgetCatalog = {
   'screenshot.action.download': 'Downloaden',
   'screenshot.action.remove': 'Verwijderen',
   'screenshot.helperText': 'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Laag',
+  'recording.quality.standard': 'Standaard',
+  'recording.quality.high': 'Hoog',
+  'recording.quality.setting': 'Opnamekwaliteit: {quality}',
   'recording.helperText': 'Ondersteund: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',
@@ -129,6 +133,10 @@ const nl: WidgetCatalog = {
     'De upload is te groot voor de server. Verwijder media en probeer het opnieuw.',
   'submit.error.videoQuota':
     'Video-uploads zijn gepauzeerd voor dit project. Verwijder de video om het rapport te verzenden.',
+  'submit.error.rejected':
+    'De upload is geweigerd. Je bijlagen zijn mogelijk te groot. Verwijder of verklein ze en probeer het opnieuw.',
+  'submit.queued':
+    'Rapport opgeslagen. Het wordt automatisch verzonden zodra de verbinding hersteld is.',
 
   'toast.success.submit': 'Bugrapport succesvol verzonden!',
   'toast.error.submit': 'Verzenden van rapport mislukt',

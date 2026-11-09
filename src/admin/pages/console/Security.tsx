@@ -16,10 +16,90 @@ import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Switch } from '../../components/ui/switch';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
-import type { AppSettings } from '@shared/types';
+import { Checkbox } from '../../components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import type { AppSettings, TwoFactorPolicy } from '@shared/types';
+import {
+  DEFAULT_PASSWORD_POLICY,
+  PASSWORD_MIN_LENGTH_CEILING,
+  PASSWORD_MIN_LENGTH_FLOOR,
+  type PasswordPolicy,
+} from '@shared/password-policy';
 
 export function Security() {
+  return (
+    <div className="max-w-4xl space-y-6">
+      <SecuritySettingsCard />
+    </div>
+  );
+}
+
+export function TwoFactor() {
+  return (
+    <div className="max-w-4xl space-y-6">
+      <TwoFactorPolicyCard />
+    </div>
+  );
+}
+
+export function PasswordPolicySettings() {
+  return (
+    <div className="max-w-4xl space-y-6">
+      <PasswordPolicyCard />
+    </div>
+  );
+}
+
+function useSettings() {
+  return useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const response = await api.get('/settings');
+      return response.data.settings as AppSettings;
+    },
+  });
+}
+
+function useSaveSettings(successMessage: string) {
   const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<AppSettings>) => {
+      const response = await api.put('/settings', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      queryClient.invalidateQueries({ queryKey: ['password-policy'] });
+      toast.success(successMessage);
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'Failed to save settings');
+    },
+  });
+}
+
+function SaveButton({ isPending }: { isPending: boolean }) {
+  return (
+    <Button type="submit" disabled={isPending}>
+      {isPending ? (
+        <>
+          <Spinner size="sm" className="mr-2" />
+          Saving...
+        </>
+      ) : (
+        'Save Changes'
+      )}
+    </Button>
+  );
+}
+
+function SecuritySettingsCard() {
   const [formData, setFormData] = useState({
     enforceHttps: false,
     rateLimitPerMinute: 60,
@@ -27,13 +107,7 @@ export function Security() {
     invitationExpirationDays: 7,
   });
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const response = await api.get('/settings');
-      return response.data.settings as AppSettings;
-    },
-  });
+  const { data: settings, isLoading } = useSettings();
 
   useEffect(() => {
     if (settings) {
@@ -46,19 +120,7 @@ export function Security() {
     }
   }, [settings]);
 
-  const mutation = useMutation({
-    mutationFn: async (data: Partial<AppSettings>) => {
-      const response = await api.put('/settings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Security settings saved successfully');
-    },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save settings');
-    },
-  });
+  const mutation = useSaveSettings('Security settings saved successfully');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +129,7 @@ export function Security() {
 
   if (isLoading) {
     return (
-      <Card className="max-w-4xl">
+      <Card>
         <CardContent className="py-12">
           <Spinner className="mx-auto text-primary" />
         </CardContent>
@@ -76,7 +138,7 @@ export function Security() {
   }
 
   return (
-    <Card className="max-w-4xl">
+    <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle>Security Settings</CardTitle>
@@ -119,8 +181,8 @@ export function Security() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Rate limiting helps prevent abuse by limiting the number of requests from a single IP
-              address. This applies globally to all projects.
+              Rate limiting helps prevent abuse by limiting the number of widget submissions from a
+              single IP address. Each project is counted separately.
             </AlertDescription>
           </Alert>
 
@@ -138,7 +200,8 @@ export function Security() {
               required
             />
             <p className="text-xs text-muted-foreground">
-              Maximum number of API requests allowed per minute from a single IP address (1-1000)
+              Maximum number of widget submissions allowed per minute from a single IP address for
+              each project (1-1000)
             </p>
           </div>
 
@@ -181,16 +244,146 @@ export function Security() {
             </p>
           </div>
 
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </Button>
+          <SaveButton isPending={mutation.isPending} />
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+const TWO_FACTOR_POLICY_LABELS: Record<TwoFactorPolicy, string> = {
+  off: 'Off',
+  admins: 'Admins only',
+  everyone: 'All users',
+};
+
+function TwoFactorPolicyCard() {
+  const { data: settings } = useSettings();
+  const [policy, setPolicy] = useState<TwoFactorPolicy>('off');
+  const mutation = useSaveSettings('Two-factor policy saved');
+
+  useEffect(() => {
+    if (settings) setPolicy(settings.twoFactorPolicy ?? 'off');
+  }, [settings]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Two-Factor Authentication</CardTitle>
+        <CardDescription>
+          Require an authenticator app or a passkey in addition to the password
+        </CardDescription>
+      </CardHeader>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate({ twoFactorPolicy: policy });
+        }}
+      >
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="two-factor-policy">Require for</Label>
+            <Select value={policy} onValueChange={(value) => setPolicy(value as TwoFactorPolicy)}>
+              <SelectTrigger id="two-factor-policy" className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TWO_FACTOR_POLICY_LABELS) as TwoFactorPolicy[]).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {TWO_FACTOR_POLICY_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Users the policy covers who have no second factor yet must set one up at their next
+              sign-in. Users can always add one themselves in their profile.
+            </p>
+          </div>
+          <SaveButton isPending={mutation.isPending} />
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+const PASSWORD_RULE_OPTIONS: {
+  key: 'requireUppercase' | 'requireLowercase' | 'requireNumber' | 'requireSymbol';
+  label: string;
+}[] = [
+  { key: 'requireUppercase', label: 'Uppercase letter' },
+  { key: 'requireLowercase', label: 'Lowercase letter' },
+  { key: 'requireNumber', label: 'Number' },
+  { key: 'requireSymbol', label: 'Special character' },
+];
+
+function PasswordPolicyCard() {
+  const { data: settings } = useSettings();
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_PASSWORD_POLICY);
+  const mutation = useSaveSettings('Password policy saved');
+
+  useEffect(() => {
+    if (settings?.passwordPolicy) setPolicy(settings.passwordPolicy);
+  }, [settings]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Password Policy</CardTitle>
+        <CardDescription>
+          Strength rules for new passwords. Existing passwords keep working until they are changed.
+        </CardDescription>
+      </CardHeader>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate({ passwordPolicy: policy });
+        }}
+      >
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="password-min-length">Minimum length</Label>
+            <Input
+              id="password-min-length"
+              type="number"
+              min={PASSWORD_MIN_LENGTH_FLOOR}
+              max={PASSWORD_MIN_LENGTH_CEILING}
+              className="w-32"
+              value={policy.minLength}
+              onChange={(event) =>
+                setPolicy({
+                  ...policy,
+                  minLength: parseInt(event.target.value) || PASSWORD_MIN_LENGTH_FLOOR,
+                })
+              }
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Number of characters ({PASSWORD_MIN_LENGTH_FLOOR}-{PASSWORD_MIN_LENGTH_CEILING})
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <Label>Must contain</Label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {PASSWORD_RULE_OPTIONS.map((option) => (
+                <div key={option.key} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`password-${option.key}`}
+                    checked={policy[option.key]}
+                    onCheckedChange={(checked) =>
+                      setPolicy({ ...policy, [option.key]: checked === true })
+                    }
+                  />
+                  <Label htmlFor={`password-${option.key}`} className="font-normal">
+                    {option.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <SaveButton isPending={mutation.isPending} />
         </CardContent>
       </form>
     </Card>

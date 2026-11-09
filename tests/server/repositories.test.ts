@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'bun:test';
+import type { ReportMetadata } from '../../src/shared/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -86,7 +87,7 @@ async function createUser(email = 'user@example.com') {
   });
 }
 
-const baseMetadata = {
+const baseMetadata: ReportMetadata = {
   url: 'https://example.com',
   browser: { name: 'Chrome', version: '1', userAgent: 'UA' },
   device: { type: 'desktop', os: 'macOS' },
@@ -295,7 +296,6 @@ describe('usersRepo', () => {
       name: 'Admin',
       isActive: false,
       email: 'Updated@Example.com',
-      avatarUrl: null,
       role: 'viewer',
     });
     expect(updated?.isActive).toBe(false);
@@ -322,6 +322,26 @@ describe('usersRepo', () => {
 
     const deleted = await usersRepo.delete(user.id);
     expect(deleted).toBe(true);
+  });
+
+  it('never issues or accepts an invitation for an account that was not invited', async () => {
+    const user = await usersRepo.create({
+      email: 'direct@example.com',
+      passwordHash: 'original-hash',
+      name: 'Direct',
+      role: 'admin',
+    });
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+
+    const reissued = await usersRepo.updateInvitationToken(user.id, 'planted-token', expiresAt);
+    expect(reissued).toBeNull();
+
+    getDb().run('UPDATE users SET invitation_token = ? WHERE id = ?', ['planted-token', user.id]);
+    const accepted = await usersRepo.acceptInvitation(user.id, 'planted-token', 'attacker-hash');
+    expect(accepted).toBeNull();
+
+    const withPassword = await usersRepo.findByEmailWithPassword('direct@example.com');
+    expect(withPassword?.passwordHash).toBe('original-hash');
   });
 
   it('accepts an invitation only once for a given token', async () => {
@@ -522,6 +542,67 @@ describe('integrationsRepo', () => {
 });
 
 describe('reportsRepo', () => {
+  it('preserves the resolution time and resolver when saving an already resolved report', async () => {
+    const project = await createProject('Resolution history');
+    const resolver = await createUser('resolver@example.com');
+    const editor = await createUser('editor@example.com');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Resolved report',
+      metadata: baseMetadata,
+    });
+    const resolvedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?', [
+      'resolved',
+      resolvedAt,
+      resolver.id,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+      title: 'Updated title',
+    });
+    expect(saved).toMatchObject({ title: 'Updated title', resolvedAt, resolvedBy: resolver.id });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'in_progress' });
+    expect(reopened?.resolvedAt).toBeUndefined();
+    expect(reopened?.resolvedBy).toBeUndefined();
+
+    const resolved = await reportsRepo.update(report.id, {
+      status: 'resolved',
+      resolvedBy: editor.id,
+    });
+    expect(resolved?.resolvedAt).toBeTruthy();
+    expect(resolved?.resolvedAt).not.toBe(resolvedAt);
+    expect(resolved?.resolvedBy).toBe(editor.id);
+  });
+
+  it('preserves the closure time when saving an already closed report', async () => {
+    const project = await createProject('Closure history');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Closed report',
+      metadata: baseMetadata,
+    });
+    const closedAt = '2026-01-01T12:00:00.000Z';
+    getDb().run('UPDATE reports SET status = ?, closed_at = ? WHERE id = ?', [
+      'closed',
+      closedAt,
+      report.id,
+    ]);
+
+    const saved = await reportsRepo.update(report.id, { status: 'closed', priority: 'high' });
+    expect(saved).toMatchObject({ priority: 'high', closedAt });
+
+    const reopened = await reportsRepo.update(report.id, { status: 'open' });
+    expect(reopened?.closedAt).toBeUndefined();
+    const closed = await reportsRepo.update(report.id, { status: 'closed' });
+    expect(closed?.closedAt).toBeTruthy();
+    expect(closed?.closedAt).not.toBe(closedAt);
+  });
+
   it('creates, updates, and deletes reports', async () => {
     const project = await createProject('Reports');
 
@@ -829,7 +910,6 @@ describe('webhooksRepo', () => {
 
     const updated = await webhooksRepo.update(secondary.id, {
       isActive: false,
-      secret: null,
       events: ['report.created'],
     });
     expect(updated?.isActive).toBe(false);

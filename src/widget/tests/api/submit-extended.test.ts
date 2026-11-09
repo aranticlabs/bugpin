@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
 import { installMockXMLHttpRequest } from '../helpers/xhr';
+import { t } from '../../i18n/index';
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -83,20 +84,25 @@ describe('submit API (offline + errors)', () => {
       metadata: baseMetadata,
     });
 
-    expect(result.success).toBe(true);
-    expect(result.message).toContain('back online');
+    expect(result).toMatchObject({ success: true, queued: true, message: t('submit.queued') });
     expect(await getPendingCount()).toBe(1);
   });
 
-  it('buffers report when XHR reports a network error', async () => {
+  it('queues the report when neither the upload nor the server can be reached', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
     installMockXMLHttpRequest((request) => request.fail());
+    const probes: Array<{ url: string; cache?: RequestCache }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      probes.push({ url: String(input), cache: init?.cache });
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof fetch;
 
     const { submitReport } = await import('../../api/submit');
-    const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
+    const { clearBuffer, getPendingReports } = await import('../../storage/report-buffer');
     await clearBuffer();
 
     const result = await submitReport({
+      submissionId: 'submission-offline',
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',
       title: 'Bug report',
@@ -104,9 +110,104 @@ describe('submit API (offline + errors)', () => {
       metadata: baseMetadata,
     });
 
-    expect(result.success).toBe(true);
-    expect(result.message).toContain('connection');
-    expect(await getPendingCount()).toBe(1);
+    expect(result).toMatchObject({ success: true, queued: true, message: t('submit.queued') });
+    expect(probes[0]).toEqual({
+      url: 'https://example.com/api/widget/config/proj_key',
+      cache: 'no-store',
+    });
+    const pending = await getPendingReports();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.submissionId).toBe('submission-offline');
+  });
+
+  it('reports a rejected upload without queueing it when the server is reachable', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest((request) => request.fail());
+    let probes = 0;
+    globalThis.fetch = (async () => {
+      probes++;
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const { submitReport } = await import('../../api/submit');
+    const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
+    await clearBuffer();
+
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      })
+    ).rejects.toThrow(t('submit.error.rejected'));
+    expect(probes).toBe(1);
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('treats a server error status from the probe as a reachable server', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    installMockXMLHttpRequest((request) => request.fail());
+    globalThis.fetch = (async () => new Response('', { status: 502 })) as unknown as typeof fetch;
+
+    const { submitReport } = await import('../../api/submit');
+    const { clearBuffer, getPendingCount } = await import('../../storage/report-buffer');
+    await clearBuffer();
+
+    await expect(
+      submitReport({
+        apiKey: 'proj_key',
+        serverUrl: 'https://example.com',
+        title: 'Bug report',
+        priority: 'medium',
+        metadata: baseMetadata,
+      })
+    ).rejects.toThrow(t('submit.error.rejected'));
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('sends the submission ID and accepts a duplicate response as success', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    let sentId: unknown;
+    installMockXMLHttpRequest((request) => {
+      sentId = JSON.parse((request.body as FormData).get('data') as string).submissionId;
+      request.respond(200, JSON.stringify({ success: true, reportId: 'rpt_1', duplicate: true }));
+    });
+
+    const { submitReport } = await import('../../api/submit');
+    const result = await submitReport({
+      submissionId: 'submission-repeat',
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    expect(sentId).toBe('submission-repeat');
+    expect(result).toMatchObject({ success: true, reportId: 'rpt_1', duplicate: true });
+    expect(result.queued).toBeUndefined();
+  });
+
+  it('generates a submission ID when the caller does not provide one', async () => {
+    globalThis.navigator = { onLine: true } as Navigator;
+    let sentId: unknown;
+    installMockXMLHttpRequest((request) => {
+      sentId = JSON.parse((request.body as FormData).get('data') as string).submissionId;
+      request.respond(200, JSON.stringify({ success: true, reportId: 'rpt_1' }));
+    });
+
+    const { submitReport } = await import('../../api/submit');
+    await submitReport({
+      apiKey: 'proj_key',
+      serverUrl: 'https://example.com',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    expect(sentId).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/));
   });
 
   it('throws for server errors', async () => {
@@ -226,6 +327,41 @@ describe('submit API (offline + errors)', () => {
 });
 
 describe('submit API (media + config)', () => {
+  it('pairs metadata with filenames across mixed uploads and recordings', async () => {
+    const { buildSubmitFormData } = await import('../../api/submit-form');
+    const { formData } = buildSubmitFormData({
+      title: 'Mixed media',
+      priority: 'medium',
+      metadata: baseMetadata,
+      media: [
+        {
+          blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+          mimeType: 'video/webm',
+          source: 'recording',
+          recordingQuality: 'high',
+          timestamp: new Date('2026-11-08T14:00:00Z'),
+          width: 1920,
+          height: 1080,
+          durationMs: 24000,
+        },
+        { dataUrl: 'data:image/png;base64,AA==', mimeType: 'image/png', width: 800, height: 600 },
+        { blob: new Blob([new Uint8Array([2])]), mimeType: 'video/mp4', recordingQuality: 'low' },
+      ],
+    });
+    expect(JSON.parse(formData.get('data') as string).mediaMetadata).toEqual([
+      {
+        filename: 'recording-0.webm',
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        width: 1920,
+        height: 1080,
+        durationMs: 24000,
+        recordingQuality: 'high',
+      },
+      { filename: 'screenshot-1.png', width: 800, height: 600 },
+      { filename: 'video-2.mp4' },
+    ]);
+  });
+
   it('uploads media attachments and annotations', async () => {
     globalThis.navigator = { onLine: true } as Navigator;
 
@@ -293,6 +429,37 @@ describe('submit API (media + config)', () => {
       (capturedData as unknown as { mediaAnnotations?: unknown[] })?.mediaAnnotations?.length
     ).toBe(1);
     expect(progress).toEqual([0.5]);
+  });
+
+  it('includes the submission ID in the data field', async () => {
+    const { buildSubmitFormData } = await import('../../api/submit-form');
+    const { formData } = buildSubmitFormData({
+      submissionId: 'submission-form',
+      title: 'Bug report',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    expect(JSON.parse(formData.get('data') as string).submissionId).toBe('submission-form');
+  });
+
+  it('creates submission IDs the server accepts, with or without randomUUID', async () => {
+    const { createSubmissionId } = await import('../../api/submit-form');
+    const pattern = /^[A-Za-z0-9_-]{8,64}$/;
+    expect(createSubmissionId()).toMatch(pattern);
+
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      value: { getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto) },
+      configurable: true,
+    });
+    try {
+      const first = createSubmissionId();
+      expect(first).toMatch(pattern);
+      expect(createSubmissionId()).not.toBe(first);
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { value: originalCrypto, configurable: true });
+    }
   });
 
   it('counts the JSON field in the request size', async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { renderWithProviders, screen, userEvent, waitFor } from '../utils';
+import { renderWithProviders, screen, userEvent, within } from '../utils';
 import { AppSidebar } from '../../components/sidebar/AppSidebar';
 import { SidebarProvider } from '../../components/ui/sidebar';
 import { BrandingProvider } from '../../contexts/BrandingContext';
@@ -23,7 +23,7 @@ describe('AppSidebar', () => {
     expect(await screen.findByRole('link', { name: 'Reports (17)' })).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Projects (2)' })).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText('Security & Privacy')).toBeInTheDocument();
+    expect(screen.getByText('Security')).toBeInTheDocument();
 
     const userButton = screen.getByText('Admin User').closest('button');
     expect(userButton).not.toBeNull();
@@ -36,9 +36,10 @@ describe('AppSidebar', () => {
     await user.click(await screen.findByRole('menuitem', { name: /notifications/i }));
     expect(await screen.findByText('Notification Preferences')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText('Save Changes')).toBeInTheDocument();
-    });
+    const notifications = await screen.findByRole('dialog', { name: 'Notification Preferences' });
+    expect(
+      await within(notifications).findByRole('button', { name: 'Save Changes' })
+    ).toBeInTheDocument();
   });
 
   it('hides admin-only navigation for non-admin users', async () => {

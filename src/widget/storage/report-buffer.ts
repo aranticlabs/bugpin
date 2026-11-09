@@ -1,9 +1,10 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { buildSubmitFormData, type MediaItem } from '../api/submit-form.js';
+import { buildSubmitFormData, createSubmissionId, type MediaItem } from '../api/submit-form.js';
 
 const DB_NAME = 'bugpin-reports';
 const DB_VERSION = 2; // Bump version for schema change
 const STORE_NAME = 'pending-reports';
+const SYNC_LOCK_NAME = 'bugpin-report-sync';
 
 // Retry configuration
 const MAX_RETRIES = 5;
@@ -13,6 +14,7 @@ const BACKOFF_MULTIPLIER = 2;
 
 interface PendingReport {
   id: string;
+  submissionId: string;
   apiKey: string;
   serverUrl: string;
   title: string;
@@ -51,6 +53,12 @@ interface ReportBufferDB extends DBSchema {
 
 let db: IDBPDatabase<ReportBufferDB> | null = null;
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let syncInFlight = false;
+
+interface SyncResult {
+  synced: number;
+  failed: number;
+}
 
 /**
  * Initialize the IndexedDB database
@@ -210,14 +218,43 @@ async function submitReport(report: PendingReport): Promise<boolean> {
 }
 
 /**
- * Sync all pending reports to the server
+ * Sync all pending reports to the server. Runs never overlap, within this tab or across tabs,
+ * so a slow upload is not posted a second time while it is still in flight.
  */
-export async function syncPendingReports(): Promise<{ synced: number; failed: number }> {
+export async function syncPendingReports(): Promise<SyncResult> {
   if (!isOnline()) {
     console.log('[BugPin] Offline, skipping sync');
     return { synced: 0, failed: 0 };
   }
+  if (syncInFlight) return { synced: 0, failed: 0 };
 
+  syncInFlight = true;
+  try {
+    return await withSyncLock(syncAll);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function withSyncLock(task: () => Promise<SyncResult>): Promise<SyncResult> {
+  const locks = navigator.locks;
+  if (typeof locks?.request !== 'function') return task();
+
+  let granted = false;
+  try {
+    return await locks.request(SYNC_LOCK_NAME, { ifAvailable: true }, (lock) => {
+      if (!lock) return { synced: 0, failed: 0 };
+      granted = true;
+      return task();
+    });
+  } catch (error) {
+    // Opaque origins (sandboxed iframes) reject lock requests; sync without the lock there.
+    if (granted) throw error;
+    return task();
+  }
+}
+
+async function syncAll(): Promise<SyncResult> {
   const pending = await getPendingReports();
 
   if (pending.length === 0) {
@@ -237,6 +274,11 @@ export async function syncPendingReports(): Promise<{ synced: number; failed: nu
       if (Date.now() < nextRetryAt) {
         continue; // Skip, not time yet
       }
+    }
+
+    if (!report.submissionId) {
+      report.submissionId = createSubmissionId();
+      await updateBufferedReport(report);
     }
 
     try {

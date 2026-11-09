@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Hono } from '../../../src/server/node_modules/hono/dist/index.js';
+import { Hono } from '../../../src/server/node_modules/hono';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
@@ -26,6 +26,7 @@ const baseSession: Session = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
   id: 'rpt_1',
   projectId: 'prj_1',
   source: 'widget',
@@ -98,7 +99,13 @@ beforeEach(() => {
   reportsService.bulkUpdate = async () => Result.ok(2);
   reportsService.createManual = async (body) => {
     createManualPayload = body;
-    return Result.ok({ ...baseReport, ...body, id: 'rpt_new', source: 'manual' });
+    return Result.ok({
+      ...baseReport,
+      ...body,
+      assignedTo: body.assignedTo ?? undefined,
+      id: 'rpt_new',
+      source: 'manual',
+    });
   };
   reportsService.getStats = async () =>
     Result.ok({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } } as never);

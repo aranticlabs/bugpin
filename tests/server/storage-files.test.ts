@@ -218,7 +218,13 @@ describe('file storage', () => {
     const originalHooks = getEEHooks();
     const rangeCalls: Array<[string, number, number]> = [];
     let wholeReads = 0;
-    const provider = {
+    const provider: StorageProvider = {
+      acceptsUploads: () => true,
+      upload: async () => Result.fail('unused'),
+      delete: async () => Result.ok(undefined),
+      exists: async () => Result.ok(true),
+      testConnection: async () => Result.ok(undefined),
+      getStatus: async () => Result.ok({ enabled: true, configured: true }),
       read: async () => {
         wholeReads++;
         return Result.ok(new Uint8Array());
@@ -227,7 +233,7 @@ describe('file storage', () => {
         rangeCalls.push([filePath, start, end]);
         return Result.ok(new TextEncoder().encode('2345'));
       },
-    } as StorageProvider;
+    };
     registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
 
     try {
@@ -243,12 +249,18 @@ describe('file storage', () => {
   it('falls back to a whole-object read for older storage providers', async () => {
     const originalHooks = getEEHooks();
     let reads = 0;
-    const provider = {
+    const provider: StorageProvider = {
+      acceptsUploads: () => true,
+      upload: async () => Result.fail('unused'),
+      delete: async () => Result.ok(undefined),
+      exists: async () => Result.ok(true),
+      testConnection: async () => Result.ok(undefined),
+      getStatus: async () => Result.ok({ enabled: true, configured: true }),
       read: async () => {
         reads++;
         return Result.ok(new TextEncoder().encode('0123456789'));
       },
-    } as StorageProvider;
+    };
     registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
 
     try {

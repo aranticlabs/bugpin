@@ -75,6 +75,10 @@ const it: WidgetCatalog = {
   'screenshot.action.download': 'Scarica',
   'screenshot.action.remove': 'Rimuovi',
   'screenshot.helperText': 'Supportati: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Bassa',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Alta',
+  'recording.quality.setting': 'Qualità di registrazione: {quality}',
   'recording.helperText': 'Supportati: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Formato immagine non supportato: {type}',
@@ -127,6 +131,10 @@ const it: WidgetCatalog = {
     'Il caricamento è troppo grande per il server. Rimuovi alcuni file multimediali e riprova.',
   'submit.error.videoQuota':
     'I caricamenti video sono sospesi per questo progetto. Rimuovi il video per inviare la segnalazione.',
+  'submit.error.rejected':
+    'Il caricamento è stato rifiutato. Gli allegati potrebbero essere troppo grandi. Rimuovili o riducili e riprova.',
+  'submit.queued':
+    'Segnalazione salvata. Verrà inviata automaticamente quando la connessione sarà ripristinata.',
 
   'toast.success.submit': 'Segnalazione inviata con successo!',
   'toast.error.submit': 'Invio della segnalazione non riuscito',

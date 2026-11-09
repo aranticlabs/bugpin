@@ -4,6 +4,28 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 const RETRY_COUNT = 3;
 const RETRY_DELAY_MS = 1000;
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
+// Repeating a write can apply it twice or count against a lockout, so only reads retry
+const RETRYABLE_METHODS = new Set(['get', 'head', 'options']);
+
+// The server answers 403 with one of these codes once the signed-in user must finish a
+// setup step, which can start mid-session when an admin changes a policy.
+const SETUP_REQUIRED_ERRORS = new Set(['PASSWORD_CHANGE_REQUIRED', 'TWO_FACTOR_SETUP_REQUIRED']);
+
+const setupRequiredListeners = new Set<() => void>();
+
+export function onSetupRequired(listener: () => void): () => void {
+  setupRequiredListeners.add(listener);
+  return () => {
+    setupRequiredListeners.delete(listener);
+  };
+}
+
+function isSetupRequired(error: AxiosError): boolean {
+  if (error.response?.status !== 403) return false;
+  const data: unknown = error.response.data;
+  if (typeof data !== 'object' || data === null || !('error' in data)) return false;
+  return typeof data.error === 'string' && SETUP_REQUIRED_ERRORS.has(data.error);
+}
 
 // Extend config to track retry count
 interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
@@ -15,6 +37,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Check if error is retryable
 function isRetryable(error: AxiosError): boolean {
+  const method = (error.config?.method ?? 'get').toLowerCase();
+  if (!RETRYABLE_METHODS.has(method)) return false;
+
   // Don't retry if no response (network error) - those are usually permanent
   if (!error.response) {
     // Retry network errors (but not timeout)
@@ -64,6 +89,11 @@ api.interceptors.response.use(
       ) {
         window.location.href = '/admin/login';
       }
+      return Promise.reject(error);
+    }
+
+    if (isSetupRequired(error)) {
+      setupRequiredListeners.forEach((listener) => listener());
       return Promise.reject(error);
     }
 

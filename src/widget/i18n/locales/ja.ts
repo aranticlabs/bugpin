@@ -74,6 +74,10 @@ const ja: WidgetCatalog = {
   'screenshot.action.download': 'ダウンロード',
   'screenshot.action.remove': '削除',
   'screenshot.helperText': '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）',
+  'recording.quality.low': '低',
+  'recording.quality.standard': '標準',
+  'recording.quality.high': '高',
+  'recording.quality.setting': '録画品質：{quality}',
   'recording.helperText': '対応形式：MP4、WebM、MOV（最大{videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '対応していない画像形式です：{type}',
@@ -126,6 +130,9 @@ const ja: WidgetCatalog = {
     'アップロードがサーバーの上限を超えています。メディアを減らして、もう一度お試しください。',
   'submit.error.videoQuota':
     'このプロジェクトでは動画のアップロードが一時停止されています。動画を削除して送信してください。',
+  'submit.error.rejected':
+    'アップロードが拒否されました。添付ファイルが大きすぎる可能性があります。削除するかサイズを小さくして、もう一度お試しください。',
+  'submit.queued': 'レポートを保存しました。接続が回復すると自動的に送信されます。',
 
   'toast.success.submit': 'バグレポートを送信しました！',
   'toast.error.submit': 'レポートの送信に失敗しました',

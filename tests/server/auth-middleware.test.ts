@@ -6,6 +6,9 @@ import {
   optionalAuth,
 } from '../../src/server/middleware/auth';
 import { authService } from '../../src/server/services/auth.service';
+import { twoFactorService } from '../../src/server/services/two-factor.service';
+import { registerEEHooks, resetEEHooks } from '../../src/server/utils/ee-hooks';
+import { createDefaultHooks } from '../../src/server/types/ee-plugin';
 import { Result } from '../../src/server/utils/result';
 import type { Session, User } from '../../src/shared/types';
 
@@ -14,6 +17,7 @@ type TestContext = {
     header: (name: string) => string | undefined;
     raw: { headers: Headers };
     url: string;
+    path: string;
   };
   set: (key: string, value: unknown) => void;
   get: (key: string) => unknown;
@@ -44,9 +48,11 @@ const originalValidateSession = authService.validateSession;
 function createContext({
   cookie,
   user,
+  path = '/api',
 }: {
   cookie?: string;
   user?: User;
+  path?: string;
 } = {}): TestContext {
   const headers = new Headers();
   if (cookie) {
@@ -59,9 +65,10 @@ function createContext({
 
   return {
     req: {
-      header: (name: string) => headers.get(name),
+      header: (name: string) => headers.get(name) ?? undefined,
       raw: { headers },
-      url: 'https://example.com/api',
+      url: `https://example.com${path}`,
+      path,
     },
     set: (key: string, value: unknown) => {
       vars.set(key, value);
@@ -72,9 +79,39 @@ function createContext({
   };
 }
 
+const originalDescribeUser = twoFactorService.describeUser;
+
 afterEach(() => {
   authService.validateSession = originalValidateSession;
+  twoFactorService.describeUser = originalDescribeUser;
+  resetEEHooks();
 });
+
+function registerTokenUser(user: User): void {
+  registerEEHooks({
+    ...createDefaultHooks(),
+    getApiTokenService: () => ({
+      isApiAccessEnabled: () => true,
+      validateToken: async () =>
+        Result.ok({
+          id: 'tok_1',
+          userId: user.id,
+          name: 'CI',
+          scopes: ['read', 'write'],
+          createdAt: new Date().toISOString(),
+          user,
+        }),
+      hasScope: () => true,
+    }),
+  });
+}
+
+function bearerContext(path: string): TestContext {
+  const ctx = createContext({ path });
+  ctx.req.header = (name: string) =>
+    name.toLowerCase() === 'authorization' ? 'Bearer bp_token' : undefined;
+  return ctx;
+}
 
 describe('authMiddleware', () => {
   it('returns 401 when session cookie is missing', async () => {
@@ -119,6 +156,101 @@ describe('authMiddleware', () => {
     expect(ctx._vars.get('user')).toEqual(baseUser);
     expect(ctx._vars.get('session')).toEqual(baseSession);
   });
+
+  it('blocks a user who must change their password from other routes', async () => {
+    const flaggedUser: User = { ...baseUser, mustChangePassword: true };
+    authService.validateSession = async () =>
+      Result.ok({ user: flaggedUser, session: baseSession });
+
+    const ctx = createContext({ cookie: 'session=sess_123', path: '/api/reports' });
+    let nextCalled = false;
+
+    const response = await authMiddleware(ctx as unknown as never, async () => {
+      nextCalled = true;
+    });
+
+    expect(nextCalled).toBe(false);
+    expect((response as Response).status).toBe(403);
+    expect(await (response as Response).json()).toMatchObject({
+      error: 'PASSWORD_CHANGE_REQUIRED',
+    });
+  });
+
+  it('blocks a user who must set up two-factor authentication', async () => {
+    const flaggedUser: User = { ...baseUser, twoFactorSetupRequired: true };
+    authService.validateSession = async () =>
+      Result.ok({ user: flaggedUser, session: baseSession });
+
+    const blocked = await authMiddleware(
+      createContext({ cookie: 'session=sess_123', path: '/api/reports' }) as unknown as never,
+      async () => undefined
+    );
+    expect((blocked as Response).status).toBe(403);
+    expect(await (blocked as Response).json()).toMatchObject({
+      error: 'TWO_FACTOR_SETUP_REQUIRED',
+    });
+
+    for (const path of ['/api/auth/two-factor/totp/setup', '/api/auth/passkeys/register/options']) {
+      let nextCalled = false;
+      await authMiddleware(
+        createContext({ cookie: 'session=sess_123', path }) as unknown as never,
+        async () => {
+          nextCalled = true;
+        }
+      );
+      expect(nextCalled).toBe(true);
+    }
+  });
+
+  it('refuses API tokens of a user who must set up two-factor authentication', async () => {
+    registerTokenUser(baseUser);
+    twoFactorService.describeUser = async (user) => ({ ...user, twoFactorSetupRequired: true });
+
+    const blocked = await authMiddleware(
+      bearerContext('/api/reports') as unknown as never,
+      async () => undefined
+    );
+    expect((blocked as Response).status).toBe(403);
+    expect(await (blocked as Response).json()).toMatchObject({
+      error: 'TWO_FACTOR_SETUP_REQUIRED',
+    });
+  });
+
+  it('accepts API tokens once the user has a second factor', async () => {
+    registerTokenUser(baseUser);
+    twoFactorService.describeUser = async (user) => ({
+      ...user,
+      twoFactorEnabled: true,
+      twoFactorSetupRequired: false,
+    });
+
+    const ctx = bearerContext('/api/reports');
+    let nextCalled = false;
+    await authMiddleware(ctx as unknown as never, async () => {
+      nextCalled = true;
+    });
+    expect(nextCalled).toBe(true);
+    expect((ctx._vars.get('user') as User).twoFactorEnabled).toBe(true);
+  });
+
+  it.each(['/api/auth/change-password', '/api/auth/logout'])(
+    'lets a user who must change their password reach %s',
+    async (path) => {
+      const flaggedUser: User = { ...baseUser, mustChangePassword: true };
+      authService.validateSession = async () =>
+        Result.ok({ user: flaggedUser, session: baseSession });
+
+      const ctx = createContext({ cookie: 'session=sess_123', path });
+      let nextCalled = false;
+
+      const response = await authMiddleware(ctx as unknown as never, async () => {
+        nextCalled = true;
+      });
+
+      expect(response).toBeUndefined();
+      expect(nextCalled).toBe(true);
+    }
+  );
 });
 
 describe('authorize', () => {

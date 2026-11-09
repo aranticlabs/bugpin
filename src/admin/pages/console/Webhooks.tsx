@@ -18,7 +18,7 @@ import {
 } from '../../components/ui/select';
 import { WebhookEditor } from './WebhookEditor';
 import { WebhookCard } from './WebhookCard';
-import type { Project, Webhook } from '@shared/types';
+import type { Project, WebhookResponse as Webhook } from '@shared/types';
 
 function WebhookSettings() {
   const client = useQueryClient();
