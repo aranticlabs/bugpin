@@ -22,7 +22,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "typeRoots": ["../../src/server/node_modules/@types", "../../src/server/node_modules"],
-    "types": ["bun-types"],
+    "types": ["bun"],
     "paths": {
       "@shared/*": ["../../src/shared/*"]
     }
