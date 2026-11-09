@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthProvider';
 import { portalFetch, PortalApiError } from '../api/client';
+import { isPrivatePortalQuery } from '../api/private-query';
 
 export function usePortalEvents() {
   const { reporter } = useAuth();
@@ -20,7 +21,7 @@ export function usePortalEvents() {
     };
     const accessChanged = () => {
       void client.resetQueries({
-        predicate: (query) => query.queryKey[0] === 'portal' && query.queryKey[1] !== 'config',
+        predicate: isPrivatePortalQuery,
       });
     };
     function stop() {

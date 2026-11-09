@@ -43,6 +43,8 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
   }, []);
   useEffect(() => {
     document.getElementById('main-content')?.focus();
+  }, [location.pathname]);
+  useEffect(() => {
     if (location.pathname !== '/reports' || !auth.reporter)
       document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
   }, [location.pathname, branding?.appName, locale, auth.reporter?.id]);

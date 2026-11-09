@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { PortalMe } from '@shared/portal-types';
 import { portalApi } from '../api/reports';
 import { PortalApiError, portalFetch } from '../api/client';
+import { isPrivatePortalQuery } from '../api/private-query';
 
 const AuthContext = createContext<{
   reporter: PortalMe | null;
@@ -35,6 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  function clearPrivateData() {
+    client.removeQueries({ predicate: isPrivatePortalQuery });
+    client.getMutationCache().clear();
+  }
   useEffect(() => {
     const abort = new AbortController();
     const generation = sessionGeneration.current;
@@ -58,8 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const expire = () => {
       sessionGeneration.current++;
-      void client.cancelQueries();
-      client.clear();
+      void client.cancelQueries({ predicate: isPrivatePortalQuery });
+      clearPrivateData();
       setReporter(null);
       setExpired(true);
     };
@@ -69,18 +74,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function replaceSession(reporter: PortalMe | null) {
     const generation = ++sessionGeneration.current;
-    await client.cancelQueries();
+    await client.cancelQueries({ predicate: isPrivatePortalQuery });
     if (generation !== sessionGeneration.current) return;
-    client.clear();
+    clearPrivateData();
     setReporter(reporter);
     setExpired(false);
   }
 
   async function reconcileSession() {
     const generation = ++sessionGeneration.current;
-    await client.cancelQueries();
+    await client.cancelQueries({ predicate: isPrivatePortalQuery });
     if (generation !== sessionGeneration.current) return;
-    client.clear();
+    clearPrivateData();
     try {
       const reporter = await loadReporter();
       if (generation === sessionGeneration.current) setReporter(reporter);

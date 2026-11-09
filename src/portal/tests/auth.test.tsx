@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
 import { App } from '../src/App';
-import { AuthProvider } from '../src/auth/AuthProvider';
+import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
 import { takeLoginToken } from '../src/auth/login-token';
-import { I18nProvider } from '../src/i18n/I18nProvider';
+import { I18nProvider, useI18n } from '../src/i18n/I18nProvider';
 import { BrandingProvider } from '../src/branding/BrandingProvider';
 import { portalFetch } from '../src/api/client';
 import { server } from './setup';
@@ -35,12 +36,13 @@ const config = {
   },
 };
 
-function mount(path = '/', token = '') {
+function mount(path = '/', token = '', controls?: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
         <I18nProvider>
+          {controls}
           <BrandingProvider>
             <MemoryRouter initialEntries={[path]}>
               <App initialToken={token} />
@@ -495,3 +497,98 @@ it('keeps button text readable with a bright custom brand color', async () => {
   );
   expect(document.documentElement.style.getPropertyValue('--primary-foreground')).toBe('#000000');
 });
+
+it('keeps the email field focused when public branding arrives late', async () => {
+  let finishConfig!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finishConfig = resolve;
+  });
+  server.use(
+    http.get('/api/portal/config', async () => {
+      await pending;
+      return HttpResponse.json({ success: true, config: { ...config, appName: 'Late brand' } });
+    })
+  );
+  mount();
+  const email = await screen.findByLabelText('Email address');
+  await userEvent.click(email);
+  try {
+    await act(async () => {
+      finishConfig();
+      await pending;
+    });
+    await screen.findByRole('link', { name: 'Late brand' });
+    expect(email).toHaveFocus();
+  } finally {
+    finishConfig();
+  }
+});
+
+it('keeps field focus when the page language changes without navigation', async () => {
+  let changeLanguage!: () => void;
+  function Controls() {
+    const { setLocale } = useI18n();
+    changeLanguage = () => setLocale('de');
+    return null;
+  }
+  mount('/', '', <Controls />);
+  const email = await screen.findByLabelText('Email address');
+  await userEvent.click(email);
+  act(() => changeLanguage());
+  expect(document.documentElement.lang).toBe('de');
+  expect(email).toHaveFocus();
+});
+
+it.each(['signIn', 'signOut', 'expire', 'reconcile'] as const)(
+  'retains public branding while removing private data during %s',
+  async (transition) => {
+    let auth!: ReturnType<typeof useAuth>;
+    function Controls() {
+      auth = useAuth();
+      return null;
+    }
+    let configRequests = 0;
+    server.use(
+      http.get('/api/portal/config', () => {
+        configRequests++;
+        return HttpResponse.json({
+          success: true,
+          config: { ...config, appName: 'Private brand', hideFooterBranding: true },
+        });
+      }),
+      http.get('/api/portal/me', () =>
+        transition === 'signIn'
+          ? HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 })
+          : HttpResponse.json({ success: true, reporter })
+      ),
+      http.post('/api/portal/auth/logout', () => HttpResponse.json({ success: true }))
+    );
+    const client = mount('/', '', <Controls />);
+    await screen.findByRole('link', { name: 'Private brand' });
+    await waitFor(() => expect(auth.loading).toBe(false));
+    const publicConfig = client.getQueryData(['portal', 'config']);
+    client.setQueryData(['portal', 'private-old'], 'Old private data');
+    client.setQueryData(['unrelated'], 'Keep');
+    const flashes: boolean[] = [];
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('footer')) flashes.push(true);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+      await act(async () => {
+        if (transition === 'signIn') await auth.signIn(reporter);
+        else if (transition === 'signOut') await auth.signOut();
+        else if (transition === 'reconcile') await auth.reconcileSession();
+        else window.dispatchEvent(new Event('bugpin:portal-session-expired'));
+      });
+      expect(client.getQueryData(['portal', 'private-old'])).toBeUndefined();
+      expect(client.getQueryData(['portal', 'config'])).toBe(publicConfig);
+      expect(client.getQueryData(['unrelated'])).toBe('Keep');
+      expect(configRequests).toBe(1);
+      expect(document.querySelector('footer')).toBeNull();
+      expect(flashes).toEqual([]);
+    } finally {
+      observer.disconnect();
+    }
+  }
+);
