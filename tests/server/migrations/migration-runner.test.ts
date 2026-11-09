@@ -122,6 +122,56 @@ describe('migration runner', () => {
     expect(db.query('SELECT value FROM existing').get()).toEqual({ value: 'after' });
   });
 
+  it('skips a migration recorded by another runner between pending selection and the write lock', () => {
+    const name = '001_test.sql';
+    const sql =
+      "CREATE TABLE applied_once (id INTEGER); INSERT INTO applied_once VALUES (1); UPDATE existing SET value = 'after';";
+    writeMigration(name, sql);
+    runner.prepare();
+    const peer = new Database(databasePath);
+    const peerRunner = new MigrationRunner(peer, sqlDirectory);
+    const execute = db.exec;
+    let peerRan = false;
+    const validation = spyOn(db, 'query');
+    const acquisition = spyOn(db, 'exec').mockImplementation(function (
+      this: Database,
+      statement: string
+    ) {
+      if (statement === 'BEGIN IMMEDIATE' && !peerRan) {
+        peerRan = true;
+        peerRunner.run();
+        for (const version of ['001', '002']) {
+          const old = `${databasePath}.pre-upgrade-${version}-old.bak`;
+          peer.query('VACUUM INTO ?').run(old);
+          fs.utimesSync(old, 1, 1);
+        }
+      }
+      return execute.call(this, statement);
+    });
+    try {
+      expect(() => runner.run()).not.toThrow();
+      expect(peerRan).toBe(true);
+      expect(acquisition.mock.calls.some(([statement]) => statement === sql)).toBe(false);
+      expect(db.query('SELECT * FROM applied_once').all()).toEqual([{ id: 1 }]);
+      expect(db.query('SELECT value FROM existing').get()).toEqual({ value: 'after' });
+      expect(db.query('SELECT name FROM migrations').all()).toEqual([{ name }]);
+      expect(
+        validation.mock.calls.some(([statement]) => statement === 'PRAGMA integrity_check')
+      ).toBe(true);
+      expect(
+        validation.mock.calls.some(([statement]) => statement === 'PRAGMA foreign_key_check')
+      ).toBe(true);
+      expect(backups()).toHaveLength(2);
+      expect(backups().some((name) => name.endsWith('-old.bak'))).toBe(false);
+      expect(db.inTransaction).toBe(false);
+      expect(db.query('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 });
+    } finally {
+      acquisition.mockRestore();
+      validation.mockRestore();
+      peer.close();
+    }
+  });
+
   it('rolls back a failing file and its ledger entry and restores the pre-run snapshot', () => {
     writeMigration('001_test.sql', 'CREATE TABLE committed (id INTEGER);');
     writeMigration(
