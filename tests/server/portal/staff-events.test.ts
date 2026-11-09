@@ -149,6 +149,28 @@ it('disconnects when a heartbeat remains blocked at the next tick without event 
   expect((await reader.read()).done).toBe(true);
 });
 
+it('disconnects and frees the session slot when an event write stalls without further traffic', async () => {
+  const settings = await settingsCacheService.getAll();
+  await settingsRepo.updateAll({
+    reporterPortalLimits: { ...settings.reporterPortalLimits, sseStreamsPerSession: 1 },
+  });
+  settingsCacheService.invalidate();
+  const pulse = captureHeartbeat();
+  const reader = await open();
+  realtimeService.publish('report.updated', { reportId: 'buffered', projectId: 'project' });
+  realtimeService.publish('report.updated', { reportId: 'blocked', projectId: 'project' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await pulse();
+  const occupied = await app.request(`${portalOrigin}/api/events`, {
+    headers: { Cookie: `session=${sessionId}` },
+  });
+  expect(occupied.status).toBe(429);
+  await pulse();
+  expect(new TextDecoder().decode((await reader.read()).value)).toContain('"reportId":"buffered"');
+  expect((await reader.read()).done).toBe(true);
+  await open();
+});
+
 it('disconnects a slow reader once its hint queue is full and releases the subscription', async () => {
   const settings = await settingsCacheService.getAll();
   await settingsRepo.updateAll({
