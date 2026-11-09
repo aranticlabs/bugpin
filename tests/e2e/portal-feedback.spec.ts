@@ -4,7 +4,7 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   page,
   request,
   runtime,
-}) => {
+}, testInfo) => {
   const configResponse = await request.get(
     `${runtime.staffOrigin}/api/widget/config/${runtime.widgetApiKey}`
   );
@@ -32,10 +32,28 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Browser workflow' })).toBeVisible();
   await expect(page.getByText('Original feedback description')).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('report-desktop.png'),
+    animations: 'disabled',
+  });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole('button', { name: /Report details/ }).click();
   await expect(page.getByText('Browser confirmations', { exact: true }).first()).toBeVisible();
   expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('report-mobile.png'), animations: 'disabled' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  const foreground = (await page.evaluate('getComputedStyle(document.body).color')) as string;
+  await expect(page.getByRole('button', { name: 'Report details', exact: true })).toHaveCSS(
+    'color',
+    foreground
+  );
+  await expect(page.getByLabel('Files', { exact: true })).toHaveCSS('color', foreground);
+  await page.screenshot({
+    path: testInfo.outputPath('report-mobile-dark.png'),
+    animations: 'disabled',
+  });
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.getByLabel('Message', { exact: true }).fill('Chrome 131, attached screenshot');
   await expect(page.getByLabel('Files', { exact: true })).toBeEnabled();
   await page.getByLabel('Files', { exact: true }).setInputFiles({

@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { once } from 'node:events';
 
-interface Runtime {
+export interface Runtime {
   staffOrigin: string;
   portalOrigin: string;
   staffSession: string;
   widgetApiKey: string;
+  waitForUnsubscribeLink: (email: string) => Promise<string>;
   waitForLink: (email: string) => Promise<string>;
   expireLinks: (email: string, source: 'request' | 'confirmation') => void;
 }
@@ -97,6 +98,38 @@ export const test = base.extend<object, { runtime: Runtime }>({
             reject(new Error(`Built test server exited with ${code}: ${errors}`));
           });
         });
+        function waitForEmailLink(email: string, kind: 'login' | 'unsubscribe'): Promise<string> {
+          return new Promise((resolveLink, reject) => {
+            const timeout = setTimeout(() => {
+              events.removeEventListener('message', received);
+              reject(new Error(`No ${kind} email link captured`));
+            }, 10000);
+            const received = () => {
+              for (let index = 0; index < messages.length; index++) {
+                const message = messages[index];
+                if (message.email !== email) continue;
+                const decoded = message.body
+                  .replace(/=\n/g, '')
+                  .replace(/=([0-9a-f]{2})/gi, (_, value: string) =>
+                    String.fromCharCode(Number.parseInt(value, 16))
+                  );
+                const pattern =
+                  kind === 'login'
+                    ? /https?:\/\/[^\s<>"']+\/reporter-portal\/login#[a-zA-Z0-9_-]+/
+                    : /https?:\/\/[^\s<>"']+\/api\/portal\/unsubscribe\?[^\s<>"']+/;
+                const link = decoded.match(pattern)?.[0];
+                if (!link) continue;
+                messages.splice(index, 1);
+                clearTimeout(timeout);
+                events.removeEventListener('message', received);
+                resolveLink(link.replace(/&amp;/g, '&'));
+                return;
+              }
+            };
+            events.addEventListener('message', received);
+            received();
+          });
+        }
         await use({
           ...ready,
           expireLinks: (email, source) => {
@@ -104,32 +137,8 @@ export const test = base.extend<object, { runtime: Runtime }>({
               env: { ...process.env, E2E_DATA_DIR: directory },
             });
           },
-          waitForLink: (email) =>
-            new Promise((resolveLink, reject) => {
-              const timeout = setTimeout(() => {
-                events.removeEventListener('message', received);
-                reject(new Error('No login email captured'));
-              }, 10000);
-              const received = () => {
-                const index = messages.findIndex((message) => message.email === email);
-                if (index === -1) return;
-                const message = messages.splice(index, 1)[0];
-                const decoded = message.body
-                  .replace(/=\n/g, '')
-                  .replace(/=([0-9a-f]{2})/gi, (_, value: string) =>
-                    String.fromCharCode(Number.parseInt(value, 16))
-                  );
-                const link = decoded.match(
-                  /https?:\/\/[^\s<>"']+\/reporter-portal\/login#[a-zA-Z0-9_-]+/
-                )?.[0];
-                clearTimeout(timeout);
-                events.removeEventListener('message', received);
-                if (link) resolveLink(link);
-                else reject(new Error('Captured email has no login link'));
-              };
-              events.addEventListener('message', received);
-              received();
-            }),
+          waitForLink: (email) => waitForEmailLink(email, 'login'),
+          waitForUnsubscribeLink: (email) => waitForEmailLink(email, 'unsubscribe'),
         });
       } finally {
         child.kill('SIGTERM');

@@ -38,6 +38,8 @@ docs/
 !README.md
 
 # Tests
+playwright-report/
+test-results/
 tests/
 **/*.test.ts
 **/*.spec.ts

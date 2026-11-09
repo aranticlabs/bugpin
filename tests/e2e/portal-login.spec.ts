@@ -60,7 +60,7 @@ test('resends a real widget confirmation link after expiry without consuming it 
       },
     },
   });
-  expect(submitted.ok()).toBe(true);
+  expect(submitted.ok(), await submitted.text()).toBe(true);
   const link = await runtime.waitForLink('expired@example.test');
   runtime.expireLinks('expired@example.test', 'confirmation');
   await page.goto(link);

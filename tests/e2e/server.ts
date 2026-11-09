@@ -38,6 +38,7 @@ await settingsRepo.updateAll({
   appUrl: staffOrigin,
   portalBaseUrl: portalOrigin,
   smtpEnabled: true,
+  rateLimitPerMinute: 100,
   smtpConfig: {
     host: '127.0.0.1',
     port: Number(process.env.E2E_SMTP_PORT),

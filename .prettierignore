@@ -52,3 +52,7 @@ temp
 # Generated/minified
 *.min.js
 *.min.css
+
+# Browser test output
+test-results
+playwright-report

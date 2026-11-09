@@ -174,3 +174,28 @@ jobs:
 
       - name: Check widget bundle size
         run: bun run src/widget/scripts/check-bundle-size.ts
+
+  e2e:
+    name: Reporter Portal browsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout CE
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install browsers
+        run: bun node_modules/.bin/playwright install --with-deps chromium firefox webkit
+
+      - name: Test reporter portal browsers
+        run: make test-e2e
