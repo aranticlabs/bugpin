@@ -47,9 +47,19 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
     return next();
   }
 
+  const url = new URL(c.req.url);
+  const requestHost = c.req.header('host') ?? url.host;
+  if (!HOST_PATTERN.test(requestHost))
+    return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
+  let requestOrigin: URL;
+  try {
+    requestOrigin = new URL(`${url.protocol}//${requestHost}`);
+  } catch {
+    return c.json({ success: false, error: 'INVALID_HOST', message: 'Invalid host' }, 400);
+  }
   const origin = getEffectiveOrigin(c);
 
-  // Only separate origins restrict hosts; other redirects use appUrl or the unforwarded Host.
+  // Separate origins require a configured host; other redirects use appUrl or the raw Host.
   if (origin?.startsWith('http:')) {
     const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
     if (
@@ -70,15 +80,7 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
           421
         );
     }
-    const url = new URL(c.req.url);
-    const requestHost = c.req.header('host') || url.host;
-    if (!configured && !HOST_PATTERN.test(requestHost)) return next();
-    let destination: URL;
-    try {
-      destination = new URL(configured || `${url.protocol}//${requestHost}`);
-    } catch {
-      return next();
-    }
+    const destination = configured ? new URL(configured) : requestOrigin;
     url.protocol = 'https:';
     url.hostname = destination.hostname;
     url.port = destination.port;

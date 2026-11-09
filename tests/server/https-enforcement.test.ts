@@ -149,13 +149,14 @@ describe('httpsEnforcement', () => {
   });
 
   it.each([
+    '',
     'bad host',
     'example.test/path',
     'person@example.test',
     'example.test,evil.test',
     'example.test:invalid',
     '[::1',
-  ])('skips the redirect for malformed unforwarded Host %s', async (host) => {
+  ])('rejects malformed unforwarded Host %s with a controlled 400', async (host) => {
     appUrl = '';
     const response = await createApp().request(
       'http://internal.example/health',
@@ -168,7 +169,12 @@ describe('httpsEnforcement', () => {
       },
       { requestIP: () => ({ address: '127.0.0.1' }) }
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'INVALID_HOST',
+      message: 'Invalid host',
+    });
     expect(response.headers.get('Location')).toBeNull();
   });
 
