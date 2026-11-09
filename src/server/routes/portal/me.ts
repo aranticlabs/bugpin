@@ -27,7 +27,7 @@ portalMeRoutes.patch(
     if (!result.success)
       return c.json(
         { success: false, error: result.code, message: result.error },
-        result.code === 'UNAUTHORIZED' ? 401 : errorStatus(result.code)
+        errorStatus(result.code)
       );
     return c.json({ success: true, reporter: result.value });
   }

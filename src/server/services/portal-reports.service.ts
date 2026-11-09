@@ -41,13 +41,12 @@ function toPortalMessage(
   reporterId: string,
   files: PortalFile[]
 ): PortalMessage {
+  const isPreviousReporter = message.authorKind === 'reporter' && message.reporterId !== reporterId;
   return {
     id: message.id,
     authorKind: message.authorKind,
-    authorName:
-      message.authorKind === 'reporter' && message.reporterId !== reporterId
-        ? 'Previous reporter'
-        : message.authorName,
+    authorName: isPreviousReporter ? '' : message.authorName,
+    isPreviousReporter,
     isOwn: message.authorKind === 'reporter' && message.reporterId === reporterId,
     body: message.body,
     createdAt: message.createdAt,

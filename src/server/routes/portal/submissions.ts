@@ -47,6 +47,7 @@ portalSubmissionsRoutes.post(
           400
         );
       if (
+        ['projectId', 'title', 'description'].some((key) => form.getAll(key).length > 1) ||
         [...form.keys()].some(
           (key) => !['projectId', 'title', 'description', 'files[]', 'files'].includes(key)
         )
@@ -70,7 +71,12 @@ portalSubmissionsRoutes.post(
           errorStatus(result.code)
         );
       return c.json({ success: true, report: result.value }, 201);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'BodyLimitError')
+        return c.json(
+          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Feedback upload is too large' },
+          413
+        );
       return c.json(
         { success: false, error: 'VALIDATION_ERROR', message: 'Invalid feedback form' },
         400

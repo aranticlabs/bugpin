@@ -50,6 +50,7 @@ export interface PortalMessage {
   authorKind: MessageAuthorKind;
   authorName: string;
   isOwn: boolean;
+  isPreviousReporter: boolean;
   body: string;
   files: PortalFile[];
   createdAt: string;

@@ -58,14 +58,22 @@ portalMessagesRoutes.post(
             400
           );
         files = values.filter((value) => typeof value !== 'string');
-        if ([...form.keys()].some((key) => !['body', 'files[]', 'files'].includes(key)))
+        if (
+          form.getAll('body').length > 1 ||
+          [...form.keys()].some((key) => !['body', 'files[]', 'files'].includes(key))
+        )
           return c.json(
             { success: false, error: 'VALIDATION_ERROR', message: 'Invalid message request' },
             400
           );
         body = { body: form.get('body') ?? '' };
       } else body = await c.req.json();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'BodyLimitError')
+        return c.json(
+          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Message upload is too large' },
+          413
+        );
       return c.json(
         { success: false, error: 'VALIDATION_ERROR', message: 'Invalid message request' },
         400

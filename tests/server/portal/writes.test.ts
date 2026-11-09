@@ -247,6 +247,7 @@ it('posts safe reporter messages for every replyable status without altering rep
       authorKind: 'reporter',
       authorName: 'Owner display',
       isOwn: true,
+      isPreviousReporter: false,
       body: 'Reply text',
       files: [],
       createdAt: expect.any(String),
@@ -605,3 +606,113 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
     expect(count('report_messages')).toBe(0);
   });
 }
+
+it('rejects duplicate multipart scalars before report or message service writes', async () => {
+  const create = spyOn(portalSubmissionsService, 'create');
+  const send = spyOn(reportMessagesService, 'sendReporter');
+  for (const identical of [true, false]) {
+    for (const field of ['body', 'projectId', 'title', 'description']) {
+      clearAllRateLimits();
+      const form = new FormData();
+      const isReply = field === 'body';
+      if (isReply) form.set('body', 'Reply text');
+      else {
+        form.set('projectId', projectId);
+        form.set('title', 'New feedback');
+        form.set('description', 'Description');
+      }
+      form.append(field, identical ? String(form.get(field)) : 'Another value');
+      form.append('files[]', image());
+      const response = await multipart(
+        isReply ? `/reports/${reportId}/messages` : '/reports',
+        form
+      );
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { error: string }).error).toBe('VALIDATION_ERROR');
+    }
+  }
+  expect(create).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  expect(count('reports')).toBe(1);
+  expect(count('report_messages')).toBe(0);
+  expect(count('files')).toBe(0);
+  expect(diskFiles()).toEqual([]);
+});
+
+it('returns structured payload-too-large errors when multipart parsing raises BodyLimitError', async () => {
+  const parse = spyOn(Request.prototype, 'formData').mockRejectedValue(
+    Object.assign(new Error('Payload too large'), { name: 'BodyLimitError' })
+  );
+  const create = spyOn(portalSubmissionsService, 'create');
+  const send = spyOn(reportMessagesService, 'sendReporter');
+  for (const path of ['/reports', `/reports/${reportId}/messages`]) {
+    const form = new FormData();
+    form.set('body', 'Reply');
+    const response = await multipart(path, form);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+  }
+  expect(parse).toHaveBeenCalledTimes(2);
+  expect(create).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  expect(count('reports')).toBe(1);
+  expect(count('report_messages')).toBe(0);
+  expect(count('files')).toBe(0);
+});
+
+it('rejects real chunked multipart overflows without persisting reports, messages, or files', async () => {
+  await limits({ uploadMbPerReporterPerDay: 1 });
+  await filesRepo.create({
+    reportId,
+    type: 'screenshot',
+    filename: 'existing.png',
+    path: 'existing.png',
+    mimeType: 'image/png',
+    sizeBytes: 1024 * 1024,
+    uploadedByReporterId: reporterId,
+  });
+  for (const path of ['/reports', `/reports/${reportId}/messages`]) {
+    const form = new FormData();
+    form.set('projectId', projectId);
+    form.set('title', 'New feedback');
+    form.set('body', 'Reply');
+    const bytes = new Uint8Array(80 * 1024);
+    bytes.set(png);
+    form.append('files[]', image(bytes));
+    const encoded = new Request(`${portalOrigin}/api/portal${path}`, {
+      method: 'POST',
+      body: form,
+    });
+    const reader = encoded.body!.getReader();
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const chunk = await reader.read();
+        if (chunk.done) controller.close();
+        else controller.enqueue(chunk.value);
+      },
+      async cancel() {
+        await reader.cancel();
+      },
+    });
+    const response = await app.request(
+      new Request(encoded.url, {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          Origin: portalOrigin,
+          'X-BugPin-Portal': '1',
+          'content-type': encoded.headers.get('content-type')!,
+          'transfer-encoding': 'chunked',
+        },
+        body,
+      })
+    );
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+    await reader.cancel();
+  }
+  expect(count('reports')).toBe(1);
+  expect(count('report_messages')).toBe(0);
+  expect(count('files')).toBe(1);
+  expect(diskFiles()).toEqual([]);
+});

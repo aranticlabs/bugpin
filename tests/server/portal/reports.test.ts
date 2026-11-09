@@ -250,7 +250,16 @@ it('keeps detail DTOs allowlisted and separates original files from visible mess
     ].sort()
   );
   expect(Object.keys(result.messages[0]).sort()).toEqual(
-    ['id', 'authorKind', 'authorName', 'isOwn', 'body', 'files', 'createdAt'].sort()
+    [
+      'id',
+      'authorKind',
+      'authorName',
+      'isOwn',
+      'isPreviousReporter',
+      'body',
+      'files',
+      'createdAt',
+    ].sort()
   );
   expect(Object.keys(result.files[0]).sort()).toEqual(
     ['id', 'type', 'mimeType', 'sizeBytes', 'width', 'height', 'url'].sort()
@@ -518,7 +527,8 @@ it('masks previous reporters after reassignment while preserving staff and curre
     {
       id: earlier.id,
       authorKind: 'reporter',
-      authorName: 'Previous reporter',
+      authorName: '',
+      isPreviousReporter: true,
       isOwn: false,
       body: 'Earlier reply',
       files: [],
@@ -528,6 +538,7 @@ it('masks previous reporters after reassignment while preserving staff and curre
       id: staff.id,
       authorKind: 'staff',
       authorName: staff.authorName,
+      isPreviousReporter: false,
       isOwn: false,
       body: 'Staff reply',
       files: [],
@@ -537,6 +548,7 @@ it('masks previous reporters after reassignment while preserving staff and curre
       id: current.id,
       authorKind: 'reporter',
       authorName: current.authorName,
+      isPreviousReporter: false,
       isOwn: true,
       body: 'Current reply',
       files: [],
@@ -545,7 +557,10 @@ it('masks previous reporters after reassignment while preserving staff and curre
   ]);
   expect(JSON.stringify(result.messages)).not.toContain(earlier.authorName);
   getDb().run('DELETE FROM reporters WHERE id = ?', [owner.id]);
-  expect((await detail(item.id, other.cookie)).messages[0].authorName).toBe('Previous reporter');
+  expect((await detail(item.id, other.cookie)).messages[0]).toMatchObject({
+    authorName: '',
+    isPreviousReporter: true,
+  });
 });
 
 it('returns the same not-found response for GET and HEAD when an original or chat object is missing', async () => {
