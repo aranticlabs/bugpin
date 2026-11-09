@@ -21,7 +21,7 @@ export async function warnIfHttpsEnforcementOverridden(): Promise<void> {
  * HTTPS enforcement middleware
  *
  * When enforceHttps is enabled in settings:
- * - Redirects recognized HTTP hosts to their configured HTTPS host
+ * - Redirects HTTP to the configured host, or the request host when no URL is configured
  * - Adds Strict-Transport-Security header to HTTPS responses
  *
  * The DISABLE_HTTPS_ENFORCEMENT environment variable turns both off regardless of the setting.
@@ -44,7 +44,7 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
 
   const origin = getEffectiveOrigin(c);
 
-  // Forwarded headers identify the request; only configured hosts can be redirect destinations.
+  // Only separate origins restrict hosts; other redirects use appUrl or the unforwarded Host.
   if (origin?.startsWith('http:')) {
     const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
     if (
@@ -53,14 +53,25 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
       isLoopbackAddress(getSocketAddress(c))
     )
       return next();
-    const configured = [settings.appUrl, settings.portalBaseUrl].find(
-      (value) => value && new URL(value).host === new URL(origin).host
-    );
-    if (!configured)
-      return c.json({ success: false, error: 'MISDIRECTED_REQUEST', message: 'Unknown host' }, 421);
+    let configured = settings.appUrl;
+    if (settings.portalBaseUrl) {
+      configured =
+        [settings.appUrl, settings.portalBaseUrl].find(
+          (value) => value && new URL(value).host === new URL(origin).host
+        ) ?? '';
+      if (!configured)
+        return c.json(
+          { success: false, error: 'MISDIRECTED_REQUEST', message: 'Unknown host' },
+          421
+        );
+    }
     const url = new URL(c.req.url);
-    url.host = new URL(configured).host;
+    const destination = new URL(
+      configured || `${url.protocol}//${c.req.header('host') || url.host}`
+    );
     url.protocol = 'https:';
+    url.hostname = destination.hostname;
+    url.port = destination.port;
     return c.redirect(url.toString(), 301);
   }
 
