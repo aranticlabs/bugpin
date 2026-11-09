@@ -961,6 +961,18 @@ describe('overview edge cases', () => {
     ]);
   });
 
+  it('uses System for portal creation while keeping deleted staff attribution', async () => {
+    const id = await createReport({ title: 'Portal feedback', createdAt: ago(2 * DAY) });
+    getDb().run("UPDATE reports SET source = 'portal' WHERE id = ?", [id]);
+    addHistory(id, null, 'created', null, null, ago(2 * DAY));
+    addHistory(id, null, 'status_changed', 'open', 'resolved', ago(DAY));
+    const result = Result.unwrap(await dashboardService.getOverview({ projectId, range: 7 }, NOW));
+    expect(result.activity.map(({ action, actor }) => ({ action, actor }))).toEqual([
+      { action: 'status_changed', actor: 'deleted_user' },
+      { action: 'created', actor: 'system' },
+    ]);
+  });
+
   it.each(['widget', 'manual', 'portal'] as const)(
     'uses a neutral actor for ownership without staff on a %s report',
     async (source) => {

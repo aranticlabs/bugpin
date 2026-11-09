@@ -241,6 +241,7 @@ function summarizeResolveTime(
 /** Ownership can be automatic; widget attribution is limited to creation and its initial assignment. */
 function actorOf(row: ActivityRow): DashboardActivityActor {
   if (row.userId) return 'user';
+  if (row.reportSource === 'portal' && row.action === 'created') return 'system';
   if (
     row.action === 'owner_assigned' ||
     row.action === 'owner_removed' ||
