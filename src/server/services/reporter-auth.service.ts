@@ -70,9 +70,10 @@ export const reporterAuthService = {
       // SMTP latency and delivery failures must not reveal whether an account exists.
       void this.sendLoginLink(email)
         .then((sent) => {
-          if (!sent.success) logger.warn('Reporter login email delivery failed');
+          if (!sent.success && sent.code === 'EMAIL_DELIVERY_FAILED')
+            logger.warn('Reporter login email delivery failed');
         })
-        .catch(() => logger.warn('Reporter login email delivery failed'));
+        .catch(() => logger.warn('Reporter login request failed'));
     } catch {
       logger.warn('Reporter login request failed');
     }

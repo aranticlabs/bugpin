@@ -11,6 +11,7 @@ import { settingsCacheService } from '../../../src/server/services/settings-cach
 import { emailService } from '../../../src/server/services/email.service';
 import { hashToken } from '../../../src/server/utils/secure-token';
 import { Result } from '../../../src/server/utils/result';
+import { logger } from '../../../src/server/utils/logger';
 import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../../src/shared/types';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
 
@@ -99,6 +100,30 @@ it('keeps IP-limited login requests neutral across different emails', async () =
     expect(await response.json()).toEqual({ success: true });
   }
   expect(sent).toHaveLength(1);
+});
+
+it('logs delivery warnings for SMTP failures but not intentional login mint refusals', async () => {
+  const suspended = reportersRepo.resolve(
+    'suspended@example.com',
+    'Suspended',
+    new Date().toISOString()
+  );
+  reportersRepo.setSuspension(
+    suspended.id,
+    new Date().toISOString(),
+    null,
+    new Date().toISOString()
+  );
+  const warnings = spyOn(logger, 'warn').mockImplementation(() => {});
+  for (const email of ['invalid', suspended.email])
+    expect(await reporterAuthService.requestLogin(email)).toEqual(Result.ok(undefined));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(warnings).not.toHaveBeenCalled();
+  expect(sent).toHaveLength(0);
+  spyOn(emailService, 'sendEmail').mockResolvedValue({ success: false });
+  expect(await reporterAuthService.requestLogin('other@example.com')).toEqual(Result.ok(undefined));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(warnings).toHaveBeenCalledWith('Reporter login email delivery failed');
 });
 
 it('shares the per-email allowance between requests and expired-link resends', async () => {
