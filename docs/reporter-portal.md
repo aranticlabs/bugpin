@@ -31,7 +31,7 @@ docker compose run --rm --no-deps bugpin bun run reset-portal-origin
 docker compose up -d bugpin
 ```
 
-For a source installation, stop BugPin, run `DATA_DIR=/path/to/existing/data make reset-portal-origin` as the instance's operating-system user, then restart it with the same configuration. The command requires an existing database, clears only the Portal Base URL, and does not run migrations. After restart, open the Admin Console at the Application URL or the same-origin host, correct the Application URL, and configure the separate portal origin again. This command restores same-origin routing; it does not bypass authentication. If HTTPS enforcement is also misconfigured, use its temporary recovery variable separately.
+For a source installation, stop BugPin, run `DATA_DIR=/path/to/existing/data make reset-portal-origin` as the instance's operating-system user, then restart it with the same configuration. The command requires an explicit absolute DATA_DIR and an existing database; missing or relative paths are rejected. It clears only the Portal Base URL without loading application configuration, generating secrets, initializing storage, or running migrations. After restart, open the Admin Console at the Application URL or the same-origin host, correct the Application URL, and configure the separate portal origin again. This command restores same-origin routing; it does not bypass authentication. If HTTPS enforcement is also misconfigured, use its temporary recovery variable separately.
 
 ## Live updates and uploads
 

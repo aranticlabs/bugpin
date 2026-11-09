@@ -7,6 +7,7 @@ import { httpsEnforcement } from '../../../src/server/middleware/https-enforceme
 import { portalCsp } from '../../../src/server/middleware/portal-csp';
 import { servePortal } from '../../../src/server/routes/static';
 import { config } from '../../../src/server/config';
+import { closeDatabase, initDatabase } from '../../../src/server/database/database';
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { settingsService } from '../../../src/server/services/settings.service';
@@ -219,11 +220,13 @@ it('rejects clearing the staff origin and restores Admin Console routing through
   settingsCacheService.invalidate();
   expect((await app.request('https://staff.example.test/admin')).status).toBe(421);
   const before = await settingsRepo.getAll();
+  closeDatabase();
   const recovered = Bun.spawnSync(['make', 'reset-portal-origin'], {
     env: { ...process.env, NODE_ENV: 'test', DATA_DIR: config.dataDir },
   });
   expect(recovered.exitCode).toBe(0);
   expect(recovered.stdout.toString()).toContain('Portal Base URL cleared');
+  await initDatabase();
   expect(await settingsRepo.getAll()).toEqual({ ...before, portalBaseUrl: '' });
   settingsCacheService.invalidate();
   expect((await app.request('https://staff.example.test/admin')).status).toBe(200);
