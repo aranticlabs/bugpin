@@ -340,7 +340,29 @@ describe('validateFile', () => {
     }
   });
 
-  for (const brand of ['isom', 'iso5', 'mp41', 'mp42', 'avc1', 'M4V ', 'MSNV', 'dash']) {
+  for (const brand of [
+    'isom',
+    'iso5',
+    'mp41',
+    'mp42',
+    'avc1',
+    'M4V ',
+    'MSNV',
+    'dash',
+    'XAVC',
+    '3gp4',
+    '3gp5',
+    '3gp6',
+    '3gp7',
+    '3gp8',
+    '3gp9',
+    '3g2a',
+    'mp71',
+    'f4v ',
+    'av01',
+    'cmfc',
+    'cmfs',
+  ]) {
     it(`accepts the MP4 major brand ${brand}`, () => {
       const header = createFtypBuffer(brand);
       const padded = Buffer.concat([Buffer.alloc(3), header]);

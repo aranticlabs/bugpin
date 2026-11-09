@@ -73,6 +73,19 @@ const MP4_MAJOR_BRANDS = [
   'M4VP',
   'MSNV',
   'dash',
+  'XAVC',
+  '3gp4',
+  '3gp5',
+  '3gp6',
+  '3gp7',
+  '3gp8',
+  '3gp9',
+  '3g2a',
+  'mp71',
+  'f4v ',
+  'av01',
+  'cmfc',
+  'cmfs',
 ];
 
 function matchesFileSignature(data: Buffer | Uint8Array, mimeType: string): boolean {
