@@ -243,9 +243,14 @@ export class MigrationRunner {
     try {
       const databasePath = path.resolve(this.db.filename);
       const parent = path.dirname(databasePath);
+      // A live backup may leave its staging directory's mtime unchanged for hours.
+      const abandonedBefore = Date.now() - 24 * 60 * 60 * 1000;
       for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
         if (entry.isDirectory() && entry.name.startsWith('.bugpin-upgrade-')) {
-          fs.rmSync(path.join(parent, entry.name), { recursive: true });
+          const staging = path.join(parent, entry.name);
+          const stats = fs.statSync(staging, { throwIfNoEntry: false });
+          if (stats && stats.mtimeMs < abandonedBefore)
+            fs.rmSync(staging, { recursive: true, force: true });
         }
       }
       // Bootstrap creates user tables before run(), so retain the state seen before bootstrap.
