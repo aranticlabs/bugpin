@@ -6,6 +6,7 @@ import { formatDateTime } from '../../lib/format';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
@@ -53,6 +54,7 @@ export function OwnerField({
   const [mode, setMode] = useState<OwnerMode>('assign');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [email, setEmail] = useState('');
+  const [invitation, setInvitation] = useState('');
   const ownerEmail = report.owner?.reporter?.email ?? report.claimableEmail;
   const correspondentEmail = ownerEmail ?? report.owner?.correspondentEmail ?? report.reporterEmail;
   const hasOwner = Boolean(report.reporterId || report.claimableEmail);
@@ -70,9 +72,14 @@ export function OwnerField({
   };
   const save = useMutation({
     mutationFn: async () => {
-      let body: { reporterId: string } | { claimableEmail: string };
+      let body:
+        { reporterId: string } | { claimableEmail: string; invitation?: { message: string } };
       const normalized = email.trim().toLowerCase();
-      if (mode === 'claimable') body = { claimableEmail: normalized };
+      if (mode === 'claimable')
+        body = {
+          claimableEmail: normalized,
+          ...(invitation.trim() ? { invitation: { message: invitation.trim() } } : {}),
+        };
       else {
         const { data } = await api.get<{ reporter: { id: string } | null }>('/reporters/lookup', {
           params: { email: normalized },
@@ -127,6 +134,7 @@ export function OwnerField({
             disabled={busy}
             onClick={() => {
               setEmail(ownerEmail ?? '');
+              setInvitation('');
               setMode(report.claimableEmail ? 'claimable' : 'assign');
               save.reset();
               setOpen(true);
@@ -247,6 +255,22 @@ export function OwnerField({
                 onChange={(event) => setEmail(event.target.value)}
               />
             </div>
+            {mode === 'claimable' && (
+              <div className="space-y-2">
+                <Label htmlFor="owner-invitation">Invitation message (optional)</Label>
+                <Textarea
+                  id="owner-invitation"
+                  value={invitation}
+                  onChange={(event) => setInvitation(event.target.value)}
+                  maxLength={5000}
+                  rows={3}
+                  disabled={busy}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Invite the reporter with a message in the conversation.
+                </p>
+              </div>
+            )}
             {save.isError && (
               <p role="alert" className="text-sm text-destructive">
                 {getApiErrorMessage(save.error, 'Failed to update owner')}

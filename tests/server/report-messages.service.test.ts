@@ -114,6 +114,83 @@ async function uploadLimit(mb: number): Promise<void> {
 }
 
 describe('message writes', () => {
+  it('keeps a committed invitation and claimability when delivery fails', async () => {
+    const notify = spyOn(notificationsService, 'notifyReporterMessage').mockRejectedValue(
+      new Error('Delivery unavailable')
+    );
+    expect(
+      await reportMessagesService.sendInvitation(
+        'report',
+        'staff',
+        'Invitee@Example.com',
+        'Join us'
+      )
+    ).toMatchObject({
+      success: true,
+      value: {
+        reporterId: null,
+        claimableEmail: 'invitee@example.com',
+        correspondentEmail: 'invitee@example.com',
+      },
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual({ reporter_id: null, claimable_email: 'invitee@example.com' });
+    expect(counts()).toEqual({ messages: 1, files: 0 });
+    notify.mockRestore();
+  });
+
+  it('rolls ownership and the invitation back together when ownership history cannot be saved', async () => {
+    const before = getDb()
+      .query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'")
+      .get();
+    getDb().exec(
+      "CREATE TRIGGER reject_invitation_history BEFORE INSERT ON report_history WHEN NEW.action = 'claimable_set' BEGIN SELECT RAISE(ABORT, 'History unavailable'); END"
+    );
+    expect(
+      await reportMessagesService.sendInvitation(
+        'report',
+        'staff',
+        'invitee@example.com',
+        'Join the conversation'
+      )
+    ).toMatchObject({ success: false, code: 'MESSAGE_WRITE_FAILED' });
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual(before);
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+  });
+
+  it('rejects invalid invitation input before storing ownership or a message', async () => {
+    for (const [email, body, code] of [
+      ['invalid', 'Hello', 'INVALID_EMAIL'],
+      ['invitee@example.com', '   ', 'VALIDATION_ERROR'],
+      ['invitee@example.com', 'x'.repeat(5001), 'VALIDATION_ERROR'],
+    ]) {
+      expect(
+        await reportMessagesService.sendInvitation('report', 'staff', email, body)
+      ).toMatchObject({ success: false, code });
+    }
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(
+      getDb().query("SELECT reporter_id, claimable_email FROM reports WHERE id = 'report'").get()
+    ).toEqual({ reporter_id: 'reporter', claimable_email: null });
+  });
+
+  it('does not describe an inactive project conversation as visible in the portal', async () => {
+    expect(await reportMessagesService.portalContext('report')).toMatchObject({
+      success: true,
+      value: { visible: true },
+    });
+    getDb().run("UPDATE projects SET is_active = 0 WHERE id = 'project'");
+    expect(await reportMessagesService.portalContext('report')).toMatchObject({
+      success: true,
+      value: { visible: false },
+    });
+  });
+
   it('preserves an expected ownership failure while rolling the message and staged files back', async () => {
     getDb().run(
       "UPDATE reports SET reporter_id = NULL, reporter_email = 'invalid' WHERE id = 'report'"

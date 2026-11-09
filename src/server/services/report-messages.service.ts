@@ -29,6 +29,9 @@ import type {
   CreateFileData,
 } from '../database/repositories/interfaces.js';
 import type { MediaFile } from './reports.service.js';
+import type { ReportOwner } from '@shared/reporter-types';
+import { normalizeEmail } from '../utils/email-normalize.js';
+import { isValidEmail } from '../utils/validators.js';
 
 export type MessageUpload = MediaFile | File;
 
@@ -66,7 +69,8 @@ function checkAccess(
   reportId: string,
   author: MessageAuthor,
   settings: AppSettings,
-  writing = true
+  writing = true,
+  invitationEmail?: string
 ): Result<MessageWriteContext> {
   if (!reportMessagesRepo.hasAuthor(author))
     return Result.fail('Author is no longer available', 'UNAUTHORIZED');
@@ -96,7 +100,8 @@ function checkAccess(
       author.kind === 'staff' &&
       !context.reporterId &&
       !context.claimableEmail &&
-      !context.reporterEmail
+      !context.reporterEmail &&
+      !invitationEmail
     )
       return Result.fail('Report does not have a reporter email address', 'NO_REPORTER_EMAIL');
   }
@@ -114,7 +119,8 @@ async function writeMessage(
   author: MessageAuthor,
   body: string,
   files: MessageUpload[],
-  confirmPortalAccess = false
+  confirmPortalAccess = false,
+  invitationEmail?: string
 ): Promise<Result<ReportMessage>> {
   const text = body.trim();
   if (text.length > 5000 || (!text && files.length === 0))
@@ -131,7 +137,7 @@ async function writeMessage(
   let releaseVideo: (() => void) | undefined;
   try {
     let settings = await settingsCacheService.getAll();
-    const access = checkAccess(reportId, author, settings);
+    const access = checkAccess(reportId, author, settings, true, invitationEmail);
     if (!access.success) return access;
     if (author.kind === 'staff' && needsPortalAccess(access.value) && !confirmPortalAccess)
       return Result.fail('Confirm that this message grants portal access', 'CONFIRMATION_REQUIRED');
@@ -205,7 +211,7 @@ async function writeMessage(
     }
     settings = await settingsCacheService.getAll();
     const result = transaction((): Result<ReportMessage> => {
-      const current = checkAccess(reportId, author, settings);
+      const current = checkAccess(reportId, author, settings, true, invitationEmail);
       if (!current.success) return current;
       if (author.kind === 'staff' && needsPortalAccess(current.value) && !confirmPortalAccess)
         return Result.fail(
@@ -242,10 +248,13 @@ async function writeMessage(
       }
       const message = reportMessagesRepo.insert(reportId, author, text);
       if (!message) return Result.fail('Author is no longer available', 'UNAUTHORIZED');
-      if (author.kind === 'staff' && needsPortalAccess(current.value)) {
+      if (
+        author.kind === 'staff' &&
+        (invitationEmail !== undefined || needsPortalAccess(current.value))
+      ) {
         const ownership = reporterOwnershipService.setInTransaction(
           reportId,
-          { claimableEmail: current.value.reporterEmail! },
+          { claimableEmail: invitationEmail ?? current.value.reporterEmail! },
           author.userId,
           ownershipChanges
         );
@@ -297,6 +306,41 @@ async function writeMessage(
   }
 }
 
+async function sendStaffMessage(
+  reportId: string,
+  userId: string,
+  message: string,
+  ccSender: boolean | undefined,
+  files: MessageUpload[],
+  confirmPortalAccess: boolean,
+  invitationEmail?: string
+): Promise<Result<ReporterMessage>> {
+  const saved = await writeMessage(
+    reportId,
+    { kind: 'staff', userId },
+    message,
+    files,
+    confirmPortalAccess,
+    invitationEmail
+  );
+  if (!saved.success) return saved;
+  const context = reportMessagesRepo.writeContext(reportId);
+  if (context)
+    realtimeService.publish('message.created', { reportId, projectId: context.projectId });
+  try {
+    const report = await reportsRepo.findById(reportId);
+    if (report)
+      notificationsService
+        .notifyReporterMessage(report, saved.value.body, userId, ccSender, saved.value.files)
+        .catch((error) => {
+          logger.error('Failed to send reporter message notification', error, { reportId });
+        });
+  } catch (error) {
+    logger.error('Failed to send reporter message notification', error, { reportId });
+  }
+  return Result.ok(toLegacyMessage(saved.value));
+}
+
 export const reportMessagesService = {
   async uploadBodyLimit(reportId: string): Promise<Result<number>> {
     const context = reportMessagesRepo.writeContext(reportId);
@@ -319,29 +363,29 @@ export const reportMessagesService = {
     files: MessageUpload[] = [],
     confirmPortalAccess = false
   ): Promise<Result<ReporterMessage>> {
-    const saved = await writeMessage(
+    return sendStaffMessage(reportId, userId, message, ccSender, files, confirmPortalAccess);
+  },
+
+  async sendInvitation(
+    reportId: string,
+    userId: string,
+    email: string,
+    message: string
+  ): Promise<Result<ReportOwner>> {
+    const claimableEmail = normalizeEmail(email);
+    if (claimableEmail.length > 254 || !isValidEmail(claimableEmail))
+      return Result.fail('Invalid email address', 'INVALID_EMAIL');
+    const saved = await sendStaffMessage(
       reportId,
-      { kind: 'staff', userId },
+      userId,
       message,
-      files,
-      confirmPortalAccess
+      false,
+      [],
+      true,
+      claimableEmail
     );
     if (!saved.success) return saved;
-    const context = reportMessagesRepo.writeContext(reportId);
-    if (context)
-      realtimeService.publish('message.created', { reportId, projectId: context.projectId });
-    try {
-      const report = await reportsRepo.findById(reportId);
-      if (report)
-        notificationsService
-          .notifyReporterMessage(report, saved.value.body, userId, ccSender, saved.value.files)
-          .catch((error) => {
-            logger.error('Failed to send reporter message notification', error, { reportId });
-          });
-    } catch (error) {
-      logger.error('Failed to send reporter message notification', error, { reportId });
-    }
-    return Result.ok(toLegacyMessage(saved.value));
+    return reporterOwnershipService.describeOwner({ claimableEmail });
   },
 
   async sendReporter(
@@ -373,7 +417,9 @@ export const reportMessagesService = {
     const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
     const email = reporterCorrespondenceService.recipient(report);
     return Result.ok({
-      visible: Boolean(project?.settings.reporterPortal?.enabled && report.reporterId),
+      visible: Boolean(
+        project?.isActive && project.settings.reporterPortal?.enabled && report.reporterId
+      ),
       ownerEmail: owner?.email ?? null,
       correspondentEmail: email,
       ownerLastLoginAt: owner?.lastLoginAt ?? null,

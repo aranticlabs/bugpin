@@ -56,6 +56,7 @@ export function ConversationCard({
   messagingEnabled,
   hasRecipient,
   portalEnabled,
+  projectActive,
   hasOwner,
   hasNewReporterActivity,
   onMarkSeen,
@@ -69,6 +70,7 @@ export function ConversationCard({
   messagingEnabled: boolean;
   hasRecipient: boolean;
   portalEnabled?: boolean;
+  projectActive?: boolean;
   hasOwner: boolean;
   hasNewReporterActivity?: boolean;
   onMarkSeen?: () => void;
@@ -169,11 +171,13 @@ export function ConversationCard({
           <CardContent className="space-y-4 pt-4">
             {portalEnabled !== undefined && (
               <p className="text-sm text-muted-foreground">
-                {!portalEnabled
-                  ? 'Portal disabled for this project'
-                  : hasOwner
-                    ? 'Visible to the reporter in the portal'
-                    : 'No reporter currently has portal access to this report'}
+                {projectActive === false
+                  ? 'Project inactive. The conversation is not visible in the portal.'
+                  : !portalEnabled
+                    ? 'Portal disabled for this project'
+                    : hasOwner
+                      ? 'Visible to the reporter in the portal'
+                      : 'No reporter currently has portal access to this report'}
               </p>
             )}
             {conversation.portal?.ownerLastLoginAt && (
