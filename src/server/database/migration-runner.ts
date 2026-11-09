@@ -318,14 +318,18 @@ export class MigrationRunner {
     this.prepare();
     this.db.exec(MIGRATIONS_SCHEMA);
 
-    let migrated = false;
-    for (const file of this.pendingFiles()) {
+    const pendingFiles = this.pendingFiles();
+    for (const file of pendingFiles) {
       logger.info('Applying migration', { file });
       const migration = migrations[file];
       const sql = fs.readFileSync(path.join(this.directory, file), 'utf8');
       this.db.exec('PRAGMA foreign_keys = OFF');
       try {
         this.db.exec('BEGIN IMMEDIATE');
+        if (this.db.query('SELECT 1 FROM migrations WHERE name = ?').get(file)) {
+          this.db.exec('COMMIT');
+          continue;
+        }
         if (!migration?.isSatisfied(this.db)) {
           if (migration) migration.apply(this.db, sql);
           else this.db.exec(sql);
@@ -336,7 +340,6 @@ export class MigrationRunner {
         checkForeignKeys(this.db);
         this.db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
         this.db.exec('COMMIT');
-        migrated = true;
       } catch (error) {
         if (this.db.inTransaction) this.db.exec('ROLLBACK');
         logger.error('Migration failed; pre-upgrade backup retained', error, {
@@ -349,7 +352,7 @@ export class MigrationRunner {
       }
     }
 
-    if (migrated) {
+    if (pendingFiles.length > 0) {
       checkIntegrity(this.db);
       checkForeignKeys(this.db);
       if (this.backupPath) {

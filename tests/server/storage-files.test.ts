@@ -55,6 +55,15 @@ function createWebpBufferVp8l(width: number, height: number) {
   return buffer;
 }
 
+function createFtypBuffer(brand: string): Buffer {
+  const data = Buffer.alloc(20);
+  data.writeUInt32BE(data.length);
+  data.write('ftyp', 4, 'ascii');
+  data.write(brand, 8, 'ascii');
+  data.write(brand, 16, 'ascii');
+  return data;
+}
+
 beforeAll(() => {
   filesRepo.findByReportId = async () => [];
   tempDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-files-'));
@@ -285,14 +294,25 @@ describe('validateFile', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts valid WebP screenshot', () => {
-    const result = validateFile({
-      data: createWebpBufferVp8(10, 10),
-      mimeType: 'image/webp',
-      type: 'screenshot',
+  for (const data of [createWebpBufferVp8(10, 10), createWebpBufferVp8l(10, 10)]) {
+    it(`accepts valid ${data.toString('ascii', 12, 16)} WebP signatures`, () => {
+      for (const bytes of [data, new Uint8Array(data)]) {
+        expect(
+          validateFile({ data: bytes, mimeType: 'image/webp', type: 'screenshot' }).success
+        ).toBe(true);
+      }
     });
-    expect(result.success).toBe(true);
-  });
+  }
+
+  for (const header of ['RIFF0000WAVE', 'RIFF0000AVI ', 'RIFF0000', '00000000WEBP']) {
+    it(`rejects ${header} as WebP`, () => {
+      for (const data of [Buffer.from(header), new Uint8Array(Buffer.from(header))]) {
+        expect(
+          validateFileContent({ data, mimeType: 'image/webp', type: 'screenshot' })
+        ).toMatchObject({ success: false, code: 'INVALID_FILE_CONTENT' });
+      }
+    });
+  }
 
   it('accepts valid GIF screenshot', () => {
     const gif = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00]);
@@ -320,8 +340,126 @@ describe('validateFile', () => {
     }
   });
 
+  for (const brand of [
+    'isom',
+    'iso5',
+    'mp41',
+    'mp42',
+    'avc1',
+    'M4V ',
+    'MSNV',
+    'dash',
+    'XAVC',
+    '3gp4',
+    '3gp5',
+    '3gp6',
+    '3gp7',
+    '3gp8',
+    '3gp9',
+    '3g2a',
+    'mp71',
+    'f4v ',
+    'av01',
+    'cmfc',
+    'cmfs',
+  ]) {
+    it(`accepts the MP4 major brand ${brand}`, () => {
+      const header = createFtypBuffer(brand);
+      const padded = Buffer.concat([Buffer.alloc(3), header]);
+      for (const data of [
+        header,
+        new Uint8Array(padded.buffer, padded.byteOffset + 3, header.length),
+      ]) {
+        expect(validateFileContent({ data, mimeType: 'video/mp4', type: 'video' }).success).toBe(
+          true
+        );
+      }
+    });
+  }
+
+  for (const filename of [
+    'chrome-with-audio.mp4',
+    'chrome-without-audio.mp4',
+    'webkit-with-audio.mp4',
+    'chrome-cut-off.mp4',
+  ]) {
+    it(`accepts the recorded video signature in ${filename}`, async () => {
+      const data = await Bun.file(
+        path.join(import.meta.dir, '../fixtures/video-remux', filename)
+      ).bytes();
+      expect(validateFileContent({ data, mimeType: 'video/mp4', type: 'video' }).success).toBe(
+        true
+      );
+    });
+  }
+
+  for (const mimeType of ['video/mp4', 'video/quicktime']) {
+    for (const brand of ['avif', 'avis', 'heic', 'mif1', 'M4A ', 'xxxx']) {
+      it(`rejects the ${brand} container as ${mimeType}`, () => {
+        const header = createFtypBuffer(brand);
+        header.write('isom', 16, 'ascii');
+        for (const data of [header, new Uint8Array(header)]) {
+          expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+            success: false,
+            code: 'INVALID_FILE_CONTENT',
+          });
+        }
+      });
+    }
+
+    it(`rejects the AVIF file-type header as ${mimeType}`, () => {
+      const data = Buffer.from(
+        '00000020667479706176696600000000617669666d6966316d6961664d413141',
+        'hex'
+      );
+      expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+        success: false,
+        code: 'INVALID_FILE_CONTENT',
+      });
+    });
+
+    it(`rejects incomplete or malformed file-type boxes as ${mimeType}`, () => {
+      const valid = createFtypBuffer(mimeType === 'video/mp4' ? 'isom' : 'qt  ');
+      const tooSmall = Buffer.from(valid);
+      tooSmall.writeUInt32BE(12);
+      const misaligned = Buffer.from(valid);
+      misaligned.writeUInt32BE(19);
+      for (const data of [
+        valid.subarray(0, 8),
+        valid.subarray(0, 12),
+        valid.subarray(0, 16),
+        tooSmall,
+        misaligned,
+      ]) {
+        expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+          success: false,
+          code: 'INVALID_FILE_CONTENT',
+        });
+      }
+    });
+
+    it(`accepts a bounded extended-size file-type box as ${mimeType}`, () => {
+      const data = Buffer.alloc(28);
+      data.writeUInt32BE(1);
+      data.write('ftyp', 4, 'ascii');
+      data.writeBigUInt64BE(28n, 8);
+      const brand = mimeType === 'video/mp4' ? 'isom' : 'qt  ';
+      data.write(brand, 16, 'ascii');
+      data.write(brand, 24, 'ascii');
+      expect(validateFileContent({ data, mimeType, type: 'video' }).success).toBe(true);
+      const tooLarge = Buffer.from(data);
+      tooLarge.writeBigUInt64BE(0xffffffffffffffffn, 8);
+      for (const invalid of [data.subarray(0, 16), data.subarray(0, 23), tooLarge]) {
+        expect(validateFileContent({ data: invalid, mimeType, type: 'video' })).toMatchObject({
+          success: false,
+          code: 'INVALID_FILE_CONTENT',
+        });
+      }
+    });
+  }
+
   it('accepts MOV and rejects AVI video uploads', () => {
-    const mov = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+    const mov = createFtypBuffer('qt  ');
 
     expect(validateFile({ data: mov, mimeType: 'video/quicktime', type: 'video' }).success).toBe(
       true

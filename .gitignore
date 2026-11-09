@@ -38,6 +38,8 @@ Thumbs.db
 
 # AI agent files
 .claude/
+.cursor/
+.codex/
 .codegraph/
 CLAUDE.md
 AGENTS.md

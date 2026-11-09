@@ -61,7 +61,7 @@ export const reporterOwnershipRepo = {
     return (
       getDb()
         .query(
-          `SELECT 1 FROM reports WHERE id = ? AND reporter_id = ? AND project_id IN (${enabledProject})`
+          `SELECT 1 FROM reports WHERE id = ? AND reporter_id = ? AND project_id IN (${enabledProject} AND is_active = 1)`
         )
         .get(reportId, reporterId) !== null
     );

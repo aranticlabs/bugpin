@@ -20,6 +20,39 @@ import { toast } from 'sonner';
 afterEach(() => vi.clearAllMocks());
 
 describe('ReportDetail', () => {
+  it.each([true, false])(
+    'describes portal visibility using project activity (%s)',
+    async (isActive) => {
+      server.use(
+        http.get('/api/reports/report-1', () =>
+          HttpResponse.json({
+            success: true,
+            report: { ...mockReports[0], reporterId: 'rptr_jane' },
+            files: [],
+          })
+        ),
+        http.get('/api/projects/:id', () =>
+          HttpResponse.json({
+            success: true,
+            project: { id: 'project-1', isActive, settings: { reporterPortal: { enabled: true } } },
+          })
+        )
+      );
+      renderWithProviders(
+        <Routes>
+          <Route path="/reports/:id" element={<ReportDetail />} />
+        </Routes>,
+        { initialEntries: ['/reports/report-1'] }
+      );
+      const expected = isActive
+        ? 'Visible to the reporter in the portal'
+        : 'Project inactive. The conversation is not visible in the portal.';
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      if (!isActive)
+        expect(screen.queryByText('Visible to the reporter in the portal')).not.toBeInTheDocument();
+    }
+  );
+
   it('acknowledges reporter activity only after the staff action and refreshes its indicator', async () => {
     let active = true;
     let acknowledgements = 0;

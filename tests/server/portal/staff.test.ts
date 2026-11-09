@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, mock, spyOn } from 'bun:test';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
 import { reportOwnerRoutes } from '../../../src/server/routes/api/report-owner';
+import { reporterMessagesRoutes } from '../../../src/server/routes/api/reporter-messages';
 import { reportersRoutes } from '../../../src/server/routes/api/reporters';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
@@ -15,6 +16,8 @@ import { reporterAuthTokensRepo } from '../../../src/server/database/repositorie
 import { reporterOwnershipRepo } from '../../../src/server/database/repositories/reporter-ownership.repo';
 import { reporterAuthService } from '../../../src/server/services/reporter-auth.service';
 import { reporterOwnershipService } from '../../../src/server/services/reporter-ownership.service';
+import { reportMessagesService } from '../../../src/server/services/report-messages.service';
+import { reportMessagesRepo } from '../../../src/server/database/repositories/report-messages.repo';
 import { reportersService } from '../../../src/server/services/reporters.service';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
@@ -158,6 +161,112 @@ it('assigns, makes claimable, and removes ownership atomically with history and 
   ]);
 });
 
+it('makes a report claimable and sends the optional invitation as a normal staff message without another confirmation', async () => {
+  const first = await report();
+  getDb().run('UPDATE reports SET reporter_email = NULL WHERE id = ?', [first.id]);
+  const notify = spyOn(notificationsService, 'notifyReporterMessage').mockResolvedValue(undefined);
+  expect(await reportMessagesService.portalContext(first.id)).toMatchObject({
+    success: true,
+    value: { requiresPortalAccessConfirmation: true },
+  });
+  const response = await request(
+    `/api/reports/${first.id}/owner`,
+    'PUT',
+    {
+      claimableEmail: 'Invitee@Example.com',
+      invitation: { message: ' Welcome to the conversation. ' },
+    },
+    'editor'
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    owner: {
+      reporterId: null,
+      claimableEmail: 'invitee@example.com',
+      correspondentEmail: 'invitee@example.com',
+    },
+  });
+  const messages = await reportMessagesRepo.findByReportId(first.id);
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    authorKind: 'staff',
+    userId: 'editor',
+    body: 'Welcome to the conversation.',
+  });
+  expect(notify).toHaveBeenCalledWith(
+    expect.objectContaining({ id: first.id, claimableEmail: 'invitee@example.com' }),
+    'Welcome to the conversation.',
+    'editor',
+    false,
+    []
+  );
+  expect(await reportMessagesService.portalContext(first.id)).toMatchObject({
+    success: true,
+    value: { requiresPortalAccessConfirmation: false },
+  });
+  expect(
+    (await reportMessagesService.send(first.id, 'editor', 'Follow-up without confirmation')).success
+  ).toBe(true);
+  expect(
+    getDb()
+      .query("SELECT action FROM report_history WHERE report_id = ? AND action = 'claimable_set'")
+      .all(first.id)
+  ).toEqual([{ action: 'claimable_set' }]);
+});
+
+it('validates invitation messages only on the claimable-email request variant without changing ownership', async () => {
+  const first = await report();
+  const target = login('existing@example.com');
+  for (const body of [
+    { reporterId: target.reporter.id, invitation: { message: 'Hello' } },
+    ...['', '   ', 'x'.repeat(5001), 42].map((message) => ({
+      claimableEmail: 'invitee@example.com',
+      invitation: { message },
+    })),
+    { claimableEmail: 'invitee@example.com', invitation: {} },
+    { claimableEmail: 'invitee@example.com', invitation: { message: 'Hello', extra: true } },
+  ]) {
+    expect((await request(`/api/reports/${first.id}/owner`, 'PUT', body)).status).toBe(400);
+  }
+  expect((await reportsRepo.findById(first.id))!.claimableEmail).toBeUndefined();
+  expect(await reportMessagesRepo.findByReportId(first.id)).toEqual([]);
+});
+
+it('accepts invitation message lengths at both inclusive limits', async () => {
+  const first = await report();
+  spyOn(notificationsService, 'notifyReporterMessage').mockResolvedValue(undefined);
+  for (const length of [1, 5000]) {
+    expect(
+      (
+        await request(`/api/reports/${first.id}/owner`, 'PUT', {
+          claimableEmail: 'invitee@example.com',
+          invitation: { message: 'x'.repeat(length) },
+        })
+      ).status
+    ).toBe(200);
+  }
+  expect(
+    (await reportMessagesRepo.findByReportId(first.id))
+      .map((message) => message.body.length)
+      .sort((a, b) => a - b)
+  ).toEqual([1, 5000]);
+});
+
+it('does not change claimability or save an invitation when messaging is disabled', async () => {
+  const first = await report();
+  await projectsRepo.update(project.id, {
+    settings: { ...project.settings, reporterNotifications: { messagingEnabled: false } },
+  });
+  const response = await request(`/api/reports/${first.id}/owner`, 'PUT', {
+    claimableEmail: 'invitee@example.com',
+    invitation: { message: 'Hello' },
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: 'MESSAGING_DISABLED' });
+  expect((await reportsRepo.findById(first.id))!.claimableEmail).toBeUndefined();
+  expect(await reportMessagesRepo.findByReportId(first.id)).toEqual([]);
+});
+
 it('rejects mixed owner inputs and missing reporters, and rolls back ownership when history fails', async () => {
   const target = login();
   const first = await report();
@@ -182,6 +291,7 @@ it('rejects mixed owner inputs and missing reporters, and rolls back ownership w
 });
 
 it('returns a client error without changing ownership when the project license denies mutations', async () => {
+  app.route('/api/reports', reporterMessagesRoutes);
   const target = login();
   const first = await report();
   Result.unwrap(
@@ -201,6 +311,14 @@ it('returns a client error without changing ownership when the project license d
       success: false,
       error: 'PROJECT_NOT_LICENSED',
     });
+  }
+  for (const [path, method, body] of [
+    ['owner', 'PUT', { claimableEmail: 'invitee@example.com', invitation: { message: 'Reply' } }],
+    ['reporter-messages', 'POST', { message: 'Reply' }],
+  ] as const) {
+    const response = await request(`/api/reports/${first.id}/${path}`, method, body);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'PROJECT_NOT_LICENSED' });
   }
   expect((await reportsRepo.findById(first.id))!.reporterId).toBe(target.reporter.id);
   expect(getDb().query('SELECT COUNT(*) AS count FROM report_history').get()).toEqual({ count: 1 });

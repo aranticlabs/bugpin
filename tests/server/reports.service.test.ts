@@ -31,7 +31,7 @@ const validMp4Buffer = Buffer.from([
   0x00,
   0x00,
   0x00,
-  0x18,
+  0x10,
   0x66,
   0x74,
   0x79,
@@ -429,31 +429,45 @@ describe('reportsService.create', () => {
     expect(fileCreateTypes).toEqual(['video']);
   });
 
-  it('stores the original recording and logs a warning when remuxing fails', async () => {
-    const corruptRecording = validMp4Buffer.subarray(0, 8);
-    const result = await reportsService.create({
-      apiKey: 'proj_key',
-      title: 'Short recording',
-      metadata: baseMetadata,
-      files: [
-        {
-          filename: 'recording.mp4',
-          mimeType: 'video/mp4',
-          data: corruptRecording,
-          isRecording: true,
-        },
-      ],
-    });
+  for (const { description, corruptRecording, code } of [
+    {
+      description: 'no remuxable tracks',
+      corruptRecording: validMp4Buffer,
+      code: 'REMUX_TRACKS_DROPPED',
+    },
+    {
+      description: 'corrupt MP4 payload',
+      corruptRecording: Buffer.concat([validMp4Buffer, Buffer.from('000000046d6f6f76', 'hex')]),
+      code: 'REMUX_FAILED',
+    },
+  ]) {
+    it(`stores the original recording and logs a warning for ${description}`, async () => {
+      const result = await reportsService.create({
+        apiKey: 'proj_key',
+        title: 'Short recording',
+        metadata: baseMetadata,
+        files: [
+          {
+            filename: 'recording.mp4',
+            mimeType: 'video/mp4',
+            data: corruptRecording,
+            isRecording: true,
+          },
+        ],
+      });
 
-    expect(result.success).toBe(true);
-    expect(fileCreateRecords).toHaveLength(1);
-    expect(fileCreateRecords[0]?.sizeBytes).toBe(corruptRecording.length);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(corruptRecording);
-    expect(warningCalls).toContainEqual({
-      message: 'Recording remux failed, storing original',
-      context: expect.objectContaining({ code: 'REMUX_FAILED' }),
+      expect(result.success).toBe(true);
+      expect(fileCreateRecords).toHaveLength(1);
+      const [storedFile] = fileCreateRecords;
+      if (!storedFile) throw new Error('Expected the original recording to be stored');
+      expect(storedFile.sizeBytes).toBe(corruptRecording.length);
+      expect(await Bun.file(storedFile.path).bytes()).toEqual(corruptRecording);
+      expect(warningCalls).toContainEqual({
+        message: 'Recording remux failed, storing original',
+        context: expect.objectContaining({ code }),
+      });
     });
-  });
+  }
 
   it('stores a remuxed recording with MP4 metadata first', async () => {
     const recording = await Bun.file(

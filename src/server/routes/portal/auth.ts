@@ -24,6 +24,7 @@ const resendSchema = tokenSchema.extend({ locale: z.enum(SUPPORTED_LOCALES).opti
 function loginIpLimit(kind: 'request' | 'preview' | 'exchange') {
   return rateLimiter({
     name: `portal-login-${kind}-ip`,
+    exposeHeaders: kind !== 'request',
     window: 900,
     max: async () => {
       const { reporterPortalLimits: limits } = await settingsCacheService.getAll();
@@ -42,6 +43,7 @@ function loginIpLimit(kind: 'request' | 'preview' | 'exchange') {
 function loginEmailLimit(resend: boolean) {
   return rateLimiter({
     name: 'portal-login-email',
+    exposeHeaders: false,
     window: 900,
     max: async () =>
       (await settingsCacheService.getAll()).reporterPortalLimits.loginRequestsPerEmailPer15Min,

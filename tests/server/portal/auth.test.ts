@@ -59,7 +59,16 @@ function count(table: 'reporters' | 'reporter_auth_tokens' | 'reporter_sessions'
     .count;
 }
 
-it('returns identical neutral responses for unknown, known, suspended, and limited requests', async () => {
+async function observableResponse(response: Response) {
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+    body: await response.text(),
+  };
+}
+
+it('returns identical complete responses for unknown, known, suspended, email-limited, and IP-limited requests', async () => {
   reportersRepo.resolve('known@example.com', 'Known', new Date().toISOString());
   const suspended = reportersRepo.resolve(
     'suspended@example.com',
@@ -74,21 +83,91 @@ it('returns identical neutral responses for unknown, known, suspended, and limit
   for (const email of ['unknown@example.com', 'known@example.com', 'suspended@example.com']) {
     const response = await portalPost(app, '/auth/request', { email });
     expect(response.status).toBe(200);
-    responses.push(await response.json());
+    responses.push(await observableResponse(response));
   }
   await settingsRepo.updateAll({
     reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerEmailPer15Min: 1 },
   });
   settingsCacheService.invalidate();
   const limited = await portalPost(app, '/auth/request', { email: 'known@example.com' });
-  responses.push(await limited.json());
+  responses.push(await observableResponse(limited));
   expect(limited.status).toBe(200);
-  expect(responses).toEqual(Array(4).fill({ success: true }));
+  await settingsRepo.updateAll({
+    reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerIpPer15Min: 1 },
+  });
+  settingsCacheService.invalidate();
+  responses.push(
+    await observableResponse(
+      await portalPost(app, '/auth/request', { email: 'ip-limited@example.com' })
+    )
+  );
+  expect(responses).toEqual(Array(5).fill(responses[0]));
+  expect(responses[0].body).toBe(JSON.stringify({ success: true }));
+  for (const response of responses) {
+    expect(response.status).toBe(200);
+    for (const name of [
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'x-ratelimit-reset',
+      'retry-after',
+    ])
+      expect(response.headers).not.toHaveProperty(name);
+  }
   expect(sent.map((email) => email.to[0].email)).toEqual([
     'unknown@example.com',
     'known@example.com',
   ]);
   expect(count('reporters')).toBe(2);
+  expect(count('reporter_auth_tokens')).toBe(2);
+});
+
+it('returns identical complete resend responses for unknown, known, suspended, email-limited, and IP-limited recipients', async () => {
+  const now = new Date().toISOString();
+  reportersRepo.resolve('known@example.com', 'Known', now);
+  const suspended = reportersRepo.resolve('suspended@example.com', 'Suspended', now);
+  const tokens = ['unknown@example.com', 'known@example.com', 'suspended@example.com'].map(
+    (email) => mint(email, 'confirmation')
+  );
+  for (const token of tokens)
+    getDb().run('UPDATE reporter_auth_tokens SET expires_at = ? WHERE token_hash = ?', [
+      new Date(Date.now() - 1000).toISOString(),
+      hashToken(token.secret),
+    ]);
+  reportersRepo.setSuspension(suspended.id, now, null, now);
+  const responses = [];
+  for (const token of tokens)
+    responses.push(
+      await observableResponse(await portalPost(app, '/auth/resend', { token: token.secret }))
+    );
+  await settingsRepo.updateAll({
+    reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerEmailPer15Min: 1 },
+  });
+  settingsCacheService.invalidate();
+  responses.push(
+    await observableResponse(await portalPost(app, '/auth/resend', { token: tokens[1].secret }))
+  );
+  await settingsRepo.updateAll({
+    reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginRequestsPerIpPer15Min: 1 },
+  });
+  settingsCacheService.invalidate();
+  responses.push(
+    await observableResponse(await portalPost(app, '/auth/resend', { token: tokens[0].secret }))
+  );
+  expect(responses).toEqual(Array(5).fill(responses[0]));
+  expect(responses[0].status).toBe(200);
+  expect(responses[0].body).toBe(JSON.stringify({ success: true }));
+  for (const name of [
+    'x-ratelimit-limit',
+    'x-ratelimit-remaining',
+    'x-ratelimit-reset',
+    'retry-after',
+  ])
+    expect(responses[0].headers).not.toHaveProperty(name);
+  expect(sent.map((email) => email.to[0].email)).toEqual([
+    'unknown@example.com',
+    'known@example.com',
+  ]);
+  expect(count('reporter_auth_tokens')).toBe(5);
 });
 
 it('does not wait for SMTP or expose delivery failures in the response', async () => {

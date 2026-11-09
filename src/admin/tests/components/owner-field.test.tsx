@@ -5,6 +5,41 @@ import { renderWithQuery, screen, userEvent, waitFor, within } from '../utils';
 import { OwnerField } from '../../components/report/OwnerField';
 
 describe('OwnerField', () => {
+  it('offers an optional invitation only when making a report claimable and sends its message', async () => {
+    const writes: unknown[] = [];
+    server.use(
+      http.put('/api/reports/report-1/owner', async ({ request }) => {
+        writes.push(await request.json());
+        return HttpResponse.json({ owner: { claimableEmail: 'invitee@example.com' } });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithQuery(<OwnerField report={{ id: 'report-1' }} canEdit />);
+    await user.click(screen.getByRole('button', { name: 'Change owner' }));
+    expect(screen.queryByLabelText('Invitation message (optional)')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('combobox', { name: 'Ownership' }));
+    await user.click(screen.getByRole('option', { name: 'Make claimable by email' }));
+    const invitation = screen.getByLabelText('Invitation message (optional)');
+    expect(invitation).toHaveAttribute('maxLength', '5000');
+    await user.type(screen.getByLabelText('Email address'), 'Invitee@Example.com');
+    await user.type(invitation, ' Welcome to the conversation. ');
+    await user.click(screen.getByRole('button', { name: 'Save owner' }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          claimableEmail: 'invitee@example.com',
+          invitation: { message: 'Welcome to the conversation.' },
+        },
+      ])
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Change owner' }));
+    await user.click(screen.getByRole('combobox', { name: 'Ownership' }));
+    await user.click(screen.getByRole('option', { name: 'Make claimable by email' }));
+    expect(screen.getByLabelText('Invitation message (optional)')).toHaveValue('');
+  });
+
   it('warns before granting access to a backfilled historical description', async () => {
     const user = userEvent.setup();
     renderWithQuery(

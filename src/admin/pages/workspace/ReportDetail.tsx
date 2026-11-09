@@ -647,6 +647,7 @@ export function ReportDetail() {
             portalEnabled={
               projectData ? (projectData.settings?.reporterPortal?.enabled ?? false) : undefined
             }
+            projectActive={projectData?.isActive}
             hasOwner={Boolean(report.reporterId)}
             hasNewReporterActivity={report.hasNewReporterActivity}
             onMarkSeen={() => markReporterActivitySeen.mutate()}
