@@ -168,3 +168,24 @@ it('rejects missing or suspended reporters at the service boundary', () => {
   });
   expect(reporterSuppressionsRepo.has('profile@example.com')).toBe(false);
 });
+
+it('normalizes names to NFC and removes bidi, zero-width, and line/paragraph format controls', async () => {
+  for (const [input, expected] of [
+    ['  Ja\u202Ene\u202C Doe  ', 'Jane Doe'],
+    ['\u2066Jane\u2069 \u200BD\u200Co\u200De\uFEFF', 'Jane Doe'],
+    ['Jane\u2028 \u2029Doe', 'Jane Doe'],
+    ['  Cafe\u0301  ', 'Café'],
+    ['e\u200B\u0301', 'é'],
+    ['e\u0301'.repeat(80), 'é'.repeat(80)],
+  ]) {
+    const response = await patch({ displayName: input });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { reporter: PortalMe }).reporter.displayName).toBe(expected);
+    expect(reportersRepo.findById(reporterId)!.displayName).toBe(expected);
+  }
+  const before = reportersRepo.findById(reporterId)!.displayName;
+  for (const input of ['\u202E\u2066\u200B\u2028\u2029', 'e\u0301'.repeat(81)]) {
+    expect((await patch({ displayName: input })).status).toBe(400);
+    expect(reportersRepo.findById(reporterId)!.displayName).toBe(before);
+  }
+});

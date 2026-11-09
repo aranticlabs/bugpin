@@ -32,6 +32,7 @@ describe('createFileResponse', () => {
     let requestedRange: { start: number; end: number } | undefined;
     const handle: StoredFileHandle = {
       kind: 'remote',
+      exists: async () => true,
       read: async () => new Uint8Array(),
       readRange: async (start, end) => {
         requestedRange = { start, end };
@@ -53,9 +54,13 @@ describe('createFileResponse', () => {
   });
 
   function createRecordingHandle(kind: StoredFileHandle['kind']) {
-    const calls: Array<{ start: number; end: number } | 'full'> = [];
+    const calls: Array<{ start: number; end: number } | 'full' | 'exists'> = [];
     const handle: StoredFileHandle = {
       kind,
+      exists: async () => {
+        calls.push('exists');
+        return true;
+      },
       read: async () => {
         calls.push('full');
         return new Uint8Array();
@@ -115,7 +120,7 @@ describe('createFileResponse', () => {
   });
 
   for (const kind of ['local', 'remote'] as const) {
-    it(`answers ${kind} HEAD requests without reading the file`, async () => {
+    it(`answers ${kind} HEAD requests after checking existence without reading the body`, async () => {
       const { handle, calls } = createRecordingHandle(kind);
 
       const full = await createFileResponse({
@@ -135,7 +140,7 @@ describe('createFileResponse', () => {
         headOnly: true,
       });
 
-      expect(calls).toEqual([]);
+      expect(calls).toEqual(['exists', 'exists']);
       expect(full?.status).toBe(200);
       expect(full?.headers.get('Content-Length')).toBe((20 * MB).toString());
       expect(full?.headers.get('Content-Type')).toBe('video/webm');
@@ -152,6 +157,7 @@ it('sanitizes filenames and uses attachment disposition for non-media files', as
   const response = await createFileResponse({
     handle: {
       kind: 'local',
+      exists: async () => true,
       read: async () => new Uint8Array([1]),
       readRange: async () => new Uint8Array([1]),
     },
@@ -172,6 +178,7 @@ it('serves the accepted image/jpg alias inline', async () => {
   const response = await createFileResponse({
     handle: {
       kind: 'local',
+      exists: async () => true,
       read: async () => new Uint8Array([1]),
       readRange: async () => new Uint8Array([1]),
     },

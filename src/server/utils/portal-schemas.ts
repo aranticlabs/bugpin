@@ -41,7 +41,12 @@ export const portalProfileSchema = z
   .object({
     displayName: z
       .string()
-      .transform((value) => value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim())
+      .transform((value) =>
+        value
+          .replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, '')
+          .normalize('NFC')
+          .trim()
+      )
       .pipe(z.string().min(1).max(80))
       .optional(),
     locale: z.enum(SUPPORTED_LOCALES).optional(),

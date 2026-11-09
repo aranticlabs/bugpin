@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { getDb } from '../../../src/server/database/database';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
@@ -486,5 +486,84 @@ it('rejects revoked sessions on every authenticated read', async () => {
     `/reports/${item.id}/files/${uploaded.id}`,
   ]) {
     expect((await request(path)).status).toBe(401);
+  }
+});
+
+it('masks previous reporters after reassignment while preserving staff and current author snapshots', async () => {
+  const item = await report();
+  getDb().run('UPDATE reporters SET display_name = ? WHERE id = ?', [
+    'alice.private-localpart',
+    owner.id,
+  ]);
+  const earlier = reportMessagesRepo.insert(
+    item.id,
+    { kind: 'reporter', reporterId: owner.id },
+    'Earlier reply'
+  )!;
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [past, earlier.id]);
+  expect((await detail(item.id)).messages[0].authorName).toBe(earlier.authorName);
+  const staff = staffMessage(item.id, 'Staff reply');
+  const staffTime = '2026-01-01T00:00:01.000Z';
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [staffTime, staff.id]);
+  reporterOwnershipRepo.setOwner(item.id, other.id, null);
+  const current = reportMessagesRepo.insert(
+    item.id,
+    { kind: 'reporter', reporterId: other.id },
+    'Current reply'
+  )!;
+  const currentTime = '2026-01-01T00:00:02.000Z';
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [currentTime, current.id]);
+  const result = await detail(item.id, other.cookie);
+  expect(result.messages).toEqual([
+    {
+      id: earlier.id,
+      authorKind: 'reporter',
+      authorName: 'Previous reporter',
+      isOwn: false,
+      body: 'Earlier reply',
+      files: [],
+      createdAt: past,
+    },
+    {
+      id: staff.id,
+      authorKind: 'staff',
+      authorName: staff.authorName,
+      isOwn: false,
+      body: 'Staff reply',
+      files: [],
+      createdAt: staffTime,
+    },
+    {
+      id: current.id,
+      authorKind: 'reporter',
+      authorName: current.authorName,
+      isOwn: true,
+      body: 'Current reply',
+      files: [],
+      createdAt: currentTime,
+    },
+  ]);
+  expect(JSON.stringify(result.messages)).not.toContain(earlier.authorName);
+  getDb().run('DELETE FROM reporters WHERE id = ?', [owner.id]);
+  expect((await detail(item.id, other.cookie)).messages[0].authorName).toBe('Previous reporter');
+});
+
+it('returns the same not-found response for GET and HEAD when an original or chat object is missing', async () => {
+  const item = await report();
+  const message = staffMessage(item.id);
+  for (const uploaded of [await file(item.id), await file(item.id, message.id)]) {
+    unlinkSync(uploaded.path);
+    for (const range of [undefined, 'bytes=0-3', 'bytes=100-200']) {
+      for (const method of ['GET', 'HEAD']) {
+        const response = await request(
+          `/reports/${item.id}/files/${uploaded.id}`,
+          owner.cookie,
+          method,
+          range
+        );
+        expect(response.status).toBe(404);
+        expect(response.headers.get('cache-control')).toBe('private, no-store');
+      }
+    }
   }
 });

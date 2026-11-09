@@ -48,6 +48,8 @@ export async function createFileResponse(options: {
   filename?: string;
 }): Promise<Response | null> {
   const parsedRange = parseRangeHeader(options.rangeHeader, options.size);
+  if ((options.headOnly || parsedRange === 'unsatisfiable') && !(await options.handle.exists()))
+    return null;
   const sharedHeaders: Record<string, string> = {
     'Accept-Ranges': 'bytes',
     'Cache-Control': options.cacheControl,

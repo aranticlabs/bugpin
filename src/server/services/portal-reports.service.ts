@@ -126,7 +126,10 @@ export const portalReportsService = {
         messages: messages.map((message) => ({
           id: message.id,
           authorKind: message.authorKind,
-          authorName: message.authorName,
+          authorName:
+            message.authorKind === 'reporter' && message.reporterId !== reporterId
+              ? 'Previous reporter'
+              : message.authorName,
           isOwn: message.authorKind === 'reporter' && message.reporterId === reporterId,
           body: message.body,
           createdAt: message.createdAt,

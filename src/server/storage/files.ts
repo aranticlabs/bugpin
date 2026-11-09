@@ -394,6 +394,7 @@ function isS3Url(path: string): boolean {
 
 export interface StoredFileHandle {
   kind: 'local' | 'remote';
+  exists(): Promise<boolean>;
   read(): Promise<Blob | Uint8Array | null>;
   readRange(start: number, end: number): Promise<Blob | Uint8Array | null>;
 }
@@ -403,6 +404,9 @@ export function createStoredFileHandle(filePath: string): StoredFileHandle {
     const resolvedPath = path.resolve(config.projectRoot, filePath);
     return {
       kind: 'local',
+      async exists() {
+        return Bun.file(resolvedPath).exists();
+      },
       async read() {
         const file = Bun.file(resolvedPath);
         return (await file.exists()) ? file : null;
@@ -416,6 +420,16 @@ export function createStoredFileHandle(filePath: string): StoredFileHandle {
 
   return {
     kind: 'remote',
+    async exists() {
+      const provider = getEEHooks().getStorageProvider();
+      if (!provider) return false;
+      const result = await provider.exists(filePath);
+      if (!result.success) {
+        logger.error('Failed to check stored object', { path: filePath, error: result.error });
+        return false;
+      }
+      return result.value;
+    },
     async read() {
       const provider = getEEHooks().getStorageProvider();
       if (!provider) return null;
