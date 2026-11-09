@@ -940,6 +940,7 @@ describe('notificationPreferencesRepo', () => {
     notifyOnPriorityChange: true,
     notifyOnAssignment: true,
     notifyOnDeletion: true,
+    notifyOnReporterReply: true,
   };
 
   it('creates and updates preferences with defaults', async () => {

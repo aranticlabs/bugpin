@@ -396,6 +396,15 @@ export async function initSchema(): Promise<void> {
     );
   }
 
+  if (!hasColumn(db, 'notification_preferences', 'notify_on_reporter_reply'))
+    db.exec(
+      'ALTER TABLE notification_preferences ADD COLUMN notify_on_reporter_reply INTEGER NOT NULL DEFAULT 1'
+    );
+  if (!hasColumn(db, 'project_notification_defaults', 'default_notify_on_reporter_reply'))
+    db.exec(
+      'ALTER TABLE project_notification_defaults ADD COLUMN default_notify_on_reporter_reply INTEGER NOT NULL DEFAULT 1'
+    );
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_pinned_projects (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -450,6 +459,7 @@ export async function initSchema(): Promise<void> {
   `);
   db.exec(`
     INSERT OR IGNORE INTO settings (key, value) VALUES
+      ('default_notify_on_reporter_reply', 'true'),
       ('app_name', '"BugPin"'),
       ('app_url', '""'),
       ('smtp_enabled', 'false'),

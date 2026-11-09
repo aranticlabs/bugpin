@@ -308,7 +308,7 @@ for (const eraseContactDetails of [false, true]) {
   });
 }
 
-it('anonymizes reporter messages when their table exists and leaves other authors and content intact', async () => {
+it('anonymizes reporter messages and leaves other authors and content intact', async () => {
   const target = login();
   const other = login();
   const first = await report();

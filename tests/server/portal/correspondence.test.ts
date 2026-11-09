@@ -67,7 +67,8 @@ it('delivers a report-targeted 24-hour token only to the claimable correspondent
     [{ filename: 'screen.png' }]
   );
   expect(sent).toHaveLength(2);
-  const [reporter, cc] = sent;
+  const reporter = sent.find((email) => email.to[0].email === 'bob@example.com')!;
+  const cc = sent.find((email) => email.to[0].email === 'staff@example.com')!;
   expect(reporter.to).toEqual([{ email: 'bob@example.com' }]);
   expect(reporter.html).toContain(reporterCopy.de.fileOnly);
   expect(reporter.html).toContain('screen.png');
@@ -304,3 +305,105 @@ it('requires a valid purpose-bound signed token for unsubscribe and never mutate
     ).status
   ).toBe(400);
 });
+
+it('delivers the staff copy when reporter delivery is suppressed or correspondence cannot be prepared', async () => {
+  const report = (await reportsRepo.findById('report'))!;
+  reporterSuppressionsRepo.insert('bob@example.com', 'unsubscribe');
+  await notificationsService.notifyReporterMessage(report, '', 'staff', true, [
+    { filename: 'screen.png' },
+  ]);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to[0].email).toBe('staff@example.com');
+  expect(sent[0].html).toContain('screen.png');
+  expect(sent[0].loginToken).toBeUndefined();
+  sent = [];
+  spyOn(reporterCorrespondenceService, 'prepare').mockReturnValue(
+    Result.fail('Preparation refused', 'INVALID_EMAIL')
+  );
+  await notificationsService.notifyReporterMessage(report, 'Reply', 'staff', true);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to[0].email).toBe('staff@example.com');
+  expect(sent[0].loginToken).toBeUndefined();
+});
+
+it('silently skips suspended claimable correspondents while honoring the staff-copy choice', async () => {
+  const reporter = reportersRepo.resolve('bob@example.com', 'Bob', new Date().toISOString());
+  reportersRepo.setSuspension(
+    reporter.id,
+    new Date().toISOString(),
+    null,
+    new Date().toISOString()
+  );
+  const warnings = spyOn(logger, 'warn').mockImplementation(() => {});
+  const report = (await reportsRepo.findById('report'))!;
+  await notificationsService.notifyReporterMessage(report, 'Reply', 'staff', false);
+  expect(sent).toHaveLength(0);
+  await notificationsService.notifyReporterMessage(report, '', 'staff', true, [
+    { filename: 'screen.png' },
+  ]);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to[0].email).toBe('staff@example.com');
+  expect(sent[0].html).toContain('screen.png');
+  expect(sent[0].loginToken).toBeUndefined();
+  expect(warnings).not.toHaveBeenCalled();
+});
+
+it('chains one-click unsubscribe to a suppressed update and continued login delivery', async () => {
+  const report = (await reportsRepo.findById('report'))!;
+  await notificationsService.notifyReporterStatusChange(report, 'open', 'in_progress');
+  const url = sent[0].headers!['List-Unsubscribe'].slice(1, -1);
+  const response = await createPortalTestApp().request(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'List-Unsubscribe=One-Click',
+  });
+  expect(response.status).toBe(200);
+  sent = [];
+  await notificationsService.notifyReporterStatusChange(report, 'in_progress', 'resolved');
+  expect(sent).toHaveLength(0);
+  await reporterAuthService.sendLoginLink('bob@example.com');
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to[0].email).toBe('bob@example.com');
+});
+
+for (const source of ['confirmation', 'invitation'] as const) {
+  it(`resends an expired ${source} in the report locale without an account, then honors the account locale`, async () => {
+    const token = Result.unwrap(
+      reporterAuthService.mintLoginToken('bob@example.com', source, 'report')
+    );
+    getDb().run(
+      "UPDATE reporter_auth_tokens SET expires_at = '2000-01-01T00:00:00.000Z' WHERE token_hash = ?",
+      [hashToken(token.secret)]
+    );
+    await reporterAuthService.resend(token.secret, 'ja');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(sent[0].subject).toBe(reporterCopy.de.login);
+    const account = reportersRepo.resolve('bob@example.com', 'Bob', new Date().toISOString());
+    getDb().run("UPDATE reporters SET locale = 'fr' WHERE id = ?", [account.id]);
+    await reporterAuthService.resend(token.secret, 'ja');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(sent[1].subject).toBe(reporterCopy.fr.login);
+  });
+}
+
+for (const locale of SUPPORTED_LOCALES) {
+  it(`localizes invalid unsubscribe links in ${locale}`, async () => {
+    const app = createPortalTestApp();
+    for (const method of ['GET', 'POST']) {
+      const response = await app.request(
+        `${portalOrigin}/api/portal/unsubscribe?t=invalid&locale=${locale}`,
+        {
+          method,
+          ...(method === 'POST'
+            ? {
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: 'List-Unsubscribe=One-Click',
+              }
+            : {}),
+        }
+      );
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe(reporterCopy[locale].invalidUnsubscribe);
+    }
+  });
+}

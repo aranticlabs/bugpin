@@ -9,6 +9,7 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { emailService } from '../../src/server/services/email.service';
+import { reportersRepo } from '../../src/server/database/repositories/reporters.repo';
 import { reporterSuppressionsRepo } from '../../src/server/database/repositories/reporter-suppressions.repo';
 import { logger } from '../../src/server/utils/logger';
 import type {
@@ -26,6 +27,7 @@ const originalUsersRepo = { ...usersRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalEmailService = { ...emailService };
+const originalReporterLookup = reportersRepo.findByEmail;
 const originalSuppressionHas = reporterSuppressionsRepo.has;
 const originalLogger = { ...logger };
 
@@ -60,6 +62,7 @@ const basePreferences: NotificationPreferences = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
   emailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -73,6 +76,7 @@ const baseDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnPriorityChange: true,
   defaultNotifyOnAssignment: true,
   defaultNotifyOnDeletion: true,
+  defaultNotifyOnReporterReply: true,
   defaultEmailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -104,6 +108,7 @@ const globalNotifications: NotificationDefaultSettings = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
 };
 
 let projectById: Project | null = baseProject;
@@ -123,6 +128,7 @@ const sendReportDeletedNotification = mock(async () => ({ success: true }));
 const sendEmail = mock(async () => ({ success: true }));
 
 beforeEach(() => {
+  reportersRepo.findByEmail = () => null;
   reporterSuppressionsRepo.has = () => false;
   projectById = baseProject;
   preferencesByProject = [basePreferences];
@@ -175,6 +181,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reportersRepo.findByEmail = originalReporterLookup;
   reporterSuppressionsRepo.has = originalSuppressionHas;
   Object.assign(notificationPreferencesRepo, originalNotificationPreferencesRepo);
   Object.assign(projectNotificationDefaultsRepo, originalProjectDefaultsRepo);

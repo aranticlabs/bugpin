@@ -128,16 +128,10 @@ export const reportersRepo = {
   },
 
   anonymizeMessages(id: string, authorName: string): void {
-    if (
-      getDb()
-        .query("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'report_messages'")
-        .get()
-    ) {
-      getDb().run(
-        "UPDATE report_messages SET author_name = ? WHERE author_kind = 'reporter' AND reporter_id = ?",
-        [authorName, id]
-      );
-    }
+    getDb().run(
+      "UPDATE report_messages SET author_name = ? WHERE author_kind = 'reporter' AND reporter_id = ?",
+      [authorName, id]
+    );
   },
 
   delete(id: string): void {

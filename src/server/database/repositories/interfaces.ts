@@ -292,6 +292,7 @@ export interface CreateNotificationPreferencesData {
   notifyOnPriorityChange?: boolean;
   notifyOnAssignment?: boolean;
   notifyOnDeletion?: boolean;
+  notifyOnReporterReply?: boolean;
   emailEnabled?: boolean;
 }
 

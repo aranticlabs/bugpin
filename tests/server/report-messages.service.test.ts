@@ -27,6 +27,7 @@ import type { MediaFile } from '../../src/server/services/reports.service';
 const originalConfig = { ...config };
 const originalLogger = { ...logger };
 const originalNotify = notificationsService.notifyReporterMessage;
+const originalNotifyActivity = notificationsService.notifyReporterActivity;
 let directory: string;
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -66,10 +67,12 @@ beforeEach(async () => {
     INSERT INTO reports (id, project_id, title, metadata) VALUES ('second', 'project', 'Another report', '{}');
   `);
   notificationsService.notifyReporterMessage = async () => undefined;
+  notificationsService.notifyReporterActivity = async () => undefined;
 });
 
 afterEach(() => {
   notificationsService.notifyReporterMessage = originalNotify;
+  notificationsService.notifyReporterActivity = originalNotifyActivity;
   settingsCacheService.invalidate();
   closeDatabase();
   rmSync(directory, { recursive: true, force: true });
@@ -108,6 +111,20 @@ async function uploadLimit(mb: number): Promise<void> {
 }
 
 describe('message writes', () => {
+  it('preserves an expected ownership failure while rolling the message and staged files back', async () => {
+    getDb().run(
+      "UPDATE reports SET reporter_id = NULL, reporter_email = 'invalid' WHERE id = 'report'"
+    );
+    expect(
+      await reportMessagesService.send('report', 'staff', 'Reply', false, [image()], true)
+    ).toMatchObject({ success: false, code: 'INVALID_EMAIL' });
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(stagedFiles()).toEqual([]);
+    expect(getDb().query("SELECT claimable_email FROM reports WHERE id = 'report'").get()).toEqual({
+      claimable_email: null,
+    });
+    expect(getDb().query('SELECT * FROM report_history').all()).toEqual([]);
+  });
   it('requires confirmation before staging files or changing claimability', async () => {
     getDb().run("UPDATE reports SET reporter_id = NULL WHERE id = 'report'");
     expect(

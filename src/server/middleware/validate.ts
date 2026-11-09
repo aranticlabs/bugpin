@@ -424,6 +424,7 @@ const boardMoveShape = {
         .object({
           projectId: z.string().min(1).max(64).optional(),
           reporterId: z.string().min(1).max(64).optional(),
+          reporterActivity: z.literal('new').optional(),
           status: z.array(z.enum(REPORT_STATUSES)).max(REPORT_STATUSES.length).optional(),
           priority: z.array(z.enum(REPORT_PRIORITIES)).max(REPORT_PRIORITIES.length).optional(),
           assignedTo: z.string().min(1).max(64).optional(),
@@ -455,6 +456,7 @@ export const schemas = {
 
   // Report filter query
   reportFilter: z.object({
+    reporterActivity: z.literal('new').optional(),
     projectId: z.string().optional(),
     reporterId: z.string().min(1).max(64).optional(),
     source: z.enum(['widget', 'manual']).optional(),
@@ -756,6 +758,7 @@ export const schemas = {
           notifyOnPriorityChange: z.boolean().optional(),
           notifyOnAssignment: z.boolean().optional(),
           notifyOnDeletion: z.boolean().optional(),
+          notifyOnReporterReply: z.boolean().optional(),
         })
         .optional(),
       reporterNotifications: z
@@ -822,6 +825,7 @@ export const schemas = {
     notifyOnPriorityChange: z.boolean().optional(),
     notifyOnAssignment: z.boolean().optional(),
     notifyOnDeletion: z.boolean().optional(),
+    notifyOnReporterReply: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
   }),
 
@@ -832,6 +836,7 @@ export const schemas = {
     defaultNotifyOnPriorityChange: z.boolean().optional(),
     defaultNotifyOnAssignment: z.boolean().optional(),
     defaultNotifyOnDeletion: z.boolean().optional(),
+    defaultNotifyOnReporterReply: z.boolean().optional(),
     defaultEmailEnabled: z.boolean().optional(),
   }),
 

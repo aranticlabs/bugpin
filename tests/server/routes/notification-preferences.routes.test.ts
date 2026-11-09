@@ -49,6 +49,7 @@ const basePreferences: NotificationPreferencesType = {
   notifyOnPriorityChange: false,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
   emailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -62,6 +63,7 @@ const baseDefaults: ProjectNotificationDefaults = {
   defaultNotifyOnPriorityChange: false,
   defaultNotifyOnAssignment: true,
   defaultNotifyOnDeletion: true,
+  defaultNotifyOnReporterReply: true,
   defaultEmailEnabled: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -74,6 +76,7 @@ const globalDefaults: NotificationDefaultSettings = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: false,
+  notifyOnReporterReply: true,
 };
 
 const originalAuthService = { ...authService };

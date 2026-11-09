@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { eventsRoutes } from './api/events.js';
 import { authRoutes } from './api/auth.js';
 import { reportsRoutes } from './api/reports.js';
 import { projectsRoutes } from './api/projects.js';
@@ -37,6 +38,7 @@ import { reportOwnerRoutes } from './api/report-owner.js';
 export function createApiRouter(): Hono {
   const api = new Hono();
   api.route('/portal', portalRoutes);
+  api.route('/events', eventsRoutes);
 
   // Mount core CE API routes
   api.route('/auth/two-factor', twoFactorRoutes);

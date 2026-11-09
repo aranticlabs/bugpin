@@ -14,10 +14,12 @@ export interface ReporterCopy {
   unsubscribe: string;
   unsubscribeIntro: string;
   unsubscribed: string;
+  invalidUnsubscribe: string;
 }
 
 export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
   en: {
+    invalidUnsubscribe: 'This unsubscribe link is not valid',
     fileUnavailable:
       'Contact the team to access the files. Files are private and are not attached to this email.',
     login: 'Sign in to your feedback',
@@ -36,6 +38,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'You have unsubscribed from update emails.',
   },
   de: {
+    invalidUnsubscribe: 'Dieser Abmeldelink ist ungültig',
     fileUnavailable:
       'Kontaktiere das Team, um die Dateien zu erhalten. Sie sind privat und nicht an diese E-Mail angehängt.',
     login: 'Zu deinem Feedback anmelden',
@@ -54,6 +57,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'Du hast Update-E-Mails abbestellt.',
   },
   es: {
+    invalidUnsubscribe: 'Este enlace para cancelar la suscripción no es válido',
     fileUnavailable:
       'Contacta con el equipo para acceder a los archivos. Son privados y no se adjuntan a este correo.',
     login: 'Inicia sesión para ver tus comentarios',
@@ -72,6 +76,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'Has cancelado los correos de actualizaciones.',
   },
   fr: {
+    invalidUnsubscribe: 'Ce lien de désabonnement n’est pas valide',
     fileUnavailable:
       'Contactez l’équipe pour accéder aux fichiers. Ils sont privés et ne sont pas joints à cet e-mail.',
     login: 'Connectez-vous pour suivre vos retours',
@@ -90,6 +95,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'Vous êtes désabonné des e-mails de mise à jour.',
   },
   it: {
+    invalidUnsubscribe: 'Questo link di annullamento non è valido',
     fileUnavailable:
       'Contatta il team per accedere ai file. Sono privati e non sono allegati a questa email.',
     login: 'Accedi per seguire il tuo feedback',
@@ -108,6 +114,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'Hai annullato le email di aggiornamento.',
   },
   ja: {
+    invalidUnsubscribe: 'この配信停止リンクは無効です',
     fileUnavailable:
       'ファイルを確認するにはチームにお問い合わせください。ファイルは非公開で、このメールには添付されていません。',
     login: 'フィードバックにサインイン',
@@ -126,6 +133,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: '更新メールの配信を停止しました。',
   },
   nl: {
+    invalidUnsubscribe: 'Deze afmeldlink is niet geldig',
     fileUnavailable:
       'Neem contact op met het team om de bestanden te bekijken. Ze zijn privé en niet bij deze e-mail gevoegd.',
     login: 'Log in om je feedback te volgen',
@@ -144,6 +152,7 @@ export const reporterCopy: Record<LocaleCode, ReporterCopy> = {
     unsubscribed: 'Je bent afgemeld voor update-e-mails.',
   },
   zh: {
+    invalidUnsubscribe: '此取消订阅链接无效',
     fileUnavailable: '请联系团队以访问文件。文件为私密内容，未附加到此邮件中。',
     login: '登录以跟踪你的反馈',
     loginIntro: '使用此链接跟踪你的反馈并与团队交流。',

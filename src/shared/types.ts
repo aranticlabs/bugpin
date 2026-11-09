@@ -286,6 +286,7 @@ export interface Report {
   ownerSeenAt?: string;
   lastReporterActivityAt?: string;
   reporterActivitySeenAt?: string;
+  hasNewReporterActivity?: boolean;
   assignedTo?: string;
   assignee?: ReportAssignee;
   customFields?: Record<string, unknown>;
@@ -678,6 +679,7 @@ export interface CreateReportRequest {
 }
 
 export interface ReportFilter {
+  reporterActivity?: 'new';
   reporterId?: string;
   projectId?: string;
   source?: ReportSource;
@@ -698,7 +700,7 @@ export interface ReportFilter {
 /** The reports a board shows, which limits the cards a drop on a sorted board reorders */
 export type ReportBoardScope = Pick<
   ReportFilter,
-  'projectId' | 'reporterId' | 'status' | 'priority' | 'assignedTo' | 'search'
+  'projectId' | 'reporterId' | 'reporterActivity' | 'status' | 'priority' | 'assignedTo' | 'search'
 >;
 
 /** Where a report is dropped on the board */
@@ -732,6 +734,7 @@ export interface NotificationDefaultSettings {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
 }
 
 // Reporter notification settings
@@ -940,6 +943,7 @@ export interface NotificationPreferences {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
   emailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -953,6 +957,7 @@ export interface ProjectNotificationDefaults {
   defaultNotifyOnPriorityChange: boolean;
   defaultNotifyOnAssignment: boolean;
   defaultNotifyOnDeletion: boolean;
+  defaultNotifyOnReporterReply: boolean;
   defaultEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;

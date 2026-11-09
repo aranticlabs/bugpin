@@ -2,6 +2,8 @@ import {
   notificationPreferencesRepo,
   projectNotificationDefaultsRepo,
 } from '../database/repositories/notification-preferences.repo.js';
+import { reportersRepo } from '../database/repositories/reporters.repo.js';
+import { normalizeEmail } from '../utils/email-normalize.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
@@ -31,6 +33,7 @@ export interface UpdateNotificationPreferencesInput {
   notifyOnPriorityChange?: boolean;
   notifyOnAssignment?: boolean;
   notifyOnDeletion?: boolean;
+  notifyOnReporterReply?: boolean;
   emailEnabled?: boolean;
 }
 
@@ -40,6 +43,7 @@ export interface UpdateProjectNotificationDefaultsInput {
   defaultNotifyOnPriorityChange?: boolean;
   defaultNotifyOnAssignment?: boolean;
   defaultNotifyOnDeletion?: boolean;
+  defaultNotifyOnReporterReply?: boolean;
   defaultEmailEnabled?: boolean;
 }
 
@@ -248,6 +252,41 @@ export const notificationsService = {
     logger.info('Project notification defaults deleted', { projectId });
 
     return Result.ok(undefined);
+  },
+
+  async notifyReporterActivity(report: Report, reporterId = report.reporterId): Promise<void> {
+    try {
+      const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
+        report.projectId,
+        await getGlobalNotificationDefaults()
+      );
+      const users = await Promise.all(
+        preferences
+          .filter(
+            (preference) =>
+              preference.notifyOnReporterReply &&
+              (!report.assignedTo || preference.userId === report.assignedTo)
+          )
+          .map((preference) => usersRepo.findById(preference.userId))
+      );
+      const actor = reporterId ? reportersRepo.findById(reporterId) : null;
+      const recipients = users
+        .filter(
+          (user) =>
+            user?.isActive &&
+            (report.assignedTo || user.role === 'admin' || user.role === 'editor') &&
+            (!actor || normalizeEmail(user.email) !== actor.email)
+        )
+        .map((user) => ({ email: user!.email, name: user!.name }));
+      if (recipients.length === 0) return;
+      const project = await projectsRepo.findById(report.projectId);
+      if (!project) return;
+      const result = await emailService.sendReporterActivityEmail(recipients, report, project.name);
+      if (!result.success)
+        logger.warn('Reporter activity notification failed', { reportId: report.id });
+    } catch {
+      logger.warn('Reporter activity notification failed', { reportId: report.id });
+    }
   },
 
   /**
@@ -745,63 +784,47 @@ export const notificationsService = {
     files: { filename: string }[] = []
   ): Promise<void> {
     try {
-      const ctx = await getReporterContext(report, 'messagingEnabled', 'invitation');
-      if (!ctx) return;
-
-      const sender = await usersRepo.findById(senderUserId);
-      if (!sender) {
-        logger.error('Sender user not found for reporter message notification', {
-          userId: senderUserId,
-        });
-        return;
-      }
-
+      const [project, settings, sender] = await Promise.all([
+        projectsRepo.findById(report.projectId),
+        settingsCacheService.getAll(),
+        usersRepo.findById(senderUserId),
+      ]);
+      if (!project || !sender) return;
       const emailData = {
         report,
-        projectName: ctx.project.name,
-        appName: ctx.settings.appName || 'BugPin',
-        appUrl: ctx.settings.appUrl || '',
-        correspondence: ctx.correspondence,
+        projectName: project.name,
+        appName: settings.appName || 'BugPin',
+        appUrl: settings.appUrl || '',
         senderName: sender.name,
         message,
         files,
       };
-
-      const result = await emailService.sendReporterMessageEmail(ctx.recipient, emailData);
-
-      if (result.success) {
-        logger.info('Reporter message notification sent', {
-          reportId: report.id,
-          reporterEmail: ctx.recipient,
-        });
-      } else {
-        logger.warn('Reporter message notification failed', {
-          reportId: report.id,
-          error: result.error,
-        });
-      }
-
-      // Send CC copy to sender with distinct framing
       if (ccSender && sender.email) {
-        const ccResult = await emailService.sendReporterMessageCcEmail(sender.email, emailData);
-
-        if (ccResult.success) {
-          logger.info('Reporter message CC sent to sender', {
-            reportId: report.id,
-            senderEmail: sender.email,
+        try {
+          const copy = await emailService.sendReporterMessageCcEmail(sender.email, {
+            ...emailData,
+            correspondence: reporterCorrespondenceService.staffCopyOptions(
+              report,
+              project,
+              settings
+            ),
           });
-        } else {
-          logger.warn('Reporter message CC to sender failed', {
-            reportId: report.id,
-            error: ccResult.error,
-          });
+          if (!copy.success)
+            logger.warn('Reporter message CC to sender failed', { reportId: report.id });
+        } catch {
+          logger.warn('Reporter message CC to sender failed', { reportId: report.id });
         }
       }
-    } catch (error) {
-      logger.error('Failed to send reporter message notification', {
-        reportId: report.id,
-        error: 'Reporter email delivery failed',
+      const ctx = await getReporterContext(report, 'messagingEnabled', 'invitation');
+      if (!ctx) return;
+      const result = await emailService.sendReporterMessageEmail(ctx.recipient, {
+        ...emailData,
+        correspondence: ctx.correspondence,
       });
+      if (!result.success)
+        logger.warn('Reporter message notification failed', { reportId: report.id });
+    } catch {
+      logger.error('Failed to send reporter message notification', { reportId: report.id });
     }
   },
 

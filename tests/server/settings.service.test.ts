@@ -86,6 +86,7 @@ function createBaseSettings(): AppSettings {
       notifyOnPriorityChange: true,
       notifyOnAssignment: true,
       notifyOnDeletion: true,
+      notifyOnReporterReply: true,
     },
     branding: {
       primaryColor: '#02658D',
@@ -385,6 +386,7 @@ describe('settingsService nested merge', () => {
     expect(lastUpdates?.notifications).toEqual({
       ...baseSettings.notifications,
       notifyOnDeletion: false,
+      notifyOnReporterReply: true,
     });
     expect(lastUpdates?.widgetDialog).toEqual({
       ...baseSettings.widgetDialog,

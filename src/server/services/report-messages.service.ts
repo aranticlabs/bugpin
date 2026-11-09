@@ -8,6 +8,7 @@ import { reporterCorrespondenceService } from './reporter-correspondence.service
 import { reporterSuppressionService } from './reporter-suppression.service.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
+import { realtimeService } from './realtime.service.js';
 import { notificationsService } from './notifications.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { uploadQuotaService } from './upload-quota.service.js';
@@ -123,6 +124,7 @@ async function writeMessage(
     return Result.fail('A message can have at most 5 files', 'INVALID_FILE');
   const staged: CreateFileData[] = [];
   let committed = false;
+  let ownershipFailure: Result<ReportMessage> | undefined;
   let releaseVideo: (() => void) | undefined;
   try {
     let settings = await settingsCacheService.getAll();
@@ -238,13 +240,15 @@ async function writeMessage(
       const message = reportMessagesRepo.insert(reportId, author, text);
       if (!message) return Result.fail('Author is no longer available', 'UNAUTHORIZED');
       if (author.kind === 'staff' && needsPortalAccess(current.value)) {
-        Result.unwrap(
-          reporterOwnershipService.setInTransaction(
-            reportId,
-            { claimableEmail: current.value.reporterEmail! },
-            author.userId
-          )
+        const ownership = reporterOwnershipService.setInTransaction(
+          reportId,
+          { claimableEmail: current.value.reporterEmail! },
+          author.userId
         );
+        if (!ownership.success) {
+          ownershipFailure = ownership;
+          throw new Error('Ownership change rejected');
+        }
       }
       const savedFiles = staged.map((file) => filesRepo.insert({ ...file, messageId: message.id }));
       reportMessagesRepo.recordActivity(reportId, author, message.createdAt);
@@ -253,6 +257,7 @@ async function writeMessage(
     committed = result.success;
     return result;
   } catch (error) {
+    if (ownershipFailure) return ownershipFailure;
     logger.error('Failed to save report message', error, { reportId });
     return Result.fail('Failed to save message', 'MESSAGE_WRITE_FAILED');
   } finally {
@@ -296,6 +301,9 @@ export const reportMessagesService = {
       confirmPortalAccess
     );
     if (!saved.success) return saved;
+    const context = reportMessagesRepo.writeContext(reportId);
+    if (context)
+      realtimeService.publish('message.created', { reportId, projectId: context.projectId });
     try {
       const report = await reportsRepo.findById(reportId);
       if (report)
@@ -316,7 +324,20 @@ export const reportMessagesService = {
     body: string,
     files: MessageUpload[] = []
   ): Promise<Result<ReportMessage>> {
-    return writeMessage(reportId, { kind: 'reporter', reporterId }, body, files);
+    const saved = await writeMessage(reportId, { kind: 'reporter', reporterId }, body, files);
+    if (!saved.success) return saved;
+    const report = await reportsRepo.findById(reportId);
+    if (report) {
+      realtimeService.publish('message.created', { reportId, projectId: report.projectId });
+      realtimeService.publish('reporter_activity.changed', {
+        reportId,
+        projectId: report.projectId,
+      });
+      void notificationsService
+        .notifyReporterActivity(report, reporterId)
+        .catch(() => logger.warn('Reporter activity notification failed', { reportId }));
+    }
+    return saved;
   },
 
   async portalContext(reportId: string) {
@@ -382,6 +403,9 @@ export const reportMessagesService = {
         return Result.ok(updated);
       });
       if (!result.success) return result;
+      const context = reportMessagesRepo.writeContext(reportId);
+      if (context)
+        realtimeService.publish('report.updated', { reportId, projectId: context.projectId });
       return Result.ok(
         toLegacyMessage({ ...result.value, files: await filesRepo.findByMessageId(messageId) })
       );

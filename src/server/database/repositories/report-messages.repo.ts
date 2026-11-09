@@ -124,10 +124,18 @@ export const reportMessagesRepo = {
   },
 
   recordActivity(reportId: string, author: MessageAuthor, now: string): void {
-    getDb().run(
-      `UPDATE reports SET updated_at = ? ${author.kind === 'reporter' ? ', last_reporter_activity_at = ?' : ''} WHERE id = ?`,
-      author.kind === 'reporter' ? [now, now, reportId] : [now, reportId]
-    );
+    if (author.kind === 'reporter') {
+      getDb().run(
+        `UPDATE reports SET updated_at = ?, last_reporter_activity_at =
+        CASE WHEN julianday(last_reporter_activity_at) >= julianday(?) THEN strftime('%Y-%m-%dT%H:%M:%fZ', last_reporter_activity_at, '+0.001 seconds') ELSE ? END WHERE id = ?`,
+        [now, now, now, reportId]
+      );
+    } else {
+      getDb().run(
+        'UPDATE reports SET updated_at = ?, reporter_activity_seen_at = last_reporter_activity_at WHERE id = ?',
+        [now, reportId]
+      );
+    }
   },
 
   setHidden(

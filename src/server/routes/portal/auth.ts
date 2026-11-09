@@ -19,6 +19,7 @@ const requestSchema = z
   })
   .strict();
 const tokenSchema = z.object({ token: z.string().min(1).max(128) }).strict();
+const resendSchema = tokenSchema.extend({ locale: z.enum(SUPPORTED_LOCALES).optional() });
 
 function loginIpLimit(kind: 'request' | 'preview' | 'exchange') {
   return rateLimiter({
@@ -77,10 +78,11 @@ portalAuthRoutes.post('/preview', loginIpLimit('preview'), validate({ body: toke
 portalAuthRoutes.post(
   '/resend',
   loginIpLimit('request'),
-  validate({ body: tokenSchema }),
+  validate({ body: resendSchema }),
   loginEmailLimit(true),
   async (c) => {
-    await reporterAuthService.resend(validatedBody(c, tokenSchema).token);
+    const { token, locale } = validatedBody(c, resendSchema);
+    await reporterAuthService.resend(token, locale);
     return c.json({ success: true });
   }
 );

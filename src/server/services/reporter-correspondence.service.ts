@@ -18,6 +18,24 @@ export const reporterCorrespondenceService = {
     return normalized && isValidEmail(normalized) ? normalized : null;
   },
 
+  staffCopyOptions(report: Report, project: Project, settings: AppSettings): ReporterEmailOptions {
+    const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
+    const options: ReporterEmailOptions = {
+      locale: normalizeLocale(owner?.locale ?? report.reporterLocale) ?? 'en',
+      portalUrl: '',
+      reportPortalUrl: '',
+      loginUrl: '',
+      unsubscribeUrl: '',
+    };
+    const baseUrl = settings.portalBaseUrl || settings.appUrl;
+    if (baseUrl && project.settings?.reporterPortal?.enabled) {
+      options.portalUrl = new URL('/reporter-portal', baseUrl).href;
+      if (owner || report.claimableEmail)
+        options.reportPortalUrl = new URL(`/reporter-portal/reports/${report.id}`, baseUrl).href;
+    }
+    return options;
+  },
+
   prepare(
     report: Report,
     project: Project,
@@ -27,14 +45,8 @@ export const reporterCorrespondenceService = {
     const recipient = this.recipient(report);
     if (!recipient || reporterSuppressionService.isSuppressed(recipient)) return Result.ok(null);
     const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
-    if (owner?.suspendedAt) return Result.ok(null);
-    const options: ReporterEmailOptions = {
-      locale: normalizeLocale(owner?.locale ?? report.reporterLocale) ?? 'en',
-      portalUrl: '',
-      reportPortalUrl: '',
-      loginUrl: '',
-      unsubscribeUrl: '',
-    };
+    if (reportersRepo.findByEmail(recipient)?.suspendedAt) return Result.ok(null);
+    const options = this.staffCopyOptions(report, project, settings);
     const baseUrl = settings.portalBaseUrl || settings.appUrl;
     if (baseUrl) {
       const unsubscribe = new URL('/api/portal/unsubscribe', baseUrl);

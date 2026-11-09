@@ -2,6 +2,7 @@ import { reporterAuthTokensRepo } from '../database/repositories/reporter-auth-t
 import { reporterSessionsRepo } from '../database/repositories/reporter-sessions.repo.js';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { reporterSuppressionsRepo } from '../database/repositories/reporter-suppressions.repo.js';
+import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
@@ -132,9 +133,13 @@ export const reporterAuthService = {
     return Result.ok(token.email);
   },
 
-  async resend(secret: string): Promise<Result<void>> {
+  async resend(secret: string, locale: LocaleCode = 'en'): Promise<Result<void>> {
     const target = this.resendTarget(secret);
-    if (target.success && target.value) await this.requestLogin(target.value);
+    if (target.success && target.value) {
+      const token = reporterAuthTokensRepo.findByHash(hashToken(secret));
+      const report = token?.reportId ? await reportsRepo.findById(token.reportId) : null;
+      await this.requestLogin(target.value, normalizeLocale(report?.reporterLocale) ?? locale);
+    }
     return Result.ok(undefined);
   },
 
