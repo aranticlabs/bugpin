@@ -30,7 +30,7 @@ const validMp4Buffer = Buffer.from([
   0x00,
   0x00,
   0x00,
-  0x18,
+  0x10,
   0x66,
   0x74,
   0x79,
@@ -426,7 +426,7 @@ describe('reportsService.create', () => {
   });
 
   it('stores the original recording and logs a warning when remuxing fails', async () => {
-    const corruptRecording = validMp4Buffer.subarray(0, 8);
+    const corruptRecording = validMp4Buffer;
     const result = await reportsService.create({
       apiKey: 'proj_key',
       title: 'Short recording',
@@ -447,7 +447,7 @@ describe('reportsService.create', () => {
     expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(corruptRecording);
     expect(warningCalls).toContainEqual({
       message: 'Recording remux failed, storing original',
-      context: expect.objectContaining({ code: 'REMUX_FAILED' }),
+      context: expect.objectContaining({ code: 'REMUX_TRACKS_DROPPED' }),
     });
   });
 

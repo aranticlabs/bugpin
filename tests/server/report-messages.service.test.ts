@@ -171,6 +171,12 @@ describe('message writes', () => {
 
   for (const file of [
     image(Buffer.from('invalid')),
+    { data: Buffer.from('RIFF0000WAVE'), mimeType: 'image/webp', filename: 'picture.webp' },
+    {
+      data: Buffer.from('00000020667479706176696600000000617669666d6966316d6961664d413141', 'hex'),
+      mimeType: 'video/mp4',
+      filename: 'video.mp4',
+    },
     { ...image(), mimeType: 'image/svg+xml' },
     { ...image(), mimeType: 'application/pdf' },
   ]) {
