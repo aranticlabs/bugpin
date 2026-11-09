@@ -184,25 +184,12 @@ describe('database lifecycle', () => {
     try {
       await initDatabase();
       const db = getDb();
-      db.exec(`
-        CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
-        CREATE TABLE reports (id TEXT PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE reporter_messages (id TEXT PRIMARY KEY, user_id TEXT, sent_at TEXT);
-        CREATE TABLE users (id TEXT PRIMARY KEY);
-        CREATE TABLE migrations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          applied_at TEXT DEFAULT (datetime('now')) NOT NULL
-        );
-      `);
-      for (const name of [
-        '001_add_reporter_messages.sql',
-        '002_add_report_source.sql',
-        '003_add_reporter_locale.sql',
-        '004_add_report_history.sql',
-      ]) {
-        db.run('INSERT INTO migrations (name) VALUES (?)', [name]);
-      }
+      db.exec(
+        fs.readFileSync(path.resolve(import.meta.dir, '../fixtures/pre-portal-schema.sql'), 'utf8')
+      );
+      db.exec(
+        "DROP TABLE widget_version_observations; DELETE FROM migrations WHERE name = '005_add_widget_version_observations.sql';"
+      );
 
       await runMigrations();
 
@@ -231,27 +218,13 @@ describe('database lifecycle', () => {
     try {
       await initDatabase();
       const db = getDb();
-      db.exec(`
-        CREATE TABLE projects (id TEXT PRIMARY KEY, settings JSON DEFAULT '{}');
-        CREATE TABLE reports (id TEXT PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE reporter_messages (id TEXT PRIMARY KEY, user_id TEXT, sent_at TEXT);
-        CREATE TABLE users (id TEXT PRIMARY KEY);
-        INSERT INTO users (id) VALUES ('usr_existing');
-        CREATE TABLE migrations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          applied_at TEXT DEFAULT (datetime('now')) NOT NULL
-        );
-      `);
-      for (const name of [
-        '001_add_reporter_messages.sql',
-        '002_add_report_source.sql',
-        '003_add_reporter_locale.sql',
-        '004_add_report_history.sql',
-        '005_add_widget_version_observations.sql',
-      ]) {
-        db.run('INSERT INTO migrations (name) VALUES (?)', [name]);
-      }
+      db.exec(
+        fs.readFileSync(path.resolve(import.meta.dir, '../fixtures/pre-portal-schema.sql'), 'utf8')
+      );
+      db.exec(`ALTER TABLE users DROP COLUMN must_change_password;
+        ALTER TABLE users DROP COLUMN password_changed_at;
+        INSERT INTO users (id, email, name, password_hash) VALUES ('usr_existing', 'staff@example.com', 'Staff', 'hash');
+        DELETE FROM migrations WHERE name = '006_add_user_password_fields.sql';`);
 
       await runMigrations();
 

@@ -6,6 +6,7 @@ import { cleanupService } from '../../src/server/services/cleanup.service';
 import { getEELicenseService } from '../../src/server/utils/ee';
 import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 import type { AppSettings } from '../../src/shared/types';
+import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../src/shared/types';
 
 function createBaseSettings(): AppSettings {
   const baseColors = {
@@ -22,6 +23,8 @@ function createBaseSettings(): AppSettings {
   return {
     appName: 'BugPin',
     appUrl: 'https://example.com',
+    portalBaseUrl: '',
+    reporterPortalLimits: DEFAULT_REPORTER_PORTAL_LIMITS,
     retentionDays: 90,
     rateLimitPerMinute: 10,
     sessionMaxAgeDays: 7,

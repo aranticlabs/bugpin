@@ -960,6 +960,25 @@ describe('overview edge cases', () => {
       ['created', 'widget'],
     ]);
   });
+
+  it.each(['widget', 'manual', 'portal'] as const)(
+    'uses a neutral actor for ownership without staff on a %s report',
+    async (source) => {
+      const editor = await createUser('Priya', 'editor');
+      const reportId = await createReport({ title: 'Owned report', createdAt: ago(2 * DAY) });
+      getDb().run('UPDATE reports SET source = ? WHERE id = ?', [source, reportId]);
+      addHistory(reportId, null, 'owner_assigned', null, 'reporter', ago(HOUR));
+      addHistory(reportId, editor.id, 'owner_assigned', null, 'reporter', ago(2 * HOUR));
+      const result = await dashboardService.getOverview({ projectId, range: 7 }, NOW);
+      if (!result.success) throw new Error(result.error);
+      expect(
+        result.value.activity.map(({ action, actor, userId }) => ({ action, actor, userId }))
+      ).toEqual([
+        { action: 'owner_assigned', actor: 'system', userId: undefined },
+        { action: 'owner_assigned', actor: 'user', userId: editor.id },
+      ]);
+    }
+  );
 });
 
 describe('time zones', () => {

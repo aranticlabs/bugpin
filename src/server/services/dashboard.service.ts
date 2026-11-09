@@ -238,12 +238,15 @@ function summarizeResolveTime(
   };
 }
 
-/**
- * History keeps no user once that user is deleted, so a missing user means the widget only for
- * widget reports, on the creation entry or the default assignee recorded with it.
- */
+/** Ownership can be automatic; widget attribution is limited to creation and its initial assignment. */
 function actorOf(row: ActivityRow): DashboardActivityActor {
   if (row.userId) return 'user';
+  if (
+    row.action === 'owner_assigned' ||
+    row.action === 'owner_removed' ||
+    row.action === 'claimable_set'
+  )
+    return 'system';
   if (row.reportSource !== 'widget') return 'deleted_user';
   if (row.action === 'created') return 'widget';
   const atCreation =

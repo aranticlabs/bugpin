@@ -360,6 +360,33 @@ describe('Dashboard Page', () => {
     expect(await screen.findByText('Your queue is clear')).toBeInTheDocument();
   });
 
+  it('names system ownership activity without a staff author', async () => {
+    server.use(
+      http.get('/api/dashboard/overview', () =>
+        HttpResponse.json({
+          success: true,
+          overview: {
+            ...mockDashboardOverview,
+            activity: [
+              {
+                id: 'ownership',
+                reportId: 'report-1',
+                reportTitle: 'Login button broken',
+                action: 'owner_assigned',
+                actor: 'system',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          },
+        })
+      )
+    );
+    renderWithProviders(<Dashboard />);
+    expect(await screen.findByText('System')).toBeInTheDocument();
+    expect(screen.getByText('assigned a reporter to')).toBeInTheDocument();
+    expect(screen.queryByText('Deleted user')).not.toBeInTheDocument();
+  });
+
   it('names the widget and deleted users in the activity feed, with priority labels', async () => {
     const entry = (overrides: Partial<DashboardActivityItem>): DashboardActivityItem => ({
       id: `history-${overrides.action}-${overrides.actor}`,
@@ -386,6 +413,15 @@ describe('Dashboard Page', () => {
                 userId: 'user-2',
                 userName: 'Editor User',
               }),
+              ...(
+                [
+                  'owner_assigned',
+                  'owner_removed',
+                  'claimable_set',
+                  'message_hidden',
+                  'message_unhidden',
+                ] as const
+              ).map((action) => entry({ action, userName: 'Editor User' })),
             ],
           },
         })
@@ -395,5 +431,14 @@ describe('Dashboard Page', () => {
     expect(await screen.findByText('Widget')).toBeInTheDocument();
     expect(screen.getByText('Deleted user')).toBeInTheDocument();
     expect(screen.getByText('set priority to highest on')).toBeInTheDocument();
+    for (const label of [
+      'assigned a reporter to',
+      'removed the reporter from',
+      'allowed a reporter to claim',
+      'hid a message on',
+      'unhid a message on',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
   });
 });
