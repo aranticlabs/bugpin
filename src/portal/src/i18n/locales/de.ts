@@ -81,10 +81,6 @@ const catalog = {
   emailUpdates: 'E-Mails zu Aktualisierungen erhalten',
   save: 'Speichern',
   reconnecting: 'Verbindung unterbrochen. Verbindung wird hergestellt…',
-  unsubscribe: 'Abmelden',
-  unsubscribeIntro: 'Keine E-Mail-Updates zu Meldungen mehr an diese Adresse senden?',
-  unsubscribed: 'Du erhältst keine E-Mail-Updates zu Meldungen mehr.',
-  invalidUnsubscribe: 'Dieser Abmeldelink ist ungültig.',
 } satisfies Catalog;
 
 export default catalog;

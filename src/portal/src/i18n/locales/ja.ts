@@ -80,10 +80,6 @@ const catalog = {
   emailUpdates: '更新情報をメールで受け取る',
   save: '保存',
   reconnecting: '接続が切れました。再接続中…',
-  unsubscribe: '配信停止',
-  unsubscribeIntro: 'このアドレスへの報告更新メールを停止しますか？',
-  unsubscribed: '報告の更新メールは配信されなくなります。',
-  invalidUnsubscribe: 'この配信停止リンクは無効です。',
 } satisfies Catalog;
 
 export default catalog;

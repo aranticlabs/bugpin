@@ -29,7 +29,7 @@ test('requests a real SMTP login link, previews without a session, then exchange
   await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
   const cookie = (await context.cookies()).find((item) => item.name === 'bugpin_reporter_session');
   expect(cookie).toMatchObject({ domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' });
-  await page.getByRole('button', { name: /▾$/ }).click();
+  await page.getByRole('button', { name: 'login', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page.getByLabel('Email address')).toBeVisible();
   expect((await context.cookies()).some((item) => item.name === 'bugpin_reporter_session')).toBe(

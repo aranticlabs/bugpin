@@ -79,10 +79,6 @@ const catalog = {
   emailUpdates: 'Enviarme actualizaciones por correo',
   save: 'Guardar',
   reconnecting: 'Conexión perdida. Reconectando…',
-  unsubscribe: 'Cancelar suscripción',
-  unsubscribeIntro: '¿Dejar de recibir actualizaciones de informes en esta dirección?',
-  unsubscribed: 'Ya no recibirás actualizaciones de informes por correo.',
-  invalidUnsubscribe: 'Este enlace para cancelar la suscripción no es válido.',
 } satisfies Catalog;
 
 export default catalog;

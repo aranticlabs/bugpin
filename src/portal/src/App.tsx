@@ -19,7 +19,6 @@ import { ProfileMenu, languages } from './components/ProfileMenu';
 import { MyFeedback } from './pages/MyFeedback';
 import { ReportDetail } from './pages/ReportDetail';
 import { NewFeedback } from './pages/NewFeedback';
-import { Unsubscribe } from './pages/Unsubscribe';
 import { usePortalEvents } from './hooks/usePortalEvents';
 import { LoginContinue } from './pages/LoginContinue';
 
@@ -44,9 +43,9 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
   }, []);
   useEffect(() => {
     document.getElementById('main-content')?.focus();
-    if (location.pathname !== '/reports')
+    if (location.pathname !== '/reports' || !auth.reporter)
       document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
-  }, [location.pathname, branding?.appName, locale]);
+  }, [location.pathname, branding?.appName, locale, auth.reporter?.id]);
   const logo = branding?.branding;
   return (
     <div className="flex min-h-dvh flex-col">
@@ -102,9 +101,7 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
             {t('reconnecting')}
           </p>
         )}
-        {location.pathname === '/unsubscribe' ? (
-          <Unsubscribe key={location.search} />
-        ) : auth.loading ? (
+        {auth.loading ? (
           <p role="status">{t('loading')}</p>
         ) : auth.error ? (
           <AuthCard title={t('requestFailed')}>

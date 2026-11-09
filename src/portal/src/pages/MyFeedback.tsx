@@ -32,9 +32,12 @@ function ReportSummary({ report }: { report: PortalReportSummary }) {
     <div className="min-w-0 space-y-2">
       <span className="flex min-w-0 items-start gap-2 font-medium">
         {report.unread && (
-          <span className="mt-1 shrink-0 text-primary" aria-label={t('unread')}>
-            ●
-          </span>
+          <>
+            <span className="mt-1 shrink-0 text-primary" aria-hidden="true">
+              ●
+            </span>
+            <span className="sr-only">{t('unread')} </span>
+          </>
         )}
         <span className="min-w-0 break-words [overflow-wrap:anywhere]">{report.title}</span>
       </span>
@@ -215,6 +218,9 @@ export function MyFeedback() {
   const board = search.get('view') === 'board';
   useEffect(() => {
     document.title = `${unread ? `(${unread}) ` : ''}${t('myFeedback')} | ${branding?.appName ?? 'BugPin'}`;
+    return () => {
+      document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
+    };
   }, [unread, locale, branding?.appName]);
   function filter(key: string, value: string) {
     const next = new URLSearchParams(search);

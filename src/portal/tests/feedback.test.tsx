@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -140,7 +140,9 @@ it('uses filtered server totals, pagination, unread markers, and title count in 
   );
   mount('/reports?projectId=project&status=resolved');
   expect(await screen.findByRole('link', { name: /Checkout button/ })).toBeVisible();
-  expect(screen.getByLabelText('Unread')).toBeVisible();
+  expect(screen.getByText('Unread')).toHaveClass('sr-only');
+  expect(screen.getByRole('link', { name: /Unread.*Checkout button/ })).toBeVisible();
+  expect(screen.getByText('●')).toHaveAttribute('aria-hidden', 'true');
   await waitFor(() => expect(document.title).toBe('(1) My feedback | BugPin'));
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
   expect(await screen.findByText('Another report')).toBeVisible();
@@ -325,42 +327,17 @@ it('saves a display name and email preference through the profile menu', async (
   );
   mount();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Jane ▾' }));
+  await user.click(await screen.findByRole('button', { name: 'Jane' }));
   await user.click(screen.getByRole('menuitem', { name: 'Display name' }));
   const dialog = screen.getByRole('dialog');
   const input = within(dialog).getByLabelText('Display name');
   await user.clear(input);
   await user.type(input, 'Janet');
   await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-  expect(await screen.findByRole('button', { name: 'Janet ▾' })).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'Janet ▾' }));
+  expect(await screen.findByRole('button', { name: 'Janet' })).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Janet' }));
   await user.click(screen.getByRole('menuitemcheckbox', { name: 'Email me about updates' }));
   await waitFor(() => expect(reporter.emailUpdates).toBe(false));
-});
-
-it('requires confirmation before posting a token-only unsubscribe without session credentials', async () => {
-  let posts = 0;
-  server.use(
-    http.get('/api/portal/unsubscribe', ({ request }) => {
-      expect(request.credentials).toBe('omit');
-      return new HttpResponse('<html>Confirmation</html>', {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }),
-    http.post('/api/portal/unsubscribe', async ({ request }) => {
-      posts++;
-      expect(request.credentials).toBe('omit');
-      expect(new URL(request.url).searchParams.get('t')).toBe('signed-token');
-      expect(await request.text()).toBe('List-Unsubscribe=One-Click');
-      return new HttpResponse('Unsubscribed');
-    })
-  );
-  mount('/unsubscribe?t=signed-token');
-  const confirm = await screen.findByRole('button', { name: 'Unsubscribe' });
-  expect(posts).toBe(0);
-  await userEvent.click(confirm);
-  expect(await screen.findByRole('status')).toHaveTextContent('no longer receive');
-  expect(posts).toBe(1);
 });
 
 it('clears private report content immediately on access changes and hides revoked feedback', async () => {
@@ -436,7 +413,7 @@ it('closes the live connection on unmount', async () => {
       </AuthProvider>
     </QueryClientProvider>
   );
-  await screen.findByRole('button', { name: 'Jane ▾' });
+  await screen.findByRole('button', { name: 'Jane' });
   const events = TestEventSource.instances[0];
   result.unmount();
   expect(events.close).toHaveBeenCalledTimes(1);
@@ -453,7 +430,7 @@ it('updates the account language and immediately localizes the page', async () =
   );
   mount();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Jane ▾' }));
+  await user.click(await screen.findByRole('button', { name: 'Jane' }));
   const language = screen.getByRole('menuitem', { name: 'Language' });
   language.focus();
   await user.keyboard('{ArrowRight}');
@@ -471,15 +448,6 @@ it('shows no new feedback action when no owned project permits submissions', asy
   mount('/new');
   expect(await screen.findByText('No project currently allows new feedback.')).toBeVisible();
   expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
-});
-
-it('rejects an invalid unsubscribe link without showing a confirmation action', async () => {
-  server.use(
-    http.get('/api/portal/unsubscribe', () => new HttpResponse('Invalid', { status: 400 }))
-  );
-  mount('/unsubscribe?t=invalid');
-  expect(await screen.findByText('This unsubscribe link is not valid.')).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Unsubscribe' })).not.toBeInTheDocument();
 });
 
 it('paginates an individual board column without changing its full count or unread total', async () => {
@@ -543,5 +511,207 @@ it('ignores a canceled request response before dispatching session expiry', asyn
     expect(expired).not.toHaveBeenCalled();
   } finally {
     window.removeEventListener('bugpin:portal-session-expired', expired);
+  }
+});
+
+it.each(['sign-out', 'session-expiry'])(
+  'clears the private title after %s on the reports page',
+  async (action) => {
+    server.use(
+      http.get('/api/portal/reports', () =>
+        HttpResponse.json({
+          success: true,
+          reports: [summary],
+          nextCursor: null,
+          total: 1,
+          unreadCount: 7,
+        })
+      ),
+      http.post('/api/portal/auth/logout', () => HttpResponse.json({ success: true }))
+    );
+    mount();
+    await waitFor(() => expect(document.title).toBe('(7) My feedback | BugPin'));
+    if (action === 'sign-out') {
+      await userEvent.click(screen.getByRole('button', { name: 'Jane' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    } else act(() => window.dispatchEvent(new Event('bugpin:portal-session-expired')));
+    await screen.findByLabelText('Email address');
+    expect(document.title).toBe('Reporter Portal | BugPin');
+  }
+);
+
+it('sets a neutral title on a cold signed-out reports load', async () => {
+  document.title = '';
+  server.use(
+    http.get('/api/portal/me', () =>
+      HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 })
+    )
+  );
+  mount();
+  await screen.findByLabelText('Email address');
+  expect(document.title).toBe('Reporter Portal | BugPin');
+});
+
+it('gives every original, message, and metadata file control a unique contextual name', async () => {
+  const image = { ...detail.files[0], mimeType: 'image/png' };
+  server.use(
+    http.get('/api/portal/reports/report', () =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          ...detail,
+          messages: detail.messages.map((message, index) => ({
+            ...message,
+            files: [1, 2].map((number) => ({
+              ...image,
+              id: `message-${index}-${number}`,
+              url: `/api/portal/files/message-${index}-${number}`,
+            })),
+          })),
+        },
+      })
+    )
+  );
+  mount('/reports/report');
+  await screen.findByRole('heading', { name: detail.title });
+  for (const context of ['Original report', 'Conversation 1', 'Conversation 2']) {
+    expect(screen.getByRole('link', { name: `${context}: Open file 1` })).toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'Conversation 2: Open file 2' })).toBeInTheDocument();
+  const links = screen
+    .getAllByRole('link')
+    .filter((link) => link.textContent?.includes('Open file'));
+  expect(new Set(links.map((link) => link.getAttribute('aria-label'))).size).toBe(links.length);
+  const images = screen
+    .getAllByRole('img')
+    .filter((image) => image.getAttribute('src')?.startsWith('/api/portal/files/'));
+  expect(new Set(images.map((image) => image.getAttribute('alt'))).size).toBe(images.length);
+  expect(screen.getByRole('link', { name: 'My feedback' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Report details' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Jane' })).toBeVisible();
+});
+
+it('replaces refused CLOSED streams with capped backoff and resets the delay after recovery', async () => {
+  mount();
+  await screen.findByRole('button', { name: 'Jane' });
+  const originalFetch = globalThis.fetch;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
+    String(input).endsWith('/me')
+      ? Promise.resolve(Response.json({ success: true, reporter }))
+      : originalFetch(input, init)
+  );
+  vi.useFakeTimers();
+  try {
+    for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+      const count = TestEventSource.instances.length;
+      const source = TestEventSource.instances[count - 1];
+      source.readyState = TestEventSource.CLOSED;
+      await act(async () => {
+        await source.onerror?.();
+        await source.onerror?.();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(delay - 1);
+      });
+      expect(TestEventSource.instances).toHaveLength(count);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(TestEventSource.instances).toHaveLength(count + 1);
+      expect(source.close).toHaveBeenCalledTimes(1);
+      expect(
+        TestEventSource.instances.filter((source) => source.readyState !== TestEventSource.CLOSED)
+      ).toHaveLength(1);
+    }
+    const recovered = TestEventSource.instances[TestEventSource.instances.length - 1]!;
+    recovered.readyState = 1;
+    act(() => recovered.onopen?.());
+    recovered.readyState = TestEventSource.CLOSED;
+    await act(async () => {
+      await recovered.onerror?.();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(TestEventSource.instances[TestEventSource.instances.length - 1]).not.toBe(recovered);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
+
+it.each(['cleanup', '401'])('cancels a refused stream retry on %s', async (reason) => {
+  mount();
+  await screen.findByRole('button', { name: 'Jane' });
+  const source = TestEventSource.instances[0];
+  source.readyState = TestEventSource.CLOSED;
+  const originalFetch = globalThis.fetch;
+  let expired = false;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
+    String(input).endsWith('/me')
+      ? Promise.resolve(
+          Response.json(
+            expired ? { success: false, error: 'UNAUTHORIZED' } : { success: true, reporter },
+            { status: expired ? 401 : 200 }
+          )
+        )
+      : originalFetch(input, init)
+  );
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      await source.onerror?.();
+    });
+    if (reason === 'cleanup') cleanup();
+    else {
+      expired = true;
+      await act(async () => {
+        await source.onerror?.();
+      });
+    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(TestEventSource.instances).toHaveLength(1);
+    expect(source.close).toHaveBeenCalled();
+    if (reason === '401') expect(screen.getByLabelText('Email address')).toBeVisible();
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
+
+it('retries session validation before replacing a closed stream when validation is temporarily unavailable', async () => {
+  mount();
+  await screen.findByRole('button', { name: 'Jane' });
+  const source = TestEventSource.instances[0];
+  source.readyState = TestEventSource.CLOSED;
+  const originalFetch = globalThis.fetch;
+  let checks = 0;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (!String(input).endsWith('/me')) return originalFetch(input, init);
+    checks++;
+    return Promise.resolve(
+      Response.json(
+        checks === 1 ? { success: false, error: 'UNAVAILABLE' } : { success: true, reporter },
+        { status: checks === 1 ? 503 : 200 }
+      )
+    );
+  });
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      await source.onerror?.();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(checks).toBe(2);
+    expect(TestEventSource.instances).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(TestEventSource.instances).toHaveLength(2);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
   }
 });

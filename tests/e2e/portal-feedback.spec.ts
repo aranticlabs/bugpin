@@ -53,7 +53,7 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   expect((await reply).status()).toBe(201);
   await expect(page.getByText('Chrome 131, attached screenshot', { exact: true })).toBeVisible();
   await expect(page.locator('ol img')).toBeVisible();
-  await page.getByRole('link', { name: '← My feedback' }).click();
+  await page.getByRole('link', { name: 'My feedback' }).click();
   await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
   await page.getByRole('tab', { name: 'Board', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open Browser workflow' })).toBeVisible();
@@ -62,13 +62,13 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   await page.getByLabel('Description', { exact: true }).fill('New feedback details');
   await page.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Created from the portal' })).toBeVisible();
-  await page.getByRole('button', { name: 'workflow ▾' }).click();
+  await page.getByRole('button', { name: 'workflow' }).click();
   await page.getByRole('menuitem', { name: 'Display name', exact: true }).click();
   await page.getByRole('textbox', { name: 'Display name', exact: true }).fill('Janet');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Janet ▾' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Janet' })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Janet ▾' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Janet' })).toBeVisible();
 });
 
 test('shows working portal links and submission success on the Admin Console widget test page', async ({
@@ -105,3 +105,40 @@ test('shows working portal links and submission success on the Admin Console wid
   await page.keyboard.press('Escape');
   await expect(widget.getByRole('dialog')).toHaveCount(0);
 });
+
+for (const status of [429, 503]) {
+  test(`recovers a refused ${status} event stream while the reporter session remains valid`, async ({
+    page,
+    runtime,
+  }) => {
+    let streams = 0;
+    let authenticatedChecks = 0;
+    page.on('response', (response) => {
+      if (response.url().endsWith('/api/portal/me') && response.status() === 200)
+        authenticatedChecks++;
+    });
+    await page.route('**/api/portal/events', (route) => {
+      streams++;
+      return streams === 1
+        ? route.fulfill({
+            status,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, error: 'RATE_LIMITED' }),
+          })
+        : route.continue();
+    });
+    const email = `recover-${status}@example.test`;
+    await page.goto(`${runtime.portalOrigin}/reporter-portal/`);
+    await page.getByLabel('Email address').fill(email);
+    await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+    await page.goto(await runtime.waitForLink(email));
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+    await expect.poll(() => streams).toBe(2);
+    expect(authenticatedChecks).toBeGreaterThan(0);
+    await expect(page.getByText('Connection lost. Reconnecting…')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: `recover-${status}`, exact: true })
+    ).toBeVisible();
+  });
+}

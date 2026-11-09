@@ -77,10 +77,6 @@ const catalog = {
   emailUpdates: 'Email me about updates',
   save: 'Save',
   reconnecting: 'Connection lost. Reconnecting…',
-  unsubscribe: 'Unsubscribe',
-  unsubscribeIntro: 'Stop receiving reporter update emails at this address?',
-  unsubscribed: 'You will no longer receive reporter update emails.',
-  invalidUnsubscribe: 'This unsubscribe link is not valid.',
 };
 
 export default catalog;

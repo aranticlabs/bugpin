@@ -57,7 +57,8 @@ export function ProfileMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="h-11 max-w-full" disabled={busy}>
-            <span className="truncate">{auth.reporter.displayName}</span> ▾
+            <span className="truncate">{auth.reporter.displayName}</span>
+            <span aria-hidden="true">▾</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

@@ -1,7 +1,7 @@
 import type { PortalFile } from '@shared/portal-types';
 import { useI18n } from '../i18n/I18nProvider';
 
-export function FilePreview({ files }: { files: PortalFile[] }) {
+export function FilePreview({ files, context }: { files: PortalFile[]; context: string }) {
   const { t } = useI18n();
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -13,7 +13,7 @@ export function FilePreview({ files }: { files: PortalFile[] }) {
               controls
               preload="metadata"
               className="max-h-80 w-full rounded-md"
-              aria-label={t('attachment', { number: index + 1 })}
+              aria-label={`${context}: ${t('attachment', { number: index + 1 })}`}
             />
           ) : file.mimeType.startsWith('image/') ? (
             <a href={file.url} target="_blank" rel="noopener noreferrer">
@@ -21,7 +21,7 @@ export function FilePreview({ files }: { files: PortalFile[] }) {
                 src={file.url}
                 loading="lazy"
                 className="max-h-80 max-w-full rounded-md object-contain"
-                alt={t('attachment', { number: index + 1 })}
+                alt={`${context}: ${t('attachment', { number: index + 1 })}`}
               />
             </a>
           ) : null}
@@ -29,6 +29,7 @@ export function FilePreview({ files }: { files: PortalFile[] }) {
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={`${context}: ${t('openFile', { number: index + 1 })}`}
             className="inline-flex min-h-11 items-center text-sm underline"
           >
             {t('openFile', { number: index + 1 })}

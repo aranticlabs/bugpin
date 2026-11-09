@@ -5,10 +5,14 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 export class TestEventSource extends EventTarget {
+  static CLOSED = 2;
+  readyState = 0;
   static instances: TestEventSource[] = [];
   onopen: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  close = vi.fn();
+  close = vi.fn(() => {
+    this.readyState = TestEventSource.CLOSED;
+  });
   constructor(
     public url: string,
     public options?: EventSourceInit

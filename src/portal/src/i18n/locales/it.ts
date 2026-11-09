@@ -80,10 +80,6 @@ const catalog = {
   emailUpdates: 'Inviami aggiornamenti via email',
   save: 'Salva',
   reconnecting: 'Connessione persa. Riconnessione…',
-  unsubscribe: 'Annulla iscrizione',
-  unsubscribeIntro: 'Vuoi interrompere gli aggiornamenti sulle segnalazioni a questo indirizzo?',
-  unsubscribed: 'Non riceverai più aggiornamenti sulle segnalazioni via email.',
-  invalidUnsubscribe: 'Questo link di annullamento non è valido.',
 } satisfies Catalog;
 
 export default catalog;

@@ -406,7 +406,7 @@ it('signs out on the server before removing the local account and cached data', 
   const client = mount('/reports');
   await screen.findByText('Jane');
   client.setQueryData(['portal', 'private'], 'secret');
-  await userEvent.click(screen.getByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Jane' }));
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   await screen.findByLabelText('Email address');
   expect(loggedOut).toBe(true);
@@ -421,7 +421,7 @@ it('keeps a failed logout retryable instead of pretending the session ended', as
     )
   );
   mount('/reports');
-  await userEvent.click(await screen.findByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Jane' }));
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Please try again');
   expect(screen.getByText('Jane')).toBeInTheDocument();
@@ -437,7 +437,7 @@ it('treats logout from an expired session as successful and clears private data 
   const client = mount('/reports');
   await screen.findByText('Jane');
   client.setQueryData(['portal', 'private'], 'Old account data');
-  await userEvent.click(screen.getByRole('button', { name: 'Jane ▾' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Jane' }));
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
   await screen.findByLabelText('Email address');
   expect(client.getQueryData(['portal', 'private'])).toBeUndefined();

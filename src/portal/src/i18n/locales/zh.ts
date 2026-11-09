@@ -79,10 +79,6 @@ const catalog = {
   emailUpdates: '通过邮件接收更新',
   save: '保存',
   reconnecting: '连接已断开。正在重新连接…',
-  unsubscribe: '取消订阅',
-  unsubscribeIntro: '停止向此地址发送报告更新邮件？',
-  unsubscribed: '您将不再收到报告更新邮件。',
-  invalidUnsubscribe: '此取消订阅链接无效。',
 } satisfies Catalog;
 
 export default catalog;

@@ -81,10 +81,6 @@ const catalog = {
   emailUpdates: 'Recevoir les mises à jour par e-mail',
   save: 'Enregistrer',
   reconnecting: 'Connexion perdue. Reconnexion…',
-  unsubscribe: 'Se désabonner',
-  unsubscribeIntro: 'Ne plus recevoir les mises à jour des signalements à cette adresse ?',
-  unsubscribed: 'Vous ne recevrez plus les mises à jour des signalements par e-mail.',
-  invalidUnsubscribe: 'Ce lien de désabonnement est invalide.',
 } satisfies Catalog;
 
 export default catalog;

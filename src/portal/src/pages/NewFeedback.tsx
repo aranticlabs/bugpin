@@ -72,7 +72,10 @@ export function NewFeedback() {
   return (
     <div className="mx-auto min-w-0 max-w-2xl space-y-5">
       <Button asChild variant="link" className="px-0">
-        <Link to="/reports">← {t('myFeedback')}</Link>
+        <Link to="/reports">
+          <span aria-hidden="true">← </span>
+          {t('myFeedback')}
+        </Link>
       </Button>
       <h1 className="text-2xl font-semibold">{t('newFeedback')}</h1>
       {!allowed.length ? (

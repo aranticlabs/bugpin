@@ -81,10 +81,6 @@ const catalog = {
   emailUpdates: 'E-mail mij over updates',
   save: 'Opslaan',
   reconnecting: 'Verbinding verbroken. Opnieuw verbinden…',
-  unsubscribe: 'Afmelden',
-  unsubscribeIntro: 'Geen updates over meldingen meer ontvangen op dit adres?',
-  unsubscribed: 'Je ontvangt geen updates over meldingen meer per e-mail.',
-  invalidUnsubscribe: 'Deze afmeldlink is ongeldig.',
 } satisfies Catalog;
 
 export default catalog;

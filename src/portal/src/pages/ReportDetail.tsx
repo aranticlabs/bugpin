@@ -69,7 +69,7 @@ export function ReportDetail() {
       {allFiles.length > 0 && (
         <div className="space-y-2">
           <h2 className="font-semibold">{t('files')}</h2>
-          <FilePreview files={allFiles} />
+          <FilePreview files={allFiles} context={t('reportDetails')} />
         </div>
       )}
     </div>
@@ -77,7 +77,10 @@ export function ReportDetail() {
   return (
     <div className="min-w-0 space-y-5">
       <Button asChild variant="link" className="px-0">
-        <Link to="/reports">← {t('myFeedback')}</Link>
+        <Link to="/reports">
+          <span aria-hidden="true">← </span>
+          {t('myFeedback')}
+        </Link>
       </Button>
       <h1 className="break-words text-2xl font-semibold [overflow-wrap:anywhere]">
         {report.title}
@@ -87,7 +90,8 @@ export function ReportDetail() {
           <Collapsible className="rounded-lg border lg:hidden">
             <CollapsibleTrigger asChild>
               <Button variant="ghost" className="w-full justify-between">
-                {t('reportDetails')} ▾
+                {t('reportDetails')}
+                <span aria-hidden="true">▾</span>
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>{facts}</CollapsibleContent>
@@ -103,11 +107,11 @@ export function ReportDetail() {
             </CardHeader>
             <CardContent className="space-y-3">
               {report.description && <PlainText text={report.description} />}
-              <FilePreview files={report.files} />
+              <FilePreview files={report.files} context={t('originalReport')} />
             </CardContent>
           </Card>
           <ol className="space-y-4" aria-label={t('conversation')}>
-            {report.messages.map((message) => (
+            {report.messages.map((message, index) => (
               <li key={message.id}>
                 <Card className={message.isOwn ? 'border-primary/30' : ''}>
                   <CardHeader>
@@ -120,7 +124,10 @@ export function ReportDetail() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <PlainText text={message.body} />
-                    <FilePreview files={message.files} />
+                    <FilePreview
+                      files={message.files}
+                      context={`${t('conversation')} ${index + 1}`}
+                    />
                   </CardContent>
                 </Card>
               </li>
