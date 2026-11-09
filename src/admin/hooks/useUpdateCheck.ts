@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { clearDismissal, readDismissal, writeDismissal } from '../lib/noticeStorage';
+import { useSnooze } from './useSnooze';
 
 const STALE_TIME_MS = 60 * 60 * 1000;
-const SNOOZE_MS = 24 * 60 * 60 * 1000;
 const UPDATE_DISMISS_KEY = 'bugpin.updateBanner.dismissedVersion';
 const UPDATE_SNOOZE_KEY = 'bugpin.updateBanner.snoozedUntil';
 const WIDGET_DISMISS_KEY = 'bugpin.widgetPackageWarning.dismissedId';
+const WIDGET_SNOOZE_KEY = 'bugpin.widgetPackageWarning.snoozedUntil';
 
 interface IncompatibleWidgetProject {
   projectId: string;
@@ -63,33 +65,6 @@ function isSameReleaseLine(dismissed: string, latest: string, type: ReleaseType)
   return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 }
 
-function readDismissal(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeDismissal(key: string, value: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // localStorage may be unavailable (private mode, quota); the banner stays dismissed for the session via state.
-  }
-}
-
-function clearDismissal(key: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // localStorage may be unavailable; state still reflects the server response.
-  }
-}
-
 export function useUpdateCheck() {
   const { user, canLoadData } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -121,9 +96,9 @@ export function useUpdateCheck() {
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(() =>
     readDismissal(UPDATE_DISMISS_KEY)
   );
-  const [snoozedUntil, setSnoozedUntil] = useState<number>(
-    () => Number(readDismissal(UPDATE_SNOOZE_KEY)) || 0
-  );
+  const { isSnoozed, snooze } = useSnooze(UPDATE_SNOOZE_KEY);
+  const { isSnoozed: isWidgetWarningSnoozed, snooze: snoozeWidgetWarning } =
+    useSnooze(WIDGET_SNOOZE_KEY);
   const [dismissedWidgetWarningId, setDismissedWidgetWarningId] = useState<string | null>(() =>
     readDismissal(WIDGET_DISMISS_KEY)
   );
@@ -147,7 +122,6 @@ export function useUpdateCheck() {
     releaseType !== null &&
     dismissedVersion !== null &&
     isSameReleaseLine(dismissedVersion, latest, releaseType);
-  const isSnoozed = snoozedUntil > Date.now();
   const isWidgetWarningDismissed =
     widgetPackage.warningId !== null && dismissedWidgetWarningId === widgetPackage.warningId;
 
@@ -155,12 +129,6 @@ export function useUpdateCheck() {
     if (!latest) return;
     writeDismissal(UPDATE_DISMISS_KEY, latest);
     setDismissedVersion(latest);
-  };
-
-  const snooze = () => {
-    const until = Date.now() + SNOOZE_MS;
-    writeDismissal(UPDATE_SNOOZE_KEY, String(until));
-    setSnoozedUntil(until);
   };
 
   const dismissWidgetWarning = () => {
@@ -183,5 +151,7 @@ export function useUpdateCheck() {
     widgetPackage,
     isWidgetWarningDismissed,
     dismissWidgetWarning,
+    isWidgetWarningSnoozed,
+    snoozeWidgetWarning,
   };
 }

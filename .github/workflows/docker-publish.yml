@@ -86,8 +86,10 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            # For production tags (v1.0.0) -> 1.0.0, latest
+            # For production tags (v1.0.0) -> 1.0.0, 1.0, 1, latest
             type=semver,pattern={{version}},enable=${{ steps.check.outputs.is_dev == 'false' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.check.outputs.is_dev == 'false' }}
+            type=semver,pattern={{major}},enable=${{ steps.check.outputs.is_dev == 'false' }}
             type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' }}
             # For dev/beta tags (v1.0.1-dev, v1.0.1-beta.1) -> <version>, dev
             type=match,pattern=v(.*),group=1,enable=${{ steps.check.outputs.is_dev == 'true' }}

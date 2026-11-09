@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { renderWithProviders, screen, userEvent, waitFor } from '../utils';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../utils';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { server } from '../mocks/server';
 import { mockUsers } from '../mocks/handlers';
@@ -10,8 +10,9 @@ const PACKAGE_URL = 'https://www.npmjs.com/package/@arantic/bugpin-widget?active
 
 const STORAGE_KEY = 'bugpin.updateBanner.dismissedVersion';
 const SNOOZE_KEY = 'bugpin.updateBanner.snoozedUntil';
-const UPGRADE_GUIDE_URL = 'https://docs.bugpin.io/installation/docker#update';
+const UPGRADE_GUIDE_URL = 'https://docs.bugpin.io/upgrading';
 const WIDGET_STORAGE_KEY = 'bugpin.widgetPackageWarning.dismissedId';
+const WIDGET_SNOOZE_KEY = 'bugpin.widgetPackageWarning.snoozedUntil';
 
 interface WidgetPackageResponseBody {
   minimumSupportedVersion: string;
@@ -384,6 +385,40 @@ describe('UpdateBanner', () => {
     expect(screen.getByText(/BugPin 1\.0\.7 is available/i)).toBeInTheDocument();
     expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBe('warning_1');
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('snoozes the widget warning for a day independently from the update notice', async () => {
+    mockUserRole('admin');
+    mockVersion({ widgetPackage: incompatibleWidgetPackage });
+
+    const user = userEvent.setup();
+    const before = Date.now();
+    renderWithProviders(<UpdateBanner />);
+
+    const warning = (await screen.findByText(/widget version unsupported/i)).closest(
+      '[role="status"]'
+    ) as HTMLElement;
+    await user.click(within(warning).getByRole('button', { name: 'Not now' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/widget version unsupported/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/BugPin 1\.0\.7 is available/i)).toBeInTheDocument();
+    expect(Number(window.localStorage.getItem(WIDGET_SNOOZE_KEY))).toBeGreaterThanOrEqual(
+      before + 24 * 60 * 60 * 1000
+    );
+    expect(window.localStorage.getItem(SNOOZE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(WIDGET_STORAGE_KEY)).toBeNull();
+  });
+
+  it('shows the widget warning again after its snooze expires', async () => {
+    window.localStorage.setItem(WIDGET_SNOOZE_KEY, String(Date.now() - 1));
+    mockUserRole('admin');
+    mockVersion({ updateAvailable: false, widgetPackage: incompatibleWidgetPackage });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(await screen.findByText(/widget version unsupported/i)).toBeInTheDocument();
   });
 
   it('shows a changed widget warning after an earlier dismissal', async () => {

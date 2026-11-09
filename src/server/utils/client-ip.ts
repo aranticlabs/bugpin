@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { config } from '../config.js';
 
 export type TrustProxyMode = 'auto' | 'always' | 'never';
+const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -63,6 +64,41 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
   if (mode === 'never') return false;
   if (mode === 'always') return true;
   return peer !== undefined && isPrivateAddress(peer);
+}
+
+export function getEffectiveOrigin(c: Context): string | null {
+  try {
+    const url = new URL(c.req.url);
+    let host = c.req.header('host') ?? url.host;
+    let protocol = url.protocol;
+    if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) {
+      host = c.req.header('x-forwarded-host') ?? host;
+      const forwardedProtocol = c.req.header('x-forwarded-proto');
+      if (
+        forwardedProtocol !== undefined &&
+        forwardedProtocol !== 'http' &&
+        forwardedProtocol !== 'https'
+      )
+        return null;
+      if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
+    }
+    if (!HOST_PATTERN.test(host)) return null;
+    return new URL(`${protocol}//${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the request carries forwarded headers from a peer that TRUST_PROXY does not
+ * trust: the usual sign of a reverse proxy in front of an instance configured for direct
+ * access.
+ */
+export function ignoresForwardedHeaders(c: Context): boolean {
+  if (peerIsTrustedProxy(getSocketAddress(c), config.trustProxy)) return false;
+  return ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'].some(
+    (header) => c.req.header(header) !== undefined
+  );
 }
 
 /**
