@@ -10,8 +10,9 @@ interface Runtime {
   staffOrigin: string;
   portalOrigin: string;
   staffSession: string;
+  widgetApiKey: string;
   waitForLink: (email: string) => Promise<string>;
-  expireLinks: (email: string) => void;
+  expireLinks: (email: string, source: 'request' | 'confirmation') => void;
 }
 
 export const test = base.extend<object, { runtime: Runtime }>({
@@ -68,7 +69,7 @@ export const test = base.extend<object, { runtime: Runtime }>({
       });
       try {
         const ready = await new Promise<
-          Pick<Runtime, 'staffOrigin' | 'portalOrigin' | 'staffSession'>
+          Pick<Runtime, 'staffOrigin' | 'portalOrigin' | 'staffSession' | 'widgetApiKey'>
         >((resolveReady, reject) => {
           const timeout = setTimeout(
             () => reject(new Error('Built test server did not start')),
@@ -98,8 +99,8 @@ export const test = base.extend<object, { runtime: Runtime }>({
         });
         await use({
           ...ready,
-          expireLinks: (email) => {
-            execFileSync('bun', [resolve('tests/e2e/database.ts'), email], {
+          expireLinks: (email, source) => {
+            execFileSync('bun', [resolve('tests/e2e/database.ts'), email, source], {
               env: { ...process.env, E2E_DATA_DIR: directory },
             });
           },

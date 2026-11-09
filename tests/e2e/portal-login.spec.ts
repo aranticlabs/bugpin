@@ -18,6 +18,10 @@ test('requests a real SMTP login link, previews without a session, then exchange
   await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
   expect(previewed).toBe(true);
   expect(new URL(page.url()).hash).toBe('');
+  await page.getByRole('link', { name: 'Skip to content' }).focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => new URL(page.url()).hash).toBe('#main-content');
+  await expect(page.locator('#main-content')).toBeFocused();
   expect(
     (await context.cookies()).some((cookie) => cookie.name === 'bugpin_reporter_session')
   ).toBe(false);
@@ -32,19 +36,32 @@ test('requests a real SMTP login link, previews without a session, then exchange
   );
 });
 
-test('offers a fresh email for an expired link without consuming it on page load', async ({
+test('resends a real widget confirmation link after expiry without consuming it on page load', async ({
   page,
+  request,
   runtime,
 }) => {
   let previews = 0;
   page.on('request', (request) => {
     if (request.url().endsWith('/auth/preview')) previews++;
   });
-  await page.goto(`${runtime.portalOrigin}/reporter-portal/`);
-  await page.getByLabel('Email address').fill('expired@example.test');
-  await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+  const submitted = await request.post(`${runtime.staffOrigin}/api/widget/submit`, {
+    headers: { 'x-api-key': runtime.widgetApiKey },
+    data: {
+      title: 'Follow this browser feedback',
+      reporterEmail: 'expired@example.test',
+      metadata: {
+        url: 'https://example.test/feedback',
+        browser: { name: 'Chromium', version: '141', userAgent: 'Browser test' },
+        device: { type: 'desktop', os: 'Test' },
+        viewport: { width: 1280, height: 720, devicePixelRatio: 1 },
+        timestamp: new Date().toISOString(),
+      },
+    },
+  });
+  expect(submitted.ok()).toBe(true);
   const link = await runtime.waitForLink('expired@example.test');
-  runtime.expireLinks('expired@example.test');
+  runtime.expireLinks('expired@example.test', 'confirmation');
   await page.goto(link);
   await expect(page.getByText(/This link expired/)).toBeVisible();
   await page.getByRole('button', { name: 'Send a new link' }).click();
@@ -55,6 +72,22 @@ test('offers a fresh email for an expired link without consuming it on page load
   expect(new URL(page.url()).hash.length).toBe(0);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+});
+
+test('offers only a new login request for an expired requested token', async ({
+  page,
+  runtime,
+}) => {
+  await page.goto(`${runtime.portalOrigin}/reporter-portal/`);
+  await page.getByLabel('Email address').fill('expired-request@example.test');
+  await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+  const link = await runtime.waitForLink('expired-request@example.test');
+  runtime.expireLinks('expired-request@example.test', 'request');
+  await page.goto(link);
+  await expect(page.getByText('This link expired. Request a new sign-in link.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send a new link' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Request a new link' }).click();
+  await expect(page.getByLabel('Email address')).toBeVisible();
 });
 
 test('isolates cookies and routes between hosts and rejects unknown hosts', async ({

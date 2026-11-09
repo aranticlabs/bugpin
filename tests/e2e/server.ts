@@ -11,6 +11,8 @@ import { sessionsRepo } from '../../src/server/database/repositories/sessions.re
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../src/shared/types';
 import { MAX_REQUEST_BODY_SIZE } from '../../src/server/utils/request-limits';
+import { projectsService } from '../../src/server/services/projects.service';
+import { Result } from '../../src/server/utils/result';
 
 await initDatabase();
 await initSchema();
@@ -44,8 +46,17 @@ await settingsRepo.updateAll({
   reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginExchangesPerIpPer15Min: 100 },
 });
 settingsCacheService.invalidate();
+const project = Result.unwrap(
+  await projectsService.create({
+    name: 'Browser confirmations',
+    settings: {
+      reporterPortal: { enabled: true, allowNewFeedback: false },
+      reporterNotifications: { emailEnabled: true, notifyOnNewReport: true },
+    },
+  })
+);
 console.log(
-  `E2E_READY ${JSON.stringify({ staffOrigin, portalOrigin, staffSession: staffSession.id })}`
+  `E2E_READY ${JSON.stringify({ staffOrigin, portalOrigin, staffSession: staffSession.id, widgetApiKey: project.apiKey })}`
 );
 process.on('SIGTERM', () => {
   server.stop(true);
