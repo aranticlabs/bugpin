@@ -244,7 +244,7 @@ describe('widget components', () => {
   });
 
   it('renders widget dialog details tab', () => {
-    const html = renderToString(
+    const dialog = (
       <WidgetDialog
         onClose={() => undefined}
         onSubmit={() => undefined}
@@ -277,6 +277,25 @@ describe('widget components', () => {
         onDismissOversizedCapture={() => undefined}
       />
     );
+    const html = renderToString(dialog);
+    const portalUrl = 'https://feedback.example.test/reporter-portal/';
+    const enabled = renderToString(
+      <WidgetDialog {...dialog.props} portalUrl={portalUrl} hidePoweredBy />
+    );
+    expect(enabled).toContain('My feedback');
+    expect(enabled).toContain(portalUrl);
+    expect(enabled).not.toContain('Powered by');
+    expect(html).not.toContain('My feedback');
+    const success = renderToString(
+      <WidgetDialog {...dialog.props} portalUrl={portalUrl} submitted submittedWithEmail />
+    );
+    expect(success).toContain('View my feedback');
+    expect(success).toContain('Check your inbox');
+    expect(success).not.toContain('Submit Report');
+    const anonymous = renderToString(
+      <WidgetDialog {...dialog.props} portalUrl={portalUrl} submitted />
+    );
+    expect(anonymous).not.toContain('Check your inbox');
     expect(html).toContain('Report a Bug');
     expect(html).toContain('Submit Report');
     expect(html).toContain('h-[770px]');

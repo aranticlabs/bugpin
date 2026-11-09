@@ -1,5 +1,5 @@
 import { FunctionComponent } from 'preact';
-import { useState, useCallback } from 'preact/hooks';
+import { useState, useCallback, useLayoutEffect, useRef } from 'preact/hooks';
 import { FileText, Image, Video, X } from 'lucide-preact';
 import { ScreenshotManager, CapturedMedia } from './ScreenshotManager.js';
 import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
@@ -36,6 +36,9 @@ export interface WidgetDialogContent {
 
 interface WidgetDialogProps {
   hidePoweredBy?: boolean;
+  portalUrl?: string | null;
+  submitted?: boolean;
+  submittedWithEmail?: boolean;
   content?: WidgetDialogContent;
   onClose: () => void;
   onSubmit: (data: FormData, media: CapturedMedia[]) => void;
@@ -84,6 +87,9 @@ const TAB_ICONS = {
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   hidePoweredBy = false,
+  portalUrl,
+  submitted = false,
+  submittedWithEmail = false,
   content,
   onClose,
   onSubmit,
@@ -121,6 +127,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onDismissOversizedRecording = () => undefined,
 }) => {
   const locale = useLocale();
+  const dialog = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (submitted) dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [submitted]);
   const contentText = (bundle: LauncherTextBundle | undefined, fallback: string) =>
     (bundle ? resolveLauncherText(bundle.project, bundle.global, locale, null) : null) ?? fallback;
   const showPriority = content?.showPriority ?? true;
@@ -210,19 +220,62 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
     <div class="fixed inset-0 z-overlay bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
       <div
         class="relative w-full max-w-3xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
+        ref={dialog}
+        onKeyDown={(event) => {
+          if (!submitted) return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+          }
+          if (event.key === 'Tab') {
+            const controls = dialog.current?.querySelectorAll<HTMLElement>('button, a[href]');
+            if (!controls?.length) return;
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && event.target === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && event.target === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="bugpin-title"
       >
         {/* Header */}
         <div class="shrink-0 flex items-center justify-between p-6 border-b border-solid border-border">
-          <h1 id="bugpin-title">{contentText(content?.title, t('dialog.title'))}</h1>
+          <h1 id="bugpin-title">
+            {submitted ? t('toast.success.submit') : contentText(content?.title, t('dialog.title'))}
+          </h1>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('aria.close')}>
             <X class="w-5 h-5" />
           </Button>
         </div>
 
-        {showScreenCaptureConsent ? (
+        {submitted ? (
+          <div
+            class="flex-1 flex flex-col items-center justify-center gap-6 p-6 text-center"
+            role="status"
+          >
+            {submittedWithEmail && <p>{t('portal.checkEmail')}</p>}
+            {portalUrl && (
+              <a
+                href={portalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex min-h-11 items-center rounded-sm bg-primary px-4 text-primary-foreground font-medium hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {t('portal.viewFeedback')}
+              </a>
+            )}
+            <Button variant="outline" onClick={onClose}>
+              {t('aria.close')}
+            </Button>
+          </div>
+        ) : showScreenCaptureConsent ? (
           <ScreenCaptureConsentDialog
             mode={consentMode}
             onConfirm={onConsentConfirm}
@@ -416,6 +469,19 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               </div>
             </div>
           </>
+        )}
+
+        {portalUrl && (
+          <div class="shrink-0 border-t border-solid border-border bg-background px-6 py-2 text-center text-sm">
+            <a
+              href={portalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex min-h-11 items-center text-brand underline"
+            >
+              {t('portal.myFeedback')}
+            </a>
+          </div>
         )}
 
         {/* Branding */}

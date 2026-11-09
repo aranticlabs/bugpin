@@ -50,7 +50,7 @@ const project = Result.unwrap(
   await projectsService.create({
     name: 'Browser confirmations',
     settings: {
-      reporterPortal: { enabled: true, allowNewFeedback: false },
+      reporterPortal: { enabled: true, allowNewFeedback: true },
       reporterNotifications: { emailEnabled: true, notifyOnNewReport: true },
     },
   })

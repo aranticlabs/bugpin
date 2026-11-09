@@ -162,6 +162,10 @@ const ja: WidgetCatalog = {
   'annotation.defaultText': 'テキスト',
   'annotation.buttons.cancel': 'キャンセル',
   'annotation.buttons.done': '完了',
+  'portal.checkEmail':
+    '受信トレイでログインリンクを確認するか、マイフィードバックからリクエストしてください。',
+  'portal.viewFeedback': '自分のフィードバックを見る',
+  'portal.myFeedback': 'マイフィードバック',
 };
 
 export default ja;

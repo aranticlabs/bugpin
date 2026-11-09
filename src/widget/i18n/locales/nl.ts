@@ -167,6 +167,9 @@ const nl: WidgetCatalog = {
   'annotation.defaultText': 'Tekst',
   'annotation.buttons.cancel': 'Annuleren',
   'annotation.buttons.done': 'Klaar',
+  'portal.checkEmail': 'Zoek een aanmeldlink in je inbox of vraag er een aan via Mijn feedback.',
+  'portal.viewFeedback': 'Mijn feedback bekijken',
+  'portal.myFeedback': 'Mijn feedback',
 };
 
 export default nl;

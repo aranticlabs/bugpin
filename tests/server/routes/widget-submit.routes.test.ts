@@ -982,6 +982,36 @@ describe('widget routes', () => {
   });
 
   describe('GET /widget/config/:apiKey', () => {
+    it.each([
+      [false, 'https://app.example.test', '', null],
+      [true, 'https://app.example.test', '', 'https://app.example.test/reporter-portal/'],
+      [
+        true,
+        'https://app.example.test',
+        'https://feedback.example.test',
+        'https://feedback.example.test/reporter-portal/',
+      ],
+      [true, '', '', null],
+      [true, 'https://app.example.test', 'invalid', null],
+    ])(
+      'exposes a portal URL only for enabled, configured projects (%s, %s, %s)',
+      async (enabled, appUrl, portalBaseUrl, expected) => {
+        projectResult = {
+          ...baseProject,
+          settings: {
+            ...baseProject.settings,
+            reporterPortal: { enabled, allowNewFeedback: false },
+          },
+        };
+        settingsService.getAll = async () =>
+          Result.ok({ ...baseSettings, appUrl, portalBaseUrl } as AppSettings);
+        const res = await createApp().request('http://localhost/widget/config/test_api_key_123');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { config: { portalUrl: string | null } };
+        expect(body.config.portalUrl).toBe(expected);
+      }
+    );
+
     it('records valid npm package metadata without changing the response', async () => {
       const app = createApp();
       const res = await app.request(

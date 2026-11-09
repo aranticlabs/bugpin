@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { render } from 'preact';
+import { render, type ComponentProps } from 'preact';
+import type { WidgetDialog } from '../../components/WidgetDialog';
+import type { AnnotationCanvas } from '../../annotate/AnnotationCanvas';
 import type { WidgetConfig } from '../../config';
 import type { FormData as WidgetFormData } from '../../components/WidgetDialog';
 import { installDom } from '../helpers/dom';
@@ -12,7 +14,7 @@ const captureScreenshot = mock(async () => 'data:image/png;base64,abc');
 const captureContext = mock(() => ({
   url: 'https://example.com',
   browser: { name: 'Chrome', version: '1', userAgent: 'UA' },
-  device: { type: 'desktop', os: 'macOS' },
+  device: { type: 'desktop' as const, os: 'macOS' },
   viewport: { width: 800, height: 600, devicePixelRatio: 2 },
   timestamp: new Date().toISOString(),
 }));
@@ -20,20 +22,20 @@ const submitReport = mock(
   async (
     _input: SubmitReportInput,
     _options?: SendOptions
-  ): Promise<{ success: boolean; queued?: boolean } | undefined> => undefined
+  ): Promise<{ success: boolean; queued?: boolean }> => ({ success: true })
 );
 const clearUserActivity = mock(() => undefined);
 
 let lastDialogProps: Record<string, unknown> | null = null;
 let lastAnnotationProps: Record<string, unknown> | null = null;
 
-const WidgetDialogStub = (props: Record<string, unknown>) => {
-  lastDialogProps = props;
+const WidgetDialogStub = (props: ComponentProps<typeof WidgetDialog>) => {
+  lastDialogProps = { ...props };
   return <div data-testid="widget-dialog" />;
 };
 
-const AnnotationCanvasStub = (props: Record<string, unknown>) => {
-  lastAnnotationProps = props;
+const AnnotationCanvasStub = (props: ComponentProps<typeof AnnotationCanvas>) => {
+  lastAnnotationProps = { ...props };
   return <div data-testid="annotation" />;
 };
 
@@ -513,6 +515,53 @@ describe('App state transitions', () => {
     container.remove();
   });
 
+  it.each([true, false])(
+    'shows portal success only for delivered submissions (queued %s)',
+    async (queued) => {
+      submitReport.mockImplementationOnce(async () => ({ success: true, queued }));
+      const { App } = await import('../../components/App');
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const portalUrl = 'https://feedback.example.test/reporter-portal/';
+      render(<App config={{ ...baseConfig, portalUrl }} deps={appDeps} />, container);
+      const launcher = container.querySelector(
+        'button[aria-label="Report issue"]'
+      ) as HTMLButtonElement;
+      launcher.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      await (
+        lastDialogProps?.onSubmit as (data: WidgetFormData, media: unknown[]) => Promise<void>
+      )(
+        {
+          title: 'Bug title',
+          description: '',
+          priority: 'medium',
+          reporterEmail: 'jane@example.com',
+          reporterName: '',
+        },
+        []
+      );
+      await flush();
+      if (queued) {
+        expect(container.querySelector('[data-testid="widget-dialog"]')).toBeNull();
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          t('submit.queued')
+        );
+      } else {
+        expect(lastDialogProps?.submitted).toBe(true);
+        expect(lastDialogProps?.submittedWithEmail).toBe(true);
+        expect(lastDialogProps?.portalUrl).toBe(portalUrl);
+        expect(container.querySelector('[role="alert"]')).toBeNull();
+        (lastDialogProps?.onClose as () => void)();
+        await flush();
+        expect(container.querySelector('[data-testid="widget-dialog"]')).toBeNull();
+      }
+      render(null, container);
+      container.remove();
+    }
+  );
+
   it('shows a toast when submit fails', async () => {
     submitReport.mockImplementationOnce(async () => {
       throw new Error('submit failed');
@@ -554,7 +603,7 @@ describe('App state transitions', () => {
   it('cancels an in-flight upload without showing an error', async () => {
     submitReport.mockImplementationOnce(
       async (_input: SubmitReportInput, options?: SendOptions) =>
-        await new Promise<undefined>((_, reject) => {
+        await new Promise<never>((_, reject) => {
           options?.signal?.addEventListener('abort', () => {
             reject(new DOMException('Upload canceled', 'AbortError'));
           });

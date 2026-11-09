@@ -165,6 +165,9 @@ const es: WidgetCatalog = {
   'annotation.defaultText': 'Texto',
   'annotation.buttons.cancel': 'Cancelar',
   'annotation.buttons.done': 'Hecho',
+  'portal.checkEmail': 'Busca un enlace de acceso en tu correo o solicita uno en Mis comentarios.',
+  'portal.viewFeedback': 'Ver mis comentarios',
+  'portal.myFeedback': 'Mis comentarios',
 };
 
 export default es;

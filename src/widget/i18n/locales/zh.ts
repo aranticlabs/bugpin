@@ -153,6 +153,9 @@ const zh: WidgetCatalog = {
   'annotation.defaultText': '文字',
   'annotation.buttons.cancel': '取消',
   'annotation.buttons.done': '完成',
+  'portal.checkEmail': '请在收件箱查找登录链接，或在“我的反馈”中申请。',
+  'portal.viewFeedback': '查看我的反馈',
+  'portal.myFeedback': '我的反馈',
 };
 
 export default zh;

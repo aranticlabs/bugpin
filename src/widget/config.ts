@@ -10,6 +10,7 @@ export interface WidgetLanguageConfig {
 
 export interface WidgetConfig {
   hidePoweredBy?: boolean;
+  portalUrl?: string | null;
   apiKey: string;
   serverUrl: string;
   reporterName?: string;
