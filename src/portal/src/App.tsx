@@ -141,7 +141,7 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
               path="*"
               element={
                 <AuthCard title={t('notFound')}>
-                  <Button asChild variant="link">
+                  <Button asChild variant="link" className="underline dark:text-foreground">
                     <Link to="/">{t('backHome')}</Link>
                   </Button>
                 </AuthCard>

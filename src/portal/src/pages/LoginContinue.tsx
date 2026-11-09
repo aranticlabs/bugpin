@@ -123,7 +123,11 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
           )}
         </>
       )}
-      <Button asChild variant="link" className="h-auto whitespace-normal px-0">
+      <Button
+        asChild
+        variant="link"
+        className="h-auto whitespace-normal px-0 underline dark:text-foreground"
+      >
         <Link to="/" onClick={clearToken}>
           {t('requestNewLink')}
         </Link>

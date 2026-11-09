@@ -71,7 +71,7 @@ export function NewFeedback() {
   }
   return (
     <div className="mx-auto min-w-0 max-w-2xl space-y-5">
-      <Button asChild variant="link" className="px-0">
+      <Button asChild variant="link" className="px-0 underline dark:text-foreground">
         <Link to="/reports">
           <span aria-hidden="true">← </span>
           {t('myFeedback')}

@@ -75,7 +75,7 @@ export function ReportDetail() {
   );
   return (
     <div className="min-w-0 space-y-5">
-      <Button asChild variant="link" className="px-0">
+      <Button asChild variant="link" className="px-0 underline dark:text-foreground">
         <Link to="/reports">
           <span aria-hidden="true">← </span>
           {t('myFeedback')}
