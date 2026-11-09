@@ -2,7 +2,12 @@ import type { MiddlewareHandler } from 'hono';
 import { config } from '../config.js';
 import { settingsCacheService } from '../services/settings-cache.service.js';
 import { logger } from '../utils/logger.js';
-import { getEffectiveOrigin, getSocketAddress, isLoopbackAddress } from '../utils/client-ip.js';
+import {
+  getEffectiveOrigin,
+  getSocketAddress,
+  isLoopbackAddress,
+  HOST_PATTERN,
+} from '../utils/client-ip.js';
 
 let overrideWarningLogged = false;
 
@@ -66,9 +71,14 @@ export const httpsEnforcement: MiddlewareHandler = async (c, next) => {
         );
     }
     const url = new URL(c.req.url);
-    const destination = new URL(
-      configured || `${url.protocol}//${c.req.header('host') || url.host}`
-    );
+    const requestHost = c.req.header('host') || url.host;
+    if (!configured && !HOST_PATTERN.test(requestHost)) return next();
+    let destination: URL;
+    try {
+      destination = new URL(configured || `${url.protocol}//${requestHost}`);
+    } catch {
+      return next();
+    }
     url.protocol = 'https:';
     url.hostname = destination.hostname;
     url.port = destination.port;

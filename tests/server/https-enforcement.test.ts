@@ -148,6 +148,30 @@ describe('httpsEnforcement', () => {
     expect(response.headers.get('Location')).toBe('https://request.example:8080/health?next=1');
   });
 
+  it.each([
+    'bad host',
+    'example.test/path',
+    'person@example.test',
+    'example.test,evil.test',
+    'example.test:invalid',
+    '[::1',
+  ])('skips the redirect for malformed unforwarded Host %s', async (host) => {
+    appUrl = '';
+    const response = await createApp().request(
+      'http://internal.example/health',
+      {
+        headers: {
+          Host: host,
+          'X-Forwarded-Host': 'bugpin.example.com',
+          'X-Forwarded-Proto': 'http',
+        },
+      },
+      { requestIP: () => ({ address: '127.0.0.1' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Location')).toBeNull();
+  });
+
   it('uses the trusted forwarded protocol without redirecting an already secure single-origin request', async () => {
     appUrl = '';
     const response = await createApp().request(

@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { config } from '../config.js';
 
 export type TrustProxyMode = 'auto' | 'always' | 'never';
+export const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -83,7 +84,7 @@ export function getEffectiveOrigin(c: Context): string | null {
         return null;
       if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
     }
-    if (!/^[a-z0-9.:[\]-]+$/i.test(host)) return null;
+    if (!HOST_PATTERN.test(host)) return null;
     return new URL(`${protocol}//${host}`).origin;
   } catch {
     return null;
