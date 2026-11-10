@@ -2,14 +2,12 @@ import { compareVersions, parseVersion } from '../utils/version-compare.js';
 
 export interface FloatingTags {
   latest: boolean;
-  major: boolean;
   minor: boolean;
 }
 
 /**
  * Decides which floating image tags a release may move. A floating tag only moves forward:
- * `latest` to the newest release overall, `1` to the newest 1.x, and `1.3` to the newest
- * 1.3.x. Tags that are not plain x.y.z versions, such as dev and beta builds, are ignored.
+ * `latest` to the newest release overall and `1.3` to the newest 1.3.x. Tags that are not plain x.y.z versions, such as dev and beta builds, are ignored.
  * Returns null when the release itself is not a plain x.y.z version.
  */
 export function floatingTagsFor(version: string, existingTags: string[]): FloatingTags | null {
@@ -22,7 +20,6 @@ export function floatingTagsFor(version: string, existingTags: string[]): Floati
 
   return {
     latest: newer.length === 0,
-    major: !newer.some((tag) => tag.major === release.major),
     minor: !newer.some((tag) => tag.major === release.major && tag.minor === release.minor),
   };
 }
@@ -41,5 +38,5 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
-  console.log(`latest=${result.latest}\nmajor=${result.major}\nminor=${result.minor}`);
+  console.log(`latest=${result.latest}\nminor=${result.minor}`);
 }
