@@ -442,7 +442,7 @@ describe('migration runner', () => {
       '003_add_reporter_locale.sql',
       '004_add_report_history.sql',
       '006_add_user_password_fields.sql',
-      '008_add_user_api_access.sql',
+      '009_add_account_access.sql',
     ]) {
       writeMigration(name, fs.readFileSync(path.join(sourceDirectory, name), 'utf8'));
     }

@@ -93,12 +93,12 @@ it('repairs a missing board-position index without reranking existing positions'
     INSERT INTO reports (rowid, id, project_id, title, metadata, board_position) VALUES
       (7, 'first', 'project', 'First report', '{}', 44.5), (42, 'second', 'project', 'Second report', '{}', -3.25);
     DROP INDEX idx_reports_status_board_position;
-    DELETE FROM migrations WHERE name = '014_add_report_board_position.sql';`);
+    DELETE FROM migrations WHERE name = '012_add_report_board_position.sql';`);
   const rows = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
   const before = schema(db);
   const custom = path.join(directory, 'migrations');
   fs.mkdirSync(custom);
-  const name = '014_add_report_board_position.sql';
+  const name = '012_add_report_board_position.sql';
   fs.copyFileSync(path.join(config.migrationsDir, name), path.join(custom, name));
   const statements = spyOn(db, 'exec');
   try {
@@ -138,13 +138,13 @@ it('repairs missing portal indexes without rebuilding an already matching report
     DROP INDEX idx_reports_reporter;
     DROP INDEX idx_reports_claimable;
     DROP INDEX idx_reports_reporter_activity;
-    DELETE FROM migrations WHERE name = '019_rebuild_reports_for_portal.sql';`);
+    DELETE FROM migrations WHERE name = '015_rebuild_reports_for_portal.sql';`);
   const rows = db.query('SELECT rowid, * FROM reports ORDER BY rowid').all();
   const before = schema(db);
   const search = db.query("SELECT rowid FROM reports_fts WHERE reports_fts MATCH 'Portal'").all();
   const custom = path.join(directory, 'migrations');
   fs.mkdirSync(custom);
-  const name = '019_rebuild_reports_for_portal.sql';
+  const name = '015_rebuild_reports_for_portal.sql';
   fs.copyFileSync(path.join(config.migrationsDir, name), path.join(custom, name));
   const statements = spyOn(db, 'exec');
   try {
@@ -339,13 +339,13 @@ it('rolls back a failing reports rebuild and leaves a verified restorable backup
   const db = getDb();
   db.exec(fixture);
   db.exec(REPORTERS_SCHEMA);
-  db.exec("INSERT INTO migrations (name) VALUES ('018_add_reporters.sql');");
+  db.exec("INSERT INTO migrations (name) VALUES ('014_add_reporters.sql');");
   db.exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
     INSERT INTO reports (rowid, id, project_id, title, description, metadata) VALUES (13, 'report', 'project', 'Searchable report', 'Original', '{}');`);
   const before = schema(db);
   const custom = path.join(directory, 'migrations');
   fs.mkdirSync(custom);
-  const name = '019_rebuild_reports_for_portal.sql';
+  const name = '015_rebuild_reports_for_portal.sql';
   fs.writeFileSync(
     path.join(custom, name),
     fs.readFileSync(path.join(config.migrationsDir, name), 'utf8') + '\nINVALID SQL;'

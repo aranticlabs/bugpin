@@ -139,10 +139,7 @@ describe('API access migration', () => {
         ('t3', 'usr_expired', NULL, '2020-01-01T00:00:00.000Z');
     `);
     const sql = fs.readFileSync(
-      path.join(
-        import.meta.dir,
-        '../../src/server/database/migrations/008_add_user_api_access.sql'
-      ),
+      path.join(import.meta.dir, '../../src/server/database/migrations/009_add_account_access.sql'),
       'utf8'
     );
     db.exec(sql);
