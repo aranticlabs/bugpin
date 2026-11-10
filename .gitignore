@@ -17,6 +17,8 @@ uploads/
 # Environment variables
 .env
 .env.*
+!.env.example
+!deploy/.env.portal-host.example
 
 # Scripts with credentials
 /scripts/

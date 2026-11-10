@@ -76,7 +76,7 @@ Open `http://localhost:7300/admin/`.
 | `bugpin-admin`  | `7300`                                     | Admin Console and Reporter Portal, with API proxying |
 | `bugpin-portal` | `7310`, optional `separate-portal` profile | Reporter Portal only                                 |
 
-Only the server mounts `./data:/data`. The server writes its proxy token to the shared `bugpin-proxy` volume, which frontends mount read-only. Keep every image on the same release tag.
+Only the server mounts `./data:/data`. The server writes its proxy token to the shared `bugpin-proxy` volume, which frontends mount read-only. Keep every image on the same release tag. To pin a release or configure a reverse proxy, copy [.env.example](.env.example) to `.env`.
 
 The Reporter Portal is served at `/reporter-portal/` by default. For your own hostname, a separate portal host, HTTPS behind a reverse proxy, or the single-container image, see the [Docker installation](https://docs.bugpin.io/installation/docker), [Reverse Proxy and HTTPS](https://docs.bugpin.io/installation/reverse-proxy), and [Separate Portal Host](https://docs.bugpin.io/installation/separate-portal-host) guides.
 

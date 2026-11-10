@@ -1,9 +1,10 @@
 # The connection to the server carries credentials and must use a private network or VPN.
 # Publish the server on its private interface with deploy/docker-compose.server-private.yml.
 # Set Portal Base URL to this host's HTTPS origin in the Admin Console.
+# Configure it with .env, starting from deploy/.env.portal-host.example.
 services:
   bugpin-portal:
-    image: registry.arantic.cloud/bugpin/bugpin-portal:latest
+    image: registry.arantic.cloud/bugpin/bugpin-portal:${BUGPIN_TAG:-latest}
     restart: unless-stopped
     ports:
       - '127.0.0.1:7310:7310'

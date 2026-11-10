@@ -3,6 +3,7 @@
 # First login defaults: admin@example.com / changeme123.
 # The initial password works once; BugPin asks for a new one after the first login.
 # Update: docker compose pull && docker compose up -d
+# Optional settings such as the image tag: copy .env.example to .env.
 # Enable the dedicated portal frontend: docker compose --profile separate-portal up -d
 # Set Portal Base URL to its HTTPS origin in the Admin Console.
 
@@ -22,7 +23,7 @@ x-frontend: &frontend
 services:
   bugpin-server:
     container_name: bugpin-server
-    image: registry.arantic.cloud/bugpin/bugpin-server:latest
+    image: registry.arantic.cloud/bugpin/bugpin-server:${BUGPIN_TAG:-latest}
     restart: unless-stopped
     environment:
       # Set to debug for verbose logging (default: info).
@@ -53,7 +54,7 @@ services:
   bugpin-admin:
     <<: *frontend
     container_name: bugpin-admin
-    image: registry.arantic.cloud/bugpin/bugpin-admin:latest
+    image: registry.arantic.cloud/bugpin/bugpin-admin:${BUGPIN_TAG:-latest}
     ports:
       - '7300:7300'
     # Traefik: route to this frontend, keeping the server port private.
@@ -78,7 +79,7 @@ services:
   bugpin-portal:
     <<: *frontend
     container_name: bugpin-portal
-    image: registry.arantic.cloud/bugpin/bugpin-portal:latest
+    image: registry.arantic.cloud/bugpin/bugpin-portal:${BUGPIN_TAG:-latest}
     profiles:
       - separate-portal
     ports:
