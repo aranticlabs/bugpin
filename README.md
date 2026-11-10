@@ -45,7 +45,7 @@ Capture screenshots, record the screen, and annotate issues from any page on you
 - **Automated Metadata Collection** - Failed network requests (4xx, 5xx), console errors, and OS/browser/device info captured automatically
 - **Offline Support** - Reports are buffered and sent when back online
 - **Self-Hosted** - Your data stays on your servers
-- **Reporter Portal** - Email sign-in, private feedback history, conversations and progress tracking; see the [setup and deployment guide](docs/reporter-portal.md)
+- **Reporter Portal** - Email sign-in, private feedback history, conversations and progress tracking; see the [setup and deployment guide](https://docs.bugpin.io/configuration/reporter-portal)
 - **Multi-Project** - Manage multiple projects with separate API keys
 - **Multilingual Widget** - Widget and reporter emails translated into 8 languages, with per-project language settings
 - **Export Diagnostics** - Export a report's full context as Markdown, plain text, an AI prompt, or JSON, with section toggles and redactions
@@ -61,56 +61,26 @@ Get BugPin up and running in under 5 minutes. This guide will walk you through t
 
 ### Docker Compose
 
-Create a `docker-compose.yml` file:
-
-```yaml
-services:
-  bugpin:
-    image: registry.arantic.cloud/bugpin/bugpin:latest
-    container_name: bugpin
-    restart: unless-stopped
-    ports:
-      - '7300:7300'
-    volumes:
-      - ./data:/data
-    environment:
-      TRUST_PROXY: 'false'
-```
-
-Then run:
+Download the repository's [Compose file](docker-compose.yml), then start it:
 
 ```bash
-# Start BugPin
+curl -O https://raw.githubusercontent.com/aranticlabs/bugpin/main/docker-compose.yml
 docker compose up -d
 ```
 
-### Docker Run
+Open `http://localhost:7300/admin/`.
 
-```bash
-# Run BugPin container
-docker run -d \
-  --name bugpin \
-  --restart unless-stopped \
-  -p 7300:7300 \
-  -v bugpin-data:/data \
-  registry.arantic.cloud/bugpin/bugpin:latest
-```
+| Service         | Port                                       | Purpose                                              |
+| --------------- | ------------------------------------------ | ---------------------------------------------------- |
+| `bugpin-server` | `4300`, private Compose network only       | API, authentication, SQLite, uploads, email, widget  |
+| `bugpin-admin`  | `7300`                                     | Admin Console and Reporter Portal, with API proxying |
+| `bugpin-portal` | `7310`, optional `separate-portal` profile | Reporter Portal only                                 |
 
-BugPin will be available at `http://localhost:7300`
+Only the server mounts `./data:/data`. The server writes its proxy token to the shared `bugpin-proxy` volume, which frontends mount read-only. Keep every image on the same release tag.
 
-### Reverse Proxy
+The Reporter Portal is served at `/reporter-portal/` by default. For your own hostname, a separate portal host, HTTPS behind a reverse proxy, or the single-container image, see the [Docker installation](https://docs.bugpin.io/installation/docker), [Reverse Proxy and HTTPS](https://docs.bugpin.io/installation/reverse-proxy), and [Separate Portal Host](https://docs.bugpin.io/installation/separate-portal-host) guides.
 
-BugPin rate-limits logins and widget submissions per client address. It reads `X-Forwarded-For` only from proxies it trusts, set with `TRUST_PROXY`:
-
-| Value            | Behavior                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| `auto` (default) | Trust forwarded headers from loopback and private-network proxies (same host or Docker network) |
-| `true`           | Trust forwarded headers from any connecting proxy (for example a CDN with a public address)     |
-| `false`          | Ignore forwarded headers and use the connection address                                         |
-
-The quick-start `docker-compose.yml` publishes port 7300 directly and sets `TRUST_PROXY=false`, so clients cannot choose their own address with a forged header. Behind a reverse proxy, set `TRUST_PROXY=auto` (or `true` for a proxy with a public address) and make sure the proxy sets or appends `X-Forwarded-For`. IPv6 clients are rate-limited per /64 network.
-
-If **Enforce HTTPS** is turned on without a working TLS proxy, every request redirects to HTTPS and the Admin Console becomes unreachable. Start BugPin with `DISABLE_HTTPS_ENFORCEMENT=true` to ignore the setting, sign in, turn the setting off, then remove the variable and restart. BugPin logs a warning while the variable overrides an enabled setting.
+For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Login
 
