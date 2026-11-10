@@ -1,5 +1,7 @@
 # Local development: docker compose -f docker-compose.local.yml up --build -V
 # -V renews anonymous node_modules volumes after rebuilding dependencies.
+name: bugpin-local
+
 x-dev: &dev
   build:
     context: .
@@ -30,8 +32,6 @@ services:
       - ./ee:/app/ee
       - ./src/admin/public/branding:/app/src/admin/public/branding:ro
       - /app/src/server/node_modules
-      - /app/src/shared/node_modules
-      - /app/src/widget/node_modules
       - /app/ee/node_modules
     healthcheck:
       test:
@@ -53,7 +53,6 @@ services:
       - ./src/widget:/app/src/widget
       - ./src/shared:/app/src/shared
       - /app/src/widget/node_modules
-      - /app/src/shared/node_modules
 
   bugpin-admin:
     <<: *dev
@@ -71,7 +70,6 @@ services:
       - ./src/shared:/app/src/shared
       - ./src/shared-ui:/app/src/shared-ui
       - /app/src/admin/node_modules
-      - /app/src/shared/node_modules
       - /app/src/shared-ui/node_modules
     depends_on:
       bugpin-server:
@@ -94,7 +92,6 @@ services:
       - ./src/shared:/app/src/shared
       - ./src/shared-ui:/app/src/shared-ui
       - /app/src/portal/node_modules
-      - /app/src/shared/node_modules
       - /app/src/shared-ui/node_modules
     depends_on:
       bugpin-server:
