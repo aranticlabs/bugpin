@@ -165,9 +165,13 @@ policy. Docker releases also use the same policy. Run
 
 If release age is the only failure, wait until the reported eligibility time or
 ask a repository admin to approve that run through **Review deployments**.
-Other failures still block CI. Fork PRs blocked by private EE access need help
-from a maintainer. Download or network failures require rerunning failed jobs;
-they do not create an age exception approval request.
+Other failures still block CI. PRs with unchanged dependency inputs pass without
+EE access. CE dependency, manifest, or check configuration changes validate the
+public CE lockfile. Changes to the EE revision or submodule configuration require
+both lockfiles; fork PRs making those changes need a trusted maintainer branch
+with EE access. Pushes to `dev`/`main`, manual runs, and Docker builds always
+validate both lockfiles. Download or network failures require rerunning failed
+jobs; they do not create an age exception approval request.
 
 The policy has three jobs: **Check dependency ages**, optional **Approve age
 exception**, and **Dependency policy**, which reports the final decision and

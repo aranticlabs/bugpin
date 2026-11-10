@@ -6,7 +6,7 @@
 #   sudo systemctl enable bugpin
 #   sudo systemctl start bugpin
 #
-# Full documentation: https://docs.bugpin.io/monitoring/systemd
+# Full documentation: https://docs.bugpin.io/installation/systemd
 
 [Unit]
 Description=BugPin - Self-hosted Bug Reporting & Feedback Widget

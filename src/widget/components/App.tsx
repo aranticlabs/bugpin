@@ -8,7 +8,8 @@ import { shouldSkipRecordingConsent, type ConsentMode } from './ScreenCaptureCon
 import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
-import { captureScreenshot, dataUrlToBlob } from '../capture/screenshot.js';
+import { captureScreenshot } from '../capture/screenshot.js';
+import { dataUrlToBlob } from '../lib/data-url.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
 import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
@@ -186,12 +187,13 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     const item: CapturedMedia = {
       id,
       blob: result.blob,
-      timestamp: new Date(),
+      timestamp: result.capturedAt ? new Date(result.capturedAt) : new Date(),
       annotated: false,
       mimeType: result.mimeType,
       width: result.width,
       height: result.height,
       durationMs: result.durationMs,
+      recordingQuality: result.recordingQuality,
       source: 'recording',
     };
     const nextMedia = [...mediaRef.current, item];
@@ -272,6 +274,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           annotated: false,
           mimeType: recovered.mimeType,
           durationMs: recovered.durationMs,
+          recordingQuality: recovered.recordingQuality,
+          width: recovered.width,
+          height: recovered.height,
           source: 'recording',
           recovered: true,
         };

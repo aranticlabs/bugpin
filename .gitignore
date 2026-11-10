@@ -53,7 +53,7 @@ Makefile
 
 # Development docs
 docs-dev/
-src/admin/prototypes/
+/src/admin/prototypes/
 
 # Testing
 coverage/

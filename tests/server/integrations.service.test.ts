@@ -36,10 +36,10 @@ const baseIntegration: Integration = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
-  source: 'widget',
-  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'medium',

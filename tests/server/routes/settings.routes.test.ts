@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
-import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
 import { settingsService } from '../../../src/server/services/settings.service';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { emailService } from '../../../src/server/services/email.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { cleanupService } from '../../../src/server/services/cleanup.service';
@@ -109,6 +109,41 @@ describe('settings routes', () => {
       headers: { cookie: 'session=sess_1' },
     });
     expect(res.status).toBe(200);
+  });
+
+  it('reports the Application URL and the request origin as BugPin derives it', async () => {
+    settingsCacheService.getAll = async () => ({
+      ...storedSettings,
+      appUrl: 'https://bugs.example.com',
+    });
+    const app = createApp();
+    const res = await app.request(
+      'http://localhost/settings/address-check',
+      {
+        headers: {
+          cookie: 'session=sess_1',
+          host: 'bugs.example.com',
+          'x-forwarded-proto': 'https',
+        },
+      },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      appUrl: 'https://bugs.example.com',
+      requestOrigin: 'http://bugs.example.com',
+      requiredTrustProxy: 'true',
+    });
+  });
+
+  it('refuses the address check to non-admins', async () => {
+    asRole('editor');
+    const app = createApp();
+    const res = await app.request('http://localhost/settings/address-check', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(403);
   });
 
   it('returns 500 when settings fetch fails', async () => {

@@ -703,6 +703,15 @@ export const handlers = [
   }),
 
   // Settings endpoints
+  http.get('/api/settings/address-check', ({ request }) => {
+    return HttpResponse.json({
+      success: true,
+      appUrl: '',
+      requestOrigin: new URL(request.url).origin,
+      requiredTrustProxy: null,
+    });
+  }),
+
   http.get('/api/settings', () => {
     return HttpResponse.json({
       success: true,

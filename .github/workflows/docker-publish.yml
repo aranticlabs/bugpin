@@ -78,6 +78,20 @@ jobs:
           username: ${{ vars.HARBOR_ROBOT_DEV }}
           password: ${{ secrets.HARBOR_KEY_DEV }}
 
+      # Floating tags (1.3, 1, latest) only move forward. Without this, publishing an older
+      # release again, or a patch for an older release line, would point them at an older
+      # version. If the check itself fails, all floating tags are moved as before.
+      - name: Decide which floating tags this release may move
+        id: floating
+        if: steps.check.outputs.is_dev == 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" 'v*' \
+            | sed 's#.*refs/tags/##' \
+            | bun run src/server/scripts/floating-image-tags.ts "${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v6
@@ -86,9 +100,11 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            # For production tags (v1.0.0) -> 1.0.0, latest
+            # For production tags (v1.0.0) -> 1.0.0, plus the floating tags 1.0, 1, latest
             type=semver,pattern={{version}},enable=${{ steps.check.outputs.is_dev == 'false' }}
-            type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.check.outputs.is_dev == 'false' && steps.floating.outputs.minor != 'false' }}
+            type=semver,pattern={{major}},enable=${{ steps.check.outputs.is_dev == 'false' && steps.floating.outputs.major != 'false' }}
+            type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' && steps.floating.outputs.latest != 'false' }}
             # For dev/beta tags (v1.0.1-dev, v1.0.1-beta.1) -> <version>, dev
             type=match,pattern=v(.*),group=1,enable=${{ steps.check.outputs.is_dev == 'true' }}
             type=raw,value=dev,enable=${{ steps.check.outputs.is_dev == 'true' }}

@@ -558,7 +558,7 @@ test('the default CLI requires the EE lockfile before querying the registry', as
   expect(stdout).not.toContain('Checked');
 });
 
-test('the required PR job checks both locks and checks out EE at the recorded submodule revision', async () => {
+test('the full dependency check checks out EE at the recorded submodule revision', async () => {
   const manifest = await Bun.file(new URL('../../package.json', import.meta.url)).json();
   const command: string = manifest.scripts['check:dependency-age'];
   expect(command.split(/\s+/)).toContain('bun.lock');
@@ -577,7 +577,7 @@ test('the required PR job checks both locks and checks out EE at the recorded su
   const steps = workflow.jobs.validate.steps;
   const checkout = steps.findIndex((step) => step.with?.repository === 'aranticlabs/bugpin-ee');
   const check = steps.findIndex((step) =>
-    step.run?.includes('bun run check:dependency-age --request-approval')
+    step.run?.includes('bun run src/server/scripts/check-dependency-age.ts')
   );
   expect(checkout).toBeGreaterThan(-1);
   expect(check).toBeGreaterThan(checkout);
@@ -607,4 +607,247 @@ test('merges lockfiles and reports registry failures without skipping remaining 
   expect(issues).toHaveLength(2);
   expect(issues[0].message).toStartWith('example@1.1.0:');
   expect(issues[1]).toEqual({ kind: 'validation', message: 'unavailable: Registry unavailable' });
+});
+
+test('dependency scope skips code-only PRs, checks CE independently, and keeps full checks outside PRs', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as {
+    on: { workflow_call: { secrets: { EE_ACCESS_TOKEN: { required: boolean } } } };
+    jobs: {
+      validate: {
+        outputs: { approval_required: string };
+        steps: Array<{
+          name: string;
+          id?: string;
+          run?: string;
+          if?: string;
+          with?: Record<string, unknown>;
+        }>;
+      };
+    };
+  };
+  const { steps, outputs } = policy.jobs.validate;
+  const scope = steps.find((step) => step.id === 'scope');
+  if (!scope?.run) throw new Error('Missing dependency scope selection');
+  expect(policy.on.workflow_call.secrets.EE_ACCESS_TOKEN.required).toBe(false);
+  expect(steps[0].with?.['fetch-depth']).toBe(0);
+  expect(outputs.approval_required).toBe(
+    "${{ steps.scope.outputs.check == 'none' && 'false' || steps.age.outputs.approval_required }}"
+  );
+  for (const name of [
+    'Verify EE access',
+    'Resolve pinned EE revision',
+    'Checkout pinned EE lockfile',
+  ]) {
+    expect(steps.find((step) => step.name === name)?.if).toBe("steps.scope.outputs.check == 'all'");
+  }
+  for (const name of ['Set up Bun', 'Test release age checks', 'Check dependency release age']) {
+    expect(steps.find((step) => step.name === name)?.if).toBe(
+      "steps.scope.outputs.check != 'none'"
+    );
+  }
+
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin dependency scope-'));
+  directories.push(directory);
+  await Bun.write(
+    join(directory, 'git'),
+    `#!/bin/bash
+set -euo pipefail
+printf '%s\\n' "$@" >> "$GIT_ARGUMENTS"
+test "$1" = diff
+test "$2" = --name-only
+test "$3" = base-revision
+test "$4" = HEAD
+test "$5" = --
+if [ "$#" = 7 ]; then
+  test "$6" = ee
+  test "$7" = .gitmodules
+  printf '%s' "$MOCK_EE_CHANGES"
+else
+  printf '%s' "$MOCK_CHANGES"
+fi
+exit "$MOCK_GIT_EXIT"
+`
+  );
+  chmodSync(join(directory, 'git'), 0o755);
+  for (const [event, changes, eeChanges, gitExit, expected] of [
+    ['pull_request', '', '', '0', 'none'],
+    ['pull_request', 'bun.lock', '', '0', 'ce'],
+    ['pull_request', 'src/admin/package.json', '', '0', 'ce'],
+    ['pull_request', '.github/workflows/dependency-age-policy.yml', '', '0', 'ce'],
+    ['pull_request', 'ee', 'ee', '0', 'all'],
+    ['pull_request', '.gitmodules', '.gitmodules', '0', 'all'],
+    ['pull_request', 'bun.lock\nee', 'ee', '0', 'all'],
+    ['pull_request', '', '', '128', 'failed'],
+    ['push', '', '', '128', 'all'],
+    ['workflow_dispatch', '', '', '128', 'all'],
+  ] as const) {
+    const output = join(directory, 'output');
+    const summary = join(directory, 'summary');
+    const argumentsFile = join(directory, 'arguments');
+    await Promise.all([output, summary, argumentsFile].map((path) => Bun.write(path, '')));
+    const child = Bun.spawn(['bash', '-e', '-c', scope.run], {
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        GITHUB_EVENT_NAME: event,
+        PR_BASE_SHA: 'base-revision',
+        GITHUB_OUTPUT: output,
+        GITHUB_STEP_SUMMARY: summary,
+        EE_ACCESS_TOKEN: '',
+        GIT_ARGUMENTS: argumentsFile,
+        MOCK_CHANGES: changes,
+        MOCK_EE_CHANGES: eeChanges,
+        MOCK_GIT_EXIT: gitExit,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (expected === 'failed') {
+      expect(code).not.toBe(0);
+      expect(await Bun.file(output).text()).toBe('');
+    } else {
+      expect(code).toBe(0);
+      expect(await Bun.file(output).text()).toBe(`check=${expected}\n`);
+      expect(await Bun.file(summary).text()).toBe(
+        expected === 'none' ? 'Dependency inputs unchanged; no release age check required.\n' : ''
+      );
+    }
+    const args = (await Bun.file(argumentsFile).text()).trim().split('\n');
+    if (event === 'pull_request') {
+      for (const path of [
+        'bun.lock',
+        'bun.lockb',
+        'package.json',
+        ':(glob)**/package.json',
+        'bunfig.toml',
+        ':(glob)**/bunfig.toml',
+        '.npmrc',
+        ':(glob)**/.npmrc',
+        'ee',
+        '.gitmodules',
+        '.github/workflows',
+        'src/server/scripts/check-dependency-age.ts',
+        'tests/server/dependency-age.test.ts',
+      ])
+        expect(args).toContain(path);
+    } else expect(await Bun.file(argumentsFile).text()).toBe('');
+  }
+});
+
+test('CE-only workflow validation runs without an EE lockfile and still blocks invalid metadata', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as { jobs: { validate: { steps: Array<{ id?: string; run?: string }> } } };
+  const step = policy.jobs.validate.steps.find((step) => step.id === 'age');
+  if (!step?.run) throw new Error('Missing dependency age check');
+  const directory = mkdtempSync(join(tmpdir(), 'bugpin scoped age-'));
+  directories.push(directory);
+  await Bun.write(join(directory, 'bun.lock'), lockfile('example@1.0.0'));
+  const script = decodeURIComponent(
+    new URL('../../src/server/scripts/check-dependency-age.ts', import.meta.url).pathname
+  );
+  const preload = join(directory, 'registry.ts');
+  await Bun.write(
+    preload,
+    `globalThis.fetch = async () => Response.json(JSON.parse(process.env.MOCK_METADATA!));`
+  );
+  await Bun.write(
+    join(directory, 'bun'),
+    `#!/bin/bash
+set -euo pipefail
+test "$1" = run
+test "$2" = src/server/scripts/check-dependency-age.ts
+shift 2
+exec "$BUN_EXECUTABLE" --preload "$REGISTRY_PRELOAD" "$AGE_SCRIPT" "$@"
+`
+  );
+  chmodSync(join(directory, 'bun'), 0o755);
+  for (const [scope, publishedAt, expected] of [
+    ['ce', '2026-01-01T00:00:00Z', 'passed'],
+    ['ce', new Date().toISOString(), 'approval'],
+    ['ce', 'invalid', 'failed'],
+    ['all', '2026-01-01T00:00:00Z', 'failed'],
+    ['all', '2026-01-01T00:00:00Z', 'passed'],
+  ] as const) {
+    if (scope === 'all' && expected === 'passed') {
+      await Bun.write(join(directory, 'ee/bun.lock'), lockfile('example@1.0.0'));
+    }
+    const output = join(directory, 'output');
+    const summary = join(directory, 'summary');
+    await Promise.all([output, summary].map((path) => Bun.write(path, '')));
+    const child = Bun.spawn(['bash', '-e', '-c', step.run], {
+      cwd: directory,
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        BUN_EXECUTABLE: process.execPath,
+        REGISTRY_PRELOAD: preload,
+        AGE_SCRIPT: script,
+        MOCK_METADATA: JSON.stringify({ time: { '1.0.0': publishedAt } }),
+        CHECK_SCOPE: scope,
+        EE_SHA: scope === 'all' ? 'pinned-ee-revision' : '',
+        GITHUB_SHA: 'ce-revision',
+        GITHUB_OUTPUT: output,
+        GITHUB_STEP_SUMMARY: summary,
+        EE_ACCESS_TOKEN: '',
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, , stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (expected === 'failed') {
+      expect(code).not.toBe(0);
+      expect(await Bun.file(output).text()).toBe('');
+      if (scope === 'all') expect(stderr).toContain('ee/bun.lock');
+    } else {
+      expect(code).toBe(0);
+      expect(await Bun.file(output).text()).toContain(
+        `approval_required=${expected === 'approval'}\n`
+      );
+    }
+    expect(await Bun.file(summary).text()).toContain(
+      scope === 'all'
+        ? 'EE: pinned-ee-revision'
+        : 'EE revision unchanged; checking CE dependencies only.'
+    );
+  }
+});
+
+test('full validation still requires EE access before checking private dependencies', async () => {
+  const policy = Bun.YAML.parse(
+    await Bun.file(
+      new URL('../../.github/workflows/dependency-age-policy.yml', import.meta.url)
+    ).text()
+  ) as { jobs: { validate: { steps: Array<{ name?: string; run?: string }> } } };
+  const guard = policy.jobs.validate.steps.find((step) => step.name === 'Verify EE access');
+  if (!guard?.run) throw new Error('Missing EE access verification');
+  for (const token of ['', 'test-token']) {
+    const child = Bun.spawn(['bash', '-e', '-c', guard.run], {
+      env: { ...process.env, EE_ACCESS_TOKEN: token },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(token ? 0 : 1);
+    if (!token) expect(stdout).toContain('trusted maintainer branch');
+  }
 });

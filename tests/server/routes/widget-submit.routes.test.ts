@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { buildSubmitFormData } from '../../../src/widget/api/submit-form';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { widgetRoutes } from '../../../src/server/routes/widget/submit';
@@ -262,6 +263,81 @@ describe('widget submit request body limit', () => {
       error: 'FILE_TOO_LARGE',
       details: { kind: 'video', limit: 100 * MB },
     });
+  });
+});
+
+describe('widget submit idle timeout', () => {
+  function createTimeoutEnv() {
+    const timeouts: number[] = [];
+    return {
+      timeouts,
+      env: {
+        timeout: (_request: Request, seconds: number) => {
+          timeouts.push(seconds);
+        },
+      },
+    };
+  }
+
+  it('keeps the server idle timeout for requests without a valid API key', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(res.status).toBe(401);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('keeps the server idle timeout for reports without a recording', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    const res = await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify(validSubmitBody),
+      },
+      env
+    );
+
+    expect(res.status).toBe(201);
+    expect(timeouts).toEqual([]);
+  });
+
+  it('extends the idle timeout to a finite bound once a recording has been received', async () => {
+    const { env, timeouts } = createTimeoutEnv();
+
+    await createApp().request(
+      'http://localhost/widget/submit',
+      {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: createVideoSubmitForm(
+          8,
+          'video/webm',
+          'rec.webm',
+          [0x1a, 0x45, 0xdf, 0xa3],
+          'recording'
+        ),
+      },
+      env
+    );
+
+    expect(timeouts).toEqual([255]);
   });
 });
 
@@ -551,6 +627,108 @@ describe('widget routes', () => {
       expect(res.status).toBe(201);
       expect(submittedFile?.mimeType).toBe('video/webm');
       expect(Array.from(submittedFile?.data.slice(0, 4) ?? [])).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    });
+
+    it.each([2000.4, 61234.7])(
+      'accepts the widget-built payload for a recovered duration of %s ms',
+      async (durationMs) => {
+        projectResult = {
+          ...baseProject,
+          settings: { screenshot: { enableScreenRecording: true } },
+        };
+        let submittedFiles: Parameters<typeof reportsService.create>[0]['files'];
+        reportsService.create = async (input) => {
+          submittedFiles = input.files;
+          return Result.ok(baseReport);
+        };
+        const { formData } = buildSubmitFormData({
+          ...validSubmitBody,
+          media: [
+            {
+              blob: new Blob([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])], {
+                type: 'video/mp4',
+              }),
+              mimeType: 'video/mp4',
+              source: 'recording',
+              recordingQuality: 'high',
+              durationMs,
+            },
+          ],
+        });
+        const response = await createApp().request('http://localhost/widget/submit', {
+          method: 'POST',
+          headers: { 'x-api-key': 'test_api_key_123' },
+          body: formData,
+        });
+        expect(response.status).toBe(201);
+        expect(submittedFiles).toMatchObject([
+          { recordingQuality: 'high', durationMs: Math.round(durationMs) },
+        ]);
+      }
+    );
+
+    it('matches attachment metadata by filename and keeps quality only for recordings', async () => {
+      projectResult = { ...baseProject, settings: { screenshot: { enableScreenRecording: true } } };
+      let submittedFiles: Parameters<typeof reportsService.create>[0]['files'];
+      reportsService.create = async (input) => {
+        submittedFiles = input.files;
+        return Result.ok(baseReport);
+      };
+      const form = new FormData();
+      form.set(
+        'data',
+        JSON.stringify({
+          ...validSubmitBody,
+          mediaMetadata: [
+            {
+              filename: 'recording.mp4',
+              recordingQuality: 'high',
+              width: 1920,
+              height: 1080,
+              durationMs: 24000,
+              capturedAt: '2026-11-08T14:00:00.000Z',
+            },
+            { filename: 'upload.mp4', recordingQuality: 'low', width: 800, height: 600 },
+          ],
+        })
+      );
+      const mp4 = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+      form.append('recording', new File([mp4], 'recording.mp4', { type: 'video/mp4' }));
+      form.append('media', new File([mp4], 'upload.mp4', { type: 'video/mp4' }));
+      const response = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'x-api-key': 'test_api_key_123' },
+        body: form,
+      });
+      expect(response.status).toBe(201);
+      expect(submittedFiles).toMatchObject([
+        { filename: 'upload.mp4', width: 800, height: 600, recordingQuality: undefined },
+        {
+          filename: 'recording.mp4',
+          recordingQuality: 'high',
+          width: 1920,
+          height: 1080,
+          durationMs: 24000,
+          capturedAt: '2026-11-08T14:00:00.000Z',
+        },
+      ]);
+    });
+
+    it.each([
+      { recordingQuality: 'ultra' },
+      { width: -1 },
+      { durationMs: -1 },
+      { capturedAt: 'invalid' },
+    ])('rejects invalid media metadata %j', async (metadata) => {
+      const response = await createApp().request('http://localhost/widget/submit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'test_api_key_123' },
+        body: JSON.stringify({
+          ...validSubmitBody,
+          mediaMetadata: [{ filename: 'clip.mp4', ...metadata }],
+        }),
+      });
+      expect(response.status).toBe(400);
     });
 
     it('marks only files from the recording field for remuxing', async () => {

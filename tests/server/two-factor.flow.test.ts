@@ -17,6 +17,7 @@ import { settingsCacheService } from '../../src/server/services/settings-cache.s
 import { authService } from '../../src/server/services/auth.service';
 import { twoFactorService } from '../../src/server/services/two-factor.service';
 import { loginChallengeService } from '../../src/server/services/login-challenge.service';
+import { invitationsService } from '../../src/server/services/invitations.service';
 import { generateTotpCode, timeStep } from '../../src/server/utils/totp';
 import { logger } from '../../src/server/utils/logger';
 import type { User } from '../../src/shared/types';
@@ -226,5 +227,15 @@ describe('two-factor policy', () => {
     const result = await twoFactorService.startTotpSetup(user, 'BugPin', 'wrong-password');
     expect(result.success ? undefined : result.code).toBe('INVALID_PASSWORD');
     expect(await twoFactorRepo.getTotp(user.id)).toBeNull();
+  });
+
+  it('refuses to send an invitation that would replace the password of an existing account', async () => {
+    await enableTotp(user);
+
+    const result = await invitationsService.resendInvitation(user.id, 'Another Admin');
+
+    expect(result.success ? undefined : result.code).toBe('NOT_INVITED');
+    const reloaded = await usersRepo.findById(user.id);
+    expect(reloaded?.invitationSentAt ?? null).toBeNull();
   });
 });

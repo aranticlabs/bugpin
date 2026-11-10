@@ -1023,6 +1023,29 @@ describe('ScreenRecordingPanel', () => {
     onDismissOversizedRecording: noop,
   };
 
+  it('shows each clip’s saved quality in the existing footer', async () => {
+    await mount(
+      <ScreenRecordingPanel
+        {...panelProps}
+        clips={[
+          {
+            ...clip('quality', 'recording'),
+            recordingQuality: 'high',
+            width: 1920,
+            height: 1080,
+          },
+        ]}
+      />
+    );
+    expect(container.textContent).not.toContain('Recording quality');
+    const footer = [...container.querySelectorAll('span')].find(
+      (span) => span.textContent === 'High · 1920 x 1080 · 1:05 · 1.0 MB'
+    )?.parentElement;
+    expect(footer?.classList.contains('border-t')).toBe(true);
+    expect(footer?.classList.contains('text-muted-foreground')).toBe(true);
+    expect(footer?.classList.contains('flex-wrap')).toBe(true);
+  });
+
   it('hides the microphone option unless an admin allows it', async () => {
     await mount(<ScreenRecordingPanel {...panelProps} />);
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();

@@ -35,6 +35,16 @@ function useIsMobile() {
   return !!isMobile;
 }
 
+function readSidebarCookie(): boolean | undefined {
+  const value = document.cookie
+    .split('; ')
+    .find((cookie) => cookie.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    ?.slice(SIDEBAR_COOKIE_NAME.length + 1);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
 type SidebarContext = {
   state: 'expanded' | 'collapsed';
   open: boolean;
@@ -95,7 +105,7 @@ const SidebarProvider = React.forwardRef<
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for controlled component.
-    const [_open, _setOpen] = React.useState(defaultOpen);
+    const [_open, _setOpen] = React.useState(() => readSidebarCookie() ?? defaultOpen);
     const open = openProp ?? _open;
     const setOpen = React.useCallback(
       (value: boolean | ((value: boolean) => boolean)) => {

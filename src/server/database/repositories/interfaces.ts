@@ -195,7 +195,10 @@ export interface IRecentReportsRepository {
 
 // File Repository Interface
 
-export interface CreateFileData {
+export interface CreateFileData extends Pick<
+  FileRecord,
+  'capturedAt' | 'durationMs' | 'recordingQuality'
+> {
   reportId: string;
   messageId?: string;
   uploadedByReporterId?: string;

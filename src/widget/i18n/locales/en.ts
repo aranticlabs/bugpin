@@ -74,6 +74,9 @@ const en = {
   'screenshot.action.download': 'Download',
   'screenshot.action.remove': 'Remove',
   'screenshot.helperText': 'Supported: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Low',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'High',
   'recording.helperText': 'Supported: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Unsupported image format: {type}',

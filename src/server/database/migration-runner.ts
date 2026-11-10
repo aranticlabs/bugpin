@@ -100,6 +100,13 @@ const migrations: Record<string, Migration> = {
       hasColumn(db, 'users', 'password_changed_at'),
     apply: addMissingColumns,
   },
+  '008_add_media_metadata.sql': {
+    isSatisfied: (db) =>
+      ['captured_at', 'duration_ms', 'recording_quality'].every((column) =>
+        hasColumn(db, 'files', column)
+      ),
+    apply: addMissingColumns,
+  },
   '009_add_account_access.sql': {
     isSatisfied: (db) =>
       hasColumn(db, 'users', 'api_access_enabled') &&

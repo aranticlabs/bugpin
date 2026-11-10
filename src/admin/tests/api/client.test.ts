@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { api, getApiErrorMessage, isApiError } from '../../api/client';
+import { api, getApiErrorMessage, isApiError, onSetupRequired } from '../../api/client';
 
 type ResponseHandler = (error: unknown) => Promise<unknown>;
 type RequestHandler = (config: Record<string, unknown>) => Record<string, unknown>;
@@ -80,6 +80,48 @@ describe('api client', () => {
     await promise;
 
     expect(requestSpy).toHaveBeenCalledWith({ _retryCount: 1 });
+  });
+
+  it.each([
+    ['post', 429],
+    ['post', 502],
+    ['put', 503],
+    ['patch', 500],
+    ['delete', 504],
+  ])('does not retry a %s request that failed with %i', async (method, status) => {
+    const handler = getResponseHandler();
+    const requestSpy = vi.spyOn(api, 'request').mockResolvedValue({ data: { ok: true } });
+
+    const error = {
+      config: { _retryCount: 0, method },
+      response: { status },
+    };
+
+    await expect(handler(error)).rejects.toBe(error);
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('notifies listeners when the server requires a setup step', async () => {
+    const handler = getResponseHandler();
+    const listener = vi.fn();
+    const unsubscribe = onSetupRequired(listener);
+
+    const setupError = {
+      config: { _retryCount: 0, method: 'get' },
+      response: { status: 403, data: { error: 'TWO_FACTOR_SETUP_REQUIRED' } },
+    };
+    await expect(handler(setupError)).rejects.toBe(setupError);
+
+    const forbidden = {
+      config: { _retryCount: 0, method: 'get' },
+      response: { status: 403, data: { error: 'FORBIDDEN' } },
+    };
+    await expect(handler(forbidden)).rejects.toBe(forbidden);
+
+    unsubscribe();
+    await expect(handler(setupError)).rejects.toBe(setupError);
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry on non-retryable status', async () => {

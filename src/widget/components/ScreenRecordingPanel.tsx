@@ -12,7 +12,7 @@ import {
 } from './MediaPanelShared';
 import {
   downloadMedia,
-  formatVideoMeta,
+  formatMediaMeta,
   VideoPreview,
   type CapturedMedia,
 } from './ScreenshotManager.js';
@@ -230,7 +230,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
                   </div>
                   <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-1.5 text-xs text-muted-foreground border-t border-solid border-border">
                     <span>{formatTimestamp(clip.timestamp)}</span>
-                    <span class="tabular-nums">{formatVideoMeta(clip)}</span>
+                    <span class="min-w-0 break-words tabular-nums">{formatMediaMeta(clip)}</span>
                   </div>
                   <div class="flex gap-1 px-2 py-1.5 border-t border-solid border-border bg-muted">
                     <Button
