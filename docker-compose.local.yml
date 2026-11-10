@@ -11,6 +11,7 @@ x-dev: &dev
 services:
   bugpin-server:
     <<: *dev
+    container_name: bugpin-server-local
     command: bun run dev:server
     environment:
       <<: *environment
@@ -46,6 +47,7 @@ services:
 
   bugpin-widget:
     <<: *dev
+    container_name: bugpin-widget-local
     command: bun run dev:widget
     volumes:
       - ./src/widget:/app/src/widget
@@ -55,6 +57,7 @@ services:
 
   bugpin-admin:
     <<: *dev
+    container_name: bugpin-admin-local
     command: bun run dev:admin
     environment:
       <<: *environment
@@ -78,6 +81,7 @@ services:
 
   bugpin-portal:
     <<: *dev
+    container_name: bugpin-portal-local
     command: bun run dev:portal
     environment:
       <<: *environment
