@@ -1,0 +1,29 @@
+location = /reporter-portal { return 301 /reporter-portal/; }
+
+location /reporter-portal/assets/ {
+    include /etc/nginx/conf.d/shared/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+}
+
+location = /reporter-portal/index.html {
+    set $gated_frontend portal;
+    auth_request /internal/frontend-gate;
+    include /etc/nginx/conf.d/shared/security-headers.conf;
+    add_header Strict-Transport-Security $gate_hsts always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'" always;
+    add_header Cache-Control no-store always;
+}
+
+location ~* ^/reporter-portal/.*\.html$ { return 404; }
+
+location /reporter-portal/ {
+    include /etc/nginx/conf.d/shared/security-headers.conf;
+    try_files $uri $uri/ /reporter-portal/index.html;
+}
+
+location = /api/portal/events {
+    include /etc/nginx/conf.d/shared/proxy-defaults.conf;
+    proxy_buffering off;
+    proxy_cache off;
+}

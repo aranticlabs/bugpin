@@ -1,0 +1,48 @@
+include /etc/nginx/conf.d/shared/upstream.conf;
+
+server {
+    listen 7300;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    set $bugpin_frontend admin;
+    if ($unsafe_path) { return 400; }
+    absolute_redirect off;
+    client_max_body_size 512m;
+    client_body_timeout 300s;
+    include /etc/nginx/conf.d/shared/real-ip.conf;
+    include /etc/nginx/conf.d/shared/frontend-gate.conf;
+    include /etc/nginx/conf.d/shared/portal-locations.conf;
+
+    location = /admin-health {
+        if ($remote_addr != 127.0.0.1) { return 404; }
+        access_log off;
+        return 200 "ok\n";
+    }
+    location = / { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location = /health { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location /api/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location /branding/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location /admin/branding/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location = /widget.js { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location = /admin { return 301 /admin/; }
+
+    location /admin/assets/ {
+        include /etc/nginx/conf.d/shared/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+    location = /admin/index.html {
+        set $gated_frontend admin;
+        auth_request /internal/frontend-gate;
+        include /etc/nginx/conf.d/shared/security-headers.conf;
+        add_header Strict-Transport-Security $gate_hsts always;
+        add_header Cache-Control no-cache always;
+    }
+    location ~* ^/admin/.*\.html$ { return 404; }
+    location /admin/ {
+        include /etc/nginx/conf.d/shared/security-headers.conf;
+        try_files $uri $uri/ /admin/index.html;
+    }
+    location / { return 404; }
+}

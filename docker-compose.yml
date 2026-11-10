@@ -1,49 +1,64 @@
-# BugPin - Self-hosted Bug Reporting & Feedback Widget
-# https://github.com/aranticlabs/bugpin
-#
-# Quick start:
-#   docker compose up -d
-#
+# BugPin with Docker Compose: docker compose up -d
 # Access: http://localhost:7300
-# First login: ADMIN_EMAIL / ADMIN_PASSWORD below (defaults: admin@example.com / changeme123).
+# First login defaults: admin@example.com / changeme123.
 # The initial password works once; BugPin asks for a new one after the first login.
-#
-# Update:
-#   docker compose pull && docker compose up -d
+# Update: docker compose pull && docker compose up -d
+# Enable the dedicated portal frontend: docker compose --profile separate-portal up -d
+# Set Portal Base URL to its HTTPS origin in the Admin Console.
+
+x-frontend: &frontend
+  restart: unless-stopped
+  environment:
+    BUGPIN_PUBLIC_SCHEME: ${BUGPIN_PUBLIC_SCHEME:-http}
+    BUGPIN_RESOLVER: ${BUGPIN_RESOLVER:-127.0.0.11}
+    BUGPIN_TRUSTED_PROXIES: ${BUGPIN_TRUSTED_PROXIES:-}
+  volumes:
+    - bugpin-proxy:/run/bugpin:ro
+  depends_on:
+    bugpin-server:
+      condition: service_healthy
+      restart: true
 
 services:
-  bugpin:
-    image: registry.arantic.cloud/bugpin/bugpin:latest
-    container_name: bugpin
+  bugpin-server:
+    container_name: bugpin-server
+    image: registry.arantic.cloud/bugpin/bugpin-server:latest
     restart: unless-stopped
-    ports:
-      - "7300:7300"
+    environment:
+      # Set to debug for verbose logging (default: info).
+      LOG_LEVEL: info
+      # Initial admin account, used only when no users exist yet.
+      # ADMIN_EMAIL: admin@example.com
+      # ADMIN_PASSWORD: choose-a-strong-initial-password
+      # Ignore Enforce HTTPS temporarily to recover without a TLS proxy.
+      # Remove this override after correcting the setting.
+      # DISABLE_HTTPS_ENFORCEMENT: 'true'
+      PORT: '4300'
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      TRUST_PROXY: token
+      PROXY_TOKEN_FILE: /run/bugpin/proxy-token
+    expose:
+      - '4300'
     volumes:
       - ./data:/data
-      # Alternative: use named volume
-      # - bugpin-data:/data
-    environment:
-      # Set to "debug" for verbose logging (default: info)
-      - LOG_LEVEL=info
-      # Initial admin account, used only when no users exist yet
-      # - ADMIN_EMAIL=admin@example.com
-      # - ADMIN_PASSWORD=choose-a-strong-initial-password
-      # Which proxies may set X-Forwarded-For: auto (loopback and private networks, default
-      # when unset), true (any proxy) or false (none). This quick start publishes port 7300
-      # without a proxy, so forwarded headers are ignored. Switch to auto behind a reverse
-      # proxy such as the Traefik example below.
-      - TRUST_PROXY=false
-      # Ignore the "Enforce HTTPS" setting, for example after it locked you out without a TLS
-      # proxy. Remove it again once the setting is turned off.
-      # - DISABLE_HTTPS_ENFORCEMENT=true
+      - bugpin-proxy:/run/bugpin
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7300/health"]
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4300/health']
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
 
-    # Traefik reverse proxy example (uncomment to use, and set TRUST_PROXY=auto above)
+  bugpin-admin:
+    <<: *frontend
+    container_name: bugpin-admin
+    image: registry.arantic.cloud/bugpin/bugpin-admin:latest
+    ports:
+      - '7300:7300'
+    # Traefik: route to this frontend, keeping the server port private.
+    # Set BUGPIN_PUBLIC_SCHEME=https and BUGPIN_TRUSTED_PROXIES to Traefik's IP/CIDR.
+    # Publish on 127.0.0.1 or remove ports when using a shared proxy network.
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.bugpin.rule=Host(`bugpin.yourdomain.com`)"
@@ -51,13 +66,35 @@ services:
     #   - "traefik.http.routers.bugpin.tls.certresolver=letsencrypt"
     #   - "traefik.http.services.bugpin.loadbalancer.server.port=7300"
     # networks:
+    #   - default
     #   - traefik
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:7300/admin-health']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
-# Uncomment if using Traefik or external network
+  bugpin-portal:
+    <<: *frontend
+    container_name: bugpin-portal
+    image: registry.arantic.cloud/bugpin/bugpin-portal:latest
+    profiles:
+      - separate-portal
+    ports:
+      - '7310:7310'
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:7310/portal-health']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  bugpin-proxy:
+
+# Uncomment when using an external Traefik network. Add the portal frontend to it too
+# and give it its own router and service on port 7310 when enabling separate-portal.
 # networks:
 #   traefik:
 #     external: true
-
-# Uncomment if using named volumes
-# volumes:
-#   bugpin-data:

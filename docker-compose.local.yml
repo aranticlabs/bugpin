@@ -1,0 +1,97 @@
+# Local development: docker compose -f docker-compose.local.yml up --build -V
+# -V renews anonymous node_modules volumes after rebuilding dependencies.
+x-dev: &dev
+  build:
+    context: .
+    target: dev
+  init: true
+  environment: &environment
+    NODE_ENV: development
+
+services:
+  bugpin-server:
+    <<: *dev
+    command: bun run dev:server
+    environment:
+      <<: *environment
+      PORT: '4300'
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      TRUST_PROXY: 'false'
+    expose:
+      - '4300'
+    volumes:
+      - ./data:/data
+      - ./src/server:/app/src/server
+      - ./src/shared:/app/src/shared
+      - ./src/widget:/app/src/widget
+      # Empty in CE-only checkouts.
+      - ./ee:/app/ee
+      - ./src/admin/public/branding:/app/src/admin/public/branding:ro
+      - /app/src/server/node_modules
+      - /app/src/shared/node_modules
+      - /app/src/widget/node_modules
+      - /app/ee/node_modules
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:4300/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  bugpin-widget:
+    <<: *dev
+    command: bun run dev:widget
+    volumes:
+      - ./src/widget:/app/src/widget
+      - ./src/shared:/app/src/shared
+      - /app/src/widget/node_modules
+      - /app/src/shared/node_modules
+
+  bugpin-admin:
+    <<: *dev
+    command: bun run dev:admin
+    environment:
+      <<: *environment
+      BUGPIN_DEV_HOST: 0.0.0.0
+      BUGPIN_API_PROXY_TARGET: http://bugpin-server:4300
+      BUGPIN_PORTAL_DEV_TARGET: http://bugpin-portal:7310
+    ports:
+      - '127.0.0.1:7300:7300'
+    volumes:
+      - ./src/admin:/app/src/admin
+      - ./src/shared:/app/src/shared
+      - ./src/shared-ui:/app/src/shared-ui
+      - /app/src/admin/node_modules
+      - /app/src/shared/node_modules
+      - /app/src/shared-ui/node_modules
+    depends_on:
+      bugpin-server:
+        condition: service_healthy
+      bugpin-portal:
+        condition: service_started
+
+  bugpin-portal:
+    <<: *dev
+    command: bun run dev:portal
+    environment:
+      <<: *environment
+      BUGPIN_DEV_HOST: 0.0.0.0
+      BUGPIN_API_PROXY_TARGET: http://bugpin-server:4300
+    ports:
+      - '127.0.0.1:7310:7310'
+    volumes:
+      - ./src/portal:/app/src/portal
+      - ./src/shared:/app/src/shared
+      - ./src/shared-ui:/app/src/shared-ui
+      - /app/src/portal/node_modules
+      - /app/src/shared/node_modules
+      - /app/src/shared-ui/node_modules
+    depends_on:
+      bugpin-server:
+        condition: service_healthy

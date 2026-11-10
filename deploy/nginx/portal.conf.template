@@ -1,0 +1,26 @@
+include /etc/nginx/conf.d/shared/upstream.conf;
+
+server {
+    listen 7310;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    set $bugpin_frontend portal;
+    if ($unsafe_path) { return 400; }
+    absolute_redirect off;
+    client_max_body_size 512m;
+    client_body_timeout 300s;
+    include /etc/nginx/conf.d/shared/real-ip.conf;
+    include /etc/nginx/conf.d/shared/frontend-gate.conf;
+    include /etc/nginx/conf.d/shared/portal-locations.conf;
+
+    location = /portal-health {
+        if ($remote_addr != 127.0.0.1) { return 404; }
+        access_log off;
+        return 200 "ok\n";
+    }
+    location = / { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location /api/portal/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location /branding/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location / { return 404; }
+}

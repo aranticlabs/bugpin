@@ -3,6 +3,8 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
+const apiProxyTarget = process.env.BUGPIN_API_PROXY_TARGET ?? 'http://localhost:4300';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -32,11 +34,12 @@ export default defineConfig({
   },
   build: { outDir: '../../dist/portal', emptyOutDir: true, sourcemap: false },
   server: {
-    port: 7302,
+    host: process.env.BUGPIN_DEV_HOST ?? 'localhost',
+    port: 7310,
     strictPort: true,
     proxy: {
-      '/api/portal': { target: 'http://localhost:7301', changeOrigin: true, xfwd: true },
-      '/branding': { target: 'http://localhost:7301', changeOrigin: true },
+      '/api/portal': { target: apiProxyTarget, changeOrigin: false, xfwd: false },
+      '/branding': { target: apiProxyTarget, changeOrigin: false, xfwd: false },
     },
   },
   test: {

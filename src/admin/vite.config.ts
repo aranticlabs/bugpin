@@ -9,6 +9,8 @@ const packageJson = JSON.parse(
   readFileSync(path.resolve(import.meta.dirname, '../../package.json'), 'utf-8')
 );
 
+const apiProxyTarget = process.env.BUGPIN_API_PROXY_TARGET ?? 'http://localhost:4300';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
@@ -58,30 +60,36 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
   },
   server: {
+    host: process.env.BUGPIN_DEV_HOST ?? 'localhost',
     port: 7300,
     strictPort: true,
     proxy: {
-      '/api': {
-        target: 'http://localhost:7301',
+      '/reporter-portal': {
+        target: process.env.BUGPIN_PORTAL_DEV_TARGET ?? 'http://localhost:7310',
         changeOrigin: false,
-        xfwd: true,
+        xfwd: false,
+        ws: true,
+      },
+      '/api': {
+        target: apiProxyTarget,
+        changeOrigin: false,
+        xfwd: false,
       },
       '/branding': {
-        target: 'http://localhost:7301',
-        changeOrigin: true,
+        target: apiProxyTarget,
+        changeOrigin: false,
+        xfwd: false,
       },
       '/admin/branding': {
-        target: 'http://localhost:7301',
-        changeOrigin: true,
+        target: apiProxyTarget,
+        changeOrigin: false,
+        xfwd: false,
         rewrite: (path) => path.replace(/^\/admin/, ''),
       },
-      '/test-widget': {
-        target: 'http://localhost:7301',
-        changeOrigin: true,
-      },
       '/widget.js': {
-        target: 'http://localhost:7301',
-        changeOrigin: true,
+        target: apiProxyTarget,
+        changeOrigin: false,
+        xfwd: false,
       },
     },
   },
