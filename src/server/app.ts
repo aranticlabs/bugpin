@@ -2,9 +2,11 @@ import { Hono, Context, Next } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestBodyLimit } from './middleware/body-limit.js';
+import { internalRoutes } from './routes/internal.js';
 import { createApiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
+import { proxyTrust } from './middleware/proxy-trust.js';
 import { hostRouting } from './middleware/host-routing.js';
 import { portalCsp } from './middleware/portal-csp.js';
 import { config } from './config.js';
@@ -24,6 +26,7 @@ export function createApp(): Hono {
 
   // Global Middleware
 
+  app.use('*', proxyTrust);
   app.use('*', hostRouting);
 
   // Host validation precedes redirects so unknown hosts cannot influence their destination.
@@ -70,6 +73,8 @@ export function createApp(): Hono {
   app.use('*', requestBodyLimit);
 
   // Routes
+
+  app.route('/internal', internalRoutes);
 
   // Health check
   app.get('/health', (c) => {

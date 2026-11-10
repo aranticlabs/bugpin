@@ -15,8 +15,11 @@ const configSchema = z.object({
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
   adminEmail: z.string().email('ADMIN_EMAIL must be a valid email address'),
   adminPassword: z.string().min(8, 'ADMIN_PASSWORD must be at least 8 characters'),
-  trustProxy: z.enum(['auto', 'always', 'never'], {
-    message: 'TRUST_PROXY must be auto, true or false',
+  port: z.coerce.number().int().min(1).max(65535),
+  host: z.string().min(1),
+  proxyTokenFile: z.string().optional(),
+  trustProxy: z.enum(['auto', 'always', 'never', 'token'], {
+    message: 'TRUST_PROXY must be auto, true, false or token',
   }),
 });
 
@@ -95,6 +98,9 @@ function loadConfig() {
     adminEmail: readEnv('ADMIN_EMAIL')?.trim() ?? DEFAULT_ADMIN_EMAIL,
     adminPassword: readEnv('ADMIN_PASSWORD') ?? DEFAULT_ADMIN_PASSWORD,
     trustProxy: parseTrustProxy(readEnv('TRUST_PROXY')),
+    port: readEnv('PORT') ?? (isDevelopment ? 4300 : 7300),
+    host: readEnv('HOST') ?? '0.0.0.0',
+    proxyTokenFile: readEnv('PROXY_TOKEN_FILE'),
   };
 
   const parsed = configSchema.parse(env);
@@ -103,9 +109,6 @@ function loadConfig() {
     ...parsed,
     // Escape hatch for an instance locked out by the "Enforce HTTPS" setting
     disableHttpsEnforcement: readEnv('DISABLE_HTTPS_ENFORCEMENT')?.trim().toLowerCase() === 'true',
-    // Hardcoded values (port 7301 in dev for Vite proxy, 7300 in production)
-    port: isDevelopment ? 7301 : 7300,
-    host: '0.0.0.0',
     adminEmail: parsed.adminEmail.toLowerCase(),
     // Derived values
     version: VERSION,

@@ -77,6 +77,7 @@ describe('TRUST_PROXY', () => {
     ['true', 'always'],
     ['TRUE', 'always'],
     ['false', 'never'],
+    ['token', 'token'],
   ])('maps %s to %s', (value, expected) => {
     const result = loadAdminConfig(value === undefined ? {} : { TRUST_PROXY: value });
     expect(result.exitCode).toBe(0);
@@ -86,6 +87,6 @@ describe('TRUST_PROXY', () => {
   it('refuses to start with an unknown value', () => {
     const result = loadAdminConfig({ TRUST_PROXY: 'sometimes' });
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('TRUST_PROXY must be auto, true or false');
+    expect(result.stderr).toContain('TRUST_PROXY must be auto, true, false or token');
   });
 });
