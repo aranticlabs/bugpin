@@ -1,5 +1,6 @@
 /* Tailwind v4 - Shadow DOM provides style isolation */
 @import 'tailwindcss';
+@source not '../dist';
 
 /* Dark mode variant for .bugpin-theme-dark */
 /* @custom-variant is a Tailwind CSS v4 feature - ignore unknown at-rule warning */

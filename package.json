@@ -31,7 +31,7 @@
     "typecheck:widget": "bun run --cwd src/widget typecheck",
     "typecheck:ee": "bun run src/server/scripts/check-ee.ts typecheck",
     "test": "bun run test:server && bun run test:admin && bun run test:widget && bun run test:ee && bun run test:portal",
-    "test:server": "bun test tests/server tests/shared",
+    "test:server": "bun test tests/server tests/shared tests/fixtures/nginx-config.test.ts",
     "test:admin": "bun run --cwd src/admin test",
     "test:widget": "bun run --cwd src/widget test",
     "test:ee": "bun run src/server/scripts/check-ee.ts test",

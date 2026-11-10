@@ -17,6 +17,8 @@ uploads/
 # Environment variables
 .env
 .env.*
+!.env.example
+!deploy/.env.portal-host.example
 
 # Scripts with credentials
 /scripts/
@@ -47,9 +49,6 @@ GEMINI.md
 
 # Obsidian files
 .obsidian/
-
-# Build automation
-Makefile
 
 # Development docs
 docs-dev/

@@ -1,0 +1,26 @@
+auth_request_set $gate_status $frontend_gate_status;
+auth_request_set $gate_location $upstream_http_x_bugpin_gate_location;
+auth_request_set $gate_hsts $upstream_http_x_bugpin_gate_hsts;
+error_page 403 = @frontend-denied;
+
+location = /internal/frontend-gate {
+    internal;
+    include /etc/nginx/conf.d/shared/proxy-defaults.conf;
+    proxy_intercept_errors on;
+    error_page 421 =403 @frontend-token-denied;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header X-BugPin-Gated-Frontend $gated_frontend;
+    proxy_set_header X-BugPin-Original-URI $request_uri;
+}
+
+location @frontend-token-denied { return 403; }
+
+location ^~ /internal/ { return 404; }
+
+location @frontend-denied {
+    include /etc/nginx/conf.d/shared/security-headers.conf;
+    if ($gate_status = 301) { return 301 $gate_location; }
+    if ($gate_status = 421) { return 421; }
+    return 404;
+}

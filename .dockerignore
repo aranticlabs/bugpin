@@ -29,6 +29,7 @@ Thumbs.db
 
 # Environment files (use Docker env vars instead)
 .env
+**/.env
 .env.local
 .env.*.local
 

@@ -37,7 +37,8 @@ it('allows HTTP only for loopback and development suffixes', () => {
   config.isDev = false;
   for (const url of [
     'https://example.com',
-    'http://localhost:7301',
+    'http://localhost:4300',
+    'http://127.0.0.1:7310',
     'http://127.2.3.4',
     'http://[::1]',
   ])

@@ -870,7 +870,7 @@ it('uses strict effective-origin equality for staff bootstrap and ignores untrus
   await settingsRepo.updateAll({ appUrl: '' });
   settingsCacheService.invalidate();
   const first = await report();
-  const url = `http://localhost:7301/api/reports/${first.id}/owner`;
+  const url = `http://localhost:4300/api/reports/${first.id}/owner`;
   const headers = {
     Cookie: cookies.admin,
     Origin: 'http://localhost:7300',

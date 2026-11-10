@@ -1,0 +1,16 @@
+resolver ${BUGPIN_RESOLVER} valid=10s;
+
+upstream bugpin_backend {
+    zone bugpin_backend 256k;
+    server ${BUGPIN_SERVER_ADDRESS} resolve;
+}
+
+map $request_uri $unsafe_path {
+    default 0;
+    "~*^[^?]*(\\x5c|%5c|%2f|%2e)" 1;
+}
+
+map $upstream_status $frontend_gate_status {
+    default $upstream_http_x_bugpin_gate_status;
+    421 421;
+}

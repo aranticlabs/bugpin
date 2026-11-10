@@ -1,11 +1,25 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent } from '../../components/ui/card';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Switch } from '../../components/ui/switch';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Copy, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { SettingRow, SettingRows } from '../../components/ui/setting-row';
 import { SettingsCard } from '../../components/ui/settings-card';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../../components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -24,6 +38,7 @@ import {
   type PasswordPolicy,
 } from '@shared/password-policy';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useProxyToken } from '../../hooks/useProxyToken';
 import {
   useDraft,
   useSettings,
@@ -256,6 +271,119 @@ export function NetworkSettingsCard() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+export function ProxyTokenCard() {
+  const { data, isPending, isError, refetch, regenerate } = useProxyToken();
+  const [revealed, setRevealed] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  if (isPending || data?.enabled === false) return null;
+
+  const copyToken = async () => {
+    if (!data?.enabled) return;
+    try {
+      await navigator.clipboard.writeText(data.token);
+      toast.success('Proxy token copied');
+    } catch {
+      toast.error('Could not copy the token. Reveal it and copy it manually.');
+    }
+  };
+
+  return (
+    <SettingsCard
+      title="Proxy token"
+      description="Connects frontend containers, such as a Reporter Portal on a separate host, to the server."
+    >
+      {isError ? (
+        <div className="space-y-3">
+          <Alert variant="destructive">
+            <AlertDescription>Unable to load the proxy token.</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : (
+        data?.enabled && (
+          <div className="space-y-4">
+            {data.warning && (
+              <Alert variant="destructive">
+                <AlertDescription>{data.warning}</AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="proxy-token">Token</Label>
+              <div className="flex min-w-0 items-center gap-2">
+                <Input
+                  id="proxy-token"
+                  type={revealed ? 'text' : 'password'}
+                  value={data.token}
+                  readOnly
+                  autoComplete="off"
+                  className="min-w-0 font-mono"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label={revealed ? 'Hide token' : 'Reveal token'}
+                  disabled={regenerate.isPending}
+                  onClick={() => setRevealed(!revealed)}
+                >
+                  {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Copy token"
+                  disabled={regenerate.isPending}
+                  onClick={() => void copyToken()}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <AlertDialog
+              open={confirmOpen}
+              onOpenChange={(open) => {
+                if (!regenerate.isPending) setConfirmOpen(open);
+              }}
+            >
+              <AlertDialogTrigger asChild>
+                <Button variant="outline-destructive">Regenerate</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Regenerate proxy token?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The old token stops working immediately. Frontend containers on the same host
+                    need a restart. A portal container on a separate host needs the new token.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={regenerate.isPending}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    disabled={regenerate.isPending}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (regenerate.isPending) return;
+                      setRevealed(false);
+                      regenerate.mutate(undefined, { onSuccess: () => setConfirmOpen(false) });
+                    }}
+                  >
+                    {regenerate.isPending ? 'Regenerating...' : 'Regenerate token'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )
+      )}
+    </SettingsCard>
   );
 }
 
