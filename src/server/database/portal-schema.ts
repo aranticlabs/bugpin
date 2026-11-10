@@ -3,23 +3,23 @@ import * as path from 'node:path';
 import { config } from '../config.js';
 
 export const REPORTERS_SCHEMA = fs.readFileSync(
-  path.join(config.migrationsDir, '018_add_reporters.sql'),
+  path.join(config.migrationsDir, '014_add_reporters.sql'),
   'utf8'
 );
 export const REPORTS_SCHEMA = fs.readFileSync(
-  path.join(config.migrationsDir, '019_rebuild_reports_for_portal.sql'),
+  path.join(config.migrationsDir, '015_rebuild_reports_for_portal.sql'),
   'utf8'
 );
 export const REPORT_HISTORY_SCHEMA = fs.readFileSync(
-  path.join(config.migrationsDir, '020_rebuild_report_history_actions.sql'),
+  path.join(config.migrationsDir, '016_rebuild_report_history_actions.sql'),
   'utf8'
 );
 export const REPORT_MESSAGES_SCHEMA = fs.readFileSync(
-  path.join(config.migrationsDir, '021_add_report_messages.sql'),
+  path.join(config.migrationsDir, '017_add_report_messages.sql'),
   'utf8'
 );
 export const FILE_MESSAGE_SCHEMA = fs.readFileSync(
-  path.join(config.migrationsDir, '022_add_file_message_links.sql'),
+  path.join(config.migrationsDir, '018_add_file_message_links.sql'),
   'utf8'
 );
 

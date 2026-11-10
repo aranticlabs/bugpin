@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { initDatabase, initSchema, runMigrations, closeDatabase } from './database/database.js';
+import { proxyTokenService } from './services/proxy-token.service.js';
 import { authService } from './services/auth.service.js';
 import { cleanupService } from './services/cleanup.service.js';
 import { syncQueueService } from './services/integrations/sync-queue.service.js';
@@ -13,6 +14,11 @@ import { MAX_REQUEST_BODY_SIZE } from './utils/request-limits.js';
 
 async function main(): Promise<void> {
   logger.info('Starting BugPin server...');
+
+  if (config.trustProxy === 'token') {
+    const proxyToken = proxyTokenService.initialize();
+    if (!proxyToken.success) throw new Error(proxyToken.error);
+  }
 
   // Database Initialization
   logger.info('Initializing database...');

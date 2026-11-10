@@ -467,7 +467,6 @@ export function EmailTemplates() {
   if (!isLicensed) {
     return (
       <UpgradePrompt
-        feature="custom-templates"
         title="Email Templates"
         description="Customize the email notification templates sent to users. Personalize subject lines, content, and styling to match your brand."
       />

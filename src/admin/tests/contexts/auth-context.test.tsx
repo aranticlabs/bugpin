@@ -6,10 +6,18 @@ import { AuthProvider, useAuth } from '../../contexts/AuthContext';
 import { api } from '../../api/client';
 import type { User } from '@shared/types';
 
+const setupRequiredListeners = vi.hoisted(() => new Set<() => void>());
+
 vi.mock('../../api/client', () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+  },
+  onSetupRequired: (listener: () => void) => {
+    setupRequiredListeners.add(listener);
+    return () => {
+      setupRequiredListeners.delete(listener);
+    };
   },
 }));
 
@@ -212,5 +220,40 @@ describe('AuthProvider', () => {
       expect(screen.getByTestId('can-load-data').textContent).toBe('true');
     });
     expect(queryClient.getDefaultOptions().queries?.enabled).toBe(true);
+  });
+
+  it('reloads the user once when the server starts requiring a setup step mid-session', async () => {
+    let resolveRefresh: (value: unknown) => void = () => undefined;
+    apiMock.get
+      .mockResolvedValueOnce({
+        data: { success: true, authenticated: true, user: baseUser },
+      })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        })
+      );
+
+    renderAuth();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('can-load-data').textContent).toBe('true');
+    });
+
+    setupRequiredListeners.forEach((listener) => listener());
+    setupRequiredListeners.forEach((listener) => listener());
+    resolveRefresh({
+      data: {
+        success: true,
+        authenticated: true,
+        user: { ...baseUser, twoFactorSetupRequired: true },
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('can-load-data').textContent).toBe('false');
+    });
+    setupRequiredListeners.forEach((listener) => listener());
+    expect(apiMock.get).toHaveBeenCalledTimes(2);
   });
 });

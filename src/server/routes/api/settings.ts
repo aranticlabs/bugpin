@@ -1,6 +1,9 @@
 import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { config } from '../../config.js';
+import { proxyTokenService } from '../../services/proxy-token.service.js';
+import { staffOriginCheck } from '../../middleware/origin-check.js';
 import { settingsService } from '../../services/settings.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { emailService } from '../../services/email.service.js';
@@ -15,6 +18,7 @@ import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, validatedBody, schemas } from '../../middleware/validate.js';
 import { requireEEFeature, hasEEFeature } from '../../utils/ee.js';
 import { errorStatus } from '../../utils/http-status.js';
+import { getEffectiveOrigin, requiredTrustProxy } from '../../utils/client-ip.js';
 import type { EmailTemplateType } from '@shared/types';
 
 // Email template routes require 'custom-templates' EE feature
@@ -22,8 +26,46 @@ const requireEmailTemplates = requireEEFeature('custom-templates');
 
 const settings = new Hono();
 
+settings.use('/proxy-token', async (c, next) => {
+  c.header('Cache-Control', 'no-store');
+  await next();
+});
+settings.use('/proxy-token/*', async (c, next) => {
+  c.header('Cache-Control', 'no-store');
+  await next();
+});
+
 // All settings routes require authentication
 settings.use('*', authMiddleware);
+
+// The configured Application URL and the address BugPin derives for this request, for
+// comparison with the address in the browser (Admin only)
+
+settings.get('/address-check', authorize(['admin']), async (c) => {
+  const { appUrl } = await settingsCacheService.getAll();
+  return c.json({
+    success: true,
+    appUrl,
+    requestOrigin: getEffectiveOrigin(c),
+    requiredTrustProxy: requiredTrustProxy(c),
+  });
+});
+
+settings.get('/proxy-token', authorize(['admin']), staffOriginCheck, (c) => {
+  if (config.trustProxy !== 'token') return c.json({ success: true, enabled: false });
+  const result = proxyTokenService.getStatus();
+  if (!result.success)
+    return c.json({ success: false, error: result.code, message: result.error }, 500);
+  return c.json({ success: true, enabled: true, ...result.value });
+});
+
+settings.post('/proxy-token/regenerate', authorize(['admin']), staffOriginCheck, (c) => {
+  if (config.trustProxy !== 'token') return c.json({ success: true, enabled: false });
+  const result = proxyTokenService.regenerate();
+  if (!result.success)
+    return c.json({ success: false, error: result.code, message: result.error }, 500);
+  return c.json({ success: true, enabled: true, ...result.value });
+});
 
 // Get Settings (Admin only)
 

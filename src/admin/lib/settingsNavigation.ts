@@ -169,7 +169,7 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
       },
       {
         title: 'Network',
-        description: 'HTTPS enforcement and widget rate limiting',
+        description: 'HTTPS enforcement, proxy token, widget rate limiting and portal limits',
         path: '/settings/network',
         icon: Globe,
       },

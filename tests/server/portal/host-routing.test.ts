@@ -221,7 +221,7 @@ it('rejects clearing the staff origin and restores Admin Console routing through
   expect((await app.request('https://staff.example.test/admin')).status).toBe(421);
   const before = await settingsRepo.getAll();
   closeDatabase();
-  const recovered = Bun.spawnSync(['make', 'reset-portal-origin'], {
+  const recovered = Bun.spawnSync([process.execPath, 'run', 'reset-portal-origin'], {
     env: { ...process.env, NODE_ENV: 'test', DATA_DIR: config.dataDir },
   });
   expect(recovered.exitCode).toBe(0);

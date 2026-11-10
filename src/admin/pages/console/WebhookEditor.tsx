@@ -218,8 +218,11 @@ export function WebhookEditor({
               }
             />
             <p id={`${formId}-secret-help`} className="text-xs text-muted-foreground">
-              Use the same secret in your receiver to verify deliveries. Leave blank for unsigned
-              requests.
+              {fields.removeSecret
+                ? 'The signing secret will be removed when you save.'
+                : hasSavedSecret
+                  ? 'Leave empty to keep the saved secret, or enter a new secret to replace it.'
+                  : 'Use the same secret in your receiver to verify deliveries. Leave blank for unsigned requests.'}
             </p>
           </div>
           <fieldset className="space-y-3" disabled={save.isPending}>

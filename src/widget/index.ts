@@ -137,7 +137,7 @@ async function fetchConfig(
     } else if (response.status === 403) {
       // Project is paused - don't initialize widget
       const data = await response.json();
-      if (data.error === 'PROJECT_PAUSED') {
+      if (data.error === 'PROJECT_INACTIVE') {
         console.info('[BugPin] Widget disabled - project is paused');
         return null;
       }

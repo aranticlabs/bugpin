@@ -70,7 +70,7 @@ function copyColumns(db: Database, table: string): Record<string, string> {
 }
 
 const migrations: Record<string, Migration> = {
-  '023_add_reporter_reply_preferences.sql': {
+  '019_add_reporter_reply_preferences.sql': {
     isSatisfied: (db) =>
       hasColumn(db, 'notification_preferences', 'notify_on_reporter_reply') &&
       hasColumn(db, 'project_notification_defaults', 'default_notify_on_reporter_reply') &&
@@ -100,10 +100,17 @@ const migrations: Record<string, Migration> = {
       hasColumn(db, 'users', 'password_changed_at'),
     apply: addMissingColumns,
   },
-  '008_add_user_api_access.sql': {
+  '008_add_media_metadata.sql': {
+    isSatisfied: (db) =>
+      ['captured_at', 'duration_ms', 'recording_quality'].every((column) =>
+        hasColumn(db, 'files', column)
+      ),
+    apply: addMissingColumns,
+  },
+  '009_add_account_access.sql': {
     isSatisfied: (db) =>
       hasColumn(db, 'users', 'api_access_enabled') &&
-      hasObjects(db, ['api_tokens']) &&
+      hasObjects(db, ['api_tokens', 'password_reset_tokens', 'idx_password_reset_tokens_user']) &&
       db
         .query(
           `SELECT 1 FROM users JOIN api_tokens ON api_tokens.user_id = users.id
@@ -114,7 +121,7 @@ const migrations: Record<string, Migration> = {
         .get() === null,
     apply: addMissingColumns,
   },
-  '014_add_report_board_position.sql': {
+  '012_add_report_board_position.sql': {
     isSatisfied: (db) =>
       hasColumn(db, 'reports', 'board_position') &&
       hasObjects(db, ['idx_reports_status_board_position']),
@@ -126,11 +133,11 @@ const migrations: Record<string, Migration> = {
         );
     },
   },
-  '018_add_reporters.sql': {
+  '014_add_reporters.sql': {
     isSatisfied: (db) => schemaMatches(db, REPORTERS_SCHEMA),
     apply: (db, sql) => db.exec(sql),
   },
-  '019_rebuild_reports_for_portal.sql': {
+  '015_rebuild_reports_for_portal.sql': {
     isSatisfied: (db) =>
       schemaMatches(db, REPORTS_SCHEMA) && schemaMatches(db, REPORT_PORTAL_INDEXES),
     apply: (db, sql) => {
@@ -155,11 +162,11 @@ const migrations: Record<string, Migration> = {
       db.exec(REPORT_PORTAL_INDEXES);
     },
   },
-  '020_rebuild_report_history_actions.sql': {
+  '016_rebuild_report_history_actions.sql': {
     isSatisfied: (db) => schemaMatches(db, REPORT_HISTORY_SCHEMA),
     apply: (db, sql) => rebuildTable(db, 'report_history', sql, copyColumns(db, 'report_history')),
   },
-  '021_add_report_messages.sql': {
+  '017_add_report_messages.sql': {
     isSatisfied: (db) =>
       schemaMatches(db, REPORT_MESSAGES_SCHEMA) && !hasObjects(db, ['reporter_messages']),
     apply: (db, sql) => {
@@ -176,7 +183,7 @@ const migrations: Record<string, Migration> = {
       }
     },
   },
-  '022_add_file_message_links.sql': {
+  '018_add_file_message_links.sql': {
     isSatisfied: (db) =>
       hasColumn(db, 'files', 'message_id') &&
       hasColumn(db, 'files', 'uploaded_by_reporter_id') &&

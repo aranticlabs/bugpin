@@ -77,7 +77,7 @@ export function ScreenshotSettingsForm({
             browser asks the reporter for permission before each screenshot. Screen recordings are
             not affected.{' '}
             <a
-              href="https://docs.bugpin.io/configuration/widget#screen-capture-api"
+              href="https://docs.bugpin.io/widget/configuration#screen-capture-api"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"

@@ -71,20 +71,26 @@ githubWebhook.post('/:integrationId', async (c) => {
     return c.json({ error: 'Invalid integration type' }, 400);
   }
 
+  if (!integration.isActive) {
+    logger.warn('GitHub webhook for inactive integration', { integrationId });
+    return c.json({ error: 'Integration not found' }, 404);
+  }
+
   const config = integration.config as GitHubIntegrationConfig;
 
-  // Verify signature if webhook secret is configured
-  if (config.webhookSecret) {
-    if (!signature) {
-      logger.warn('GitHub webhook missing signature', { integrationId });
-      return c.json({ error: 'Missing signature' }, 401);
-    }
+  if (!config.webhookSecret) {
+    logger.warn('GitHub webhook secret not configured', { integrationId });
+    return c.json({ error: 'Webhook not configured' }, 401);
+  }
+  if (!signature) {
+    logger.warn('GitHub webhook missing signature', { integrationId });
+    return c.json({ error: 'Missing signature' }, 401);
+  }
 
-    const isValid = await verifyWebhookSignature(rawBody, signature, config.webhookSecret);
-    if (!isValid) {
-      logger.warn('GitHub webhook signature mismatch', { integrationId });
-      return c.json({ error: 'Invalid signature' }, 401);
-    }
+  const isValid = await verifyWebhookSignature(rawBody, signature, config.webhookSecret);
+  if (!isValid) {
+    logger.warn('GitHub webhook signature mismatch', { integrationId });
+    return c.json({ error: 'Invalid signature' }, 401);
   }
 
   // Parse payload

@@ -305,7 +305,6 @@ CREATE INDEX idx_report_history_user_action ON report_history(user_id, action);
 
 CREATE INDEX idx_reporter_messages_report_id ON reporter_messages(report_id);
 
-CREATE INDEX idx_reporter_messages_user_sent ON reporter_messages(user_id, sent_at);
 
 CREATE INDEX idx_reports_assigned_to ON reports(assigned_to);
 
@@ -390,13 +389,8 @@ INSERT INTO migrations(name) VALUES ('004_add_report_history.sql');
 INSERT INTO migrations(name) VALUES ('005_add_widget_version_observations.sql');
 INSERT INTO migrations(name) VALUES ('006_add_user_password_fields.sql');
 INSERT INTO migrations(name) VALUES ('007_add_two_factor.sql');
-INSERT INTO migrations(name) VALUES ('008_add_user_api_access.sql');
-INSERT INTO migrations(name) VALUES ('009_add_password_reset_tokens.sql');
-INSERT INTO migrations(name) VALUES ('010_add_workspace_views.sql');
+INSERT INTO migrations(name) VALUES ('009_add_account_access.sql');
+INSERT INTO migrations(name) VALUES ('010_add_user_workspace.sql');
 INSERT INTO migrations(name) VALUES ('011_inherit_default_diagnostics.sql');
-INSERT INTO migrations(name) VALUES ('012_add_pinned_project_position.sql');
-INSERT INTO migrations(name) VALUES ('013_add_user_preferences.sql');
-INSERT INTO migrations(name) VALUES ('014_add_report_board_position.sql');
-INSERT INTO migrations(name) VALUES ('015_add_gamification.sql');
-INSERT INTO migrations(name) VALUES ('016_limit_report_search_trigger.sql');
-INSERT INTO migrations(name) VALUES ('017_add_dashboard_indexes.sql');
+INSERT INTO migrations(name) VALUES ('012_add_report_board_position.sql');
+INSERT INTO migrations(name) VALUES ('013_limit_report_search_trigger.sql');

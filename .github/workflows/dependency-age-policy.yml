@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       EE_ACCESS_TOKEN:
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -16,30 +16,60 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      approval_required: ${{ steps.age.outputs.approval_required }}
+      approval_required: ${{ steps.scope.outputs.check == 'none' && 'false' || steps.age.outputs.approval_required }}
     steps:
       - name: Checkout exact CE revision
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Select dependency checks
+        id: scope
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          check=all
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            changes=$(git diff --name-only "$PR_BASE_SHA" HEAD -- \
+              bun.lock bun.lockb package.json ':(glob)**/package.json' \
+              bunfig.toml ':(glob)**/bunfig.toml' .npmrc ':(glob)**/.npmrc' \
+              ee .gitmodules .github/workflows \
+              src/server/scripts/check-dependency-age.ts tests/server/dependency-age.test.ts)
+            if [ -z "$changes" ]; then
+              check=none
+            else
+              ee_changes=$(git diff --name-only "$PR_BASE_SHA" HEAD -- ee .gitmodules)
+              if [ -z "$ee_changes" ]; then check=ce; fi
+            fi
+          fi
+          echo "check=$check" >> "$GITHUB_OUTPUT"
+          if [ "$check" = none ]; then
+            echo "Dependency inputs unchanged; no release age check required." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Verify EE access
+        if: steps.scope.outputs.check == 'all'
         env:
           EE_ACCESS_TOKEN: ${{ secrets.EE_ACCESS_TOKEN }}
         run: |
           if [ -z "$EE_ACCESS_TOKEN" ]; then
-            echo "::error::EE_ACCESS_TOKEN is required to verify the private EE lockfile. Fork contributions must be checked from a trusted maintainer branch."
+            echo "::error::EE_ACCESS_TOKEN is required to verify the private EE lockfile. Fork contributions that change the EE revision must be checked from a trusted maintainer branch."
             exit 1
           fi
 
       - name: Resolve pinned EE revision
         id: ee-revision
+        if: steps.scope.outputs.check == 'all'
         run: |
           sha=$(git rev-parse --verify HEAD:ee)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout pinned EE lockfile
+        if: steps.scope.outputs.check == 'all'
         uses: actions/checkout@v4
         with:
           repository: aranticlabs/bugpin-ee
@@ -51,18 +81,22 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Bun
+        if: steps.scope.outputs.check != 'none'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.4'
 
       - name: Test release age checks
+        if: steps.scope.outputs.check != 'none'
         run: bun test tests/server/dependency-age.test.ts
 
       - name: Check dependency release age
         id: age
+        if: steps.scope.outputs.check != 'none'
         shell: bash
         env:
           EE_SHA: ${{ steps.ee-revision.outputs.sha }}
+          CHECK_SCOPE: ${{ steps.scope.outputs.check }}
         run: |
           set -euo pipefail
           {
@@ -70,9 +104,15 @@ jobs:
             echo
             echo "CE: $GITHUB_SHA"
             echo
-            echo "EE: $EE_SHA"
+            if [ "$CHECK_SCOPE" = all ]; then
+              echo "EE: $EE_SHA"
+            else
+              echo "EE revision unchanged; checking CE dependencies only."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
-          bun run check:dependency-age --request-approval
+          lockfiles=(bun.lock)
+          if [ "$CHECK_SCOPE" = all ]; then lockfiles+=(ee/bun.lock); fi
+          bun run src/server/scripts/check-dependency-age.ts "${lockfiles[@]}" --request-approval
 
       - name: Verify admin approval protection
         if: steps.age.outputs.approval_required == 'true'

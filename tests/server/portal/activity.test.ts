@@ -69,7 +69,7 @@ it('adds default-on reply preferences to existing rows without changing their ot
     db.exec(
       readFileSync(
         new URL(
-          '../../../src/server/database/migrations/023_add_reporter_reply_preferences.sql',
+          '../../../src/server/database/migrations/019_add_reporter_reply_preferences.sql',
           import.meta.url
         ),
         'utf8'

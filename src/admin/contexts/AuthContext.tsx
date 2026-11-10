@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, onSetupRequired } from '../api/client';
 import { signInWithPasskey, verifyPasskeySecondFactor } from '../lib/passkeys';
 import type { User } from '@shared/types';
 
@@ -140,6 +140,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     }
   }, [setUser]);
+
+  // Several requests can be refused at once, and queries that set their own `enabled`
+  // keep running while the setup dialog is open, so one refresh at a time is enough.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  const setupRefresh = useRef<Promise<void> | null>(null);
+  useEffect(
+    () =>
+      onSetupRequired(() => {
+        if (setupRefresh.current || hasPendingSetup(userRef.current)) return;
+        setupRefresh.current = refreshUser().finally(() => {
+          setupRefresh.current = null;
+        });
+      }),
+    [refreshUser]
+  );
 
   const canLoadData = !!user && !hasPendingSetup(user);
 

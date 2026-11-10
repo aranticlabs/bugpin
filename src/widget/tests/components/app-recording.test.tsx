@@ -25,7 +25,7 @@ class FakeTrack {
   }
 
   getSettings(): MediaTrackSettings {
-    return { displaySurface: this.displaySurface };
+    return { displaySurface: this.displaySurface, width: 1280, height: 720 };
   }
 
   addEventListener(_type: string, listener: () => void): void {
@@ -277,6 +277,9 @@ describe('App screen recording', () => {
       durationMs: 2000,
       startedAt: new Date().toISOString(),
       hasAudio: false,
+      recordingQuality: 'high' as const,
+      width: 1920,
+      height: 1080,
     }));
 
     await renderClosedApp();
@@ -294,6 +297,9 @@ describe('App screen recording', () => {
           id: 'recording-recovered-session',
           source: 'recording',
           recovered: true,
+          recordingQuality: 'high',
+          width: 1920,
+          height: 1080,
         }),
       ])
     );
@@ -679,6 +685,9 @@ describe('App screen recording', () => {
       ownerEmail: undefined,
       mimeType: 'video/webm',
       hasAudio: false,
+      recordingQuality: 'standard',
+      width: 1280,
+      height: 720,
     });
     expect(recoveryStore.addChunk).toHaveBeenCalledWith(
       'recording-session',

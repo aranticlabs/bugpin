@@ -231,7 +231,7 @@ it('backfills a missing staff author and recognizes already satisfied message an
     INSERT INTO reporter_messages (id, report_id, user_id, message, sent_at)
       VALUES ('orphan', 'report', 'missing', 'A past reply', '2026-01-01');
     PRAGMA foreign_keys = ON;
-    DELETE FROM migrations WHERE name IN ('021_add_report_messages.sql', '022_add_file_message_links.sql');`);
+    DELETE FROM migrations WHERE name IN ('017_add_report_messages.sql', '018_add_file_message_links.sql');`);
   await runMigrations();
   expect((await reportMessagesRepo.findByReportId('report'))[0]).toMatchObject({
     id: 'orphan',
@@ -240,7 +240,7 @@ it('backfills a missing staff author and recognizes already satisfied message an
     createdAt: '2026-01-01',
   });
   db.exec(
-    "DELETE FROM migrations WHERE name IN ('021_add_report_messages.sql', '022_add_file_message_links.sql');"
+    "DELETE FROM migrations WHERE name IN ('017_add_report_messages.sql', '018_add_file_message_links.sql');"
   );
   await runMigrations();
   expect(await reportMessagesRepo.findByReportId('report')).toHaveLength(1);
@@ -255,12 +255,12 @@ it('rolls back a failed message backfill and retains a restorable legacy snapsho
   db.exec(readFileSync(join(config.migrationsDir, '001_add_reporter_messages.sql'), 'utf8'));
   db.exec(`INSERT INTO reporter_messages (id, report_id, user_id, message) VALUES ('duplicate', 'report', 'staff', 'Legacy reply');
     INSERT INTO report_messages (id, report_id, author_kind, user_id, author_name, body) VALUES ('duplicate', 'report', 'staff', 'staff', 'Original name', 'Existing reply');
-    DELETE FROM migrations WHERE name = '021_add_report_messages.sql';`);
+    DELETE FROM migrations WHERE name = '017_add_report_messages.sql';`);
   const migrationDirectory = join(directory, 'migrations');
   mkdirSync(migrationDirectory);
   writeFileSync(
-    join(migrationDirectory, '021_add_report_messages.sql'),
-    readFileSync(join(config.migrationsDir, '021_add_report_messages.sql'))
+    join(migrationDirectory, '017_add_report_messages.sql'),
+    readFileSync(join(config.migrationsDir, '017_add_report_messages.sql'))
   );
   const legacy = db.query('SELECT * FROM reporter_messages').all();
   const current = db.query('SELECT * FROM report_messages').all();

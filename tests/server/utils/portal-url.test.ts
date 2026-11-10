@@ -15,7 +15,13 @@ it.each([
   [true, '', 'https://feedback.example.com', null],
   [true, 'invalid', '', null],
   [true, 'https://app.example.com', 'invalid', null],
-  [true, 'http://localhost:7301', '', 'http://localhost:7301/reporter-portal/'],
+  [true, 'http://localhost:4300', '', 'http://localhost:4300/reporter-portal/'],
+  [
+    true,
+    'http://localhost:7300',
+    'http://127.0.0.1:7310',
+    'http://127.0.0.1:7310/reporter-portal/',
+  ],
 ])(
   'resolves the project portal URL for enabled %s, app %s, portal %s',
   (enabled, appUrl, portalBaseUrl, expected) => {
@@ -35,7 +41,8 @@ it.each([
   ['https://app.example.com', 'http://feedback.example.com', null],
   ['', 'https://feedback.example.com', null],
   ['https://user:password@app.example.com', '', null],
-  ['http://localhost:7301', '', 'http://localhost:7301'],
+  ['http://localhost:4300', '', 'http://localhost:4300'],
+  ['http://localhost:7300', 'http://127.0.0.1:7310', 'http://127.0.0.1:7310'],
 ])('selects a secure base for app %s and portal %s', (appUrl, portalBaseUrl, expected) => {
   expect(securePortalBaseUrl({ appUrl, portalBaseUrl })).toBe(expected);
 });

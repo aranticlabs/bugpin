@@ -452,6 +452,11 @@ describe('reportsService.create', () => {
             mimeType: 'video/mp4',
             data: corruptRecording,
             isRecording: true,
+            recordingQuality: 'high',
+            capturedAt: '2026-11-08T14:00:00.000Z',
+            durationMs: 24000,
+            width: 1920,
+            height: 1080,
           },
         ],
       });
@@ -460,6 +465,13 @@ describe('reportsService.create', () => {
       expect(fileCreateRecords).toHaveLength(1);
       const [storedFile] = fileCreateRecords;
       if (!storedFile) throw new Error('Expected the original recording to be stored');
+      expect(storedFile).toMatchObject({
+        recordingQuality: 'high',
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        durationMs: 24000,
+        width: 1920,
+        height: 1080,
+      });
       expect(storedFile.sizeBytes).toBe(corruptRecording.length);
       expect(await Bun.file(storedFile.path).bytes()).toEqual(corruptRecording);
       expect(warningCalls).toContainEqual({

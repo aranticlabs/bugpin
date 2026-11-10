@@ -37,7 +37,6 @@ export function Branding() {
         </>
       ) : (
         <UpgradePrompt
-          feature="custom-branding"
           title="Custom Branding"
           description="Customize your BugPin instance with your own logo, icon, favicon, and brand colors. Make it truly yours."
         />

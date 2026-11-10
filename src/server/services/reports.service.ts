@@ -45,10 +45,11 @@ import type {
   LocaleCode,
   Project,
 } from '@shared/types';
+import type { MediaMetadata } from '@shared/media-metadata';
 
 // Types
 
-export interface MediaFile {
+export interface MediaFile extends MediaMetadata {
   data: Buffer | Uint8Array;
   filename: string;
   mimeType: string;
@@ -312,8 +313,11 @@ async function saveSubmittedFiles(
         path: savedFile.path,
         mimeType: savedFile.mimeType,
         sizeBytes: savedFile.sizeBytes,
-        width: savedFile.width,
-        height: savedFile.height,
+        width: savedFile.width ?? file.width,
+        height: savedFile.height ?? file.height,
+        capturedAt: file.capturedAt,
+        durationMs: fileType === 'video' ? file.durationMs : undefined,
+        recordingQuality: file.isRecording ? file.recordingQuality : undefined,
       });
 
       logger.info('Submitted file saved for report', {

@@ -153,6 +153,7 @@ it('edits an existing endpoint while keeping its project and saved signing secre
   const user = userEvent.setup();
   renderWithQuery(<Webhooks />);
   const card = await screen.findByRole('article', { name: endpoint.name });
+  expect(within(card).getByText('Payloads are signed.')).toBeInTheDocument();
   await user.click(within(card).getByRole('button', { name: 'Edit' }));
   expect(screen.getByLabelText('Project')).toHaveValue('Website');
   expect(screen.getByLabelText('Project')).toHaveAttribute('readonly');
@@ -180,6 +181,27 @@ it('edits an existing endpoint while keeping its project and saved signing secre
   expect(await screen.findByRole('article', { name: 'Updated receiver' })).toBeInTheDocument();
   expect(screen.queryByLabelText('Webhook name')).not.toBeInTheDocument();
 });
+
+it.each([false, true])(
+  'replaces the saved secret after selecting removal: %s',
+  async (removeFirst) => {
+    setupWebhooks([endpoint]);
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: { webhook: endpoint } });
+    const user = userEvent.setup();
+    renderWithQuery(<Webhooks />);
+    const card = await screen.findByRole('article', { name: endpoint.name });
+    await user.click(within(card).getByRole('button', { name: 'Edit' }));
+    if (removeFirst) await user.click(screen.getByRole('button', { name: 'Remove secret' }));
+    await user.type(screen.getByLabelText(/Signing secret/), 'replacement-secret');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(
+        '/webhooks/wh_primary',
+        expect.objectContaining({ secret: 'replacement-secret' })
+      )
+    );
+  }
+);
 
 it('allows explicitly removing the signing secret when editing', async () => {
   const state = setupWebhooks([endpoint]);

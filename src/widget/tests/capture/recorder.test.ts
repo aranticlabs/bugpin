@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   canRestrictCapture,
   isRecordingSupported,
+  isWholeScreenCapture,
   requestMicrophoneTrack,
   requestRecordingStream,
   restrictCaptureToPage,
@@ -653,7 +654,7 @@ describe('screen recorder', () => {
     expect(microphone.stopCount).toBeGreaterThan(0);
   });
 
-  it('records at the bitrate of the chosen quality', () => {
+  it('records at the bitrate of the chosen quality and preserves the preset', async () => {
     FakeMediaRecorder.supported.add('video/webm');
     const { stream } = makeVideoStream();
 
@@ -665,7 +666,11 @@ describe('screen recorder', () => {
 
     const [recorder] = FakeMediaRecorder.instances.slice(-1);
     expect(recorder.options.videoBitsPerSecond).toBe(4_000_000);
-    session.discard();
+    session.stop();
+    expect(await session.finished).toMatchObject({
+      recordingQuality: 'high',
+      capturedAt: expect.any(String),
+    });
   });
 });
 
@@ -728,5 +733,51 @@ describe('restrictCaptureToPage', () => {
     await expect(
       restrictCaptureToPage(new FakeTrack('video') as unknown as MediaStreamTrack)
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('isWholeScreenCapture', () => {
+  const scope = globalThis as unknown as { screen?: { width: number; height: number } };
+  const originalScreen = Object.getOwnPropertyDescriptor(globalThis, 'screen');
+
+  const trackWith = (settings: MediaTrackSettings) =>
+    ({ getSettings: () => settings }) as unknown as MediaStreamTrack;
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'screen', {
+      value: { width: 1512, height: 982 },
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    if (originalScreen) Object.defineProperty(globalThis, 'screen', originalScreen);
+    else delete scope.screen;
+  });
+
+  it('trusts the reported display surface', () => {
+    expect(isWholeScreenCapture(trackWith({ displaySurface: 'monitor' }))).toBe(true);
+    expect(
+      isWholeScreenCapture(trackWith({ displaySurface: 'window', width: 3024, height: 1964 }))
+    ).toBe(false);
+    expect(isWholeScreenCapture(trackWith({ displaySurface: 'browser' }))).toBe(false);
+  });
+
+  it('treats a capture with the screen aspect ratio as the whole screen', () => {
+    expect(isWholeScreenCapture(trackWith({ width: 3024, height: 1964 }))).toBe(true);
+    expect(isWholeScreenCapture(trackWith({ width: 1663, height: 1080 }))).toBe(true);
+  });
+
+  it('treats a capture with another aspect ratio as a window', () => {
+    expect(isWholeScreenCapture(trackWith({ width: 1512, height: 944 }))).toBe(false);
+    expect(isWholeScreenCapture(trackWith({ width: 1280, height: 720 }))).toBe(false);
+  });
+
+  it('reports no whole screen without dimensions', () => {
+    expect(isWholeScreenCapture(undefined)).toBe(false);
+    expect(isWholeScreenCapture(trackWith({}))).toBe(false);
+    delete scope.screen;
+    expect(isWholeScreenCapture(trackWith({ width: 3024, height: 1964 }))).toBe(false);
   });
 });

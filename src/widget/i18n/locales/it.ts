@@ -75,6 +75,9 @@ const it: WidgetCatalog = {
   'screenshot.action.download': 'Scarica',
   'screenshot.action.remove': 'Rimuovi',
   'screenshot.helperText': 'Supportati: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Bassa',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Alta',
   'recording.helperText': 'Supportati: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Formato immagine non supportato: {type}',

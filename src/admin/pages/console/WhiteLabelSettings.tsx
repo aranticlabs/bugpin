@@ -164,7 +164,6 @@ export function WhiteLabel() {
   if (!featureStatus?.features['white-label']) {
     return (
       <UpgradePrompt
-        feature="white-label"
         title="White-label"
         description="Remove BugPin branding from the Admin Console, email notifications, and the widget."
       />

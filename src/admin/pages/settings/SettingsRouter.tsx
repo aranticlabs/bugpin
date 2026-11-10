@@ -63,6 +63,9 @@ const PasswordPolicy = lazyWithRetry(() =>
 const NetworkSettings = lazyWithRetry(() =>
   import('../console/Security').then((m) => ({ default: m.NetworkSettingsCard }))
 );
+const ProxyToken = lazyWithRetry(() =>
+  import('../console/Security').then((m) => ({ default: m.ProxyTokenCard }))
+);
 const WidgetButton = lazyWithRetry(() =>
   import('../widget/Button').then((m) => ({ default: m.Button }))
 );
@@ -253,6 +256,7 @@ export function SettingsRouter() {
         element={
           <SettingsPage adminOnly>
             <NetworkSettings />
+            <ProxyToken />
           </SettingsPage>
         }
       />

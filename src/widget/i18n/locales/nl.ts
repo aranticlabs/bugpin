@@ -77,6 +77,9 @@ const nl: WidgetCatalog = {
   'screenshot.action.download': 'Downloaden',
   'screenshot.action.remove': 'Verwijderen',
   'screenshot.helperText': 'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Laag',
+  'recording.quality.standard': 'Standaard',
+  'recording.quality.high': 'Hoog',
   'recording.helperText': 'Ondersteund: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',

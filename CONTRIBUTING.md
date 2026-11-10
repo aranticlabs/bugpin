@@ -57,7 +57,7 @@ We follow a standard fork-and-pull-request workflow:
    # Install dependencies
    bun install
 
-   # Start development server
+   # Start server, Admin Console, and portal with hot reload
    bun run dev
    ```
 
@@ -165,9 +165,13 @@ policy. Docker releases also use the same policy. Run
 
 If release age is the only failure, wait until the reported eligibility time or
 ask a repository admin to approve that run through **Review deployments**.
-Other failures still block CI. Fork PRs blocked by private EE access need help
-from a maintainer. Download or network failures require rerunning failed jobs;
-they do not create an age exception approval request.
+Other failures still block CI. PRs with unchanged dependency inputs pass without
+EE access. CE dependency, manifest, or check configuration changes validate the
+public CE lockfile. Changes to the EE revision or submodule configuration require
+both lockfiles; fork PRs making those changes need a trusted maintainer branch
+with EE access. Pushes to `dev`/`main`, manual runs, and Docker builds always
+validate both lockfiles. Download or network failures require rerunning failed
+jobs; they do not create an age exception approval request.
 
 The policy has three jobs: **Check dependency ages**, optional **Approve age
 exception**, and **Dependency policy**, which reports the final decision and
@@ -183,8 +187,14 @@ Leave other required checks, such as DCO, in place.
 # Install dependencies
 bun install
 
-# Development: server + admin (hot reload). Widget: bun run dev:widget for watch build
+# Development: server (4300), Admin Console (7300), portal (7310)
 bun run dev
+
+# Widget watch build, in another terminal
+bun run dev:widget
+
+# Run all development services in Docker; renew anonymous node_modules volumes
+docker compose -f docker-compose.local.yml up --build -V
 
 # Build for production
 bun run build

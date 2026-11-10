@@ -108,8 +108,8 @@ describe('report buffer', () => {
     await clearBuffer();
   });
 
-  it('buffers reports and returns count', async () => {
-    const { bufferReport, getPendingCount, getPendingReports, clearBuffer } =
+  it('preserves recording metadata through offline storage and retry', async () => {
+    const { bufferReport, getPendingCount, getPendingReports, clearBuffer, syncPendingReports } =
       await import('../../storage/report-buffer');
     await clearBuffer();
 
@@ -120,6 +120,18 @@ describe('report buffer', () => {
       title: 'Bug report',
       priority: 'medium',
       metadata: { url: 'https://example.com' },
+      media: [
+        {
+          blob: new Blob([new Uint8Array([1])], { type: 'video/webm' }),
+          mimeType: 'video/webm',
+          source: 'recording',
+          recordingQuality: 'high',
+          timestamp: new Date('2026-11-08T14:00:00Z'),
+          width: 1920,
+          height: 1080,
+          durationMs: 24000,
+        },
+      ],
     });
 
     const count = await getPendingCount();
@@ -127,6 +139,24 @@ describe('report buffer', () => {
 
     expect(count).toBe(1);
     expect(pending[0].id).toBe(id);
+    expect(pending[0].media?.[0].recordingQuality).toBe('high');
+    let submittedMetadata: unknown;
+    globalThis.navigator = { onLine: true } as Navigator;
+    globalThis.fetch = (async (_input, init) => {
+      submittedMetadata = JSON.parse((init?.body as FormData).get('data') as string).mediaMetadata;
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+    expect(await syncPendingReports()).toMatchObject({ synced: 1, failed: 0 });
+    expect(submittedMetadata).toEqual([
+      {
+        filename: 'recording-0.webm',
+        recordingQuality: 'high',
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        width: 1920,
+        height: 1080,
+        durationMs: 24000,
+      },
+    ]);
   });
 
   it('skips sync when offline', async () => {

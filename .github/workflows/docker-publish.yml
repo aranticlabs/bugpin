@@ -78,6 +78,20 @@ jobs:
           username: ${{ vars.HARBOR_ROBOT_DEV }}
           password: ${{ secrets.HARBOR_KEY_DEV }}
 
+      # Floating tags (1.3, latest) only move forward. Without this, publishing an older
+      # release again, or a patch for an older release line, would point them at an older
+      # version. If the check itself fails, all floating tags are moved as before.
+      - name: Decide which floating tags this release may move
+        id: floating
+        if: steps.check.outputs.is_dev == 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" 'v*' \
+            | sed 's#.*refs/tags/##' \
+            | bun run src/server/scripts/floating-image-tags.ts "${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v6
@@ -86,9 +100,10 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            # For production tags (v1.0.0) -> 1.0.0, latest
+            # For production tags (v1.0.0) -> 1.0.0, plus the floating tags 1.0 and latest
             type=semver,pattern={{version}},enable=${{ steps.check.outputs.is_dev == 'false' }}
-            type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.check.outputs.is_dev == 'false' && steps.floating.outputs.minor != 'false' }}
+            type=raw,value=latest,enable=${{ steps.check.outputs.is_dev == 'false' && steps.floating.outputs.latest != 'false' }}
             # For dev/beta tags (v1.0.1-dev, v1.0.1-beta.1) -> <version>, dev
             type=match,pattern=v(.*),group=1,enable=${{ steps.check.outputs.is_dev == 'true' }}
             type=raw,value=dev,enable=${{ steps.check.outputs.is_dev == 'true' }}
@@ -101,18 +116,28 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: APP_VERSION=${{ steps.version.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64 # Add linux/arm64 if needed
+      - name: Prepare shared image metadata
+        env:
+          METADATA_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          bun -e '
+            const metadata = JSON.parse(process.env.METADATA_JSON);
+            const tags = metadata.tags.map(tag => tag.slice(tag.lastIndexOf(":") + 1));
+            const output = `IMAGE_TAGS=${JSON.stringify(tags)}\nIMAGE_LABELS=${JSON.stringify(metadata.labels)}\n`;
+            await Bun.write(process.env.GITHUB_ENV, await Bun.file(process.env.GITHUB_ENV).text() + output);
+          '
 
-      - name: Image digest
-        run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"
+      - name: Build and push Docker images
+        id: build
+        uses: docker/bake-action@v6
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        with:
+          source: .
+          files: docker-bake.hcl
+          push: true
+
+      - name: Image metadata
+        env:
+          BUILD_METADATA: ${{ steps.build.outputs.metadata }}
+        run: printf '%s\n' "$BUILD_METADATA"

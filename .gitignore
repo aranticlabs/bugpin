@@ -17,6 +17,8 @@ uploads/
 # Environment variables
 .env
 .env.*
+!.env.example
+!deploy/.env.portal-host.example
 
 # Scripts with credentials
 /scripts/
@@ -50,7 +52,8 @@ GEMINI.md
 
 # Development docs
 docs-dev/
-src/admin/prototypes/
+/src/admin/prototypes/
+
 # Testing
 coverage/
 

@@ -67,6 +67,48 @@ export async function initDatabase(): Promise<void> {
 }
 
 /**
+ * Refuses a database that records migrations this build does not ship. Such a database was
+ * changed by a newer BugPin version, and its schema can no longer be read or written safely
+ * by this one. Development continues with a warning so branches can share a data directory.
+ */
+function assertNoUnknownMigrations(database: Database): void {
+  const migrationsDir = path.join(import.meta.dir, 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+
+  const hasMigrationsTable = database
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migrations'")
+    .get();
+  if (!hasMigrationsTable) return;
+
+  const known = new Set(fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')));
+  const unknown = (
+    database.query('SELECT name FROM migrations ORDER BY id').all() as { name: string }[]
+  )
+    .map(({ name }) => name)
+    .filter((name) => !known.has(name));
+  if (unknown.length === 0) return;
+
+  const dataDir = path.dirname(config.dbPath);
+  const snapshotPrefix = `${path.basename(config.dbPath)}.pre-upgrade-`;
+  const snapshots = fs
+    .readdirSync(dataDir)
+    .filter((name) => name.startsWith(snapshotPrefix) && name.endsWith('.bak'))
+    .map((name) => path.join(dataDir, name));
+
+  const message =
+    `This database was changed by a newer BugPin version and cannot be used with BugPin ${config.version}. ` +
+    `Migrations unknown to this version: ${unknown.join(', ')}. ` +
+    'Start the newer version again, or stop BugPin and restore the database backup taken before the upgrade.' +
+    (snapshots.length > 0 ? ` Pre-upgrade snapshots found: ${snapshots.join(', ')}.` : '');
+
+  if (config.isDev) {
+    logger.warn(message);
+    return;
+  }
+  throw new Error(message);
+}
+
+/**
  * Initialize database schema
  * Creates all tables if they don't exist
  */
@@ -75,6 +117,8 @@ export async function initSchema(): Promise<void> {
     throw new Error('Database not initialized');
   }
 
+  // Checked before the bootstrap below touches the schema.
+  assertNoUnknownMigrations(db);
   migrationRunner!.prepare();
   logger.info('Initializing database schema');
 
@@ -286,6 +330,11 @@ export async function initSchema(): Promise<void> {
       created_at TEXT DEFAULT (datetime('now')) NOT NULL
     )
   `);
+  // New installations add later columns through their migrations, so the column order matches
+  // an upgraded database.
+  if (!filesExist) {
+    db.exec(fs.readFileSync(path.join(config.migrationsDir, '008_add_media_metadata.sql'), 'utf8'));
+  }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_report ON files(report_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_type ON files(type)`);
   if (!filesExist) db.exec(FILE_MESSAGE_SCHEMA);
@@ -514,6 +563,7 @@ export async function runMigrations(): Promise<void> {
   if (!migrationRunner) {
     throw new Error('Database not initialized');
   }
+  assertNoUnknownMigrations(getDb());
   migrationRunner.run();
 }
 

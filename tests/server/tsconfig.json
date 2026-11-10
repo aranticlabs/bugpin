@@ -30,6 +30,9 @@
   "include": [
     "./**/*.ts",
     "../fixtures/dev-proxy.test.ts",
+    "../fixtures/proxy-token-cases.ts",
+    "../fixtures/nginx-config.test.ts",
+    "../fixtures/nginx-live.test.ts",
     "../fixtures/request-body-limits.test.ts",
     "../../src/shared/**/*.ts"
   ],

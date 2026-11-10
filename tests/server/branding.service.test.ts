@@ -1,7 +1,11 @@
 import { getEELicenseService } from '../../src/server/utils/ee';
 const licenseService = getEELicenseService()!;
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'bun:test';
-import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import {
+  settingsRepo,
+  DEFAULT_BRANDING,
+  DEFAULT_ADMIN_BUTTON,
+} from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 
@@ -76,6 +80,22 @@ describe('brandingService.getBrandingConfig', () => {
     if (result.success) {
       expect(result.value.primaryColor).toBe('#123456');
     }
+  });
+
+  it('uses default branding without a license and preserves saved customization', async () => {
+    licenseService.hasFeature = () => false;
+    const settings = await settingsRepo.getAll();
+    const snapshot = structuredClone(settings);
+    settingsRepo.getAll = async () => settings;
+    const result = await brandingService.getBrandingConfig();
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.primaryColor).toBe(DEFAULT_BRANDING.primaryColor);
+      expect(result.value.logoLightUrl).toBeNull();
+      expect(result.value.adminThemeColors).toEqual(DEFAULT_ADMIN_BUTTON);
+      expect(result.value.widgetPrimaryColors).toEqual(settings.widgetDialog);
+    }
+    expect(settings).toEqual(snapshot);
   });
 
   it('returns GET_FAILED when settings fetch throws', async () => {
