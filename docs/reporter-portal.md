@@ -31,7 +31,7 @@ docker compose run --rm --no-deps bugpin bun run reset-portal-origin
 docker compose up -d bugpin
 ```
 
-For a source installation, stop BugPin, run `DATA_DIR=/path/to/existing/data make reset-portal-origin` as the instance's operating-system user, then restart it with the same configuration. The command requires an explicit absolute DATA_DIR and an existing database; missing or relative paths are rejected. It clears only the Portal Base URL without loading application configuration, generating secrets, initializing storage, or running migrations. After restart, open the Admin Console at the Application URL or the same-origin host, correct the Application URL, and configure the separate portal origin again. This command restores same-origin routing; it does not bypass authentication. If HTTPS enforcement is also misconfigured, use its temporary recovery variable separately.
+For a source installation, stop BugPin, run `DATA_DIR=/path/to/existing/data bun run reset-portal-origin` as the instance's operating-system user, then restart it with the same configuration. The command requires an explicit absolute DATA_DIR and an existing database; missing or relative paths are rejected. It clears only the Portal Base URL without loading application configuration, generating secrets, initializing storage, or running migrations. After restart, open the Admin Console at the Application URL or the same-origin host, correct the Application URL, and configure the separate portal origin again. This command restores same-origin routing; it does not bypass authentication. If HTTPS enforcement is also misconfigured, use its temporary recovery variable separately.
 
 ## Live updates and uploads
 
@@ -148,4 +148,4 @@ Before releasing a deployment, verify:
 - A quota rejection leaves the draft intact and stores no partial message or files.
 - Unsubscribe GET does not change preferences, and a cookie-free one-click POST works.
 
-For source builds, run `bun install --frozen-lockfile`, install browsers with `bun node_modules/.bin/playwright install --with-deps chromium firefox webkit`, then run `make typecheck`, `make typecheck-tests`, `make test`, `make knip`, `make test-e2e`, `make check-widget-size` and `make format-check`. The portal build rejects Admin Console or dnd-kit imports. Automated WebKit coverage supplements a check in physical Safari.
+For source builds, run `bun install --frozen-lockfile`, install browsers with `bun node_modules/.bin/playwright install --with-deps chromium firefox webkit`, then run `bun run typecheck`, `bun run typecheck:tests`, `bun run test`, `bun run knip`, `bun run test:e2e`, `bun run check:widget-size` and `bun run format:check`. The portal build rejects Admin Console or dnd-kit imports. Automated WebKit coverage supplements a check in physical Safari.

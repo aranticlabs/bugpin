@@ -4,6 +4,7 @@ import { filesRepo } from '../../database/repositories/files.repo.js';
 import { githubService } from './github.service.js';
 import { settingsService } from '../settings.service.js';
 import { checkProjectLicense } from '../../utils/project-license.js';
+import { generateSecureToken } from '../../utils/secure-token.js';
 import { Result } from '../../utils/result.js';
 import { logger } from '../../utils/logger.js';
 import type { Integration, GitHubIntegrationConfig, ReportStatus } from '@shared/types';
@@ -30,16 +31,6 @@ const RETRY_CONFIG = {
   maxAttempts: 3,
   delays: [1000, 5000, 15000], // 1s, 5s, 15s
 };
-
-// Helper to generate webhook secret
-function generateWebhookSecret(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
 
 // Service
 
@@ -330,7 +321,7 @@ export const githubSyncService = {
     }
 
     // Generate webhook secret
-    const webhookSecret = generateWebhookSecret();
+    const webhookSecret = generateSecureToken();
 
     // Build webhook URL (remove trailing slash from appUrl if present)
     const baseUrl = appUrl.trim().replace(/\/$/, '');

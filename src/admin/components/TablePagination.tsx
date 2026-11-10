@@ -10,7 +10,7 @@ export function pageCount(total: number, pageSize: number): number {
   return Math.max(1, Math.ceil(total / pageSize));
 }
 
-export function toTablePageSize(value: string): TablePageSize | undefined {
+function toTablePageSize(value: string): TablePageSize | undefined {
   return TABLE_PAGE_SIZES.find((size) => String(size) === value);
 }
 

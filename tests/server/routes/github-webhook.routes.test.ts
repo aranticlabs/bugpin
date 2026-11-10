@@ -336,7 +336,7 @@ describe('github-webhook routes', () => {
       expect(body.message).toBe('Event ignored');
     });
 
-    it('works without webhook secret configured', async () => {
+    it('rejects requests when no webhook secret is configured', async () => {
       integrationResult = {
         ...baseIntegration,
         config: {
@@ -356,7 +356,29 @@ describe('github-webhook routes', () => {
         body: JSON.stringify({ zen: 'test' }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'Webhook not configured' });
+    });
+
+    it('rejects webhooks for inactive integrations', async () => {
+      integrationResult = { ...baseIntegration, isActive: false };
+      const payload = JSON.stringify({ zen: 'test' });
+      const signature = await computeSignature(payload, 'webhook_secret_123');
+
+      const app = createApp();
+      const res = await app.request('http://localhost/github-webhook/int_1', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-github-event': 'ping',
+          'x-github-delivery': 'delivery_1',
+          'x-hub-signature-256': signature,
+        },
+        body: payload,
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Integration not found' });
     });
   });
 

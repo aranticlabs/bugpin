@@ -1021,7 +1021,7 @@ export const handlers = [
 ];
 
 // Mock integrations data
-export const mockIntegrations = [
+const mockIntegrations = [
   {
     id: 'integration-1',
     projectId: 'project-1',

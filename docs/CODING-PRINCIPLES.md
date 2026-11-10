@@ -278,9 +278,9 @@ describe('reportsService.update', () => {
 
 ## Pre-Commit Checklist
 
-1. `make typecheck` and `make typecheck-tests` pass
-2. `make test` passes
-3. `make knip` reports no unused code
+1. `bun run typecheck` and `bun run typecheck:tests` pass
+2. `bun run test` passes
+3. `bun run knip` reports no unused code
 4. Routes are thin (no business logic)
 5. Services return `Result<T>`
 6. No `any` types

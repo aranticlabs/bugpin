@@ -1,5 +1,5 @@
 export const BRAND_COLOR_PLACEHOLDER = '__BRAND_COLOR__';
-export const BRAND_COLOR_HOVER_PLACEHOLDER = '__BRAND_COLOR_HOVER__';
+const BRAND_COLOR_HOVER_PLACEHOLDER = '__BRAND_COLOR_HOVER__';
 
 export const emailStyles = `
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }

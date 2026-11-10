@@ -124,7 +124,7 @@ On first start, BugPin creates an admin account from these environment variables
 The initial password only works once. After the first login, BugPin asks you to choose a new password before you can use the Admin Console or the API. Instances that still use the initial password after an update ask for the change on the next login.
 
 > [!NOTE]
-> The variables are only read when no users exist yet. Changing them later does not change an existing account. Development mode (`make dev`) does not require the password change.
+> The variables are only read when no users exist yet. Changing them later does not change an existing account. Development mode (`bun run dev`) does not require the password change.
 
 ## Create a Project
 

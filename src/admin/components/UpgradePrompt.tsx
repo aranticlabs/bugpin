@@ -3,14 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 
 interface UpgradePromptProps {
-  feature: string;
   title: string;
   description: string;
 }
 
 const EDITIONS_URL = 'https://bugpin.io/editions/';
 
-export function UpgradePrompt({ feature: _feature, title, description }: UpgradePromptProps) {
+export function UpgradePrompt({ title, description }: UpgradePromptProps) {
   return (
     <Card className="border-dashed">
       <CardHeader className="text-center pb-2">
@@ -33,26 +32,4 @@ export function UpgradePrompt({ feature: _feature, title, description }: Upgrade
       </CardContent>
     </Card>
   );
-}
-
-interface FeatureGateProps {
-  feature: string;
-  isLicensed: boolean;
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}
-
-export function FeatureGate({
-  feature,
-  isLicensed,
-  title,
-  description,
-  children,
-}: FeatureGateProps) {
-  if (!isLicensed) {
-    return <UpgradePrompt feature={feature} title={title} description={description} />;
-  }
-
-  return <>{children}</>;
 }

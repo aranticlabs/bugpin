@@ -113,7 +113,7 @@ Client Request
 
 ## Widget Constraints
 
-- Bundle size: ≤190KB gzipped (IIFE bundle, the one customers embed), enforced by `make check-widget-size`
+- Bundle size: ≤190KB gzipped (IIFE bundle, the one customers embed), enforced by `bun run check:widget-size`
 - No external runtime dependencies
 - Shadow DOM for CSS isolation
 - Offline-first with IndexedDB queue

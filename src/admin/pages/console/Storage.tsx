@@ -65,7 +65,6 @@ export function Storage() {
   if (!isLicensed) {
     return (
       <UpgradePrompt
-        feature="s3-storage"
         title="S3 Storage"
         description="Store screenshots and attachments in S3-compatible object storage. Supports AWS S3, MinIO, DigitalOcean Spaces, and more."
       />

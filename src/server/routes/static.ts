@@ -18,7 +18,7 @@ export const servePortal = async (c: Context) => {
   return c.json({ success: false, error: 'NOT_FOUND', message: 'File not found' }, 404);
 };
 
-// Serve admin portal (static files) - handler for both /admin and /admin/*
+// Serve Admin Console static files for both /admin and /admin/*.
 export const serveAdmin = async (c: Context) => {
   let path = c.req.path.substring('/admin'.length);
   if (path === '' || path === '/') {

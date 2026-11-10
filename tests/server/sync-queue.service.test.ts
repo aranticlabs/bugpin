@@ -16,6 +16,7 @@ const originalIntegrationsRepo = { ...integrationsRepo };
 const originalCheckAccess = projectLicenseService.checkAccess;
 
 let markPendingIds: string[] = [];
+let finalSyncError: string | null = null;
 let syncResult = Result.ok({
   reportId: 'rpt_1',
   success: true,
@@ -28,6 +29,7 @@ beforeEach(() => {
   integrationsRepo.findById = async (id) => ({ id, projectId: 'prj_1' }) as Integration;
   projectLicenseService.checkAccess = () => Result.ok(undefined);
   markPendingIds = [];
+  finalSyncError = null;
   syncResult = Result.ok({
     reportId: 'rpt_1',
     success: true,
@@ -37,6 +39,10 @@ beforeEach(() => {
 
   reportsRepo.markPendingSyncBatch = (ids) => {
     markPendingIds.push(...ids);
+  };
+  reportsRepo.updateGitHubSyncStatus = async (_id, update) => {
+    finalSyncError = update.error ?? null;
+    return null;
   };
 
   githubSyncService.syncReport = async () => syncResult;
@@ -126,7 +132,46 @@ describe('syncQueueService', () => {
 
     const status = syncQueueService.getStatus();
     expect(status.queueLength).toBe(0);
+    expect(finalSyncError).toBe('Sync failed');
 
+    Date.now = originalNow;
+  });
+
+  it('does not record the final error for a project without license access', async () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    syncResult = Result.fail('Sync failed', 'SYNC_FAILED');
+
+    await syncQueueService.enqueue('rpt_1', 'int_1');
+    projectLicenseService.checkAccess = () =>
+      Result.fail('This project is read-only', 'PROJECT_NOT_LICENSED');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await syncQueueService.processQueue();
+      now += 60000;
+    }
+
+    expect(syncQueueService.getStatus().queueLength).toBe(0);
+    expect(finalSyncError).toBeNull();
+    Date.now = originalNow;
+  });
+
+  it('bounds thrown sync failures and records the final error', async () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    githubSyncService.syncReport = async () => {
+      throw new Error('Database unavailable');
+    };
+
+    await syncQueueService.enqueue('rpt_1', 'int_1');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await syncQueueService.processQueue();
+      now += 60000;
+    }
+
+    expect(syncQueueService.getStatus().queueLength).toBe(0);
+    expect(finalSyncError).toBe('Database unavailable');
     Date.now = originalNow;
   });
 

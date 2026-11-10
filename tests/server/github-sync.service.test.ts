@@ -71,6 +71,7 @@ let updateStatusPayload: unknown;
 let deletedWebhookId: string | null = null;
 let updatedIntegrationConfig: unknown;
 let createWebhookUrl: string | null = null;
+let createWebhookSecret: string | null = null;
 
 beforeEach(() => {
   projectLicenseService.checkAccess = () => Result.ok(undefined);
@@ -82,6 +83,7 @@ beforeEach(() => {
   deletedWebhookId = null;
   updatedIntegrationConfig = null;
   createWebhookUrl = null;
+  createWebhookSecret = null;
 
   reportsRepo.findById = async () => reportById;
   reportsRepo.updateGitHubSyncStatus = async (_id, payload) => {
@@ -118,8 +120,9 @@ beforeEach(() => {
     issueNumber: 456,
     issueUrl: 'https://github.com/org/repo/issues/456',
   });
-  githubService.createWebhook = async (_config, url) => {
+  githubService.createWebhook = async (_config, url, secret) => {
     createWebhookUrl = url;
+    createWebhookSecret = secret;
     return { success: true, webhookId: '42' };
   };
   githubService.deleteWebhook = async (_config, webhookId) => {
@@ -321,6 +324,7 @@ describe('githubSyncService', () => {
   it('enables automatic sync', async () => {
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(true);
+    expect(createWebhookSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('returns NOT_FOUND when enabling auto sync for missing integration', async () => {
