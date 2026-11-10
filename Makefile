@@ -307,7 +307,7 @@ release:
 		echo "$(BLUE)[INFO]$(NC) Bumping version to $(v)..."; \
 		$(MAKE) -s bump-version v=$(v); \
 		echo "$(BLUE)[INFO]$(NC) Committing changes..."; \
-		git add -A; \
+		git add package.json src/server/package.json src/admin/package.json; \
 		git diff --cached --quiet && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
 		git commit -m "chore: bump version to $(v)"; \
 		echo "$(BLUE)[INFO]$(NC) Pushing commit to $$BRANCH..."; \
