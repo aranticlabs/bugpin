@@ -528,3 +528,144 @@ describe('ScreenshotManager uploads', () => {
     container.remove();
   });
 });
+
+describe('ScreenshotManager paste', () => {
+  function renderManager(onUpload: (item: CapturedMedia) => void): HTMLElement {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(
+      <ScreenshotManager
+        media={[]}
+        onCapture={() => undefined}
+        onUpload={onUpload}
+        onRemove={() => undefined}
+        onAnnotate={() => undefined}
+        isCapturing={false}
+        enableAnnotation={true}
+        reduceQuality={false}
+        onReduceQualityChange={() => undefined}
+        oversizedCapture={null}
+        onDismissOversizedCapture={() => undefined}
+      />,
+      container
+    );
+    return container;
+  }
+
+  function clipboardItem(file: File) {
+    return { kind: 'file', type: file.type, getAsFile: () => file };
+  }
+
+  function paste(
+    target: EventTarget,
+    items: Array<{ kind: string; type: string; getAsFile: () => File | null }>
+  ): Event {
+    const event = new window.Event('paste', { bubbles: true, cancelable: true, composed: true });
+    const files = items.flatMap((item) => item.getAsFile() ?? []);
+    Object.defineProperty(event, 'clipboardData', {
+      value: { items, files: files.length > 0 ? buildFileList(files[0] as File) : [] },
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it('adds a pasted image like an upload', async () => {
+    const onUpload = mock((_item: CapturedMedia) => undefined);
+    const container = renderManager(onUpload);
+    await settle();
+
+    const file = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });
+    const event = paste(document.body, [clipboardItem(file)]);
+    await settle();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onUpload).toHaveBeenCalledTimes(1);
+    expect(onUpload.mock.calls[0]?.[0]).toMatchObject({
+      mimeType: 'image/png',
+      width: 320,
+      height: 240,
+    });
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('applies upload validation to pasted files', async () => {
+    const onUpload = mock((_item: CapturedMedia) => undefined);
+    const container = renderManager(onUpload);
+    await settle();
+
+    const pdf = new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' });
+    paste(document.body, [clipboardItem(pdf)]);
+    await settle();
+    expect(onUpload).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      t('screenshot.error.unsupportedFile', { type: 'application/pdf' })
+    );
+
+    const huge = new File([new Uint8Array(11 * 1024 * 1024)], 'big.png', { type: 'image/png' });
+    paste(document.body, [clipboardItem(huge)]);
+    await settle();
+    expect(onUpload).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      t('screenshot.error.imageTooLarge', { size: 10 })
+    );
+
+    render(null, container);
+    container.remove();
+  });
+
+  it('leaves pastes into text fields and text-only pastes alone', async () => {
+    const onUpload = mock((_item: CapturedMedia) => undefined);
+    const container = renderManager(onUpload);
+    await settle();
+
+    const input = document.createElement('textarea');
+    document.body.appendChild(input);
+    const file = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });
+    const intoField = paste(input, [clipboardItem(file)]);
+    const textOnly = paste(document.body, [
+      { kind: 'string', type: 'text/plain', getAsFile: () => null },
+    ]);
+    await settle();
+
+    expect(intoField.defaultPrevented).toBe(false);
+    expect(textOnly.defaultPrevented).toBe(false);
+    expect(onUpload).not.toHaveBeenCalled();
+
+    input.remove();
+    render(null, container);
+    container.remove();
+  });
+
+  it('stops listening once the Screenshots tab is unmounted', async () => {
+    const onUpload = mock((_item: CapturedMedia) => undefined);
+    const container = renderManager(onUpload);
+    await settle();
+    render(null, container);
+    await settle();
+
+    const file = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });
+    const event = paste(document.body, [clipboardItem(file)]);
+    await settle();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(onUpload).not.toHaveBeenCalled();
+    container.remove();
+  });
+
+  it('shows the paste hint in the empty drop zone', () => {
+    const container = renderManager(() => undefined);
+    expect(container.textContent).toContain(
+      t('screenshot.dropzone.subtitlePaste', { shortcut: 'Ctrl+V' })
+    );
+    render(null, container);
+    container.remove();
+  });
+});
