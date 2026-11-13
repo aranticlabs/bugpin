@@ -5,7 +5,7 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import { githubService } from '../../src/server/services/integrations/github.service';
-import type { Integration, Project, Report } from '../../src/shared/types';
+import type { Integration, IntegrationConfig, Project, Report } from '../../src/shared/types';
 
 const baseProject: Project = {
   isActive: true,
@@ -213,6 +213,217 @@ describe('integrationsService.update/delete', () => {
   it('deletes integration', async () => {
     const result = await integrationsService.delete('int_1');
     expect(result.success).toBe(true);
+  });
+});
+
+describe('integrationsService.update config merge', () => {
+  const storedToken = 'ghp_realtoken1234abcd';
+  const storedGithub: Integration = {
+    ...baseIntegration,
+    config: {
+      owner: 'org',
+      repo: 'repo',
+      accessToken: storedToken,
+      labels: ['bug'],
+      syncMode: 'automatic',
+      webhookId: '42',
+      webhookSecret: 'whsec_stored',
+    },
+  };
+
+  let persistedConfig: IntegrationConfig | undefined;
+
+  beforeEach(() => {
+    integrationById = storedGithub;
+    persistedConfig = undefined;
+    integrationsRepo.update = async (_id, updates) => {
+      persistedConfig = updates.config;
+      return { ...storedGithub, ...updates };
+    };
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['blank', '   '],
+    ['the masked form', 'ghp_****abcd'],
+    ['the short masked form', '****'],
+  ])('keeps the stored token when the incoming token is %s', async (_label, accessToken) => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ accessToken: storedToken });
+  });
+
+  it('replaces the stored token when a new token is provided', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: 'ghp_newtoken9999' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ accessToken: 'ghp_newtoken9999' });
+  });
+
+  it('returns the updated integration with a masked token', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const config = result.value.config as { accessToken: string };
+      expect(config.accessToken).toBe('ghp_****abcd');
+    }
+  });
+
+  it('preserves sync mode and webhook fields that the update omits', async () => {
+    const result = await integrationsService.update('int_1', {
+      name: 'Renamed',
+      config: { owner: 'org', repo: 'repo', labels: ['ui'] },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({
+      syncMode: 'automatic',
+      webhookId: '42',
+      webhookSecret: 'whsec_stored',
+      labels: ['ui'],
+    });
+  });
+
+  it('ignores sync mode and webhook fields sent by the client', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: {
+        owner: 'org',
+        repo: 'repo',
+        syncMode: 'manual',
+        webhookId: '999',
+        webhookSecret: 'attacker',
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({
+      syncMode: 'automatic',
+      webhookId: '42',
+      webhookSecret: 'whsec_stored',
+    });
+  });
+
+  it('does not add sync fields that the stored config does not have', async () => {
+    integrationById = baseIntegration;
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', syncMode: 'automatic', webhookId: '1' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).not.toHaveProperty('syncMode');
+    expect(persistedConfig).not.toHaveProperty('webhookId');
+  });
+
+  it('rejects moving an automatically synced integration to another repository', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'other-repo' },
+    });
+    expect(result).toEqual({
+      success: false,
+      error: 'Switch to manual sync before changing the repository',
+      code: 'SYNC_ACTIVE',
+    });
+    expect(persistedConfig).toBeUndefined();
+  });
+
+  it('treats repository names case-insensitively for synced integrations', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'Org', repo: 'Repo' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ owner: 'Org', repo: 'Repo' });
+  });
+
+  it('allows changing the repository of a manually synced integration', async () => {
+    integrationById = baseIntegration;
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'other-repo' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ repo: 'other-repo', accessToken: 'token1234' });
+  });
+
+  it('lets the client clear optional non-secret fields by omitting them', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).not.toHaveProperty('labels');
+  });
+
+  it('rejects a masked token when no token is stored', async () => {
+    integrationById = {
+      ...baseIntegration,
+      config: { owner: 'org', repo: 'repo', accessToken: '' },
+    };
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: 'ghp_****abcd' },
+    });
+    expect(result).toEqual({
+      success: false,
+      error: 'GitHub access token is required',
+      code: 'INVALID_CONFIG',
+    });
+    expect(persistedConfig).toBeUndefined();
+  });
+
+  it('keeps the stored Jira API token when the incoming token is masked', async () => {
+    integrationById = {
+      ...baseIntegration,
+      type: 'jira',
+      config: {
+        domain: 'acme.atlassian.net',
+        email: 'dev@example.com',
+        apiToken: 'jira-secret-token',
+        projectKey: 'BUG',
+        issueType: 'Bug',
+      },
+    };
+    const result = await integrationsService.update('int_1', {
+      config: {
+        domain: 'acme.atlassian.net',
+        email: 'dev@example.com',
+        apiToken: 'jira****oken',
+        projectKey: 'OPS',
+        issueType: 'Bug',
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ apiToken: 'jira-secret-token', projectKey: 'OPS' });
+  });
+
+  it('keeps the stored Slack webhook URL when the incoming URL is masked', async () => {
+    integrationById = {
+      ...baseIntegration,
+      type: 'slack',
+      config: { webhookUrl: 'https://hooks.slack.com/services/T/B/secret', notifyOn: [] },
+    };
+    const result = await integrationsService.update('int_1', {
+      config: { webhookUrl: 'http****cret', notifyOn: ['report.created'] },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({
+      webhookUrl: 'https://hooks.slack.com/services/T/B/secret',
+      notifyOn: ['report.created'],
+    });
+  });
+});
+
+describe('integrationsService.create masked secrets', () => {
+  it('rejects a masked access token', async () => {
+    const result = await integrationsService.create({
+      projectId: 'prj_1',
+      type: 'github',
+      name: 'GitHub',
+      config: { owner: 'org', repo: 'repo', accessToken: 'ghp_****abcd' },
+    });
+    expect(result).toEqual({
+      success: false,
+      error: 'Secrets must not be masked values',
+      code: 'INVALID_CONFIG',
+    });
   });
 });
 
