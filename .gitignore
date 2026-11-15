@@ -46,9 +46,6 @@ GEMINI.md
 # Obsidian files
 .obsidian/
 
-# Build automation
-Makefile
-
 # Development docs
 docs-dev/
 /src/admin/prototypes/
