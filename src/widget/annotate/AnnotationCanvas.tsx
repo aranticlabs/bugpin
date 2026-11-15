@@ -1164,7 +1164,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
       {/* Canvas */}
       <div
-        class="flex-auto min-h-0 min-w-[700px] overflow-auto flex items-center justify-center p-4 bg-muted"
+        class="flex-auto min-h-0 min-w-0 overflow-auto flex items-center justify-center p-4 bg-muted"
         ref={canvasWrapperRef}
       >
         <canvas ref={canvasRef} />

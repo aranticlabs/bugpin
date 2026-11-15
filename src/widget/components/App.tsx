@@ -770,8 +770,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       )}
 
       {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
-        <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
-          <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
+        <div class="fixed inset-0 z-[2147483647] bg-black/50 flex items-center justify-center sm:p-5 animate-[fadeIn_0.2s_ease-out]">
+          <div class="relative w-full h-full min-h-0 bg-background sm:border sm:border-solid sm:border-border sm:rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
             <AnnotationCanvasComponent
               screenshot={annotatingMedia.dataUrl}
               onSave={handleAnnotationSave}
