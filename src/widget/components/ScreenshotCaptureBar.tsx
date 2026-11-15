@@ -1,8 +1,8 @@
-import { FunctionComponent } from 'preact';
-import { useCallback, useEffect, useRef } from 'preact/hooks';
-import { Camera, GripVertical, Timer, Trash2 } from 'lucide-preact';
+import { FunctionComponent, JSX } from 'preact';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { Camera, Check, ChevronDown, GripVertical, Timer, X } from 'lucide-preact';
 import { cn } from '../lib/utils';
-import { Card } from './ui';
+import { Button, Card, Popover, Separator, Tooltip } from './ui';
 import {
   CAPTURE_BAR_CLASS,
   CAPTURE_BAR_SHADOW_CLASS,
@@ -13,16 +13,23 @@ import {
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 
+const MENU_OFFSET = 8;
+
 interface ScreenshotCaptureBarProps {
   isReady: boolean;
   isCountingDown: boolean;
   countdown: number;
   delaySeconds: number;
+  delayOptions: readonly number[];
   position: CaptureBarPosition | null;
   onPositionChange: (position: CaptureBarPosition) => void;
-  onCaptureNow: () => void;
-  onCaptureDelayed: () => void;
+  onDelayChange: (seconds: number) => void;
+  onCapture: () => void;
   onCancel: () => void;
+}
+
+function delayText(seconds: number): string {
+  return seconds === 0 ? t('screenshot.bar.timerOff') : t('screenshot.bar.timerShort', { seconds });
 }
 
 export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> = ({
@@ -30,10 +37,11 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
   isCountingDown,
   countdown,
   delaySeconds,
+  delayOptions,
   position,
   onPositionChange,
-  onCaptureNow,
-  onCaptureDelayed,
+  onDelayChange,
+  onCapture,
   onCancel,
 }) => {
   useLocale();
@@ -42,26 +50,86 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
     onPositionChange,
     [isReady, isCountingDown]
   );
-  const countdownRef = useRef<HTMLSpanElement>(null);
-  const keepFocusRef = useRef(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const timerRef = useRef<HTMLDivElement>(null);
 
-  // Starting the countdown removes the focused button, so focus moves to the countdown
-  // instead of falling back to the page.
+  const focusTimerItem = useCallback((selector: string) => {
+    timerRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
+  }, []);
+
+  const closeMenu = useCallback(
+    (restoreFocus: boolean) => {
+      setIsMenuOpen(false);
+      if (restoreFocus) focusTimerItem('[aria-haspopup="menu"]');
+    },
+    [focusTimerItem]
+  );
+
   useEffect(() => {
-    if (isCountingDown && keepFocusRef.current) {
-      keepFocusRef.current = false;
-      countdownRef.current?.focus();
-    }
-  }, [isCountingDown]);
+    if (!isMenuOpen) return;
+    focusTimerItem('[role="menuitemradio"][aria-checked="true"]');
+    // The bar lives in a shadow root, so the composed path is the reliable way to
+    // tell a click inside the menu from one on the page.
+    const handleOutside = (event: PointerEvent) => {
+      const timer = timerRef.current;
+      if (timer && !event.composedPath().includes(timer)) closeMenu(false);
+    };
+    document.addEventListener('pointerdown', handleOutside, true);
+    return () => document.removeEventListener('pointerdown', handleOutside, true);
+  }, [isMenuOpen, closeMenu, focusTimerItem]);
 
-  const handleCaptureDelayed = useCallback(() => {
-    const bar = barRef.current;
-    const root = bar?.getRootNode() as DocumentOrShadowRoot | undefined;
-    keepFocusRef.current = !!bar && !!root?.activeElement && bar.contains(root.activeElement);
-    onCaptureDelayed();
-  }, [barRef, onCaptureDelayed]);
+  useEffect(() => {
+    if (isCountingDown || !isReady) setIsMenuOpen(false);
+  }, [isCountingDown, isReady]);
 
-  const delayedLabel = t('screenshot.bar.delayedLabel', { seconds: delaySeconds });
+  const handleMenuKeyDown = useCallback(
+    (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+      const items = Array.from(
+        timerRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []
+      );
+      const root = timerRef.current?.getRootNode() as DocumentOrShadowRoot | undefined;
+      const index = items.indexOf(root?.activeElement as HTMLButtonElement);
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        items[(index + step + items.length) % items.length]?.focus();
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMenu(true);
+      } else if (event.key === 'Tab') {
+        closeMenu(false);
+      }
+    },
+    [closeMenu]
+  );
+
+  const selectDelay = useCallback(
+    (seconds: number) => {
+      onDelayChange(seconds);
+      closeMenu(true);
+    },
+    [closeMenu, onDelayChange]
+  );
+
+  const timerTrigger = (
+    <Button
+      variant={delaySeconds === 0 ? 'ghost' : 'secondary'}
+      class="h-9 gap-1.5 px-2.5 text-sm"
+      aria-haspopup="menu"
+      aria-expanded={isMenuOpen}
+      disabled={!isReady || isCountingDown}
+      onClick={() => setIsMenuOpen((open) => !open)}
+    >
+      <Timer class="w-4 h-4" aria-hidden="true" />
+      <span class="sr-only">{t('screenshot.bar.timerLabel')}: </span>
+      <span>{delayText(delaySeconds)}</span>
+      <ChevronDown class="w-3.5 h-3.5 opacity-70" aria-hidden="true" />
+    </Button>
+  );
 
   return (
     <Card
@@ -81,39 +149,65 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
           <GripVertical class="w-4 h-4" aria-hidden="true" />
         </div>
 
-        {isCountingDown ? (
-          <span
-            ref={countdownRef}
-            role="status"
-            tabIndex={-1}
-            class="px-2 text-sm font-medium tabular-nums outline-none"
+        <div ref={timerRef} class="relative inline-flex" onKeyDown={handleMenuKeyDown}>
+          {isMenuOpen ? (
+            timerTrigger
+          ) : (
+            <Tooltip content={t('screenshot.bar.timerLabel')} side={tooltipSide}>
+              {timerTrigger}
+            </Tooltip>
+          )}
+          <Popover
+            open={isMenuOpen}
+            side={tooltipSide}
+            sideOffset={MENU_OFFSET}
+            class={cn('flex min-w-[9rem] flex-col gap-0.5 p-1', CAPTURE_BAR_SHADOW_CLASS)}
           >
-            {t('screenshot.bar.countdown', { seconds: countdown })}
-          </span>
-        ) : (
-          <div class="flex items-center gap-0.5">
-            <CaptureBarButton
-              label={t('screenshot.bar.nowLabel')}
-              side={tooltipSide}
-              class="w-auto gap-1.5 px-3 text-sm"
-              disabled={!isReady}
-              onClick={onCaptureNow}
-            >
+            <div role="menu" aria-label={t('screenshot.bar.timerLabel')} class="contents">
+              {delayOptions.map((seconds) => (
+                <Button
+                  key={seconds}
+                  variant="ghost"
+                  size="sm"
+                  role="menuitemradio"
+                  aria-checked={seconds === delaySeconds}
+                  tabIndex={-1}
+                  class="w-full justify-start gap-2 text-sm"
+                  onClick={() => selectDelay(seconds)}
+                >
+                  <Check
+                    class={cn('w-4 h-4', seconds !== delaySeconds && 'invisible')}
+                    aria-hidden="true"
+                  />
+                  {seconds === 0
+                    ? t('screenshot.bar.timerOff')
+                    : t('screenshot.bar.timerOption', { seconds })}
+                </Button>
+              ))}
+            </div>
+          </Popover>
+        </div>
+
+        <Button
+          class="h-9 min-w-[7.5rem] gap-1.5 px-3 text-sm tabular-nums"
+          disabled={!isReady}
+          aria-disabled={isCountingDown || undefined}
+          onClick={isCountingDown ? undefined : onCapture}
+        >
+          {isCountingDown ? (
+            <span>{t('screenshot.bar.countdown', { seconds: countdown })}</span>
+          ) : (
+            <>
               <Camera class="w-4 h-4" aria-hidden="true" />
-              <span>{t('screenshot.bar.now')}</span>
-            </CaptureBarButton>
-            <CaptureBarButton
-              label={delayedLabel}
-              side={tooltipSide}
-              class="w-auto gap-1.5 px-3 text-sm"
-              disabled={!isReady}
-              onClick={handleCaptureDelayed}
-            >
-              <Timer class="w-4 h-4" aria-hidden="true" />
-              <span>{t('screenshot.bar.delayed', { seconds: delaySeconds })}</span>
-            </CaptureBarButton>
-          </div>
-        )}
+              <span>{t('screenshot.bar.capture')}</span>
+            </>
+          )}
+        </Button>
+        <span role="status" class="sr-only">
+          {isCountingDown ? t('screenshot.bar.countdown', { seconds: countdown }) : ''}
+        </span>
+
+        <Separator orientation="vertical" class="h-5" />
 
         <CaptureBarButton
           label={t('screenshot.bar.cancel')}
@@ -121,7 +215,7 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
           variant="ghost"
           onClick={onCancel}
         >
-          <Trash2 class="w-4 h-4" />
+          <X class="w-4 h-4" />
         </CaptureBarButton>
       </div>
     </Card>

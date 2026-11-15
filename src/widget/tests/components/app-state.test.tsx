@@ -185,6 +185,27 @@ function clickButton(container: HTMLElement, label: string): void {
   button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 }
 
+function clickCapture(container: HTMLElement): void {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent === t('screenshot.bar.capture')
+  );
+  expect(button).toBeDefined();
+  button?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+}
+
+async function chooseDelay(container: HTMLElement, seconds: number): Promise<void> {
+  container
+    .querySelector('button[aria-haspopup="menu"]')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await settle();
+  const option = Array.from(container.querySelectorAll('[role="menuitemradio"]')).find(
+    (item) => item.textContent === t('screenshot.bar.timerOption', { seconds })
+  );
+  expect(option).toBeDefined();
+  option?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await settle();
+}
+
 function barHandle(container: HTMLElement): Element | null {
   return container.querySelector('[data-screenshot-capture-bar-drag-handle]');
 }
@@ -431,7 +452,7 @@ describe('App state transitions', () => {
     expect(container.querySelector('button[aria-label="Report issue"]')).toBeNull();
     expect(captureScreenshot).not.toHaveBeenCalled();
 
-    clickButton(container, t('screenshot.bar.nowLabel'));
+    clickCapture(container);
     await settle();
 
     expect(captureScreenshot).toHaveBeenCalledTimes(1);
@@ -462,7 +483,7 @@ describe('App state transitions', () => {
     const onCaptureScreenshot = lastDialogProps?.onCaptureScreenshot as () => Promise<void>;
     await onCaptureScreenshot();
     await flush();
-    clickButton(container, t('screenshot.bar.nowLabel'));
+    clickCapture(container);
     await settle();
 
     const toast = container.querySelector('[role="alert"]');
@@ -698,7 +719,9 @@ describe('Screenshot bar and capture API', () => {
     });
 
     await openBar(container);
-    clickButton(container, t('screenshot.bar.delayedLabel', { seconds: 3 }));
+    await chooseDelay(container, 3);
+    expect(localStorage.getItem('bugpin-screenshot-delay')).toBe('3');
+    clickCapture(container);
     await settle();
 
     const status = () => container.querySelector('[role="status"]')?.textContent;
@@ -721,6 +744,26 @@ describe('Screenshot bar and capture API', () => {
     expect((lastDialogProps?.media as unknown[]).length).toBe(1);
     expect(lastDialogProps?.activeTab).toBe('media');
 
+    cleanup(container);
+  });
+
+  it('starts with the delay chosen last time', async () => {
+    localStorage.setItem('bugpin-screenshot-delay', '5');
+    const container = await renderApp();
+    await openBar(container);
+
+    const trigger = container.querySelector('button[aria-haspopup="menu"]');
+    expect(trigger?.textContent).toContain(t('screenshot.bar.timerShort', { seconds: 5 }));
+    clickCapture(container);
+    await settle();
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      t('screenshot.bar.countdown', { seconds: 5 })
+    );
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    clickButton(container, t('screenshot.bar.cancel'));
+    await settle();
     cleanup(container);
   });
 
@@ -748,7 +791,7 @@ describe('Screenshot bar and capture API', () => {
     await flush();
     expect(openScreenCaptureSession).toHaveBeenCalledTimes(1);
 
-    clickButton(container, t('screenshot.bar.nowLabel'));
+    clickCapture(container);
     await settle();
 
     const options = (captureScreenshot.mock.calls as unknown[][])[0]?.[0] as Record<
@@ -771,7 +814,7 @@ describe('Screenshot bar and capture API', () => {
 
     await openBar(container);
     await settle();
-    clickButton(container, t('screenshot.bar.nowLabel'));
+    clickCapture(container);
     await settle();
 
     const options = (captureScreenshot.mock.calls as unknown[][])[0]?.[0] as Record<

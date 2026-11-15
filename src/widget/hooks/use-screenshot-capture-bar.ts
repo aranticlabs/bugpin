@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { openScreenCaptureSession, type ScreenCaptureSession } from '../capture/screenshot.js';
 
-export const CAPTURE_DELAY_SECONDS = 3;
+export const CAPTURE_DELAY_OPTIONS = [0, 3, 5, 10] as const;
 const COUNTDOWN_STEP_MS = 1000;
+const DELAY_STORAGE_KEY = 'bugpin-screenshot-delay';
+
+function loadDelaySeconds(): number {
+  try {
+    const stored = Number(localStorage.getItem(DELAY_STORAGE_KEY));
+    return (CAPTURE_DELAY_OPTIONS as readonly number[]).includes(stored) ? stored : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export type ScreenshotCaptureBarStatus = 'idle' | 'preparing' | 'ready' | 'countdown' | 'capturing';
 
@@ -33,7 +43,8 @@ export function useScreenshotCaptureBar({
   const openSession = dependencies?.openScreenCaptureSession ?? openScreenCaptureSession;
   const [status, setStatus] = useState<ScreenshotCaptureBarStatus>('idle');
   const statusRef = useRef(status);
-  const [countdown, setCountdown] = useState(CAPTURE_DELAY_SECONDS);
+  const [delaySeconds, setDelaySecondsState] = useState(loadDelaySeconds);
+  const [countdown, setCountdown] = useState(delaySeconds);
   const sessionRef = useRef<ScreenCaptureSession | null>(null);
   const openGenerationRef = useRef(0);
   const captureRef = useRef(capture);
@@ -93,11 +104,24 @@ export function useScreenshotCaptureBar({
     }
   }, [releaseSession, updateStatus]);
 
-  const captureDelayed = useCallback(() => {
+  const startCapture = useCallback(() => {
     if (statusRef.current !== 'ready') return;
-    setCountdown(CAPTURE_DELAY_SECONDS);
+    if (delaySeconds === 0) {
+      void captureNow();
+      return;
+    }
+    setCountdown(delaySeconds);
     updateStatus('countdown');
-  }, [updateStatus]);
+  }, [captureNow, delaySeconds, updateStatus]);
+
+  const setDelaySeconds = useCallback((seconds: number) => {
+    setDelaySecondsState(seconds);
+    try {
+      localStorage.setItem(DELAY_STORAGE_KEY, String(seconds));
+    } catch {
+      // Storage can be unavailable (private mode, blocked cookies); the choice then lasts for the page.
+    }
+  }, []);
 
   const cancel = useCallback(() => {
     releaseSession();
@@ -114,5 +138,5 @@ export function useScreenshotCaptureBar({
     return () => clearTimeout(timeout);
   }, [status, countdown, captureNow]);
 
-  return { status, countdown, open, captureNow, captureDelayed, cancel };
+  return { status, countdown, delaySeconds, setDelaySeconds, open, capture: startCapture, cancel };
 }

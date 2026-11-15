@@ -26,7 +26,7 @@ import { recordingStore } from '../storage/recording-store.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
 import { useScreenRecording, type RecordingDependencies } from '../hooks/use-screen-recording.js';
 import {
-  CAPTURE_DELAY_SECONDS,
+  CAPTURE_DELAY_OPTIONS,
   useScreenshotCaptureBar,
   type ScreenshotCaptureBarDependencies,
 } from '../hooks/use-screenshot-capture-bar.js';
@@ -839,11 +839,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           isReady={screenshotCaptureBar.status === 'ready'}
           isCountingDown={screenshotCaptureBar.status === 'countdown'}
           countdown={screenshotCaptureBar.countdown}
-          delaySeconds={CAPTURE_DELAY_SECONDS}
+          delaySeconds={screenshotCaptureBar.delaySeconds}
+          delayOptions={CAPTURE_DELAY_OPTIONS}
           position={screenshotCaptureBarPosition}
           onPositionChange={setScreenshotCaptureBarPosition}
-          onCaptureNow={screenshotCaptureBar.captureNow}
-          onCaptureDelayed={screenshotCaptureBar.captureDelayed}
+          onDelayChange={screenshotCaptureBar.setDelaySeconds}
+          onCapture={screenshotCaptureBar.capture}
           onCancel={handleCancelScreenshotCaptureBar}
         />
       )}
