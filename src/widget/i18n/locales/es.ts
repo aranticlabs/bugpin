@@ -155,8 +155,9 @@ const es: WidgetCatalog = {
   'annotation.toolbar.delete': 'Eliminar selección (Del)',
   'annotation.toolbar.zoomIn': 'Acercar - Mantén pulsado Espacio para desplazar al ampliar',
   'annotation.toolbar.zoomOut': 'Alejar - Mantén pulsado Espacio para desplazar al ampliar',
-  'annotation.toolbar.zoomReset':
-    'Restablecer zoom ({percent}%) - Mantén pulsado Espacio para desplazar',
+  'annotation.toolbar.zoomFit': 'Ajustar a la pantalla',
+  'annotation.toolbar.maximize': 'Maximizar',
+  'annotation.toolbar.restore': 'Tamaño original',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.defaultText': 'Texto',
   'annotation.buttons.cancel': 'Cancelar',

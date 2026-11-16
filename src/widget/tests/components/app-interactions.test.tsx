@@ -280,14 +280,30 @@ describe('App interactions', () => {
       'Fabric canvas not ready'
     );
 
-    const annotationRoot = container.querySelector('canvas')?.parentElement?.parentElement;
+    const annotationRoot =
+      container.querySelector('canvas')?.parentElement?.parentElement?.parentElement;
     const annotationModal = annotationRoot?.parentElement;
 
     expect(annotationModal?.classList.contains('w-full')).toBe(true);
     expect(annotationModal?.classList.contains('h-full')).toBe(true);
     expect(annotationModal?.classList.contains('min-h-0')).toBe(true);
-    expect(annotationModal?.className).not.toContain('max-w-');
+    expect(annotationModal?.classList.contains('sm:max-w-4xl')).toBe(true);
+    expect(annotationModal?.classList.contains('sm:h-[770px]')).toBe(true);
     expect(annotationModal?.parentElement?.classList.contains('sm:p-5')).toBe(true);
+
+    const maximizeButton = container.querySelector(
+      'button[title="Maximize"]'
+    ) as HTMLButtonElement | null;
+    expect(maximizeButton).toBeTruthy();
+    maximizeButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    const restoreButton = await waitFor(
+      () => container.querySelector('button[title="Restore size"]') as HTMLButtonElement | null,
+      'Restore button not shown'
+    );
+    expect(restoreButton).toBeTruthy();
+    expect(annotationModal?.className).not.toContain('max-w-');
+    expect(annotationModal?.className).not.toContain('h-[770px]');
 
     const annotationOverlay = annotationModal?.parentElement;
     const launcherLayer = container.querySelector('button[aria-label="Report issue"]')
@@ -316,6 +332,18 @@ describe('App interactions', () => {
       'Annotated badge not shown'
     );
     expect(container.textContent).toContain('Annotated');
+
+    delete (globalThis as Record<string, unknown>).__fabricCanvasReady;
+    const reopenButton = await waitFor(
+      () => container.querySelector('button[title="Annotate"]') as HTMLButtonElement | null,
+      'Annotate button not shown again'
+    );
+    reopenButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    const reopenedMaximize = await waitFor(
+      () => container.querySelector('button[title="Maximize"]') as HTMLButtonElement | null,
+      'Editor did not reopen at normal size'
+    );
+    expect(reopenedMaximize).toBeTruthy();
 
     render(null, container);
     container.remove();
