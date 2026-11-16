@@ -102,7 +102,7 @@ function loadConfig() {
   return {
     ...parsed,
     // Hardcoded values (port 7301 in dev for Vite proxy, 7300 in production)
-    port: isDevelopment ? 7322 : 7300,
+    port: isDevelopment ? 7301 : 7300,
     host: '0.0.0.0',
     adminEmail: parsed.adminEmail.toLowerCase(),
     // Derived values

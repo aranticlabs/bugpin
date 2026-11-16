@@ -57,29 +57,29 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
   },
   server: {
-    port: 7321,
+    port: 7300,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:7322',
+        target: 'http://localhost:7301',
         changeOrigin: false,
         xfwd: true,
       },
       '/branding': {
-        target: 'http://localhost:7322',
+        target: 'http://localhost:7301',
         changeOrigin: true,
       },
       '/admin/branding': {
-        target: 'http://localhost:7322',
+        target: 'http://localhost:7301',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/admin/, ''),
       },
       '/test-widget': {
-        target: 'http://localhost:7322',
+        target: 'http://localhost:7301',
         changeOrigin: true,
       },
       '/widget.js': {
-        target: 'http://localhost:7322',
+        target: 'http://localhost:7301',
         changeOrigin: true,
       },
     },
