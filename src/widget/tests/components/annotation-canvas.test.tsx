@@ -74,6 +74,8 @@ describe('AnnotationCanvas', () => {
     render(
       <AnnotationCanvas
         screenshot="data:image/png;base64,stub"
+        isMaximized={false}
+        onToggleMaximize={() => undefined}
         onSave={onSave}
         onCancel={onCancel}
       />,
@@ -82,8 +84,13 @@ describe('AnnotationCanvas', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const canvasRegion = container.querySelector('canvas')?.parentElement;
+    const canvasLayer = container.querySelector('canvas')?.parentElement;
+    const canvasRegion = canvasLayer?.parentElement;
     const annotationRoot = canvasRegion?.parentElement;
+
+    expect(canvasLayer?.classList.contains('absolute')).toBe(true);
+    expect(canvasLayer?.classList.contains('inset-0')).toBe(true);
+    expect(canvasRegion?.classList.contains('overflow-hidden')).toBe(true);
 
     expect(annotationRoot?.classList.contains('h-full')).toBe(true);
     expect(annotationRoot?.classList.contains('min-h-0')).toBe(true);
@@ -114,6 +121,8 @@ describe('AnnotationCanvas', () => {
     render(
       <AnnotationCanvas
         screenshot="data:image/png;base64,stub"
+        isMaximized={false}
+        onToggleMaximize={() => undefined}
         onSave={() => undefined}
         onCancel={() => undefined}
       />,
@@ -134,6 +143,7 @@ describe('AnnotationCanvas', () => {
     const canvas = canvasEl.__fabricCanvas as
       | {
           getZoom: () => number;
+          backgroundImage?: unknown;
           freeDrawingBrush?: { color?: string; width?: number };
           events?: Map<string, unknown>;
         }
@@ -165,17 +175,18 @@ describe('AnnotationCanvas', () => {
     widthButton.click();
     await waitFor(() => canvas.freeDrawingBrush?.width === 8, 'Brush width not updated');
 
+    await waitFor(() => Boolean(canvas.backgroundImage), 'Screenshot not loaded');
+    const fittedZoom = canvas.getZoom();
+
     const zoomInButton = container.querySelector(
       'button[title="Zoom In - Hold Space to pan when zoomed"]'
     ) as HTMLButtonElement;
     zoomInButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    expect(canvas.getZoom()).toBeGreaterThan(1);
+    expect(canvas.getZoom()).toBeGreaterThan(fittedZoom);
 
-    const zoomResetButton = container.querySelector(
-      'button[title^="Reset Zoom"]'
-    ) as HTMLButtonElement;
-    zoomResetButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    expect(canvas.getZoom()).toBe(1);
+    const fitButton = container.querySelector('button[title="Fit to screen"]') as HTMLButtonElement;
+    fitButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(canvas.getZoom()).toBe(fittedZoom);
 
     render(null, container);
     container.remove();
@@ -190,6 +201,8 @@ describe('AnnotationCanvas', () => {
     render(
       <AnnotationCanvas
         screenshot="data:image/png;base64,stub"
+        isMaximized={false}
+        onToggleMaximize={() => undefined}
         onSave={() => undefined}
         onCancel={() => undefined}
       />,
@@ -248,6 +261,8 @@ describe('AnnotationCanvas', () => {
     render(
       <AnnotationCanvas
         screenshot="data:image/png;base64,stub"
+        isMaximized={false}
+        onToggleMaximize={() => undefined}
         onSave={() => undefined}
         onCancel={() => undefined}
       />,
@@ -319,5 +334,265 @@ describe('AnnotationCanvas', () => {
 
     render(null, container);
     container.remove();
+  });
+
+  describe('viewport', () => {
+    type Vpt = [number, number, number, number, number, number];
+    type MockCanvas = {
+      viewportTransform: Vpt;
+      backgroundImage?: unknown;
+      events?: Map<string, unknown>;
+      getZoom: () => number;
+      getObjects: () => unknown[];
+      trigger: (event: string, payload?: unknown) => void;
+      lastExport: { options?: Record<string, unknown>; viewportTransform: Vpt } | null;
+    };
+
+    let restoreSize: (() => void) | null = null;
+    let viewSize = { width: 832, height: 632 };
+    let resizeCallback: (() => void) | null = null;
+    const originalResizeObserver = (globalThis as Record<string, unknown>).ResizeObserver;
+
+    beforeEach(() => {
+      // 832 x 632 leaves 800 x 600 inside the fit padding, so the 1600 x 1200 mock
+      // screenshot loads at half scale and fits at zoom 1.
+      viewSize = { width: 832, height: 632 };
+      const proto = window.HTMLElement.prototype;
+      const width = Object.getOwnPropertyDescriptor(proto, 'clientWidth');
+      const height = Object.getOwnPropertyDescriptor(proto, 'clientHeight');
+      Object.defineProperty(proto, 'clientWidth', {
+        configurable: true,
+        get: () => viewSize.width,
+      });
+      Object.defineProperty(proto, 'clientHeight', {
+        configurable: true,
+        get: () => viewSize.height,
+      });
+      restoreSize = () => {
+        if (width) Object.defineProperty(proto, 'clientWidth', width);
+        if (height) Object.defineProperty(proto, 'clientHeight', height);
+      };
+      (globalThis as Record<string, unknown>).ResizeObserver = class {
+        constructor(callback: () => void) {
+          resizeCallback = callback;
+        }
+        observe() {}
+        disconnect() {}
+      };
+    });
+
+    afterEach(() => {
+      restoreSize?.();
+      restoreSize = null;
+      resizeCallback = null;
+      (globalThis as Record<string, unknown>).ResizeObserver = originalResizeObserver;
+    });
+
+    function resizeView(width: number, height: number) {
+      viewSize = { width, height };
+      resizeCallback?.();
+    }
+
+    async function renderCanvas(onSave: (image: string, annotations: object) => void = () => {}) {
+      const { AnnotationCanvas } = await import('../../annotate/AnnotationCanvas');
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      render(
+        <AnnotationCanvas
+          screenshot="data:image/png;base64,stub"
+          isMaximized={false}
+          onToggleMaximize={() => undefined}
+          onSave={onSave}
+          onCancel={() => undefined}
+        />,
+        container
+      );
+      await waitFor(
+        () => Boolean((globalThis as Record<string, unknown>).__fabricCanvasReady),
+        'Fabric canvas not ready'
+      );
+      const canvasEl = container.querySelector('canvas') as HTMLCanvasElement & {
+        __fabricCanvas?: MockCanvas;
+      };
+      const canvas = canvasEl.__fabricCanvas;
+      if (!canvas) throw new Error('Fabric canvas missing');
+      await waitFor(() => Boolean(canvas.backgroundImage), 'Screenshot not loaded');
+      await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
+      const fitButton = () =>
+        container.querySelector('button[title="Fit to screen"]') as HTMLButtonElement;
+      const cleanup = () => {
+        render(null, container);
+        container.remove();
+      };
+      return { container, canvas, canvasEl, fitButton, cleanup };
+    }
+
+    function touchDispatcher(target: HTMLElement) {
+      return (type: string, points: Array<[number, number]>) => {
+        const event = new window.Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'touches', {
+          value: points.map(([clientX, clientY]) => ({ clientX, clientY })),
+        });
+        target.dispatchEvent(event);
+        return event;
+      };
+    }
+
+    function wheel(
+      canvas: MockCanvas,
+      init: { deltaY: number; ctrlKey?: boolean; offsetX?: number; offsetY?: number }
+    ) {
+      canvas.trigger('mouse:wheel', {
+        e: {
+          deltaX: 0,
+          deltaMode: 0,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
+          preventDefault: () => undefined,
+          ...init,
+        },
+      });
+    }
+
+    it('fits the screenshot, zooms with ctrl + wheel, pans with the wheel and refits', async () => {
+      const { canvas, fitButton, cleanup } = await renderCanvas();
+
+      expect(canvas.viewportTransform).toEqual([1, 0, 0, 1, 16, 16]);
+      expect(fitButton().textContent).toBe('50%');
+
+      // A mouse notch is capped at a 1.25x step.
+      wheel(canvas, { deltaY: -100, ctrlKey: true, offsetX: 416, offsetY: 316 });
+      await waitFor(() => fitButton().textContent === '63%', 'Ctrl + wheel did not zoom in');
+      const zoomed = [...canvas.viewportTransform];
+      expect(zoomed[0]).toBeGreaterThan(1);
+      // The scene point under the pointer stays put.
+      expect((416 - zoomed[4]) / zoomed[0]).toBeCloseTo(400);
+
+      wheel(canvas, { deltaY: 50 });
+      expect(canvas.viewportTransform[0]).toBe(zoomed[0]);
+      expect(canvas.viewportTransform[5]).toBeCloseTo(zoomed[5] - 50);
+
+      fitButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await waitFor(() => fitButton().textContent === '50%', 'Fit did not restore the zoom');
+      expect(canvas.viewportTransform).toEqual([1, 0, 0, 1, 16, 16]);
+
+      cleanup();
+    });
+
+    it('refits on resize while fitted and keeps a user zoom otherwise', async () => {
+      const { canvas, cleanup } = await renderCanvas();
+
+      // The fitted screenshot cannot pan, so this wheel changes nothing and the view
+      // stays fitted.
+      wheel(canvas, { deltaY: 50 });
+      resizeView(1032, 632);
+      expect(canvas.viewportTransform).toEqual([1, 0, 0, 1, 116, 16]);
+
+      wheel(canvas, { deltaY: -100, ctrlKey: true, offsetX: 516, offsetY: 316 });
+      const zoomed = canvas.viewportTransform[0];
+      expect(zoomed).toBeCloseTo(1.25);
+
+      resizeView(1232, 832);
+      expect(canvas.viewportTransform[0]).toBe(zoomed);
+      // The screenshot now fits, so the axis is centered rather than shifted.
+      expect(canvas.viewportTransform[4]).toBeCloseTo((1232 - 800 * zoomed) / 2);
+
+      cleanup();
+    });
+
+    it('exports the screenshot area at its original resolution while zoomed', async () => {
+      const onSave = mock(() => undefined);
+      const { container, canvas, cleanup } = await renderCanvas(onSave);
+
+      wheel(canvas, { deltaY: -300, ctrlKey: true, offsetX: 100, offsetY: 100 });
+      const zoomedViewport = [...canvas.viewportTransform];
+
+      const doneButton = Array.from(container.querySelectorAll('button')).find(
+        (btn) => btn.textContent?.trim() === 'Done'
+      );
+      doneButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+      expect(canvas.lastExport?.options).toMatchObject({
+        left: 0,
+        top: 0,
+        width: 1600,
+        height: 1200,
+        multiplier: 1,
+      });
+      expect(canvas.lastExport?.viewportTransform).toEqual([2, 0, 0, 2, 0, 0]);
+      expect(canvas.viewportTransform).toEqual(zoomedViewport as Vpt);
+      expect(onSave).toHaveBeenCalled();
+
+      cleanup();
+    });
+
+    it('cancels the shape in progress and zooms when a second finger pinches', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+
+      (container.querySelector('button[title="Rectangle"]') as HTMLButtonElement).click();
+      await waitFor(
+        () =>
+          (
+            container.querySelector('button[title="Rectangle"]') as HTMLButtonElement | null
+          )?.className.includes('text-primary') ?? false,
+        'Rectangle tool not active'
+      );
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(1);
+
+      const reachedCanvas: string[] = [];
+      ['touchstart', 'touchmove', 'touchend'].forEach((type) =>
+        canvasEl.addEventListener(type, () => reachedCanvas.push(type))
+      );
+      const touch = touchDispatcher(canvasEl);
+
+      const start = touch('touchstart', [
+        [366, 316],
+        [466, 316],
+      ]);
+      expect(start.defaultPrevented).toBe(true);
+      expect(canvas.getObjects()).toHaveLength(0);
+
+      touch('touchmove', [
+        [316, 316],
+        [516, 316],
+      ]);
+      expect(canvas.getZoom()).toBeCloseTo(2);
+
+      touch('touchend', []);
+      // Fabric never sees the second finger, but the final touchend reaches it so it can
+      // release its listeners.
+      expect(reachedCanvas).toEqual(['touchend']);
+      cleanup();
+    });
+
+    it('removes a text box the first finger created when the touch becomes a pinch', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+      const objectsBefore = canvas.getObjects().length;
+
+      (container.querySelector('button[title="Text"]') as HTMLButtonElement).click();
+      await waitFor(
+        () =>
+          (
+            container.querySelector('button[title="Text"]') as HTMLButtonElement | null
+          )?.className.includes('text-primary') ?? false,
+        'Text tool not active'
+      );
+
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [[300, 300]]);
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      touch('touchstart', [
+        [300, 300],
+        [400, 300],
+      ]);
+      expect(canvas.getObjects()).toHaveLength(objectsBefore);
+
+      touch('touchend', []);
+      cleanup();
+    });
   });
 });

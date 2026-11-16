@@ -10,6 +10,7 @@ import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
 import { captureScreenshot } from '../capture/screenshot.js';
 import { dataUrlToBlob } from '../lib/data-url.js';
+import { cn } from '../lib/utils.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
 import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
@@ -86,6 +87,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const mediaRef = useRef(media);
   mediaRef.current = media;
   const [annotatingMediaId, setAnnotatingMediaId] = useState<string | null>(null);
+  const [isAnnotationMaximized, setIsAnnotationMaximized] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
@@ -603,6 +605,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   const handleAnnotateMedia = useCallback((id: string) => {
     setAnnotatingMediaId(id);
+    setIsAnnotationMaximized(false);
     setStep('annotating');
   }, []);
 
@@ -770,10 +773,17 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       )}
 
       {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
-        <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
-          <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
+        <div class="fixed inset-0 z-[2147483647] bg-black/50 flex items-center justify-center sm:p-5 animate-[fadeIn_0.2s_ease-out]">
+          <div
+            class={cn(
+              'relative w-full h-full min-h-0 bg-background sm:border sm:border-solid sm:border-border sm:rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]',
+              !isAnnotationMaximized && 'sm:max-w-4xl sm:h-[770px] sm:max-h-full'
+            )}
+          >
             <AnnotationCanvasComponent
               screenshot={annotatingMedia.dataUrl}
+              isMaximized={isAnnotationMaximized}
+              onToggleMaximize={() => setIsAnnotationMaximized((value) => !value)}
               onSave={handleAnnotationSave}
               onCancel={handleAnnotationCancel}
             />

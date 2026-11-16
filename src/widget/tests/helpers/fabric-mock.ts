@@ -63,7 +63,7 @@ class FabricImage extends FabricObject {
   }
 
   static async fromURL() {
-    return new FabricImage();
+    return new FabricImage(undefined, { width: 1600, height: 1200 });
   }
 
   applyFilters() {
@@ -95,9 +95,13 @@ class Canvas {
   freeDrawingBrush: PencilBrush | null = null;
   backgroundImage: FabricImage | null = null;
   viewportTransform: [number, number, number, number, number, number] = [1, 0, 0, 1, 0, 0];
-  private zoom = 1;
+  contextTop = {};
+  lastExport: {
+    options?: Record<string, unknown>;
+    viewportTransform: [number, number, number, number, number, number];
+  } | null = null;
   private objects: FabricObject[] = [];
-  events = new Map<string, (event?: unknown) => void>();
+  events = new Map<string, Set<(event?: unknown) => void>>();
 
   constructor(el: unknown, _options?: Record<string, unknown>) {
     (globalThis as Record<string, unknown>).__fabricCanvasReady = true;
@@ -112,11 +116,12 @@ class Canvas {
   }
 
   setZoom(zoom: number) {
-    this.zoom = zoom;
+    const [, b, c, , e, f] = this.viewportTransform;
+    this.viewportTransform = [zoom, b, c, zoom, e, f];
   }
 
   getZoom() {
-    return this.zoom;
+    return this.viewportTransform[0];
   }
 
   setViewportTransform(transform: [number, number, number, number, number, number]) {
@@ -124,7 +129,15 @@ class Canvas {
   }
 
   zoomToPoint(_point: unknown, zoom: number) {
-    this.zoom = zoom;
+    this.setZoom(zoom);
+  }
+
+  getViewportPoint(event?: { offsetX?: number; offsetY?: number }) {
+    return { x: event?.offsetX ?? 0, y: event?.offsetY ?? 0 };
+  }
+
+  clearContext(_ctx: unknown) {
+    return undefined;
   }
 
   renderAll() {
@@ -151,6 +164,10 @@ class Canvas {
     return this.objects;
   }
 
+  getActiveObject() {
+    return null;
+  }
+
   getActiveObjects() {
     return [] as FabricObject[];
   }
@@ -160,22 +177,23 @@ class Canvas {
   }
 
   on(event: string, handler: (event?: unknown) => void) {
-    this.events.set(event, handler);
+    const handlers = this.events.get(event) ?? new Set();
+    handlers.add(handler);
+    this.events.set(event, handlers);
   }
 
-  off(event: string) {
-    this.events.delete(event);
+  off(event: string, handler?: (event?: unknown) => void) {
+    const handlers = this.events.get(event);
+    if (handler) handlers?.delete(handler);
+    if (!handler || handlers?.size === 0) this.events.delete(event);
   }
 
   trigger(event: string, payload?: unknown) {
-    const handler = this.events.get(event);
-    if (handler) {
-      handler(payload);
-    }
+    this.events.get(event)?.forEach((handler) => handler(payload));
   }
 
   findTarget() {
-    return null;
+    return { target: undefined };
   }
 
   setActiveObject(_obj: FabricObject) {
@@ -194,7 +212,8 @@ class Canvas {
     this.defaultCursor = cursor;
   }
 
-  toDataURL() {
+  toDataURL(options?: Record<string, unknown>) {
+    this.lastExport = { options, viewportTransform: [...this.viewportTransform] };
     return 'data:image/png;base64,stub';
   }
 
@@ -223,6 +242,10 @@ class IText extends FabricObject {
   isEditing = false;
   enterEditing() {
     this.isEditing = true;
+    return undefined;
+  }
+  exitEditing() {
+    this.isEditing = false;
     return undefined;
   }
 }
