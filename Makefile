@@ -329,6 +329,19 @@ release-widget:
 		echo "$(RED)[ERROR]$(NC) Widget version must use stable X.Y.Z format"; \
 		exit 1; \
 	fi
+	@if [ ! -f "Changelog/widget/v$(v).md" ]; then \
+		echo "$(RED)[ERROR]$(NC) Missing Changelog/widget/v$(v).md. The widget release workflow needs it for the GitHub release notes."; \
+		exit 1; \
+	fi
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$BRANCH" != "main" ]; then \
+		echo "$(RED)[ERROR]$(NC) Widget releases must be tagged from the main branch (currently on $$BRANCH)"; \
+		exit 1; \
+	fi
+	@if git rev-parse -q --verify "refs/tags/widget-v$(v)" >/dev/null || git ls-remote --exit-code --tags origin "refs/tags/widget-v$(v)" >/dev/null 2>&1; then \
+		echo "$(RED)[ERROR]$(NC) Tag widget-v$(v) already exists"; \
+		exit 1; \
+	fi
 	@echo "$(BLUE)================================================$(NC)"
 	@echo "$(BLUE)  BugPin Widget Release v$(v)$(NC)"
 	@echo "$(BLUE)================================================$(NC)"
@@ -368,8 +381,19 @@ release-widget:
 		echo "  To log in, run: npm login"; \
 		exit 1; \
 	}; \
+	echo "$(GREEN)[OK]$(NC) Widget v$(v) published to npm."; \
+	echo "$(BLUE)[INFO]$(NC) Committing widget version bump..."; \
+	git add src/widget/package.json; \
+	git diff --cached --quiet && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
+	git commit -m "chore(widget): bump version to $(v)"; \
+	echo "$(BLUE)[INFO]$(NC) Pushing commit to main..."; \
+	git push origin main; \
+	echo "$(BLUE)[INFO]$(NC) Creating and pushing tag widget-v$(v)..."; \
+	git tag widget-v$(v); \
+	git push origin widget-v$(v); \
 	echo ""; \
-	echo "$(GREEN)[SUCCESS]$(NC) Widget v$(v) published to npm."
+	echo "$(GREEN)[SUCCESS]$(NC) Widget v$(v) published to npm and tagged widget-v$(v)."; \
+	echo "  The GitHub release is created from Changelog/widget/v$(v).md."
 
 retag:
 	@if [ -z "$(v)" ]; then \
@@ -446,7 +470,7 @@ help:
 	row 'make release v=1.2.3-dev' 'Tag a dev release from dev'; \
 	row 'make release v=1.2.3-beta.1' 'Tag a beta release from dev'; \
 	row 'make retag v=1.2.3' 'Delete and re-push a tag'; \
-	row 'make release-widget v=1.2.3' 'Bump the widget version and publish to npm'; \
+	row 'make release-widget v=1.2.3' 'Publish the widget to npm and tag widget-vX.Y.Z'; \
 	section 'Notes'; \
 	printf '  %s\n' \
 		'- Run make dev or make local, not both: they use the same ports.' \
