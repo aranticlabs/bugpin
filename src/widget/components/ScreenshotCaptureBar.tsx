@@ -161,7 +161,7 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
             open={isMenuOpen}
             side={tooltipSide}
             sideOffset={MENU_OFFSET}
-            class={cn('flex min-w-[9rem] flex-col gap-0.5 p-1', CAPTURE_BAR_SHADOW_CLASS)}
+            class={cn('flex min-w-[144px] flex-col gap-0.5 p-1', CAPTURE_BAR_SHADOW_CLASS)}
           >
             <div role="menu" aria-label={t('screenshot.bar.timerLabel')} class="contents">
               {delayOptions.map((seconds) => (
@@ -189,7 +189,7 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
         </div>
 
         <Button
-          class="h-9 min-w-[7.5rem] gap-1.5 px-3 text-sm tabular-nums"
+          class="h-9 min-w-[120px] gap-1.5 px-3 text-sm tabular-nums"
           disabled={!isReady}
           aria-disabled={isCountingDown || undefined}
           onClick={isCountingDown ? undefined : onCapture}
