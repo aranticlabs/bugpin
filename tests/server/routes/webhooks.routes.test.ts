@@ -4,9 +4,12 @@ import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type { Session, User } from '../../../src/shared/types';
 
-// Mock EE module to ensure requireEEFeature returns 402
+// Mock EE module to ensure requireEEFeature returns 402. The real exports stay in place
+// because the mock is process-wide and other test files import the rest of the module.
 const eeUrl = new URL('../../../src/server/utils/ee.js', import.meta.url).href;
+const realEE = await import(eeUrl);
 mock.module(eeUrl, () => ({
+  ...realEE,
   isEEAvailable: () => false,
   hasEEFeature: () => false,
   requireEEFeature: () => async (c: { json: (data: unknown, status: number) => Response }) => {
@@ -22,8 +25,9 @@ mock.module(eeUrl, () => ({
   },
 }));
 
-// Import routes after mocking
-const { webhooksRoutes } = await import('../../../src/server/routes/api/webhooks');
+// Load a fresh copy of the routes: another test file may already have imported them with
+// the real EE middleware, which is bound when the module is evaluated.
+const { webhooksRoutes } = await import(`../../../src/server/routes/api/webhooks.js?ce-stub`);
 
 const baseUser: User = {
   id: 'usr_1',
