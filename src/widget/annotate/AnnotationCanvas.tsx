@@ -15,13 +15,29 @@ import {
   Redo2,
   Trash2,
   ZoomOut,
-  Maximize,
   ZoomIn,
+  Maximize2,
+  Minimize2,
 } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import {
+  clampZoom,
+  constrainViewport,
+  fitViewport,
+  panBy,
+  sceneScaleFor,
+  wheelDeltaPx,
+  wheelZoomFactor,
+  zoomAtPoint,
+  zoomLimits,
+  type Size,
+  type ViewportPoint,
+  type ViewportTransform,
+  type ZoomLimits,
+} from './viewport';
 
 export type AnnotationTool =
   'select' | 'pan' | 'pen' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'pixelate';
@@ -64,9 +80,63 @@ if (!(fabric.FabricObject.prototype as unknown as Record<symbol, boolean>)[TO_OB
 
 interface AnnotationCanvasProps {
   screenshot: string;
+  isMaximized: boolean;
+  onToggleMaximize: () => void;
   onSave: (annotatedImage: string, annotations: object) => void;
   onCancel: () => void;
 }
+
+interface Scene {
+  size: Size;
+  /** Scene units per screenshot pixel. */
+  scale: number;
+}
+
+interface ZoomState {
+  zoom: number;
+  limits: ZoomLimits;
+  sceneScale: number;
+}
+
+interface PinchState {
+  startDistance: number;
+  startMidpoint: ViewportPoint;
+  startViewport: ViewportTransform;
+}
+
+/** Safari's non-standard trackpad and touch pinch event. */
+interface GestureEvent extends UIEvent {
+  scale: number;
+  clientX: number;
+  clientY: number;
+}
+
+/** Fabric internals for abandoning a pointer interaction that a pinch interrupts. */
+interface FabricInteractionState {
+  _isCurrentlyDrawing?: boolean;
+  _groupSelector?: unknown;
+  _currentTransform?: {
+    target: fabric.FabricObject;
+    original: Partial<Record<keyof fabric.FabricObject, unknown>>;
+  } | null;
+  contextTop?: CanvasRenderingContext2D;
+}
+
+const TRANSFORM_KEYS = [
+  'left',
+  'top',
+  'scaleX',
+  'scaleY',
+  'skewX',
+  'skewY',
+  'angle',
+  'flipX',
+  'flipY',
+] as const;
+
+const ZOOM_STEP = 1.2;
+// Float slack so a zoom clamped to a limit counts as having reached it.
+const ZOOM_LIMIT_TOLERANCE = 1.0001;
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#000000'];
 const STROKE_WIDTHS = [2, 4, 6, 8];
@@ -183,6 +253,8 @@ function regeneratePixelate(
 
 export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   screenshot,
+  isMaximized,
+  onToggleMaximize,
   onSave,
   onCancel,
 }) => {
@@ -195,7 +267,11 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   const [strokeWidth, setStrokeWidth] = useState(4);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomState, setZoomState] = useState<ZoomState>({
+    zoom: 1,
+    limits: { min: 1, max: 1 },
+    sceneScale: 1,
+  });
   const [isPanning, setIsPanning] = useState(false);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
@@ -203,6 +279,78 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   const isPanningRef = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const originalDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
+  const viewSizeRef = useRef<Size>({ width: 0, height: 0 });
+  // While true, resizing the view refits the scene instead of keeping the user's zoom.
+  const isFitRef = useRef(true);
+  const gestureActiveRef = useRef(false);
+
+  const applyViewport = useCallback((vpt: ViewportTransform) => {
+    const canvas = fabricRef.current;
+    const scene = sceneRef.current;
+    if (!canvas || !scene) return;
+    canvas.setViewportTransform(vpt);
+    canvas.requestRenderAll();
+    const limits = zoomLimits(viewSizeRef.current, scene.size, scene.scale);
+    // Panning keeps the zoom, so skip the re-render unless something shown changes.
+    setZoomState((previous) =>
+      previous.zoom === vpt[0] &&
+      previous.sceneScale === scene.scale &&
+      previous.limits.min === limits.min &&
+      previous.limits.max === limits.max
+        ? previous
+        : { zoom: vpt[0], limits, sceneScale: scene.scale }
+    );
+  }, []);
+
+  /** Applies a user zoom or pan; one that changes nothing keeps the view fitted. */
+  const moveViewport = useCallback(
+    (next: ViewportTransform) => {
+      const current = fabricRef.current?.viewportTransform;
+      if (current && next.every((value, index) => value === current[index])) return;
+      isFitRef.current = false;
+      applyViewport(next);
+    },
+    [applyViewport]
+  );
+
+  const fitToView = useCallback(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    isFitRef.current = true;
+    applyViewport(fitViewport(viewSizeRef.current, scene.size));
+  }, [applyViewport]);
+
+  const zoomTo = useCallback(
+    (zoom: number, point: ViewportPoint) => {
+      const canvas = fabricRef.current;
+      const scene = sceneRef.current;
+      if (!canvas || !scene) return;
+      const view = viewSizeRef.current;
+      const limits = zoomLimits(view, scene.size, scene.scale);
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      moveViewport(
+        constrainViewport(zoomAtPoint(vpt, point, clampZoom(zoom, limits)), view, scene.size)
+      );
+    },
+    [moveViewport]
+  );
+
+  const panViewport = useCallback(
+    (dx: number, dy: number) => {
+      const canvas = fabricRef.current;
+      const scene = sceneRef.current;
+      if (!canvas || !scene) return;
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      moveViewport(constrainViewport(panBy(vpt, dx, dy), viewSizeRef.current, scene.size));
+    },
+    [moveViewport]
+  );
+
+  const measureView = useCallback((): Size => {
+    const wrapper = canvasWrapperRef.current;
+    return { width: wrapper?.clientWidth ?? 0, height: wrapper?.clientHeight ?? 0 };
+  }, []);
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -213,34 +361,54 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       selection: true,
     });
     fabricRef.current = canvas;
+    viewSizeRef.current = measureView();
+    canvas.setDimensions(viewSizeRef.current);
 
     // Load screenshot as background
     fabric.FabricImage.fromURL(screenshot).then((img) => {
-      // Store original dimensions for high-quality export
-      originalDimensionsRef.current = {
-        width: img.width || 800,
-        height: img.height || 600,
+      const original = { width: img.width || 800, height: img.height || 600 };
+      originalDimensionsRef.current = original;
+
+      const scale = sceneScaleFor(viewSizeRef.current, original);
+      sceneRef.current = {
+        size: { width: original.width * scale, height: original.height * scale },
+        scale,
       };
 
-      // Scale image to fit container while maintaining aspect ratio
-      // Get actual available space from the canvas wrapper element
-      const wrapperRect = canvasWrapperRef.current?.getBoundingClientRect();
-      const maxWidth = wrapperRect ? wrapperRect.width - 32 : 800; // 32px for padding
-      const maxHeight = wrapperRect ? wrapperRect.height - 32 : 600;
-
-      const scale = Math.min(maxWidth / (img.width || 800), maxHeight / (img.height || 600));
-
-      canvas.setDimensions({
-        width: (img.width || 800) * scale,
-        height: (img.height || 600) * scale,
-      });
-
-      img.scaleToWidth(canvas.width!);
+      img.set({ scaleX: scale, scaleY: scale });
       canvas.backgroundImage = img;
-      canvas.renderAll();
+      // Only the screenshot is exported, so hide anything drawn past its edges.
+      canvas.clipPath = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: original.width * scale,
+        height: original.height * scale,
+        absolutePositioned: true,
+      });
+      fitToView();
 
       // Save initial state
       saveToHistory();
+    });
+
+    // Ctrl/Cmd + wheel (and trackpad pinch, which browsers report the same way) zooms
+    // around the pointer; a plain wheel pans.
+    canvas.on('mouse:wheel', (opt) => {
+      const e = opt.e as WheelEvent;
+      e.preventDefault();
+      if (gestureActiveRef.current) return;
+      if (e.ctrlKey || e.metaKey) {
+        zoomTo(
+          canvas.getZoom() * wheelZoomFactor(e.deltaY, e.deltaMode),
+          canvas.getViewportPoint(e)
+        );
+        return;
+      }
+      const dx = wheelDeltaPx(e.deltaX, e.deltaMode);
+      const dy = wheelDeltaPx(e.deltaY, e.deltaMode);
+      // Windows reports shift + wheel as vertical delta with shiftKey set.
+      if (e.shiftKey && dx === 0) panViewport(-dy, 0);
+      else panViewport(-dx, -dy);
     });
 
     // Set up drawing brush
@@ -276,6 +444,216 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.dispose();
     };
   }, [screenshot]);
+
+  // Keep the canvas filling the work area; refit, or keep the user's zoom centered.
+  useEffect(() => {
+    const wrapper = canvasWrapperRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const previous = viewSizeRef.current;
+      const view = measureView();
+      if (view.width === previous.width && view.height === previous.height) return;
+
+      viewSizeRef.current = view;
+      canvas.setDimensions(view);
+      const scene = sceneRef.current;
+      if (!scene) return;
+      if (isFitRef.current) {
+        fitToView();
+        return;
+      }
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      const shifted = panBy(
+        vpt,
+        (view.width - previous.width) / 2,
+        (view.height - previous.height) / 2
+      );
+      const zoom = clampZoom(shifted[0], zoomLimits(view, scene.size, scene.scale));
+      const center = { x: view.width / 2, y: view.height / 2 };
+      applyViewport(constrainViewport(zoomAtPoint(shifted, center, zoom), view, scene.size));
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [applyViewport, fitToView, measureView]);
+
+  // Two-finger pinch on touch screens and Safari's gesture events. Touch events are
+  // intercepted in the capture phase so Fabric never sees the second finger; whatever the
+  // first finger started is cancelled, and the final touchend still reaches Fabric so it
+  // can release its document listeners.
+  useEffect(() => {
+    const wrapper = canvasWrapperRef.current;
+    if (!wrapper) return;
+
+    let pinch: PinchState | null = null;
+    let touchSessionBlocked = false;
+    // Objects that existed before the first finger landed; anything newer is undone if
+    // the touch turns into a pinch.
+    let objectsBeforeTouch: Set<fabric.FabricObject> | null = null;
+    let gestureStart: { zoom: number } | null = null;
+
+    const toViewportPoint = (clientX: number, clientY: number): ViewportPoint => {
+      const rect = wrapper.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+
+    const readPinch = (touches: TouchList) => {
+      const [a, b] = [touches[0], touches[1]];
+      return {
+        distance: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+        midpoint: toViewportPoint((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2),
+      };
+    };
+
+    const cancelPointerInteraction = () => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const drawingCanvas = canvas as unknown as { _drawingShape?: fabric.FabricObject };
+      if (isDrawingRef.current && drawingCanvas._drawingShape) {
+        canvas.remove(drawingCanvas._drawingShape);
+      }
+      drawingCanvas._drawingShape = undefined;
+      isDrawingRef.current = false;
+
+      const before = objectsBeforeTouch;
+      if (before) {
+        canvas
+          .getObjects()
+          .filter((obj) => !before.has(obj))
+          .forEach((obj) => {
+            if (obj instanceof fabric.IText && obj.isEditing) obj.exitEditing();
+            if (canvas.getActiveObject() === obj) canvas.discardActiveObject();
+            canvas.remove(obj);
+          });
+      }
+
+      const internals = canvas as unknown as FabricInteractionState;
+      const transform = internals._currentTransform;
+      if (transform) {
+        const restored: Record<string, unknown> = {};
+        TRANSFORM_KEYS.forEach((key) => {
+          if (key in transform.original) restored[key] = transform.original[key];
+        });
+        transform.target.set(restored);
+        transform.target.setCoords();
+        internals._currentTransform = null;
+      }
+      internals._groupSelector = null;
+      internals._isCurrentlyDrawing = false;
+      if (internals.contextTop) canvas.clearContext(internals.contextTop);
+      canvas.requestRenderAll();
+    };
+
+    const startPinch = (touches: TouchList) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const { distance, midpoint } = readPinch(touches);
+      pinch = {
+        startDistance: Math.max(distance, 1),
+        startMidpoint: midpoint,
+        startViewport: [...(canvas.viewportTransform as ViewportTransform)],
+      };
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1 && !touchSessionBlocked) {
+        objectsBeforeTouch = new Set(fabricRef.current?.getObjects() ?? []);
+        return;
+      }
+      if (e.touches.length < 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!touchSessionBlocked) {
+        touchSessionBlocked = true;
+        cancelPointerInteraction();
+      }
+      startPinch(e.touches);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchSessionBlocked) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const scene = sceneRef.current;
+      if (!pinch || e.touches.length < 2 || !scene) return;
+
+      const { distance, midpoint } = readPinch(e.touches);
+      const start = pinch.startViewport;
+      const view = viewSizeRef.current;
+      const zoom = clampZoom(
+        start[0] * (distance / pinch.startDistance),
+        zoomLimits(view, scene.size, scene.scale)
+      );
+      // Keep the scene point that was under the starting midpoint under the current one,
+      // so moving both fingers pans while spreading them zooms.
+      const sceneX = (pinch.startMidpoint.x - start[4]) / start[0];
+      const sceneY = (pinch.startMidpoint.y - start[5]) / start[3];
+      const vpt: ViewportTransform = [
+        zoom,
+        0,
+        0,
+        zoom,
+        midpoint.x - sceneX * zoom,
+        midpoint.y - sceneY * zoom,
+      ];
+      moveViewport(constrainViewport(vpt, view, scene.size));
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!touchSessionBlocked) return;
+      if (e.touches.length === 0) {
+        touchSessionBlocked = false;
+        pinch = null;
+        objectsBeforeTouch = null;
+        return;
+      }
+      e.stopPropagation();
+      if (e.touches.length >= 2) startPinch(e.touches);
+      else pinch = null;
+    };
+
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+      gestureActiveRef.current = true;
+      gestureStart = { zoom: fabricRef.current?.getZoom() ?? 1 };
+    };
+
+    const handleGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (touchSessionBlocked || !gestureStart) return;
+      const gesture = e as GestureEvent;
+      const point = Number.isFinite(gesture.clientX)
+        ? toViewportPoint(gesture.clientX, gesture.clientY)
+        : { x: viewSizeRef.current.width / 2, y: viewSizeRef.current.height / 2 };
+      zoomTo(gestureStart.zoom * gesture.scale, point);
+    };
+
+    const handleGestureEnd = (e: Event) => {
+      e.preventDefault();
+      gestureActiveRef.current = false;
+      gestureStart = null;
+    };
+
+    const capture = { capture: true, passive: false };
+    wrapper.addEventListener('touchstart', handleTouchStart, capture);
+    wrapper.addEventListener('touchmove', handleTouchMove, capture);
+    wrapper.addEventListener('touchend', handleTouchEnd, capture);
+    wrapper.addEventListener('touchcancel', handleTouchEnd, capture);
+    wrapper.addEventListener('gesturestart', handleGestureStart);
+    wrapper.addEventListener('gesturechange', handleGestureChange);
+    wrapper.addEventListener('gestureend', handleGestureEnd);
+    return () => {
+      wrapper.removeEventListener('touchstart', handleTouchStart, capture);
+      wrapper.removeEventListener('touchmove', handleTouchMove, capture);
+      wrapper.removeEventListener('touchend', handleTouchEnd, capture);
+      wrapper.removeEventListener('touchcancel', handleTouchEnd, capture);
+      wrapper.removeEventListener('gesturestart', handleGestureStart);
+      wrapper.removeEventListener('gesturechange', handleGestureChange);
+      wrapper.removeEventListener('gestureend', handleGestureEnd);
+    };
+  }, [moveViewport, zoomTo]);
 
   // Update brush when color/width changes
   useEffect(() => {
@@ -731,7 +1109,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
     // Calculate multiplier to export at original resolution
     const originalDimensions = originalDimensionsRef.current;
-    const multiplier = originalDimensions ? originalDimensions.width / (canvas.width || 1) : 1;
+    const scene = sceneRef.current;
+    const multiplier = scene ? 1 / scene.scale : 1;
 
     // Regenerate pixelate patches at export resolution for crisp redaction
     const pixelateObjects: {
@@ -827,11 +1206,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.renderAll();
     }
 
-    // Get annotated image as data URL at original resolution
+    // Export exactly the screenshot's area at its original resolution. Zooming the viewport
+    // instead of passing a multiplier keeps the output size an exact integer.
+    canvas.setViewportTransform([multiplier, 0, 0, multiplier, 0, 0]);
     const dataUrl = canvas.toDataURL({
       format: 'png',
       quality: 1,
-      multiplier: multiplier,
+      multiplier: 1,
+      left: 0,
+      top: 0,
+      width: originalDimensions?.width ?? canvas.width,
+      height: originalDimensions?.height ?? canvas.height,
     });
 
     // Restore pixelate objects to canvas resolution (synchronous, no onload needed)
@@ -867,36 +1252,18 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     }
   }, [saveToHistory]);
 
-  const handleZoomIn = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    const newZoom = Math.min(zoomLevel * 1.2, 3); // Max 3x zoom
+  const viewCenter = (): ViewportPoint => ({
+    x: viewSizeRef.current.width / 2,
+    y: viewSizeRef.current.height / 2,
+  });
 
-    // Zoom to center of viewport
-    const center = new fabric.Point(canvas.width! / 2, canvas.height! / 2);
-    canvas.zoomToPoint(center, newZoom);
-    setZoomLevel(newZoom);
-  }, [zoomLevel]);
+  const handleZoomIn = useCallback(() => {
+    zoomTo(zoomState.zoom * ZOOM_STEP, viewCenter());
+  }, [zoomState.zoom, zoomTo]);
 
   const handleZoomOut = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    const newZoom = Math.max(zoomLevel / 1.2, 0.5); // Min 0.5x zoom
-
-    // Zoom to center of viewport
-    const center = new fabric.Point(canvas.width! / 2, canvas.height! / 2);
-    canvas.zoomToPoint(center, newZoom);
-    setZoomLevel(newZoom);
-  }, [zoomLevel]);
-
-  const handleZoomReset = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    setZoomLevel(1);
-    canvas.setZoom(1);
-    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); // Reset pan as well
-    canvas.renderAll();
-  }, []);
+    zoomTo(zoomState.zoom / ZOOM_STEP, viewCenter());
+  }, [zoomState.zoom, zoomTo]);
 
   // Panning functionality (hold Space to pan)
   useEffect(() => {
@@ -922,10 +1289,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     const handleMouseMove = (opt: fabric.TPointerEventInfo) => {
       if (isPanningRef.current && lastPosRef.current) {
         const evt = opt.e as MouseEvent;
-        const vpt = canvas.viewportTransform!;
-        vpt[4] += evt.clientX - lastPosRef.current.x;
-        vpt[5] += evt.clientY - lastPosRef.current.y;
-        canvas.requestRenderAll();
+        panViewport(evt.clientX - lastPosRef.current.x, evt.clientY - lastPosRef.current.y);
         lastPosRef.current = { x: evt.clientX, y: evt.clientY };
       }
     };
@@ -949,7 +1313,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.off('mouse:move', handleMouseMove);
       canvas.off('mouse:up', handleMouseUp);
     };
-  }, [isPanning, activeTool]);
+  }, [isPanning, activeTool, panViewport]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1139,35 +1503,45 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           <button
             class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
             onClick={handleZoomOut}
-            disabled={zoomLevel <= 0.5}
+            disabled={zoomState.zoom <= zoomState.limits.min * ZOOM_LIMIT_TOLERANCE}
             title={t('annotation.toolbar.zoomOut')}
           >
             <ZoomOut />
           </button>
           <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomReset}
-            title={t('annotation.toolbar.zoomReset', { percent: Math.round(zoomLevel * 100) })}
+            class="flex items-center justify-center min-w-12 h-8 px-1.5 border-none rounded bg-transparent text-xs font-medium tabular-nums text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground"
+            onClick={fitToView}
+            title={t('annotation.toolbar.zoomFit')}
           >
-            <Maximize />
+            {Math.round(zoomState.zoom * zoomState.sceneScale * 100)}%
           </button>
           <button
             class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
             onClick={handleZoomIn}
-            disabled={zoomLevel >= 3}
+            disabled={zoomState.zoom >= zoomState.limits.max / ZOOM_LIMIT_TOLERANCE}
             title={t('annotation.toolbar.zoomIn')}
           >
             <ZoomIn />
           </button>
         </div>
+
+        <button
+          class="hidden sm:flex ml-auto items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground [&_svg]:w-4.5 [&_svg]:h-4.5"
+          onClick={onToggleMaximize}
+          title={t(isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize')}
+        >
+          {isMaximized ? <Minimize2 /> : <Maximize2 />}
+        </button>
       </div>
 
       {/* Canvas */}
       <div
-        class="flex-auto min-h-0 min-w-[700px] overflow-auto flex items-center justify-center p-4 bg-muted"
+        class="relative flex-auto min-h-0 min-w-0 overflow-hidden bg-muted"
         ref={canvasWrapperRef}
       >
-        <canvas ref={canvasRef} />
+        <div class="absolute inset-0">
+          <canvas ref={canvasRef} />
+        </div>
       </div>
 
       {/* Actions */}

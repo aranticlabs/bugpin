@@ -163,8 +163,9 @@ const it: WidgetCatalog = {
   'annotation.toolbar.zoomIn': 'Ingrandisci - Tieni premuto Spazio per spostarti quando ingrandito',
   'annotation.toolbar.zoomOut':
     'Rimpicciolisci - Tieni premuto Spazio per spostarti quando ingrandito',
-  'annotation.toolbar.zoomReset':
-    'Reimposta zoom ({percent}%) - Tieni premuto Spazio per spostarti',
+  'annotation.toolbar.zoomFit': 'Adatta allo schermo',
+  'annotation.toolbar.maximize': 'Ingrandisci',
+  'annotation.toolbar.restore': 'Dimensione originale',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.defaultText': 'Testo',
   'annotation.buttons.cancel': 'Annulla',

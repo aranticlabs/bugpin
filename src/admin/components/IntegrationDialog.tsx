@@ -344,11 +344,10 @@ export function IntegrationDialog({
   };
 
   const onSubmit = async (data: FormData) => {
-    const config: GitHubIntegrationConfig = {
+    const newAccessToken = data.accessToken?.trim() ?? '';
+    const sharedConfig = {
       owner: data.owner.trim(),
       repo: data.repo.trim(),
-      accessToken:
-        data.accessToken?.trim() || (integration?.config as GitHubIntegrationConfig).accessToken,
       labels: selectedLabels.length > 0 ? selectedLabels : undefined,
       assignees: selectedAssignees.length > 0 ? selectedAssignees : undefined,
       fileTransferMode,
@@ -357,29 +356,23 @@ export function IntegrationDialog({
 
     try {
       if (isEditing && integration) {
-        const updateData: { name?: string; config?: GitHubIntegrationConfig } = {
-          name: data.name.trim(),
-        };
-
-        if (data.accessToken) {
-          updateData.config = config;
-        } else {
-          updateData.config = {
-            ...config,
-            accessToken: (integration.config as GitHubIntegrationConfig).accessToken,
-          };
-        }
-
+        // The loaded config only holds a masked token, so the server keeps the saved
+        // token unless a new one is typed in.
         await updateMutation.mutateAsync({
           id: integration.id,
-          data: updateData,
+          data: {
+            name: data.name.trim(),
+            config: newAccessToken
+              ? { ...sharedConfig, accessToken: newAccessToken }
+              : sharedConfig,
+          },
         });
       } else {
         const created = await createMutation.mutateAsync({
           projectId,
           type: 'github' as IntegrationType,
           name: data.name.trim(),
-          config,
+          config: { ...sharedConfig, accessToken: newAccessToken },
         });
 
         // Enable automatic sync after creation if the user toggled it on

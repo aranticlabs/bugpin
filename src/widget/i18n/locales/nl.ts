@@ -165,8 +165,9 @@ const nl: WidgetCatalog = {
   'annotation.toolbar.delete': 'Selectie verwijderen (Del)',
   'annotation.toolbar.zoomIn': 'Inzoomen - houd Spatie ingedrukt om te verschuiven bij ingezoomd',
   'annotation.toolbar.zoomOut': 'Uitzoomen - houd Spatie ingedrukt om te verschuiven bij ingezoomd',
-  'annotation.toolbar.zoomReset':
-    'Zoom resetten ({percent}%) - houd Spatie ingedrukt om te verschuiven',
+  'annotation.toolbar.zoomFit': 'Aanpassen aan scherm',
+  'annotation.toolbar.maximize': 'Maximaliseren',
+  'annotation.toolbar.restore': 'Oorspronkelijke grootte',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.defaultText': 'Tekst',
   'annotation.buttons.cancel': 'Annuleren',

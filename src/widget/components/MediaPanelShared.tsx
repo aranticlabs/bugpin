@@ -24,7 +24,7 @@ export const MediaOptionToggle: FunctionComponent<{
       />
       <span
         aria-hidden="true"
-        class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] peer-focus-visible:[outline:2px_solid_var(--primary)] peer-focus-visible:outline-offset-2 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:[transform:translateX(1rem)]"
+        class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] peer-focus-visible:[outline:2px_solid_var(--primary)] peer-focus-visible:outline-offset-2 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:[transform:translateX(16px)]"
       />
     </label>
   </div>
