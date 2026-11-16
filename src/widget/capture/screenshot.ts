@@ -16,6 +16,9 @@ export interface CaptureOptions {
   // trade resolution for a smaller output, e.g. to fit a server size budget.
   // Still clamped to safe canvas/pixel limits.
   pixelRatioOverride?: number;
+  // An already shared tab stream to grab the frame from instead of opening a
+  // new picker. The caller stays responsible for stopping it.
+  screenCaptureSession?: ScreenCaptureSession | null;
 }
 
 // Guardrails to prevent crashes
@@ -358,13 +361,18 @@ function isScreenCaptureAvailable(): boolean {
   );
 }
 
+export interface ScreenCaptureSession {
+  grabFrame: () => Promise<string>;
+  stop: () => void;
+}
+
 /**
- * Capture screenshot using Screen Capture API.
+ * Ask the user to share the current tab and keep the stream open, so frames can
+ * be grabbed later (for example after a countdown) without another picker.
  * Hosts that restrict display capture must allow the page with:
  *   Permissions-Policy: display-capture=(self)
- * @returns Base64 data URL of the screenshot
  */
-async function captureWithScreenCaptureAPI(): Promise<string> {
+export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> {
   if (!isScreenCaptureAvailable()) {
     throw new Error(
       'Screen Capture API is not available. The page must be served over HTTPS, ' +
@@ -383,29 +391,51 @@ async function captureWithScreenCaptureAPI(): Promise<string> {
     preferCurrentTab: true,
   } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean });
 
+  const stop = () => stream.getTracks().forEach((track) => track.stop());
+
   try {
     const video = document.createElement('video');
+    video.muted = true;
     video.srcObject = stream;
     video.autoplay = true;
 
     await new Promise<void>((resolve) => {
       video.onloadedmetadata = () => resolve();
     });
+    // A detached video only keeps decoding new frames while it is playing.
+    await Promise.resolve(video.play?.()).catch(() => undefined);
 
+    return {
+      grabFrame: async () => {
+        if (stream.getTracks().every((track) => track.readyState === 'ended')) {
+          throw new Error('Screen sharing was stopped');
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to get canvas context');
+        }
+
+        ctx.drawImage(video, 0, 0);
+        return canvas.toDataURL('image/png');
+      },
+      stop,
+    };
+  } catch (error) {
+    stop();
+    throw error;
+  }
+}
+
+async function captureWithScreenCaptureAPI(): Promise<string> {
+  const session = await openScreenCaptureSession();
+  try {
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Failed to get canvas context');
-    }
-
-    ctx.drawImage(video, 0, 0);
-    return canvas.toDataURL('image/png');
+    return await session.grabFrame();
   } finally {
-    stream.getTracks().forEach((track) => track.stop());
+    session.stop();
   }
 }
 
@@ -421,12 +451,15 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
     useScreenCaptureAPI = false,
     cacheBust,
     pixelRatioOverride,
+    screenCaptureSession,
   } = options;
 
   // Use Screen Capture API if enabled, fall back to html-to-image on failure
   if (useScreenCaptureAPI) {
     try {
-      return await captureWithScreenCaptureAPI();
+      return screenCaptureSession
+        ? await screenCaptureSession.grabFrame()
+        : await captureWithScreenCaptureAPI();
     } catch (error) {
       console.warn(
         '[BugPin] Screen Capture API unavailable, falling back to DOM capture.',

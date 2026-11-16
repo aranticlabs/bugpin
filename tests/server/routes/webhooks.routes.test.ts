@@ -4,7 +4,8 @@ import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import type { Session, User } from '../../../src/shared/types';
 
-// Mock EE module to ensure requireEEFeature returns 402
+// Mock EE module to ensure requireEEFeature returns 402. The real exports stay in place
+// because the mock is process-wide and other test files import the rest of the module.
 const eeUrl = new URL('../../../src/server/utils/ee.js', import.meta.url).href;
 // mock.module replaces the module for every later test file, so keep its other exports.
 const realEE = { ...(await import(eeUrl)) };
