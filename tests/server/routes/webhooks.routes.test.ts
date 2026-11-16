@@ -6,7 +6,10 @@ import type { Session, User } from '../../../src/shared/types';
 
 // Mock EE module to ensure requireEEFeature returns 402
 const eeUrl = new URL('../../../src/server/utils/ee.js', import.meta.url).href;
+// mock.module replaces the module for every later test file, so keep its other exports.
+const realEE = { ...(await import(eeUrl)) };
 mock.module(eeUrl, () => ({
+  ...realEE,
   isEEAvailable: () => false,
   hasEEFeature: () => false,
   requireEEFeature: () => async (c: { json: (data: unknown, status: number) => Response }) => {
@@ -22,8 +25,13 @@ mock.module(eeUrl, () => ({
   },
 }));
 
-// Import routes after mocking
-const { webhooksRoutes } = await import('../../../src/server/routes/api/webhooks');
+// The routes module builds its EE middleware when it loads, so another test file that
+// imported it first would keep the real one. The query string loads a separate instance
+// that picks up the mock above.
+const webhooksModulePath = '../../../src/server/routes/api/webhooks';
+const { webhooksRoutes }: typeof import('../../../src/server/routes/api/webhooks') = await import(
+  `${webhooksModulePath}?ce-stub`
+);
 
 const baseUser: User = {
   id: 'usr_1',
