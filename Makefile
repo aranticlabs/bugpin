@@ -3,14 +3,11 @@
 # Run 'make' or 'make help' for available commands
 
 SHELL := /bin/bash
-LOCAL_COMPOSE := docker compose -f docker-compose.local.yml
 PROD_COMPOSE := docker compose -p bugpin -f docker-compose.yml
-REGISTRY := registry.arantic.cloud/bugpin
-BUGPIN_TAG ?= latest
+IMAGE := registry.arantic.cloud/bugpin/bugpin
 
 .PHONY: help \
-        dev dev-server dev-admin dev-portal dev-widget build-dev \
-        build-local local deploy-local logs-local down-local \
+        dev dev-server dev-admin dev-widget build-dev \
         build-prod prod deploy-prod logs-prod down-prod \
         typecheck test knip format \
         seed-all seed-projects seed-user seed-reports \
@@ -34,8 +31,8 @@ DATA_DIR ?= data
 # ==============================================================================
 
 dev:
-	@echo "Server: http://localhost:4300  Admin Console HMR: http://localhost:7300/admin/  Portal HMR: http://127.0.0.1:7310/reporter-portal/"
-	@echo "Do not run make local at the same time."
+	@echo "Admin Console HMR: http://localhost:7300/admin/  Server (proxied by Vite): http://localhost:7301"
+	@echo "Do not run make prod at the same time."
 	@bun run dev
 
 dev-server:
@@ -44,9 +41,6 @@ dev-server:
 dev-admin:
 	@bun run dev:admin
 
-dev-portal:
-	@bun run dev:portal
-
 dev-widget:
 	@bun run dev:widget
 
@@ -54,50 +48,26 @@ build-dev:
 	@bun run build
 
 # ==============================================================================
-# Local containers (docker-compose.local.yml, with HMR)
-# ==============================================================================
-
-build-local:
-	@$(LOCAL_COMPOSE) build
-
-local:
-	@$(LOCAL_COMPOSE) up -d -V
-	@echo "Admin Console HMR: http://localhost:7300/admin/"
-	@echo "Reporter Portal HMR: http://127.0.0.1:7310/reporter-portal/"
-	@echo "Logs: make logs-local  Stop: make down-local"
-	@echo "Do not run make dev at the same time."
-
-deploy-local: build-local local
-
-logs-local:
-	@$(LOCAL_COMPOSE) logs -f
-
-down-local:
-	@$(LOCAL_COMPOSE) down --remove-orphans
-	@echo "Local containers removed. ./data was kept."
-
-# ==============================================================================
-# Production containers (docker-compose.yml)
+# Production container (Dockerfile + docker-compose.yml)
 # ==============================================================================
 
 build-prod:
-	@for target in server admin portal; do \
-		docker build --target $$target -t $(REGISTRY)/bugpin-$$target:$(BUGPIN_TAG) . || exit 1; \
-	done
+	@docker build -t $(IMAGE):latest .
 
 prod:
-	@BUGPIN_TAG=$(BUGPIN_TAG) $(PROD_COMPOSE) --profile separate-portal up -d --pull never
-	@echo "Admin Console: http://localhost:7300/admin/  Portal frontend: http://localhost:7310/reporter-portal/"
+	@$(PROD_COMPOSE) up -d --pull never
+	@echo "BugPin: http://localhost:7300  Data: ./data"
 	@echo "Logs: make logs-prod  Stop: make down-prod"
+	@echo "Do not run make dev at the same time."
 
 deploy-prod: build-prod prod
 
 logs-prod:
-	@$(PROD_COMPOSE) --profile separate-portal logs -f
+	@$(PROD_COMPOSE) logs -f
 
 down-prod:
-	@$(PROD_COMPOSE) --profile separate-portal down
-	@echo "Production containers removed. Volumes were kept."
+	@$(PROD_COMPOSE) down
+	@echo "Production container removed. ./data was kept."
 
 # ==============================================================================
 # Checks (host)
@@ -105,7 +75,6 @@ down-prod:
 
 typecheck:
 	@bun run typecheck
-	@bun run typecheck:tests
 
 test:
 	@bun run test
@@ -153,7 +122,6 @@ clean:
 	@rm -rf dist
 	@rm -rf src/server/dist
 	@rm -rf src/admin/dist
-	@rm -rf src/portal/dist
 	@rm -rf src/widget/dist
 	@echo "$(GREEN)[SUCCESS]$(NC) Build artifacts removed"
 
@@ -187,9 +155,8 @@ clean-deps:
 	@rm -rf node_modules
 	@rm -rf src/server/node_modules
 	@rm -rf src/admin/node_modules
-	@rm -rf src/portal/node_modules
-	@rm -rf src/shared-ui/node_modules
 	@rm -rf src/widget/node_modules
+	@rm -rf ee/node_modules
 	@echo "$(GREEN)[SUCCESS]$(NC) Dependencies removed"
 
 clean-all: clean clean-deps
@@ -279,13 +246,17 @@ release:
 		echo "$(RED)[ERROR]$(NC) Production releases must be tagged from the main branch (currently on $$BRANCH)"; \
 		exit 1; \
 	fi; \
+	if [ "$$IS_DEV" = "false" ] && [ ! -f "Changelog/v$(v).md" ]; then \
+		echo "$(RED)[ERROR]$(NC) Missing Changelog/v$(v).md. The release workflow uses it for the GitHub release notes."; \
+		exit 1; \
+	fi; \
 	echo "  Branch:  $$BRANCH"; \
 	echo "  Version: $$BASE_VERSION"; \
 	echo "  Tag:     v$(v)"; \
 	if [ "$$IS_DEV" = "true" ]; then \
-		echo "  Images:  $(v), dev"; \
+		echo "  Image:   $(IMAGE):$(v), dev"; \
 	else \
-		echo "  Images:  $(v), latest"; \
+		echo "  Image:   $(IMAGE):$(v), plus the floating tags (minor, major, latest) it is the newest for"; \
 	fi; \
 	echo ""; \
 	printf "$(YELLOW)Proceed? [y/N]$(NC) "; \
@@ -317,7 +288,7 @@ release:
 		git push origin v$(v); \
 		echo ""; \
 		echo "$(GREEN)[SUCCESS]$(NC) Production release v$(v) complete."; \
-		echo "  Image tags: $(v), latest"; \
+		echo "  GitHub release and Docker image build triggered."; \
 	fi
 
 release-widget:
@@ -425,27 +396,20 @@ help:
 	ports() { printf '  %-38s %s%s%s\n' '' "$$P" "$$1" "$$R"; }; \
 	printf '%s%s%s\n' "$$B" 'BugPin development commands' "$$R"; \
 	section 'Host development'; \
-	row 'make dev' 'Server, Admin Console HMR, and Reporter Portal HMR on the host'; \
-	ports ':4300 server    :7300 Admin Console    :7310 Reporter Portal'; \
-	row 'make dev-server|dev-admin|dev-portal' 'Start one of them on the host'; \
+	row 'make dev' 'Server and Admin Console HMR on the host'; \
+	ports ':7300 Admin Console    :7301 server (proxied by Vite)'; \
+	row 'make dev-server|dev-admin' 'Start one of them on the host'; \
 	row 'make dev-widget' 'Build the widget in watch mode'; \
-	row 'make build-dev' 'Build server, Admin Console, portal, and widget into dist/'; \
-	section 'Local containers'; \
-	row 'make local' 'Start the Docker stack with HMR, without rebuilding'; \
-	ports ':7300 Admin Console HMR    :7310 Reporter Portal HMR'; \
-	row 'make deploy-local' 'Rebuild the development image, then start the stack'; \
-	row 'make build-local' 'Build the development image'; \
-	row 'make logs-local' 'Follow local container logs'; \
-	row 'make down-local' 'Remove local containers and keep ./data'; \
-	section 'Production containers'; \
-	row 'make build-prod' 'Build the server, admin, and portal images (BUGPIN_TAG, default latest)'; \
-	row 'make prod' 'Start docker-compose.yml with those images, portal included'; \
-	ports ':7300 Admin Console    :7310 Reporter Portal'; \
-	row 'make deploy-prod' 'Build, then start production containers'; \
+	row 'make build-dev' 'Build server, Admin Console, and widget into dist/'; \
+	section 'Production container'; \
+	row 'make build-prod' 'Build the production image locally as bugpin:latest'; \
+	row 'make prod' 'Start docker-compose.yml with that image, data in ./data'; \
+	ports ':7300 BugPin'; \
+	row 'make deploy-prod' 'Build, then start the production container'; \
 	row 'make logs-prod' 'Follow production container logs'; \
-	row 'make down-prod' 'Remove production containers and keep volumes'; \
+	row 'make down-prod' 'Remove the production container and keep ./data'; \
 	section 'Checks'; \
-	row 'make typecheck' 'Type check all components and tests'; \
+	row 'make typecheck' 'Type check all components and EE'; \
 	row 'make test' 'Run all tests'; \
 	row 'make knip' 'Find unused code and dependencies'; \
 	row 'make format' 'Format with Prettier'; \
@@ -473,7 +437,7 @@ help:
 	row 'make release-widget v=1.2.3' 'Publish the widget to npm and tag widget-vX.Y.Z'; \
 	section 'Notes'; \
 	printf '  %s\n' \
-		'- Run make dev or make local, not both: they use the same ports.' \
-		'- The server is not published in local or production containers; use the frontends.'
+		'- Run make dev or make prod, not both: they use the same port 7300.' \
+		'- make build-prod tags the local image as latest, so make prod runs it instead of the registry image until you pull again.'
 
 .DEFAULT_GOAL := help
