@@ -235,7 +235,8 @@ release:
 	@echo "$(BLUE)  BugPin Release v$(v)$(NC)"
 	@echo "$(BLUE)================================================$(NC)"
 	@echo ""
-	@BASE_VERSION=$$(echo "$(v)" | sed 's/-dev.*//'); \
+	@set -e; \
+	BASE_VERSION=$$(echo "$(v)" | sed 's/-dev.*//'); \
 	IS_DEV=$$(echo "$(v)" | grep -qE -- '(-dev|-beta)' && echo true || echo false); \
 	BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if [ "$$IS_DEV" = "true" ] && [ "$$BRANCH" != "dev" ]; then \
@@ -246,8 +247,8 @@ release:
 		echo "$(RED)[ERROR]$(NC) Production releases must be tagged from the main branch (currently on $$BRANCH)"; \
 		exit 1; \
 	fi; \
-	if [ "$$IS_DEV" = "false" ] && [ ! -f "Changelog/v$(v).md" ]; then \
-		echo "$(RED)[ERROR]$(NC) Missing Changelog/v$(v).md. The release workflow uses it for the GitHub release notes."; \
+	if [ "$$IS_DEV" = "false" ] && { ! git cat-file -e "HEAD:Changelog/v$(v).md" 2>/dev/null || ! git diff --quiet HEAD -- "Changelog/v$(v).md"; }; then \
+		echo "$(RED)[ERROR]$(NC) Changelog/v$(v).md must be committed without local changes. The release workflow uses it for the GitHub release notes."; \
 		exit 1; \
 	fi; \
 	echo "  Branch:  $$BRANCH"; \
@@ -278,9 +279,8 @@ release:
 		echo "$(BLUE)[INFO]$(NC) Bumping version to $(v)..."; \
 		$(MAKE) -s bump-version v=$(v); \
 		echo "$(BLUE)[INFO]$(NC) Committing changes..."; \
-		git add package.json src/server/package.json src/admin/package.json; \
-		git diff --cached --quiet && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
-		git commit -m "chore: bump version to $(v)"; \
+		git diff --quiet HEAD -- package.json src/server/package.json src/admin/package.json && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
+		git commit -m "chore: bump version to $(v)" -- package.json src/server/package.json src/admin/package.json; \
 		echo "$(BLUE)[INFO]$(NC) Pushing commit to $$BRANCH..."; \
 		git push origin $$BRANCH; \
 		echo "$(BLUE)[INFO]$(NC) Creating and pushing tag v$(v)..."; \
@@ -300,8 +300,8 @@ release-widget:
 		echo "$(RED)[ERROR]$(NC) Widget version must use stable X.Y.Z format"; \
 		exit 1; \
 	fi
-	@if [ ! -f "Changelog/widget/v$(v).md" ]; then \
-		echo "$(RED)[ERROR]$(NC) Missing Changelog/widget/v$(v).md. The widget release workflow needs it for the GitHub release notes."; \
+	@if ! git cat-file -e "HEAD:Changelog/widget/v$(v).md" 2>/dev/null || ! git diff --quiet HEAD -- "Changelog/widget/v$(v).md"; then \
+		echo "$(RED)[ERROR]$(NC) Changelog/widget/v$(v).md must be committed without local changes. The widget release workflow needs it for the GitHub release notes."; \
 		exit 1; \
 	fi
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
@@ -334,7 +334,7 @@ release-widget:
 	fi; \
 	echo ""; \
 	echo "$(BLUE)[INFO]$(NC) Verifying npm session..."; \
-	NPM_USER=$$(npm whoami 2>/dev/null); \
+	NPM_USER=$$(npm whoami 2>/dev/null || true); \
 	if [ -z "$$NPM_USER" ]; then \
 		echo "$(RED)[ERROR]$(NC) Not logged into npm. Run 'npm login' first."; \
 		exit 1; \
@@ -354,9 +354,8 @@ release-widget:
 	}; \
 	echo "$(GREEN)[OK]$(NC) Widget v$(v) published to npm."; \
 	echo "$(BLUE)[INFO]$(NC) Committing widget version bump..."; \
-	git add src/widget/package.json; \
-	git diff --cached --quiet && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
-	git commit -m "chore(widget): bump version to $(v)"; \
+	git diff --quiet HEAD -- src/widget/package.json && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
+	git commit -m "chore(widget): bump version to $(v)" -- src/widget/package.json; \
 	echo "$(BLUE)[INFO]$(NC) Pushing commit to main..."; \
 	git push origin main; \
 	echo "$(BLUE)[INFO]$(NC) Creating and pushing tag widget-v$(v)..."; \
@@ -428,8 +427,8 @@ help:
 	row 'make clean-purge' 'Remove build output, node_modules, and data/, asks first'; \
 	section 'Release'; \
 	row 'make version-check' 'Check package.json versions match'; \
-	row 'make bump-version v=1.2.3' 'Set every package version'; \
-	row 'make bump-patch|bump-minor|bump-major' 'Increment that part of every version'; \
+	row 'make bump-version v=1.2.3' 'Set the app version (root, server, Admin Console)'; \
+	row 'make bump-patch|bump-minor|bump-major' 'Increment that part of the app version'; \
 	row 'make release v=1.2.3' 'Tag a production release from main'; \
 	row 'make release v=1.2.3-dev' 'Tag a dev release from dev'; \
 	row 'make release v=1.2.3-beta.1' 'Tag a beta release from dev'; \
