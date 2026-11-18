@@ -58,7 +58,10 @@ export function parseShortcut(value: string): KeyboardShortcut | null {
     code: '',
   };
   for (const part of parts) {
-    const modifier = MODIFIER_ALIASES[part.toLowerCase()];
+    const name = part.toLowerCase();
+    const modifier = Object.prototype.hasOwnProperty.call(MODIFIER_ALIASES, name)
+      ? MODIFIER_ALIASES[name]
+      : undefined;
     if (!modifier) return null;
     if (modifier === 'mod') {
       if (isApplePlatform()) shortcut.meta = true;

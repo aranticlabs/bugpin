@@ -114,6 +114,27 @@ describe('ScreenshotCaptureBar', () => {
     expect(menuItems()).toHaveLength(0);
   });
 
+  it('returns focus to the timer button when the menu closes', async () => {
+    renderBar();
+    const trigger = timerTrigger();
+
+    trigger.click();
+    await settle();
+    menuItems()[0]?.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    );
+    await settle();
+    expect(timerTrigger()).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+
+    trigger.click();
+    await settle();
+    menuItems()[1]?.click();
+    await settle();
+    expect(timerTrigger()).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('disables capture and timer while the tab share is pending', () => {
     renderBar({ isReady: false });
 

@@ -54,6 +54,11 @@ describe('parseShortcut', () => {
     expect(parseShortcut('Shift+F2')?.code).toBe('F2');
     expect(parseShortcut('')).toBeNull();
   });
+
+  it('rejects names inherited from Object instead of treating them as modifiers', () => {
+    expect(parseShortcut('constructor+F8')).toBeNull();
+    expect(parseShortcut('toString+Shift+S')).toBeNull();
+  });
 });
 
 describe('matchesShortcut', () => {

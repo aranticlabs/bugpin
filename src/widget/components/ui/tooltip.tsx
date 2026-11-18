@@ -23,6 +23,8 @@ export interface TooltipProps {
   content: string;
   side?: TooltipSide;
   align?: TooltipAlign;
+  /** Hides the tooltip without remounting the trigger, so the trigger keeps focus. */
+  disabled?: boolean;
   children: ComponentChildren;
 }
 
@@ -30,6 +32,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
   content,
   side = 'top',
   align = 'center',
+  disabled = false,
   children,
 }) => {
   // Browsers start matching :focus-visible on a clicked control once any key is
@@ -43,19 +46,21 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
       onFocusOut={() => setPointerFocused(false)}
     >
       {children}
-      <span
-        role="tooltip"
-        class={cn(
-          'pointer-events-none invisible absolute z-20 whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground group-hover/tooltip:visible',
-          // Visibility switches at the end of its transition delay, so hover waits before
-          // showing while hiding and keyboard focus stay immediate.
-          '[transition:visibility_0s] group-hover/tooltip:[transition-delay:500ms]',
-          !pointerFocused && 'group-has-[:focus-visible]/tooltip:visible'
-        )}
-        style={sideStyle(side, 6, align)}
-      >
-        {content}
-      </span>
+      {!disabled && (
+        <span
+          role="tooltip"
+          class={cn(
+            'pointer-events-none invisible absolute z-20 whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground group-hover/tooltip:visible',
+            // Visibility switches at the end of its transition delay, so hover waits before
+            // showing while hiding and keyboard focus stay immediate.
+            '[transition:visibility_0s] group-hover/tooltip:[transition-delay:500ms]',
+            !pointerFocused && 'group-has-[:focus-visible]/tooltip:visible'
+          )}
+          style={sideStyle(side, 6, align)}
+        >
+          {content}
+        </span>
+      )}
     </div>
   );
 };

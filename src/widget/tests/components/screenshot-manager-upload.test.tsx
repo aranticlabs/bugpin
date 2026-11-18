@@ -596,6 +596,25 @@ describe('ScreenshotManager paste', () => {
     container.remove();
   });
 
+  it('leaves pastes the page already handled alone', async () => {
+    const onUpload = mock((_item: CapturedMedia) => undefined);
+    const container = renderManager(onUpload);
+    await settle();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.addEventListener('paste', (event) => event.preventDefault());
+    const file = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });
+    paste(host, [clipboardItem(file)]);
+    await settle();
+
+    expect(onUpload).not.toHaveBeenCalled();
+
+    host.remove();
+    render(null, container);
+    container.remove();
+  });
+
   it('applies upload validation to pasted files', async () => {
     const onUpload = mock((_item: CapturedMedia) => undefined);
     const container = renderManager(onUpload);

@@ -280,7 +280,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
   // the widget's shadow root as well as those made with focus on the host page body.
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
-      if (isEditableTarget(event)) return;
+      if (event.defaultPrevented || isEditableTarget(event)) return;
       const files = getClipboardFiles(event.clipboardData);
       if (files.length === 0) return;
       event.preventDefault();

@@ -152,13 +152,13 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
         </div>
 
         <div ref={timerRef} class="relative inline-flex" onKeyDown={handleMenuKeyDown}>
-          {isMenuOpen ? (
-            timerTrigger
-          ) : (
-            <Tooltip content={t('screenshot.bar.timerLabel')} side={tooltipSide}>
-              {timerTrigger}
-            </Tooltip>
-          )}
+          <Tooltip
+            content={t('screenshot.bar.timerLabel')}
+            side={tooltipSide}
+            disabled={isMenuOpen}
+          >
+            {timerTrigger}
+          </Tooltip>
           <Popover
             open={isMenuOpen}
             side={tooltipSide}

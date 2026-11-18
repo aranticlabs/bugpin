@@ -26,6 +26,8 @@ const IMAGE_WAIT_TIMEOUT_MS = 3000;
 const MAX_PIXEL_RATIO = 2;
 const MAX_CANVAS_DIMENSION = 16384;
 const MAX_TOTAL_PIXELS = 40_000_000;
+// HTMLMediaElement.HAVE_CURRENT_DATA
+const HAVE_CURRENT_DATA = 2;
 
 // Data attribute used to exclude elements from capture
 const EXCLUDE_ATTRIBUTE = 'data-bugpin-exclude';
@@ -409,6 +411,11 @@ export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> 
       grabFrame: async () => {
         if (stream.getTracks().every((track) => track.readyState === 'ended')) {
           throw new Error('Screen sharing was stopped');
+        }
+        // Drawing a video without decoded frame data yields a blank image, so let the
+        // caller fall back to DOM capture instead.
+        if (video.readyState < HAVE_CURRENT_DATA || video.videoWidth === 0) {
+          throw new Error('Screen sharing has no frame yet');
         }
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
