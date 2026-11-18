@@ -20,7 +20,7 @@ import {
   Minimize2,
 } from 'lucide-preact';
 import { cn } from '../lib/utils';
-import { Button } from '../components/ui';
+import { Button, Tooltip } from '../components/ui';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
 import {
@@ -138,7 +138,15 @@ const ZOOM_STEP = 1.2;
 // Float slack so a zoom clamped to a limit counts as having reached it.
 const ZOOM_LIMIT_TOLERANCE = 1.0001;
 
-const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#000000'];
+const COLORS = [
+  { value: '#ef4444', labelKey: 'annotation.color.red' },
+  { value: '#f97316', labelKey: 'annotation.color.orange' },
+  { value: '#eab308', labelKey: 'annotation.color.yellow' },
+  { value: '#22c55e', labelKey: 'annotation.color.green' },
+  { value: '#3b82f6', labelKey: 'annotation.color.blue' },
+  { value: '#8b5cf6', labelKey: 'annotation.color.purple' },
+  { value: '#000000', labelKey: 'annotation.color.black' },
+] as const;
 const STROKE_WIDTHS = [2, 4, 6, 8];
 
 // Global generation counter for pixelate race condition prevention
@@ -1381,157 +1389,152 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     icon: JSX.Element;
     label: string;
   }) => (
-    <button
-      class={cn(
-        'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors',
-        'hover:bg-foreground/10 hover:text-foreground',
-        '[&_svg]:w-4.5 [&_svg]:h-4.5',
-        activeTool === tool && 'bg-primary/10 text-primary'
-      )}
-      onClick={() => setActiveTool(tool)}
-      title={label}
-    >
-      {icon}
-    </button>
+    <Tooltip content={label} side="bottom">
+      <button
+        class={cn(
+          'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors',
+          'hover:bg-foreground/10 hover:text-foreground',
+          '[&_svg]:w-4.5 [&_svg]:h-4.5',
+          activeTool === tool && 'bg-primary/10 text-primary'
+        )}
+        onClick={() => setActiveTool(tool)}
+        aria-label={label}
+      >
+        {icon}
+      </button>
+    </Tooltip>
   );
 
   return (
     <div class="h-full min-h-0 flex flex-col">
       {/* Toolbar */}
-      <div class="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
-        <div class="flex items-center gap-1">
-          <ToolButton
-            tool="select"
-            label={t('annotation.toolbar.select')}
-            icon={<MousePointer2 />}
-          />
-          <ToolButton tool="pan" label={t('annotation.toolbar.pan')} icon={<Move />} />
-          <ToolButton tool="pen" label={t('annotation.toolbar.pen')} icon={<Pencil />} />
-          <ToolButton tool="line" label={t('annotation.toolbar.line')} icon={<Slash />} />
-          <ToolButton tool="arrow" label={t('annotation.toolbar.arrow')} icon={<MoveUpRight />} />
-          <ToolButton
-            tool="rectangle"
-            label={t('annotation.toolbar.rectangle')}
-            icon={<Square />}
-          />
-          <ToolButton tool="circle" label={t('annotation.toolbar.circle')} icon={<Circle />} />
-          <ToolButton tool="text" label={t('annotation.toolbar.text')} icon={<Type />} />
-          <ToolButton
-            tool="pixelate"
-            label={t('annotation.toolbar.pixelate')}
-            icon={<HatGlasses />}
-          />
+      <div class="shrink-0 flex items-start gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
+        <div class="flex flex-1 min-w-0 flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1">
+            <ToolButton
+              tool="select"
+              label={t('annotation.toolbar.select')}
+              icon={<MousePointer2 />}
+            />
+            <ToolButton tool="pan" label={t('annotation.toolbar.pan')} icon={<Move />} />
+            <ToolButton tool="pen" label={t('annotation.toolbar.pen')} icon={<Pencil />} />
+            <ToolButton tool="line" label={t('annotation.toolbar.line')} icon={<Slash />} />
+            <ToolButton tool="arrow" label={t('annotation.toolbar.arrow')} icon={<MoveUpRight />} />
+            <ToolButton
+              tool="rectangle"
+              label={t('annotation.toolbar.rectangle')}
+              icon={<Square />}
+            />
+            <ToolButton tool="circle" label={t('annotation.toolbar.circle')} icon={<Circle />} />
+            <ToolButton tool="text" label={t('annotation.toolbar.text')} icon={<Type />} />
+            <ToolButton
+              tool="pixelate"
+              label={t('annotation.toolbar.pixelate')}
+              icon={<HatGlasses />}
+            />
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Colors */}
+          <div class="flex items-center gap-1">
+            {COLORS.map(({ value: color, labelKey }) => (
+              <Tooltip key={color} content={t(labelKey)} side="bottom">
+                <button
+                  class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
+                  onClick={() => setActiveColor(color)}
+                  aria-label={t(labelKey)}
+                >
+                  <span
+                    class={cn(
+                      'block rounded-full transition-all',
+                      activeColor === color
+                        ? 'w-5 h-5 ring-2 ring-foreground ring-offset-1 ring-offset-muted'
+                        : 'w-6 h-6 group-hover:scale-110'
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Stroke Width */}
+          <div class="flex items-center gap-1">
+            {STROKE_WIDTHS.map((width) => (
+              <Tooltip
+                key={width}
+                content={t('annotation.toolbar.strokeWidth', { width })}
+                side="bottom"
+              >
+                <button
+                  class={cn(
+                    'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent cursor-pointer transition-colors',
+                    'hover:bg-foreground/10',
+                    strokeWidth === width && 'bg-primary/10'
+                  )}
+                  onClick={() => setStrokeWidth(width)}
+                  aria-label={t('annotation.toolbar.strokeWidth', { width })}
+                >
+                  <span class="w-5 bg-foreground rounded-full" style={{ height: `${width}px` }} />
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Undo/Redo */}
+          <div class="flex items-center gap-1">
+            <Tooltip content={t('annotation.toolbar.undo')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label={t('annotation.toolbar.undo')}
+              >
+                <Undo2 />
+              </button>
+            </Tooltip>
+            <Tooltip content={t('annotation.toolbar.redo')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label={t('annotation.toolbar.redo')}
+              >
+                <Redo2 />
+              </button>
+            </Tooltip>
+            <Tooltip content={t('annotation.toolbar.delete')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onClick={deleteSelected}
+                aria-label={t('annotation.toolbar.delete')}
+              >
+                <Trash2 />
+              </button>
+            </Tooltip>
+          </div>
         </div>
 
-        <div class="w-px h-6 bg-border" />
-
-        {/* Colors */}
-        <div class="flex items-center gap-1">
-          {COLORS.map((color) => (
-            <button
-              key={color}
-              class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
-              onClick={() => setActiveColor(color)}
-              title={color}
-            >
-              <span
-                class={cn(
-                  'block rounded-full transition-all',
-                  activeColor === color
-                    ? 'w-5 h-5 ring-2 ring-foreground ring-offset-1 ring-offset-muted'
-                    : 'w-6 h-6 group-hover:scale-110'
-                )}
-                style={{ backgroundColor: color }}
-              />
-            </button>
-          ))}
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Stroke Width */}
-        <div class="flex items-center gap-1">
-          {STROKE_WIDTHS.map((width) => (
-            <button
-              key={width}
-              class={cn(
-                'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent cursor-pointer transition-colors',
-                'hover:bg-foreground/10',
-                strokeWidth === width && 'bg-primary/10'
-              )}
-              onClick={() => setStrokeWidth(width)}
-              title={t('annotation.toolbar.strokeWidth', { width })}
-            >
-              <span class="w-5 bg-foreground rounded-full" style={{ height: `${width}px` }} />
-            </button>
-          ))}
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Undo/Redo */}
-        <div class="flex items-center gap-1">
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={undo}
-            disabled={!canUndo}
-            title={t('annotation.toolbar.undo')}
-          >
-            <Undo2 />
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={redo}
-            disabled={!canRedo}
-            title={t('annotation.toolbar.redo')}
-          >
-            <Redo2 />
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={deleteSelected}
-            title={t('annotation.toolbar.delete')}
-          >
-            <Trash2 />
-          </button>
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Zoom Controls */}
-        <div class="flex items-center gap-1">
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomOut}
-            disabled={zoomState.zoom <= zoomState.limits.min * ZOOM_LIMIT_TOLERANCE}
-            title={t('annotation.toolbar.zoomOut')}
-          >
-            <ZoomOut />
-          </button>
-          <button
-            class="flex items-center justify-center min-w-12 h-8 px-1.5 border-none rounded bg-transparent text-xs font-medium tabular-nums text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground"
-            onClick={fitToView}
-            title={t('annotation.toolbar.zoomFit')}
-          >
-            {Math.round(zoomState.zoom * zoomState.sceneScale * 100)}%
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomIn}
-            disabled={zoomState.zoom >= zoomState.limits.max / ZOOM_LIMIT_TOLERANCE}
-            title={t('annotation.toolbar.zoomIn')}
-          >
-            <ZoomIn />
-          </button>
-        </div>
-
-        <button
-          class="hidden sm:flex ml-auto items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground [&_svg]:w-4.5 [&_svg]:h-4.5"
-          onClick={onToggleMaximize}
-          title={t(isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize')}
+        <Tooltip
+          content={t(isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize')}
+          side="bottom"
+          align="end"
         >
-          {isMaximized ? <Minimize2 /> : <Maximize2 />}
-        </button>
+          <button
+            class="hidden sm:flex shrink-0 items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground [&_svg]:w-4.5 [&_svg]:h-4.5"
+            onClick={onToggleMaximize}
+            aria-label={t(
+              isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize'
+            )}
+          >
+            {isMaximized ? <Minimize2 /> : <Maximize2 />}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Canvas */}
@@ -1542,14 +1545,56 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         <div class="absolute inset-0">
           <canvas ref={canvasRef} />
         </div>
+
+        {/* Zoom Controls */}
+        <div class="absolute bottom-3 right-3 flex items-center gap-0.5 p-1 rounded-lg border border-solid border-border bg-background text-foreground [box-shadow:0_4px_12px_rgb(0_0_0/0.15)]">
+          <Tooltip content={t('annotation.toolbar.zoomOut')} side="top">
+            <button
+              class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onClick={handleZoomOut}
+              disabled={zoomState.zoom <= zoomState.limits.min * ZOOM_LIMIT_TOLERANCE}
+              aria-label={t('annotation.toolbar.zoomOut')}
+            >
+              <ZoomOut />
+            </button>
+          </Tooltip>
+          <Tooltip content={t('annotation.toolbar.zoomFit')} side="top">
+            <button
+              class="flex items-center justify-center min-w-12 h-8 px-1.5 border-none rounded bg-transparent text-xs font-medium tabular-nums text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground"
+              onClick={fitToView}
+              aria-label={t('annotation.toolbar.zoomFit')}
+            >
+              {Math.round(zoomState.zoom * zoomState.sceneScale * 100)}%
+            </button>
+          </Tooltip>
+          <Tooltip content={t('annotation.toolbar.zoomIn')} side="top" align="end">
+            <button
+              class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onClick={handleZoomIn}
+              disabled={zoomState.zoom >= zoomState.limits.max / ZOOM_LIMIT_TOLERANCE}
+              aria-label={t('annotation.toolbar.zoomIn')}
+            >
+              <ZoomIn />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Actions */}
-      <div class="shrink-0 flex gap-3 p-4 border-t border-solid border-border bg-muted">
-        <Button variant="outline" class="flex-1" onClick={onCancel}>
+      <div
+        class={cn(
+          'shrink-0 flex gap-3 p-4 border-t border-solid border-border bg-muted',
+          isMaximized && 'sm:justify-end'
+        )}
+      >
+        <Button
+          variant="outline"
+          class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')}
+          onClick={onCancel}
+        >
           {t('annotation.buttons.cancel')}
         </Button>
-        <Button class="flex-1" onClick={handleSave}>
+        <Button class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')} onClick={handleSave}>
           {t('annotation.buttons.done')}
         </Button>
       </div>

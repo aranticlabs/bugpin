@@ -292,13 +292,14 @@ describe('App interactions', () => {
     expect(annotationModal?.parentElement?.classList.contains('sm:p-5')).toBe(true);
 
     const maximizeButton = container.querySelector(
-      'button[title="Maximize"]'
+      'button[aria-label="Maximize"]'
     ) as HTMLButtonElement | null;
     expect(maximizeButton).toBeTruthy();
     maximizeButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 
     const restoreButton = await waitFor(
-      () => container.querySelector('button[title="Restore size"]') as HTMLButtonElement | null,
+      () =>
+        container.querySelector('button[aria-label="Restore size"]') as HTMLButtonElement | null,
       'Restore button not shown'
     );
     expect(restoreButton).toBeTruthy();
@@ -340,7 +341,7 @@ describe('App interactions', () => {
     );
     reopenButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     const reopenedMaximize = await waitFor(
-      () => container.querySelector('button[title="Maximize"]') as HTMLButtonElement | null,
+      () => container.querySelector('button[aria-label="Maximize"]') as HTMLButtonElement | null,
       'Editor did not reopen at normal size'
     );
     expect(reopenedMaximize).toBeTruthy();

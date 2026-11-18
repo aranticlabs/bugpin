@@ -153,25 +153,27 @@ describe('AnnotationCanvas', () => {
     }
     await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
 
-    const selectButton = container.querySelector('button[title="Select"]') as HTMLButtonElement;
+    const selectButton = container.querySelector(
+      'button[aria-label="Select"]'
+    ) as HTMLButtonElement;
     expect(selectButton.className).toContain('text-primary');
 
-    const penButton = container.querySelector('button[title="Pen"]') as HTMLButtonElement;
+    const penButton = container.querySelector('button[aria-label="Pen"]') as HTMLButtonElement;
     penButton.click();
 
     await waitFor(
       () =>
         (
-          container.querySelector('button[title="Pen"]') as HTMLButtonElement | null
+          container.querySelector('button[aria-label="Pen"]') as HTMLButtonElement | null
         )?.className.includes('text-primary') ?? false,
       'Pen tool not active'
     );
 
-    const blueButton = container.querySelector('button[title="#3b82f6"]') as HTMLButtonElement;
+    const blueButton = container.querySelector('button[aria-label="Blue"]') as HTMLButtonElement;
     blueButton.click();
     await waitFor(() => canvas.freeDrawingBrush?.color === '#3b82f6', 'Brush color not updated');
 
-    const widthButton = container.querySelector('button[title="8px"]') as HTMLButtonElement;
+    const widthButton = container.querySelector('button[aria-label="8px"]') as HTMLButtonElement;
     widthButton.click();
     await waitFor(() => canvas.freeDrawingBrush?.width === 8, 'Brush width not updated');
 
@@ -179,12 +181,14 @@ describe('AnnotationCanvas', () => {
     const fittedZoom = canvas.getZoom();
 
     const zoomInButton = container.querySelector(
-      'button[title="Zoom In - Hold Space to pan when zoomed"]'
+      'button[aria-label="Zoom in"]'
     ) as HTMLButtonElement;
     zoomInButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(canvas.getZoom()).toBeGreaterThan(fittedZoom);
 
-    const fitButton = container.querySelector('button[title="Fit to screen"]') as HTMLButtonElement;
+    const fitButton = container.querySelector(
+      'button[aria-label="Fit to screen"]'
+    ) as HTMLButtonElement;
     fitButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(canvas.getZoom()).toBe(fittedZoom);
 
@@ -232,10 +236,10 @@ describe('AnnotationCanvas', () => {
     await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
 
     const undoButton = container.querySelector(
-      'button[title="Undo (Ctrl+Z)"]'
+      'button[aria-label="Undo (Ctrl+Z)"]'
     ) as HTMLButtonElement;
     const redoButton = container.querySelector(
-      'button[title="Redo (Ctrl+Shift+Z)"]'
+      'button[aria-label="Redo (Ctrl+Shift+Z)"]'
     ) as HTMLButtonElement;
 
     expect(undoButton.disabled).toBe(true);
@@ -289,13 +293,13 @@ describe('AnnotationCanvas', () => {
 
     await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
 
-    const penButton = container.querySelector('button[title="Pen"]') as HTMLButtonElement;
+    const penButton = container.querySelector('button[aria-label="Pen"]') as HTMLButtonElement;
     penButton.click();
 
     await waitFor(
       () =>
         (
-          container.querySelector('button[title="Pen"]') as HTMLButtonElement | null
+          container.querySelector('button[aria-label="Pen"]') as HTMLButtonElement | null
         )?.className.includes('text-primary') ?? false,
       'Pen tool not active'
     );
@@ -304,14 +308,16 @@ describe('AnnotationCanvas', () => {
     expect(canvas.defaultCursor).toBe('crosshair');
 
     const panButton = container.querySelector(
-      'button[title="Pan (or hold Space)"]'
+      'button[aria-label="Pan (or hold Space)"]'
     ) as HTMLButtonElement;
     panButton.click();
 
     await waitFor(
       () =>
         (
-          container.querySelector('button[title="Pan (or hold Space)"]') as HTMLButtonElement | null
+          container.querySelector(
+            'button[aria-label="Pan (or hold Space)"]'
+          ) as HTMLButtonElement | null
         )?.className.includes('text-primary') ?? false,
       'Pan tool not active'
     );
@@ -319,13 +325,15 @@ describe('AnnotationCanvas', () => {
     expect(canvas.selection).toBe(false);
     expect(canvas.defaultCursor).toBe('grab');
 
-    const selectButton = container.querySelector('button[title="Select"]') as HTMLButtonElement;
+    const selectButton = container.querySelector(
+      'button[aria-label="Select"]'
+    ) as HTMLButtonElement;
     selectButton.click();
 
     await waitFor(
       () =>
         (
-          container.querySelector('button[title="Select"]') as HTMLButtonElement | null
+          container.querySelector('button[aria-label="Select"]') as HTMLButtonElement | null
         )?.className.includes('text-primary') ?? false,
       'Select tool not active'
     );
@@ -419,7 +427,7 @@ describe('AnnotationCanvas', () => {
       await waitFor(() => Boolean(canvas.backgroundImage), 'Screenshot not loaded');
       await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
       const fitButton = () =>
-        container.querySelector('button[title="Fit to screen"]') as HTMLButtonElement;
+        container.querySelector('button[aria-label="Fit to screen"]') as HTMLButtonElement;
       const cleanup = () => {
         render(null, container);
         container.remove();
@@ -530,11 +538,11 @@ describe('AnnotationCanvas', () => {
     it('cancels the shape in progress and zooms when a second finger pinches', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
 
-      (container.querySelector('button[title="Rectangle"]') as HTMLButtonElement).click();
+      (container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement).click();
       await waitFor(
         () =>
           (
-            container.querySelector('button[title="Rectangle"]') as HTMLButtonElement | null
+            container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement | null
           )?.className.includes('text-primary') ?? false,
         'Rectangle tool not active'
       );
@@ -571,11 +579,11 @@ describe('AnnotationCanvas', () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
 
-      (container.querySelector('button[title="Text"]') as HTMLButtonElement).click();
+      (container.querySelector('button[aria-label="Text"]') as HTMLButtonElement).click();
       await waitFor(
         () =>
           (
-            container.querySelector('button[title="Text"]') as HTMLButtonElement | null
+            container.querySelector('button[aria-label="Text"]') as HTMLButtonElement | null
           )?.className.includes('text-primary') ?? false,
         'Text tool not active'
       );
