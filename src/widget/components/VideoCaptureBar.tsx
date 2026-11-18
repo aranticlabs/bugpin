@@ -11,7 +11,7 @@ import {
   Pencil,
   Square,
   Target,
-  Trash2,
+  X,
   TriangleAlert,
   Undo2,
 } from 'lucide-preact';
@@ -328,7 +328,7 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
             variant="ghost"
             onClick={onDiscard}
           >
-            <Trash2 class="w-4 h-4" />
+            <X class="w-4 h-4" />
           </CaptureBarButton>
         </div>
 
