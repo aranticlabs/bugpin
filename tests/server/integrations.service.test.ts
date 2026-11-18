@@ -246,6 +246,7 @@ describe('integrationsService.update config merge', () => {
     ['missing', undefined],
     ['blank', '   '],
     ['the masked form', 'ghp_****abcd'],
+    ['the masked form with surrounding spaces', ' ghp_****abcd '],
     ['the short masked form', '****'],
   ])('keeps the stored token when the incoming token is %s', async (_label, accessToken) => {
     const result = await integrationsService.update('int_1', {
@@ -271,6 +272,7 @@ describe('integrationsService.update config merge', () => {
     if (result.success) {
       const config = result.value.config as { accessToken: string };
       expect(config.accessToken).toBe('ghp_****abcd');
+      expect(result.value.config).not.toHaveProperty('webhookSecret');
     }
   });
 
@@ -424,6 +426,44 @@ describe('integrationsService.create masked secrets', () => {
       error: 'Secrets must not be masked values',
       code: 'INVALID_CONFIG',
     });
+  });
+
+  it('rejects a masked access token surrounded by whitespace', async () => {
+    const result = await integrationsService.create({
+      projectId: 'prj_1',
+      type: 'github',
+      name: 'GitHub',
+      config: { owner: 'org', repo: 'repo', accessToken: ' ghp_****abcd ' },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('integrationsService.create sync fields', () => {
+  it('does not store sync mode or webhook fields sent by the client', async () => {
+    let createdConfig: IntegrationConfig | undefined;
+    integrationsRepo.create = async (data) => {
+      createdConfig = data.config;
+      return createdIntegration as Integration;
+    };
+    const result = await integrationsService.create({
+      projectId: 'prj_1',
+      type: 'github',
+      name: 'GitHub',
+      config: {
+        owner: 'org',
+        repo: 'repo',
+        accessToken: 'ghp_realtoken1234abcd',
+        syncMode: 'automatic',
+        webhookId: '1',
+        webhookSecret: 'whsec_client',
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(createdConfig).toMatchObject({ owner: 'org', repo: 'repo' });
+    expect(createdConfig).not.toHaveProperty('syncMode');
+    expect(createdConfig).not.toHaveProperty('webhookId');
+    expect(createdConfig).not.toHaveProperty('webhookSecret');
   });
 });
 

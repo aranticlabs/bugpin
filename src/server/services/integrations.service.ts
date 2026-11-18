@@ -89,7 +89,7 @@ export const integrationsService = {
       projectId: input.projectId,
       type: input.type,
       name: input.name.trim(),
-      config: input.config,
+      config: withoutSyncOwnedFields(input.config),
       isActive: true,
     };
 
@@ -408,7 +408,16 @@ const MASK = '****';
 const MASKED_SECRET_PATTERN = /^[\s\S]{4}\*{4}[\s\S]{4}$/;
 
 function isMaskedSecret(value: string): boolean {
-  return value === MASK || MASKED_SECRET_PATTERN.test(value);
+  const trimmed = value.trim();
+  return trimmed === MASK || MASKED_SECRET_PATTERN.test(trimmed);
+}
+
+function withoutSyncOwnedFields(config: IntegrationConfig): IntegrationConfig {
+  const record: Record<string, unknown> = { ...config };
+  for (const key of SYNC_OWNED_CONFIG_KEYS) {
+    delete record[key];
+  }
+  return record as unknown as IntegrationConfig;
 }
 
 function containsMaskedSecret(config: IntegrationConfig): boolean {
@@ -534,6 +543,9 @@ function maskConfig(config: IntegrationConfig): IntegrationConfig {
       masked[key] = maskToken(value);
     }
   }
+
+  // Only the webhook receiver needs the signing secret, and it reads it from the database.
+  delete masked.webhookSecret;
 
   return masked as unknown as IntegrationConfig;
 }
