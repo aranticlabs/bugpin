@@ -269,6 +269,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const canvasHostRef = useRef<HTMLDivElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -507,7 +508,16 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
-    const readPinch = (touches: TouchList) => {
+    // Only fingers that landed on the canvas take part in drawing and pinching; a finger
+    // resting on the toolbar or the zoom controls must not turn a drawing gesture into a pinch.
+    const canvasTouches = (touches: TouchList): Touch[] =>
+      Array.from(touches).filter(
+        (touch) =>
+          !(touch.target instanceof Node) ||
+          (canvasHostRef.current ?? wrapper).contains(touch.target)
+      );
+
+    const readPinch = (touches: Touch[]) => {
       const [a, b] = [touches[0], touches[1]];
       return {
         distance: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
@@ -554,7 +564,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.requestRenderAll();
     };
 
-    const startPinch = (touches: TouchList) => {
+    const startPinch = (touches: Touch[]) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
       const { distance, midpoint } = readPinch(touches);
@@ -566,18 +576,19 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1 && !touchSessionBlocked) {
+      const touches = canvasTouches(e.touches);
+      if (touches.length === 1 && !touchSessionBlocked) {
         objectsBeforeTouch = new Set(fabricRef.current?.getObjects() ?? []);
         return;
       }
-      if (e.touches.length < 2) return;
+      if (touches.length < 2) return;
       e.preventDefault();
       e.stopPropagation();
       if (!touchSessionBlocked) {
         touchSessionBlocked = true;
         cancelPointerInteraction();
       }
-      startPinch(e.touches);
+      startPinch(touches);
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -585,9 +596,10 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       e.preventDefault();
       e.stopPropagation();
       const scene = sceneRef.current;
-      if (!pinch || e.touches.length < 2 || !scene) return;
+      const touches = canvasTouches(e.touches);
+      if (!pinch || touches.length < 2 || !scene) return;
 
-      const { distance, midpoint } = readPinch(e.touches);
+      const { distance, midpoint } = readPinch(touches);
       const start = pinch.startViewport;
       const view = viewSizeRef.current;
       const zoom = clampZoom(
@@ -610,15 +622,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      if (!touchSessionBlocked) return;
-      if (e.touches.length === 0) {
+      const touches = canvasTouches(e.touches);
+      if (touches.length === 0) {
+        // The gesture is over, so a later pinch must not undo what it drew.
         touchSessionBlocked = false;
         pinch = null;
         objectsBeforeTouch = null;
         return;
       }
+      if (!touchSessionBlocked) return;
       e.stopPropagation();
-      if (e.touches.length >= 2) startPinch(e.touches);
+      if (touches.length >= 2) startPinch(touches);
       else pinch = null;
     };
 
@@ -814,7 +828,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           (shape as fabric.FabricObject & { _isArrow?: boolean })._isArrow = true;
           break;
 
-        case 'text':
+        case 'text': {
+          // Text started in the margin around the screenshot would be clipped out of view
+          // while still in edit mode and catching keystrokes.
+          const size = sceneRef.current?.size;
+          if (
+            size &&
+            (pointer.x < 0 || pointer.y < 0 || pointer.x > size.width || pointer.y > size.height)
+          ) {
+            isDrawingRef.current = false;
+            return;
+          }
           shape = new fabric.IText(t('annotation.defaultText'), {
             left: pointer.x,
             top: pointer.y,
@@ -828,6 +852,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           (shape as fabric.IText).enterEditing();
           isDrawingRef.current = false;
           return;
+        }
 
         case 'pixelate':
           // Create placeholder rect during drawing, will be replaced with pixelated image on mouse up
@@ -1542,7 +1567,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         class="relative flex-auto min-h-0 min-w-0 overflow-hidden bg-muted"
         ref={canvasWrapperRef}
       >
-        <div class="absolute inset-0">
+        <div class="absolute inset-0" ref={canvasHostRef}>
           <canvas ref={canvasRef} />
         </div>
 

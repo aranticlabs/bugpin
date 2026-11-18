@@ -436,10 +436,14 @@ describe('AnnotationCanvas', () => {
     }
 
     function touchDispatcher(target: HTMLElement) {
-      return (type: string, points: Array<[number, number]>) => {
+      return (type: string, points: Array<[number, number]>, targets: Array<EventTarget> = []) => {
         const event = new window.Event(type, { bubbles: true, cancelable: true });
         Object.defineProperty(event, 'touches', {
-          value: points.map(([clientX, clientY]) => ({ clientX, clientY })),
+          value: points.map(([clientX, clientY], index) => ({
+            clientX,
+            clientY,
+            target: targets[index] ?? target,
+          })),
         });
         target.dispatchEvent(event);
         return event;
@@ -600,6 +604,92 @@ describe('AnnotationCanvas', () => {
       expect(canvas.getObjects()).toHaveLength(objectsBefore);
 
       touch('touchend', []);
+      cleanup();
+    });
+
+    async function activateTextTool(container: HTMLElement) {
+      (container.querySelector('button[aria-label="Text"]') as HTMLButtonElement).click();
+      await waitFor(
+        () =>
+          (
+            container.querySelector('button[aria-label="Text"]') as HTMLButtonElement | null
+          )?.className.includes('text-primary') ?? false,
+        'Text tool not active'
+      );
+    }
+
+    it('keeps a finished annotation when a later pinch starts', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+      const objectsBefore = canvas.getObjects().length;
+      await activateTextTool(container);
+
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [[300, 300]]);
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      touch('touchend', []);
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      touch('touchstart', [
+        [300, 300],
+        [400, 300],
+      ]);
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      touch('touchend', []);
+      cleanup();
+    });
+
+    it('ignores a second finger resting outside the canvas or on the zoom controls', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+      const objectsBefore = canvas.getObjects().length;
+      await activateTextTool(container);
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      const zoomButton = container.querySelector(
+        'button[aria-label="Zoom in"]'
+      ) as HTMLButtonElement;
+
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [[300, 300]]);
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+
+      const start = touch(
+        'touchstart',
+        [
+          [20, 20],
+          [300, 300],
+        ],
+        [outside, canvasEl]
+      );
+      expect(start.defaultPrevented).toBe(false);
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      const onZoom = touch(
+        'touchstart',
+        [
+          [700, 600],
+          [300, 300],
+        ],
+        [zoomButton, canvasEl]
+      );
+      expect(onZoom.defaultPrevented).toBe(false);
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      touch('touchend', []);
+      outside.remove();
+      cleanup();
+    });
+
+    it('does not start text in the margin around the screenshot', async () => {
+      const { container, canvas, cleanup } = await renderCanvas();
+      const objectsBefore = canvas.getObjects().length;
+      await activateTextTool(container);
+
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: -5, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(objectsBefore);
+
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
       cleanup();
     });
   });

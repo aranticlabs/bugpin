@@ -170,7 +170,7 @@ const it: WidgetCatalog = {
   'annotation.color.black': 'Nero',
   'annotation.toolbar.zoomOut': 'Riduci',
   'annotation.toolbar.zoomFit': 'Adatta allo schermo',
-  'annotation.toolbar.maximize': 'Ingrandisci',
+  'annotation.toolbar.maximize': 'Massimizza',
   'annotation.toolbar.restore': 'Dimensione originale',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.defaultText': 'Testo',
