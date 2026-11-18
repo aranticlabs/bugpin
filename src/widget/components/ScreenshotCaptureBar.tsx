@@ -8,6 +8,7 @@ import {
   CAPTURE_BAR_SHADOW_CLASS,
   CaptureBarButton,
   useCaptureBar,
+  useCaptureBarThemeClass,
   type CaptureBarPosition,
 } from './CaptureBar';
 import { useLocale } from '../hooks/use-locale.js';
@@ -50,6 +51,7 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
     onPositionChange,
     [isReady, isCountingDown]
   );
+  const themeClass = useCaptureBarThemeClass(position);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const timerRef = useRef<HTMLDivElement>(null);
 
@@ -136,7 +138,7 @@ export const ScreenshotCaptureBar: FunctionComponent<ScreenshotCaptureBarProps> 
       cardRef={barRef}
       data-bugpin-exclude
       popover="manual"
-      class={cn(CAPTURE_BAR_CLASS, CAPTURE_BAR_SHADOW_CLASS)}
+      class={cn(CAPTURE_BAR_CLASS, themeClass, CAPTURE_BAR_SHADOW_CLASS)}
       style={style}
       {...barHandlers}
     >

@@ -137,3 +137,85 @@ describe('ScreenshotCaptureBar', () => {
     expect(cancelButton()).not.toBeNull();
   });
 });
+
+describe('ScreenshotCaptureBar contrast with the page', () => {
+  function stubCanvas() {
+    const prototype = window.HTMLCanvasElement.prototype;
+    const original = prototype.getContext;
+    let painted = 'rgba(0, 0, 0, 0)';
+    const context = {
+      set fillStyle(color: string) {
+        painted = color;
+      },
+      fillRect: () => undefined,
+      getImageData: () => {
+        const parts = painted.match(/[\d.]+/g)?.map(Number) ?? [0, 0, 0, 0];
+        const alpha = parts.length > 3 ? parts[3] : 1;
+        return { data: [parts[0], parts[1], parts[2], Math.round(alpha * 255)] };
+      },
+    };
+    prototype.getContext = (() => context) as unknown as typeof prototype.getContext;
+    return () => {
+      prototype.getContext = original;
+    };
+  }
+
+  function stubPageAt(element: Element) {
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: () => [element],
+    });
+  }
+
+  function barElement(): HTMLElement {
+    return container.querySelector('[popover]') as HTMLElement;
+  }
+
+  it('shows a light bar over a dark page background', () => {
+    const restoreCanvas = stubCanvas();
+    const page = document.createElement('main');
+    page.style.backgroundColor = 'rgb(10, 10, 10)';
+    document.body.appendChild(page);
+    stubPageAt(page);
+
+    renderBar();
+
+    expect(barElement().className).toContain('bugpin-capture-bar-light');
+    expect(barElement().className).not.toContain('bugpin-theme-dark');
+    restoreCanvas();
+  });
+
+  it('keeps the dark bar over a light page background', () => {
+    const restoreCanvas = stubCanvas();
+    const page = document.createElement('main');
+    page.style.backgroundColor = 'rgb(255, 255, 255)';
+    document.body.appendChild(page);
+    stubPageAt(page);
+
+    renderBar();
+
+    expect(barElement().className).toContain('bugpin-theme-dark');
+    restoreCanvas();
+  });
+
+  it('uses the nearest opaque ancestor when the element under the bar is transparent', () => {
+    const restoreCanvas = stubCanvas();
+    const wrapper = document.createElement('div');
+    wrapper.style.backgroundColor = 'rgb(15, 23, 42)';
+    const link = document.createElement('a');
+    wrapper.appendChild(link);
+    document.body.appendChild(wrapper);
+    stubPageAt(link);
+
+    renderBar();
+
+    expect(barElement().className).toContain('bugpin-capture-bar-light');
+    restoreCanvas();
+  });
+
+  it('keeps the dark bar when the page cannot be sampled', () => {
+    renderBar();
+
+    expect(barElement().className).toContain('bugpin-theme-dark');
+  });
+});

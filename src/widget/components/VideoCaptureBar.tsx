@@ -22,6 +22,7 @@ import {
   CAPTURE_BAR_SHADOW_CLASS,
   CaptureBarButton,
   useCaptureBar,
+  useCaptureBarThemeClass,
   type CaptureBarPosition,
 } from './CaptureBar';
 import { RecordingAnnotationLayer } from './RecordingAnnotationLayer';
@@ -88,6 +89,7 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
     onPositionChange,
     [isReady, isCountingDown]
   );
+  const themeClass = useCaptureBarThemeClass(position);
   const countdownRef = useRef<HTMLSpanElement>(null);
   const keepFocusRef = useRef(false);
 
@@ -142,7 +144,7 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
         cardRef={barRef}
         data-bugpin-exclude
         popover="manual"
-        class={cn(CAPTURE_BAR_CLASS, CAPTURE_BAR_SHADOW_CLASS)}
+        class={cn(CAPTURE_BAR_CLASS, themeClass, CAPTURE_BAR_SHADOW_CLASS)}
         style={style}
         {...barHandlers}
       >
