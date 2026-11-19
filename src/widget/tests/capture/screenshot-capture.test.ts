@@ -230,6 +230,101 @@ describe('captureScreenshot', () => {
     expect(trackStopped).toBe(true);
   });
 
+  it('grabs the frame from an open screen capture session without a new picker', async () => {
+    let pickerOpened = false;
+    globalThis.navigator = {
+      mediaDevices: {
+        getDisplayMedia: async () => {
+          pickerOpened = true;
+          throw new Error('unexpected');
+        },
+      },
+    } as unknown as Navigator;
+    const session = { grabFrame: async () => 'data:image/png;base64,session', stop: mock() };
+
+    const { captureScreenshot } = await import('../../capture/screenshot');
+    const result = await captureScreenshot({
+      useScreenCaptureAPI: true,
+      screenCaptureSession: session,
+    });
+
+    expect(result).toBe('data:image/png;base64,session');
+    expect(pickerOpened).toBe(false);
+    expect(session.stop).not.toHaveBeenCalled();
+  });
+
+  it('falls back to DOM capture when sharing was stopped before the frame grab', async () => {
+    const track = { readyState: 'live', stop: () => undefined };
+    const stream = { getTracks: () => [track] };
+    const video = {
+      videoWidth: 640,
+      videoHeight: 480,
+      set onloadedmetadata(handler: () => void) {
+        queueMicrotask(handler);
+      },
+    };
+    setupDom();
+    const fakeDocument = globalThis.document as unknown as Record<string, unknown>;
+    const createElement = fakeDocument.createElement as (tag: string) => unknown;
+    fakeDocument.createElement = (tag: string) => (tag === 'video' ? video : createElement(tag));
+    globalThis.navigator = {
+      mediaDevices: { getDisplayMedia: async () => stream },
+    } as unknown as Navigator;
+    globalThis.setTimeout = ((handler: () => void) => {
+      handler();
+      return 0 as unknown as number;
+    }) as typeof setTimeout;
+
+    const { captureScreenshot, openScreenCaptureSession } =
+      await import('../../capture/screenshot');
+    const session = await openScreenCaptureSession();
+    track.readyState = 'ended';
+
+    await expect(session.grabFrame()).rejects.toThrow('Screen sharing was stopped');
+    const result = await captureScreenshot({
+      useScreenCaptureAPI: true,
+      screenCaptureSession: session,
+    });
+    expect(result).toBe('data:image/png;base64,stub');
+    expect(toCanvasSpy).toHaveBeenCalled();
+  });
+
+  it('falls back to DOM capture when the shared tab has no decoded frame yet', async () => {
+    const track = { readyState: 'live', stop: () => undefined };
+    const stream = { getTracks: () => [track] };
+    const video = {
+      readyState: 1,
+      videoWidth: 640,
+      videoHeight: 480,
+      set onloadedmetadata(handler: () => void) {
+        queueMicrotask(handler);
+      },
+    };
+    setupDom();
+    const fakeDocument = globalThis.document as unknown as Record<string, unknown>;
+    const createElement = fakeDocument.createElement as (tag: string) => unknown;
+    fakeDocument.createElement = (tag: string) => (tag === 'video' ? video : createElement(tag));
+    globalThis.navigator = {
+      mediaDevices: { getDisplayMedia: async () => stream },
+    } as unknown as Navigator;
+    globalThis.setTimeout = ((handler: () => void) => {
+      handler();
+      return 0 as unknown as number;
+    }) as typeof setTimeout;
+
+    const { captureScreenshot, openScreenCaptureSession } =
+      await import('../../capture/screenshot');
+    const session = await openScreenCaptureSession();
+
+    await expect(session.grabFrame()).rejects.toThrow('Screen sharing has no frame yet');
+    const result = await captureScreenshot({
+      useScreenCaptureAPI: true,
+      screenCaptureSession: session,
+    });
+    expect(result).toBe('data:image/png;base64,stub');
+    expect(toCanvasSpy).toHaveBeenCalled();
+  });
+
   it('captures visible viewport and restores visibility', async () => {
     const { html, widget } = setupDom();
     const { captureScreenshot } = await import('../../capture/screenshot');
