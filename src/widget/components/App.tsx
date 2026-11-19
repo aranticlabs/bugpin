@@ -3,13 +3,21 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
 import { WidgetConfig } from '../config.js';
 import { WidgetLauncherButton } from './WidgetLauncherButton.js';
 import { WidgetDialog, FormData } from './WidgetDialog.js';
-import { RecordingBar, type RecordingBarPosition } from './RecordingBar.js';
-import { shouldSkipRecordingConsent, type ConsentMode } from './ScreenCaptureConsentDialog.js';
+import { VideoCaptureBar } from './VideoCaptureBar.js';
+import type { CaptureBarPosition } from './CaptureBar.js';
+import { ScreenshotCaptureBar } from './ScreenshotCaptureBar.js';
+import {
+  shouldSkipRecordingConsent,
+  shouldSkipScreenshotConsent,
+  type ConsentMode,
+} from './ScreenCaptureConsentDialog.js';
 import { Toast, ToastType } from './ui';
 import { AnnotationCanvas } from '../annotate/AnnotationCanvas.js';
 import { CapturedMedia } from './ScreenshotManager.js';
-import { captureScreenshot } from '../capture/screenshot.js';
+import { captureScreenshot, type ScreenCaptureSession } from '../capture/screenshot.js';
 import { dataUrlToBlob } from '../lib/data-url.js';
+import { loadImageSize } from '../lib/image.js';
+import { cn } from '../lib/utils.js';
 import { captureContext, clearUserActivity } from '../capture/context.js';
 import { isRecordingSupported, type RecordingResult } from '../capture/recorder.js';
 import { submitReport } from '../api/submit.js';
@@ -18,14 +26,24 @@ import { draftStorage } from '../storage/draft-storage.js';
 import { recordingStore } from '../storage/recording-store.js';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
 import { useScreenRecording, type RecordingDependencies } from '../hooks/use-screen-recording.js';
+import {
+  CAPTURE_DELAY_OPTIONS,
+  useScreenshotCaptureBar,
+  type ScreenshotCaptureBarDependencies,
+} from '../hooks/use-screenshot-capture-bar.js';
+import { useCaptureShortcut } from '../hooks/use-capture-shortcut.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 
-type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording';
+type WidgetStep = 'closed' | 'form' | 'annotating' | 'recording' | 'screenshot';
 
 const BYTES_PER_MB = 1024 * 1024;
 const RECORDING_ID_PREFIX = 'recording-';
 const MAX_RECOVERIES_PER_RUN = 5;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function recordingSessionId(item: CapturedMedia): string | null {
   return item.source === 'recording' && item.id.startsWith(RECORDING_ID_PREFIX)
@@ -57,7 +75,8 @@ type AppDependencies = {
   submitReport: typeof submitReport;
   clearUserActivity: typeof clearUserActivity;
   isRecordingSupported: typeof isRecordingSupported;
-} & RecordingDependencies;
+} & RecordingDependencies &
+  ScreenshotCaptureBarDependencies;
 
 interface AppProps {
   config: WidgetConfig;
@@ -82,10 +101,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const isCapturingRef = useRef(false);
   const [media, setMedia] = useState<CapturedMedia[]>([]);
   const mediaRef = useRef(media);
   mediaRef.current = media;
   const [annotatingMediaId, setAnnotatingMediaId] = useState<string | null>(null);
+  const [isAnnotationMaximized, setIsAnnotationMaximized] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
@@ -106,7 +127,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [consentMode, setConsentMode] = useState<ConsentMode>('screenshot');
   const [includeMicrophone, setIncludeMicrophone] = useState(false);
   const [hasPendingRecording, setHasPendingRecording] = useState(false);
-  const [recordingBarPosition, setRecordingBarPosition] = useState<RecordingBarPosition | null>(
+  const [videoCaptureBarPosition, setVideoCaptureBarPosition] = useState<CaptureBarPosition | null>(
     null
   );
   const [oversizedRecording, setOversizedRecording] = useState<{
@@ -305,11 +326,16 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       draftStorage.load(config.apiKey, config.reporterEmail).then((draft) => {
         if (draftLoadedRef.current) return;
         if (draft) {
+          // Keep media captured while the dialog was closed (BugPin.capture()).
+          const capturedWhileClosed = mediaRef.current.filter(
+            (item) => !draft.media.some((stored) => stored.id === item.id)
+          );
+          const nextMedia = [...draft.media, ...capturedWhileClosed];
           formDataRef.current = draft.formData;
-          mediaRef.current = draft.media;
+          mediaRef.current = nextMedia;
           setFormData(draft.formData);
-          setActiveTab(draft.activeTab);
-          setMedia(draft.media);
+          setActiveTab(capturedWhileClosed.length > 0 ? 'media' : draft.activeTab);
+          setMedia(nextMedia);
         }
         draftLoadedRef.current = true;
         setDraftLoaded(true);
@@ -362,7 +388,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   ]);
 
   const handleOpenWidget = useCallback(() => {
-    if (isRecordingStep) return;
+    if (isRecordingStep || stepRef.current === 'screenshot') return;
     setHasPendingRecording(false);
     setStep('form');
     if (draftStorageReady) void recoverPendingRecordings();
@@ -455,45 +481,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     [config.apiKey, config.reporterEmail, config.reporterName, resetUserActivity]
   );
 
-  // Listen for external open/close events
-  useEffect(() => {
-    const handleOpen = () => handleOpenWidget();
-    const handleClose = () => (isRecordingStep ? stopRecordingFlow() : handleRequestClose());
-
-    document.addEventListener('bugpin:open', handleOpen);
-    document.addEventListener('bugpin:close', handleClose);
-
-    return () => {
-      document.removeEventListener('bugpin:open', handleOpen);
-      document.removeEventListener('bugpin:close', handleClose);
-    };
-  }, [handleOpenWidget, handleRequestClose, isRecordingStep, stopRecordingFlow]);
-
-  const handleCaptureScreenshot = useCallback(async () => {
-    if (!config.enableScreenshot) return;
-
-    if (config.useScreenCaptureAPI && !showScreenCaptureConsent) {
-      const skipConsent = localStorage.getItem('bugpin-skip-screen-capture-consent') === 'true';
-      if (!skipConsent) {
-        setShowScreenCaptureConsent(true);
-        return;
-      }
-    }
-    // Reset consent flag before proceeding with actual capture
-    setShowScreenCaptureConsent(false);
-
-    setIsCapturing(true);
-    // Brief delay to ensure modal is hidden from capture
-    setStep('closed');
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    try {
-      const dataUrl = await captureScreenshotFn({
-        method: config.captureMethod,
-        useScreenCaptureAPI: config.useScreenCaptureAPI,
-        pixelRatioOverride: reduceScreenshotQuality ? 1 : undefined,
-      });
-
+  const addScreenshot = useCallback(
+    async (dataUrl: string) => {
       // Reject oversized captures up-front instead of letting the server drop
       // them silently on submit. Surface the failure via an inline banner in
       // the screenshots tab so the user can lower the capture quality or
@@ -503,61 +492,139 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         const sizeMb = Math.round((blob.size / (1024 * 1024)) * 10) / 10;
         const limitMb = Math.round(config.maxScreenshotSize / (1024 * 1024));
         setOversizedCapture({ sizeMb, limitMb });
-        setIsCapturing(false);
-        setActiveTab('media');
-        setStep('form');
         return;
       }
 
-      // Successful capture clears any previous oversize warning.
       setOversizedCapture(null);
-
-      const img = new Image();
-
-      img.onload = () => {
-        const newMedia: CapturedMedia = {
-          id: `capture-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          dataUrl,
-          timestamp: new Date(),
-          annotated: false,
-          mimeType: 'image/png',
-          width: img.width,
-          height: img.height,
-        };
-
-        setMedia((prev) => [...prev, newMedia]);
-        setIsCapturing(false);
-        setActiveTab('media'); // Stay on media tab after capture
-        setStep('form');
+      const size = await loadImageSize(dataUrl);
+      const newMedia: CapturedMedia = {
+        id: `capture-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        dataUrl,
+        timestamp: new Date(),
+        annotated: false,
+        mimeType: 'image/png',
+        ...(size ?? {}),
       };
+      mediaRef.current = [...mediaRef.current, newMedia];
+      setMedia((prev) => [...prev, newMedia]);
+    },
+    [config.maxScreenshotSize]
+  );
 
-      img.onerror = () => {
-        // Still add the screenshot even if we can't get dimensions
-        const newMedia: CapturedMedia = {
-          id: `capture-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          dataUrl,
-          timestamp: new Date(),
-          annotated: false,
-          mimeType: 'image/png',
-        };
+  const runCapture = useCallback(
+    async (screenCaptureSession: ScreenCaptureSession | null) => {
+      isCapturingRef.current = true;
+      setIsCapturing(true);
+      // Let the dialog and bar unmount so they are not part of the capture.
+      await wait(100);
 
-        setMedia((prev) => [...prev, newMedia]);
-        setIsCapturing(false);
-        setActiveTab('media'); // Stay on media tab after capture
-        setStep('form');
-      };
+      try {
+        // Without an open tab share, capture the DOM: a new share picker would steal focus
+        // and close the menus or hover states the user is trying to capture.
+        const dataUrl = await captureScreenshotFn({
+          method: config.captureMethod,
+          useScreenCaptureAPI: screenCaptureSession !== null,
+          pixelRatioOverride: reduceScreenshotQuality ? 1 : undefined,
+          screenCaptureSession,
+        });
+        await addScreenshot(dataUrl);
+      } catch (error) {
+        console.error('[BugPin] Failed to capture screenshot:', error);
+        setToast({
+          message: t('toast.error.capture'),
+          type: 'error',
+        });
+      }
 
-      img.src = dataUrl;
-    } catch (error) {
-      console.error('[BugPin] Failed to capture screenshot:', error);
+      isCapturingRef.current = false;
       setIsCapturing(false);
+      setHasPendingRecording(false);
+      setActiveTab('media');
       setStep('form');
-      setToast({
-        message: t('toast.error.capture'),
-        type: 'error',
-      });
+    },
+    [addScreenshot, captureScreenshotFn, config.captureMethod, reduceScreenshotQuality]
+  );
+
+  const screenshotCaptureBar = useScreenshotCaptureBar({
+    useScreenCaptureAPI: config.useScreenCaptureAPI,
+    dependencies: deps,
+    capture: runCapture,
+  });
+  const [screenshotCaptureBarPosition, setScreenshotCaptureBarPosition] =
+    useState<CaptureBarPosition | null>(null);
+
+  const handleCancelScreenshotCaptureBar = useCallback(() => {
+    screenshotCaptureBar.cancel();
+    setStep('form');
+  }, [screenshotCaptureBar.cancel]);
+
+  // Listen for external open/close events
+  useEffect(() => {
+    const handleOpen = () => handleOpenWidget();
+    const handleClose = () => {
+      if (isRecordingStep) {
+        stopRecordingFlow();
+        return;
+      }
+      if (step === 'screenshot') {
+        if (screenshotCaptureBar.status === 'capturing') return;
+        screenshotCaptureBar.cancel();
+        setStep('form');
+      }
+      handleRequestClose();
+    };
+
+    document.addEventListener('bugpin:open', handleOpen);
+    document.addEventListener('bugpin:close', handleClose);
+
+    return () => {
+      document.removeEventListener('bugpin:open', handleOpen);
+      document.removeEventListener('bugpin:close', handleClose);
+    };
+  }, [
+    handleOpenWidget,
+    handleRequestClose,
+    isRecordingStep,
+    stopRecordingFlow,
+    step,
+    screenshotCaptureBar.status,
+    screenshotCaptureBar.cancel,
+  ]);
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    if (!config.enableScreenshot) return;
+
+    if (config.useScreenCaptureAPI && !showScreenCaptureConsent && !shouldSkipScreenshotConsent()) {
+      setShowScreenCaptureConsent(true);
+      return;
     }
-  }, [config, captureScreenshotFn, showScreenCaptureConsent, reduceScreenshotQuality]);
+    // Reset consent flag before proceeding with actual capture
+    setShowScreenCaptureConsent(false);
+
+    setOversizedCapture(null);
+    setStep('screenshot');
+    await screenshotCaptureBar.open();
+  }, [config, showScreenCaptureConsent, screenshotCaptureBar.open]);
+
+  // Captures the page as it is right now (no bar, no countdown) and opens the dialog with
+  // the result, so host code or a shortcut can grab open menus and hover states. Always a
+  // DOM capture, even in Screen Capture API mode (see runCapture).
+  const handleExternalCapture = useCallback(async () => {
+    const current = stepRef.current;
+    if (!config.enableScreenshot || isCapturingRef.current || isSubmitting) return;
+    if (current !== 'closed' && current !== 'form') return;
+
+    setStep('closed');
+    await runCapture(null);
+  }, [config.enableScreenshot, isSubmitting, runCapture]);
+
+  useEffect(() => {
+    const handleCapture = () => void handleExternalCapture();
+    document.addEventListener('bugpin:capture', handleCapture);
+    return () => document.removeEventListener('bugpin:capture', handleCapture);
+  }, [handleExternalCapture]);
+
+  useCaptureShortcut(config.captureShortcut, handleExternalCapture);
 
   const handleStartRecording = useCallback(() => {
     if (!shouldSkipRecordingConsent()) {
@@ -603,6 +670,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   const handleAnnotateMedia = useCallback((id: string) => {
     setAnnotatingMediaId(id);
+    setIsAnnotationMaximized(false);
     setStep('annotating');
   }, []);
 
@@ -724,7 +792,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
   return (
     <div ref={containerRef} class={`bugpin-container bugpin-theme-${effectiveTheme}`}>
-      {!isRecordingStep && (
+      {!isRecordingStep && step !== 'screenshot' && (
         <WidgetLauncherButton
           position={config.position}
           buttonText={config.buttonText}
@@ -750,7 +818,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       )}
 
       {isRecordingStep && (
-        <RecordingBar
+        <VideoCaptureBar
           isReady={recording.status === 'ready'}
           isCountingDown={recording.status === 'countdown'}
           countdown={recording.countdown}
@@ -759,8 +827,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           isPaused={recording.isPaused}
           hasMicrophone={recording.hasMicrophone}
           isWholeScreen={recording.isWholeScreen}
-          position={recordingBarPosition}
-          onPositionChange={setRecordingBarPosition}
+          position={videoCaptureBarPosition}
+          onPositionChange={setVideoCaptureBarPosition}
           onStart={recording.startCountdown}
           onPause={recording.pause}
           onResume={recording.resume}
@@ -769,11 +837,33 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         />
       )}
 
+      {step === 'screenshot' && screenshotCaptureBar.status !== 'capturing' && (
+        <ScreenshotCaptureBar
+          isReady={screenshotCaptureBar.status === 'ready'}
+          isCountingDown={screenshotCaptureBar.status === 'countdown'}
+          countdown={screenshotCaptureBar.countdown}
+          delaySeconds={screenshotCaptureBar.delaySeconds}
+          delayOptions={CAPTURE_DELAY_OPTIONS}
+          position={screenshotCaptureBarPosition}
+          onPositionChange={setScreenshotCaptureBarPosition}
+          onDelayChange={screenshotCaptureBar.setDelaySeconds}
+          onCapture={screenshotCaptureBar.capture}
+          onCancel={handleCancelScreenshotCaptureBar}
+        />
+      )}
+
       {step === 'annotating' && annotatingMedia?.dataUrl !== undefined && (
-        <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
-          <div class="relative w-full max-w-4xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]">
+        <div class="fixed inset-0 z-[2147483647] bg-black/50 flex items-center justify-center sm:p-5 animate-[fadeIn_0.2s_ease-out]">
+          <div
+            class={cn(
+              'relative w-full h-full min-h-0 bg-background sm:border sm:border-solid sm:border-border sm:rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]',
+              !isAnnotationMaximized && 'sm:max-w-4xl sm:h-[770px] sm:max-h-full'
+            )}
+          >
             <AnnotationCanvasComponent
               screenshot={annotatingMedia.dataUrl}
+              isMaximized={isAnnotationMaximized}
+              onToggleMaximize={() => setIsAnnotationMaximized((value) => !value)}
               onSave={handleAnnotationSave}
               onCancel={handleAnnotationCancel}
             />

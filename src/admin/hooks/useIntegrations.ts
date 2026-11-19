@@ -14,7 +14,7 @@ interface CreateIntegrationInput {
 
 interface UpdateIntegrationInput {
   name?: string;
-  config?: IntegrationConfig;
+  config?: Partial<IntegrationConfig>;
   isActive?: boolean;
 }
 

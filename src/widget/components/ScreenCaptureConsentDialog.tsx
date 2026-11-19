@@ -15,6 +15,14 @@ interface ScreenCaptureConsentDialogProps {
   onCancel: () => void;
 }
 
+export function shouldSkipScreenshotConsent(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export function shouldSkipRecordingConsent(): boolean {
   try {
     return localStorage.getItem(RECORDING_STORAGE_KEY) === 'true';

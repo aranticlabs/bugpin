@@ -13,7 +13,7 @@ interface ToastProps {
   topLayer?: boolean;
 }
 
-const TOP_LAYER_STYLE = { inset: 'auto', bottom: '5rem', right: '1.25rem' };
+const TOP_LAYER_STYLE = { inset: 'auto', bottom: '80px', right: '20px' };
 
 const toastVariants: Record<ToastType, string> = {
   success: 'bg-green-50 border-green-200 text-green-600',
