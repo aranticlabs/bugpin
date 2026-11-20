@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { logger } from './utils/logger.js';
 import { widgetCors } from './middleware/cors.js';
 import { serveAdmin, serveBranding } from './routes/static.js';
+import { serveWidgetScript } from './routes/widget-script.js';
 
 // Extend Hono context with request ID
 declare module 'hono' {
@@ -85,27 +86,7 @@ export function createApp(): Hono {
   app.all('/admin/*', serveAdmin);
 
   // Serve widget script
-  app.get('/widget.js', async (c) => {
-    const filePath = `${config.widgetDir}/widget.js`;
-
-    try {
-      const file = Bun.file(filePath);
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: {
-            'Content-Type': 'application/javascript',
-            'Cache-Control': 'public, max-age=3600', // 1 hour
-            'Access-Control-Allow-Origin': '*', // Allow widget to be loaded from any domain
-            'Cross-Origin-Resource-Policy': 'cross-origin',
-          },
-        });
-      }
-    } catch {
-      // File not found
-    }
-
-    return c.json({ success: false, error: 'NOT_FOUND', message: 'Widget not found' }, 404);
-  });
+  app.get('/widget.js', serveWidgetScript);
 
   // Root redirect
   app.get('/', (c) => {
