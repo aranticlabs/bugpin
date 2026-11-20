@@ -43,6 +43,30 @@ describe('redactSensitiveText', () => {
     expect(redactSensitiveText('connect 127.0.0.1:8080 failed')).not.toContain('[bugpin:');
   });
 
+  it('keeps IPv4 hosts whose octets resemble a formatted phone number', () => {
+    expect(redactSensitiveText('http://192.168.0.10:3000/groups')).toBe(
+      'http://192.168.0.10:3000/groups'
+    );
+    expect(redactSensitiveText('GET http://192.168.100.200/api failed')).toBe(
+      'GET http://192.168.100.200/api failed'
+    );
+    expect(redactSensitiveText('proxy 10.200.300.4 timed out')).toBe(
+      'proxy [bugpin:redacted-phone] timed out'
+    );
+  });
+
+  it('still redacts a phone number that sits next to an IPv4 host', () => {
+    expect(redactSensitiveText('host 192.168.0.10, call 555-123-4567')).toBe(
+      'host 192.168.0.10, call [bugpin:redacted-phone]'
+    );
+    expect(redactSensitiveText('call 555.123.4567 from 192.168.0.10')).toBe(
+      'call [bugpin:redacted-phone] from 192.168.0.10'
+    );
+    expect(redactSensitiveText('192.168.0.10 555-123-4567')).toBe(
+      '192.168.0.10 [bugpin:redacted-phone]'
+    );
+  });
+
   it('redacts labeled and bearer tokens', () => {
     const token = 'a'.repeat(40);
     expect(redactSensitiveText(`token=${token}`)).toBe('token=[bugpin:redacted-token]');

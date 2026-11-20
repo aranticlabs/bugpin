@@ -6,6 +6,9 @@ const CARD_PATTERN = /\b(?:\d[ -]*?){13,19}\b/g;
 // Requires a leading "+" or an internal separator so plain digit runs
 // (IDs, timestamps, order numbers) are not mistaken for phone numbers.
 const PHONE_PATTERN = /(?:\+\d[\d\s().-]{7,}\d|\(?\d{1,4}[)\s.-]+\d{3}[\d\s().-]{3,}\d)/g;
+// Dotted quads such as 192.168.0.10 look like separator-delimited phone numbers.
+// They are hosts, not personal data: a report loses its page URL without them.
+const IPV4_PATTERN = /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g;
 const BEARER_TOKEN_PATTERN = /\b(Bearer\s+)([A-Za-z0-9_-]{32,}={0,2})\b/gi;
 const LABELED_TOKEN_PATTERN =
   /\b((?:access[_-]?token|authorization|api[_-]?key|password|secret|session(?:[_-]?(?:id|token))?|token)\s*[:=]\s*)([A-Za-z0-9_-]{32,}={0,2})\b/gi;
@@ -29,13 +32,37 @@ function passesLuhnCheck(value: string): boolean {
   return sum % 10 === 0;
 }
 
+function findIpv4Ranges(value: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  for (const match of value.matchAll(IPV4_PATTERN)) {
+    const isAddress = match[0].split('.').every((octet) => Number(octet) <= 255);
+    if (isAddress) ranges.push([match.index, match.index + match[0].length]);
+  }
+  return ranges;
+}
+
+function redactPhoneNumbers(value: string): string {
+  // Redact each stretch between addresses on its own, so a phone number written
+  // right after an address cannot hide inside one long match that spans both.
+  let result = '';
+  let cursor = 0;
+  for (const [start, stop] of findIpv4Ranges(value)) {
+    result += value.slice(cursor, start).replace(PHONE_PATTERN, '[bugpin:redacted-phone]');
+    result += value.slice(start, stop);
+    cursor = stop;
+  }
+  return result + value.slice(cursor).replace(PHONE_PATTERN, '[bugpin:redacted-phone]');
+}
+
 export function redactSensitiveText(value: string): string {
-  return value
-    .replace(EMAIL_PATTERN, '[bugpin:redacted-email]')
-    .replace(JWT_PATTERN, '[bugpin:redacted-token]')
-    .replace(UUID_PATTERN, '[bugpin:redacted-id]')
-    .replace(CARD_PATTERN, (match) => (passesLuhnCheck(match) ? '[bugpin:redacted-card]' : match))
-    .replace(PHONE_PATTERN, '[bugpin:redacted-phone]')
+  const withoutPhones = redactPhoneNumbers(
+    value
+      .replace(EMAIL_PATTERN, '[bugpin:redacted-email]')
+      .replace(JWT_PATTERN, '[bugpin:redacted-token]')
+      .replace(UUID_PATTERN, '[bugpin:redacted-id]')
+      .replace(CARD_PATTERN, (match) => (passesLuhnCheck(match) ? '[bugpin:redacted-card]' : match))
+  );
+  return withoutPhones
     .replace(BEARER_TOKEN_PATTERN, '$1[bugpin:redacted-token]')
     .replace(LABELED_TOKEN_PATTERN, '$1[bugpin:redacted-token]');
 }
