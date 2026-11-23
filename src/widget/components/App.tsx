@@ -51,6 +51,11 @@ function recordingSessionId(item: CapturedMedia): string | null {
     : null;
 }
 
+function mergeDraftMedia(stored: CapturedMedia[], current: CapturedMedia[]): CapturedMedia[] {
+  const ids = new Set(stored.map((item) => item.id));
+  return [...stored, ...current.filter((item) => !ids.has(item.id))];
+}
+
 const INITIAL_FORM_DATA: FormData = {
   title: '',
   description: '',
@@ -257,7 +262,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           source: 'recording',
           recovered: true,
         };
-        const existingMedia = draft?.media ?? [];
+        const existingMedia = mergeDraftMedia(draft?.media ?? [], mediaRef.current);
         const alreadyPresent = existingMedia.some((item) => item.id === recoveredId);
         const nextMedia = alreadyPresent ? existingMedia : [...existingMedia, recoveredItem];
         const nextFormData = draft?.formData ?? getInitialFormData(config);
@@ -327,14 +332,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         if (draftLoadedRef.current) return;
         if (draft) {
           // Keep media captured while the dialog was closed (BugPin.capture()).
-          const capturedWhileClosed = mediaRef.current.filter(
-            (item) => !draft.media.some((stored) => stored.id === item.id)
-          );
-          const nextMedia = [...draft.media, ...capturedWhileClosed];
+          const nextMedia = mergeDraftMedia(draft.media, mediaRef.current);
           formDataRef.current = draft.formData;
           mediaRef.current = nextMedia;
           setFormData(draft.formData);
-          setActiveTab(capturedWhileClosed.length > 0 ? 'media' : draft.activeTab);
+          setActiveTab(nextMedia.length > draft.media.length ? 'media' : draft.activeTab);
           setMedia(nextMedia);
         }
         draftLoadedRef.current = true;
@@ -562,6 +564,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   useEffect(() => {
     const handleOpen = () => handleOpenWidget();
     const handleClose = () => {
+      if (isCapturingRef.current) return;
       if (isRecordingStep) {
         stopRecordingFlow();
         return;
