@@ -353,6 +353,9 @@ describe('AnnotationCanvas', () => {
       events?: Map<string, unknown>;
       getZoom: () => number;
       getObjects: () => unknown[];
+      add: (obj: unknown) => void;
+      remove: (obj: unknown) => void;
+      loadFromJSON: (json: unknown) => Promise<void>;
       trigger: (event: string, payload?: unknown) => void;
       lastExport: { options?: Record<string, unknown>; viewportTransform: Vpt } | null;
     };
@@ -670,6 +673,118 @@ describe('AnnotationCanvas', () => {
         [400, 300],
       ]);
       expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+
+      touch('touchend', []);
+      cleanup();
+    });
+
+    it('preserves restored annotations when undo completes before a touch becomes a pinch', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+      await activateTextTool(container);
+
+      const originalAnnotation = { id: 'original' };
+      canvas.add(originalAnnotation);
+      canvas.trigger('path:created');
+
+      const undoButton = container.querySelector(
+        'button[aria-label="Undo (Ctrl+Z)"]'
+      ) as HTMLButtonElement;
+      await waitFor(() => undoButton.disabled === false, 'Undo button not enabled');
+
+      let finishRestore!: () => void;
+      const restoredAnnotation = { id: 'restored' };
+      canvas.loadFromJSON = () =>
+        new Promise<void>((resolve) => {
+          finishRestore = () => {
+            canvas.getObjects().slice().forEach((obj) => canvas.remove(obj));
+            canvas.add(restoredAnnotation);
+            resolve();
+          };
+        });
+
+      undoButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+      // First finger lands while loadFromJSON is still pending.
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [[300, 300]]);
+
+      // Undo resolves and replaces the canvas objects with new instances.
+      finishRestore();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // A text box created during the current touch after restoration should still be canceled.
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(2);
+
+      // Second finger turns the touch into a pinch.
+      touch('touchstart', [
+        [300, 300],
+        [400, 300],
+      ]);
+      expect(canvas.getObjects()).toEqual([restoredAnnotation]);
+
+      touch('touchend', []);
+      cleanup();
+    });
+
+    it('clears a detached in-progress shape when undo resolves mid-drag', async () => {
+      const { container, canvas, canvasEl, cleanup } = await renderCanvas();
+      (container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement).click();
+      await waitFor(
+        () =>
+          (
+            container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement | null
+          )?.className.includes('text-primary') ?? false,
+        'Rectangle tool not active'
+      );
+
+      const originalAnnotation = { id: 'original' };
+      canvas.add(originalAnnotation);
+      canvas.trigger('path:created');
+
+      const undoButton = container.querySelector(
+        'button[aria-label="Undo (Ctrl+Z)"]'
+      ) as HTMLButtonElement;
+      const redoButton = container.querySelector(
+        'button[aria-label="Redo (Ctrl+Shift+Z)"]'
+      ) as HTMLButtonElement;
+      await waitFor(() => undoButton.disabled === false, 'Undo button not enabled');
+
+      let finishRestore!: () => void;
+      const restoredAnnotation = { id: 'restored' };
+      canvas.loadFromJSON = () =>
+        new Promise<void>((resolve) => {
+          finishRestore = () => {
+            canvas.getObjects().slice().forEach((obj) => canvas.remove(obj));
+            canvas.add(restoredAnnotation);
+            resolve();
+          };
+        });
+
+      undoButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+      // Start dragging a rectangle before loadFromJSON resolves.
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [[300, 300]]);
+      canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
+      expect(canvas.getObjects()).toHaveLength(2);
+
+      // Undo resolves and clears the in-progress rectangle.
+      finishRestore();
+      await waitFor(() => redoButton.disabled === false, 'Redo button not enabled');
+
+      // Finishing the interrupted drag must not commit stale drawing state or clear redo.
+      canvas.trigger('mouse:up', { e: {} });
+      expect(redoButton.disabled).toBe(false);
+      expect(canvas.getObjects()).toEqual([restoredAnnotation]);
+
+      // Turning the touch into a pinch still preserves the restored annotation.
+      touch('touchstart', [
+        [300, 300],
+        [400, 300],
+      ]);
+      expect(canvas.getObjects()).toEqual([restoredAnnotation]);
 
       touch('touchend', []);
       cleanup();
