@@ -51,7 +51,7 @@ case "${1:-}" in
     git archive "$release_commit" | tar -x -C "$work/source"
     if ! (cd "$work/source" && bun install --frozen-lockfile && cd src/widget && bun run build && npm pack --pack-destination "$work"); then
       if (( bumped )); then
-        echo "A version bump commit was created in this run. To undo it, run: git reset --hard HEAD~1" >&2
+        echo "A version bump commit ($release_commit) was created in this run. To undo it, run: git revert $release_commit" >&2
       fi
       fail "Widget build or pack failed."
     fi
