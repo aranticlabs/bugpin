@@ -67,9 +67,7 @@ describe('widget i18n runtime', () => {
     });
 
     it('coerces numeric vars to strings', () => {
-      expect(t('annotation.toolbar.zoomReset', { percent: 100 })).toBe(
-        'Reset Zoom (100%) - Hold Space to pan'
-      );
+      expect(t('annotation.toolbar.strokeWidth', { width: 8 })).toBe('8px');
     });
 
     it('leaves unknown placeholders intact', () => {

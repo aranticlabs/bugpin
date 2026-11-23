@@ -286,7 +286,7 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
             <X class="w-6 h-6" />
           </Button>
           <div
-            class="w-[calc(100vw-3rem)] h-[calc(100vh-6rem)] overflow-hidden rounded-lg bg-black shadow-2xl"
+            class="w-[calc(100vw-48px)] h-[calc(100vh-96px)] overflow-hidden rounded-lg bg-black shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <VideoPreview item={expandedClip} controls />

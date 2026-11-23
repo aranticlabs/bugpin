@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 import { render } from 'preact';
 import type { WidgetConfig } from '../../config';
 import type { FormData as WidgetFormData } from '../../components/WidgetDialog';
 import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { recordingStore } from '../../storage/recording-store';
 import { draftStorage } from '../../storage/draft-storage';
 import type { SendOptions, SubmitReportInput } from '../../api/submit';
 import { t } from '../../i18n/index';
@@ -165,6 +166,50 @@ afterEach(() => {
   globalThis.setTimeout = originalSetTimeout;
   globalThis.Image = originalImage;
 });
+
+// Preact flushes effects on a real timer (see tests/setup.ts), which flush() does not reach.
+async function settle(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
+  }
+}
+
+function clickLauncher(container: HTMLElement): void {
+  container
+    .querySelector('button[aria-label="Report issue"]')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+}
+
+function clickButton(container: HTMLElement, label: string): void {
+  const button = container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+  expect(button).not.toBeNull();
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+}
+
+function clickCapture(container: HTMLElement): void {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent === t('screenshot.bar.capture')
+  );
+  expect(button).toBeDefined();
+  button?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+}
+
+async function chooseDelay(container: HTMLElement, seconds: number): Promise<void> {
+  container
+    .querySelector('button[aria-haspopup="menu"]')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await settle();
+  const option = Array.from(container.querySelectorAll('[role="menuitemradio"]')).find(
+    (item) => item.textContent === t('screenshot.bar.timerOption', { seconds })
+  );
+  expect(option).toBeDefined();
+  option?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await settle();
+}
+
+function barHandle(container: HTMLElement): Element | null {
+  return container.querySelector('[data-screenshot-capture-bar-drag-handle]');
+}
 
 describe('App state transitions', () => {
   it('opens via event and persists draft on close', async () => {
@@ -388,7 +433,7 @@ describe('App state transitions', () => {
     container.remove();
   });
 
-  it('captures screenshots and adds media', async () => {
+  it('captures screenshots from the screenshot capture bar and adds media', async () => {
     captureScreenshot.mockResolvedValueOnce('data:image/png;base64,abc');
     // @ts-expect-error - Query params in import for test isolation
     const { App } = await import('../../components/App?app-state');
@@ -397,19 +442,26 @@ describe('App state transitions', () => {
     document.body.appendChild(container);
     render(<App config={baseConfig} deps={appDeps} />, container);
 
-    const launcher = container.querySelector(
-      'button[aria-label="Report issue"]'
-    ) as HTMLButtonElement | null;
-    launcher?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    clickLauncher(container);
     await flush();
 
     const onCaptureScreenshot = lastDialogProps?.onCaptureScreenshot as () => Promise<void>;
     await onCaptureScreenshot();
     await flush();
 
+    expect(container.querySelector('[data-testid="widget-dialog"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Report issue"]')).toBeNull();
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    clickCapture(container);
+    await settle();
+
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
     const media = (lastDialogProps?.media as unknown[]) ?? [];
     expect(media.length).toBe(1);
+    expect(media[0]).toMatchObject({ width: 640, height: 480, mimeType: 'image/png' });
     expect(lastDialogProps?.activeTab).toBe('media');
+    expect(barHandle(container)).toBeNull();
 
     render(null, container);
     container.remove();
@@ -426,19 +478,18 @@ describe('App state transitions', () => {
     document.body.appendChild(container);
     render(<App config={baseConfig} deps={appDeps} />, container);
 
-    const launcher = container.querySelector(
-      'button[aria-label="Report issue"]'
-    ) as HTMLButtonElement | null;
-    launcher?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    clickLauncher(container);
     await flush();
 
     const onCaptureScreenshot = lastDialogProps?.onCaptureScreenshot as () => Promise<void>;
     await onCaptureScreenshot();
     await flush();
-    await flush();
+    clickCapture(container);
+    await settle();
 
     const toast = container.querySelector('[role="alert"]');
     expect(toast?.textContent ?? '').toContain('Failed to capture screenshot');
+    expect(container.querySelector('[data-testid="widget-dialog"]')).not.toBeNull();
 
     render(null, container);
     container.remove();
@@ -624,5 +675,393 @@ describe('App state transitions', () => {
 
     render(null, container);
     container.remove();
+  });
+});
+
+describe('Screenshot bar and capture API', () => {
+  async function renderApp(config: Partial<WidgetConfig> = {}, deps: Record<string, unknown> = {}) {
+    // @ts-expect-error - Query params in import for test isolation
+    const { App } = await import('../../components/App?app-state');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(<App config={{ ...baseConfig, ...config }} deps={{ ...appDeps, ...deps }} />, container);
+    await settle();
+    return container;
+  }
+
+  async function openBar(container: HTMLElement): Promise<void> {
+    clickLauncher(container);
+    await flush();
+    await (lastDialogProps?.onCaptureScreenshot as () => Promise<void>)();
+    await flush();
+  }
+
+  function cleanup(container: HTMLElement): void {
+    render(null, container);
+    container.remove();
+  }
+
+  it('counts down with the bar visible and captures only after the bar is gone', async () => {
+    const countdownTimers: Array<() => void> = [];
+    const patchedSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((handler: TimerHandler, timeout?: number) => {
+      if (timeout === 1000 && typeof handler === 'function') {
+        countdownTimers.push(handler as () => void);
+        return countdownTimers.length as never;
+      }
+      return patchedSetTimeout(handler, timeout);
+    }) as typeof setTimeout;
+
+    let barPresentDuringCapture = null as boolean | null;
+    const container = await renderApp();
+    captureScreenshot.mockImplementationOnce(async () => {
+      barPresentDuringCapture = barHandle(container) !== null;
+      return 'data:image/png;base64,delayed';
+    });
+
+    await openBar(container);
+    await chooseDelay(container, 3);
+    expect(localStorage.getItem('bugpin-screenshot-delay')).toBe('3');
+    clickCapture(container);
+    await settle();
+
+    const status = () => container.querySelector('[role="status"]')?.textContent;
+    expect(status()).toBe(t('screenshot.bar.countdown', { seconds: 3 }));
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    for (const remaining of [2, 1]) {
+      countdownTimers.shift()?.();
+      await settle();
+      expect(status()).toBe(t('screenshot.bar.countdown', { seconds: remaining }));
+      expect(captureScreenshot).not.toHaveBeenCalled();
+    }
+
+    countdownTimers.shift()?.();
+    await settle();
+
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
+    expect(barPresentDuringCapture).toBe(false);
+    expect(barHandle(container)).toBeNull();
+    expect((lastDialogProps?.media as unknown[]).length).toBe(1);
+    expect(lastDialogProps?.activeTab).toBe('media');
+
+    cleanup(container);
+  });
+
+  it('starts with the delay chosen last time', async () => {
+    localStorage.setItem('bugpin-screenshot-delay', '5');
+    const container = await renderApp();
+    await openBar(container);
+
+    const trigger = container.querySelector('button[aria-haspopup="menu"]');
+    expect(trigger?.textContent).toContain(t('screenshot.bar.timerShort', { seconds: 5 }));
+    clickCapture(container);
+    await settle();
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      t('screenshot.bar.countdown', { seconds: 5 })
+    );
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    clickButton(container, t('screenshot.bar.cancel'));
+    await settle();
+    cleanup(container);
+  });
+
+  it('returns to the dialog without capturing when the bar is cancelled', async () => {
+    const container = await renderApp();
+    await openBar(container);
+
+    clickButton(container, t('screenshot.bar.cancel'));
+    await settle();
+
+    expect(barHandle(container)).toBeNull();
+    expect(container.querySelector('[data-testid="widget-dialog"]')).not.toBeNull();
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    cleanup(container);
+  });
+
+  it('opens the tab share when the bar opens and grabs the frame from that session', async () => {
+    localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
+    const session = { grabFrame: mock(async () => 'data:image/png;base64,frame'), stop: mock() };
+    const openScreenCaptureSession = mock(async () => session);
+    const container = await renderApp({ useScreenCaptureAPI: true }, { openScreenCaptureSession });
+
+    await openBar(container);
+    await flush();
+    expect(openScreenCaptureSession).toHaveBeenCalledTimes(1);
+
+    clickCapture(container);
+    await settle();
+
+    const options = (captureScreenshot.mock.calls as unknown[][])[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(options.useScreenCaptureAPI).toBe(true);
+    expect(options.screenCaptureSession).toBe(session);
+    expect(session.stop).toHaveBeenCalledTimes(1);
+
+    cleanup(container);
+  });
+
+  it('captures the DOM without a second picker when the tab share was declined', async () => {
+    localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
+    const openScreenCaptureSession = mock(async () => {
+      throw new Error('NotAllowedError');
+    });
+    const container = await renderApp({ useScreenCaptureAPI: true }, { openScreenCaptureSession });
+
+    await openBar(container);
+    await settle();
+    clickCapture(container);
+    await settle();
+
+    const options = (captureScreenshot.mock.calls as unknown[][])[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(openScreenCaptureSession).toHaveBeenCalledTimes(1);
+    expect(options.useScreenCaptureAPI).toBe(false);
+    expect((lastDialogProps?.media as unknown[]).length).toBe(1);
+
+    cleanup(container);
+  });
+
+  it('stops a share that resolves after the bar was cancelled and reopened', async () => {
+    localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
+    const sessions = [0, 1].map(() => ({ grabFrame: async () => '', stop: mock() }));
+    const resolvers: Array<(session: (typeof sessions)[number]) => void> = [];
+    const openScreenCaptureSession = () =>
+      new Promise<(typeof sessions)[number]>((resolve) => resolvers.push(resolve));
+    const container = await renderApp({ useScreenCaptureAPI: true }, { openScreenCaptureSession });
+    const startCapture = () => void (lastDialogProps?.onCaptureScreenshot as () => Promise<void>)();
+
+    clickLauncher(container);
+    await settle();
+    startCapture();
+    await settle();
+    clickButton(container, t('screenshot.bar.cancel'));
+    await settle();
+    startCapture();
+    await settle();
+
+    resolvers[0]?.(sessions[0]!);
+    await settle();
+    expect(sessions[0]!.stop).toHaveBeenCalledTimes(1);
+
+    resolvers[1]?.(sessions[1]!);
+    await settle();
+    expect(sessions[1]!.stop).not.toHaveBeenCalled();
+    clickButton(container, t('screenshot.bar.cancel'));
+    await settle();
+    expect(sessions[1]!.stop).toHaveBeenCalledTimes(1);
+
+    cleanup(container);
+  });
+
+  it('returns to the dialog when BugPin.close() runs while the bar is open', async () => {
+    const container = await renderApp();
+    await openBar(container);
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:close'));
+    await settle();
+
+    expect(barHandle(container)).toBeNull();
+    expect(container.querySelector('[data-testid="widget-dialog"]')).toBeNull();
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    cleanup(container);
+  });
+
+  it('stops the shared tab when the bar is cancelled', async () => {
+    localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
+    const session = { grabFrame: mock(async () => ''), stop: mock() };
+    const container = await renderApp(
+      { useScreenCaptureAPI: true },
+      { openScreenCaptureSession: async () => session }
+    );
+
+    await openBar(container);
+    await flush();
+    clickButton(container, t('screenshot.bar.cancel'));
+    await flush();
+
+    expect(session.stop).toHaveBeenCalledTimes(1);
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    cleanup(container);
+  });
+
+  it('captures the current page on bugpin:capture and opens the dialog with it', async () => {
+    let dialogOpenDuringCapture = null as boolean | null;
+    const container = await renderApp();
+    captureScreenshot.mockImplementationOnce(async () => {
+      dialogOpenDuringCapture = container.querySelector('[data-testid="widget-dialog"]') !== null;
+      return 'data:image/png;base64,api';
+    });
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
+    expect(dialogOpenDuringCapture).toBe(false);
+    expect(barHandle(container)).toBeNull();
+    expect((lastDialogProps?.media as Array<{ dataUrl: string }>)[0]?.dataUrl).toBe(
+      'data:image/png;base64,api'
+    );
+    expect(lastDialogProps?.activeTab).toBe('media');
+
+    cleanup(container);
+  });
+
+  it('ignores a close request while an external screenshot is pending', async () => {
+    const container = await renderApp();
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+    const pending = Promise.withResolvers<string>();
+    captureScreenshot.mockImplementationOnce(() => pending.promise);
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+    document.dispatchEvent(new window.CustomEvent('bugpin:close'));
+    await settle();
+    expect(container.querySelector('[aria-labelledby="bugpin-confirm-title"]')).toBeNull();
+    pending.resolve('data:image/png;base64,abc');
+    await settle();
+    expect(lastDialogProps?.media).toHaveLength(2);
+    cleanup(container);
+  });
+
+  it('keeps a screenshot captured while recovery is loading the stored draft', async () => {
+    const pending = Promise.withResolvers<null>();
+    const load = spyOn(draftStorage, 'load').mockImplementationOnce(() => pending.promise);
+    const recover = mock(async (): ReturnType<typeof recordingStore.recover> => null);
+    recover.mockResolvedValueOnce({
+      sessionId: 'recovered',
+      blob: new Blob(['clip']),
+      mimeType: 'video/webm',
+      durationMs: 1000,
+      startedAt: new Date().toISOString(),
+      hasAudio: false,
+      recordingQuality: 'standard',
+      width: 640,
+      height: 480,
+    });
+    const container = await renderApp(
+      { enableScreenRecording: true },
+      {
+        isRecordingSupported: () => true,
+        recordingStore: {
+          ...recordingStore,
+          recover,
+          expire: async () => false,
+          remove: async () => {},
+        },
+      }
+    );
+    try {
+      expect(load).toHaveBeenCalled();
+      document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+      await settle();
+      expect(lastDialogProps?.media).toHaveLength(1);
+      pending.resolve(null);
+      await settle();
+      const saved = await draftStorage.load(baseConfig.apiKey);
+      expect(saved?.media.map((item) => item.id)).toEqual([
+        expect.stringMatching(/^capture-/),
+        'recording-recovered',
+      ]);
+    } finally {
+      load.mockRestore();
+      cleanup(container);
+    }
+  });
+
+  it('uses DOM capture for bugpin:capture even in Screen Capture API mode', async () => {
+    const openScreenCaptureSession = mock(async () => {
+      throw new Error('unexpected');
+    });
+    const container = await renderApp({ useScreenCaptureAPI: true }, { openScreenCaptureSession });
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+
+    const options = (captureScreenshot.mock.calls as unknown[][])[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(options.useScreenCaptureAPI).toBe(false);
+    expect(openScreenCaptureSession).not.toHaveBeenCalled();
+    expect((lastDialogProps?.media as unknown[]).length).toBe(1);
+
+    cleanup(container);
+  });
+
+  it('keeps a saved draft and appends the screenshot taken by bugpin:capture', async () => {
+    await draftStorage.save(
+      baseConfig.apiKey,
+      { title: 'Saved', description: '', priority: 'medium', reporterEmail: '', reporterName: '' },
+      'details',
+      [
+        {
+          id: 'stored-1',
+          dataUrl: 'data:image/png;base64,stored',
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: 'image/png',
+        },
+      ]
+    );
+    const container = await renderApp();
+
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+
+    const media = lastDialogProps?.media as Array<{ id: string }>;
+    expect(media.map((item) => item.id)[0]).toBe('stored-1');
+    expect(media).toHaveLength(2);
+    expect((lastDialogProps?.formData as WidgetFormData).title).toBe('Saved');
+    expect(lastDialogProps?.activeTab).toBe('media');
+
+    cleanup(container);
+  });
+
+  it('runs the configured shortcut outside editable fields only', async () => {
+    const container = await renderApp({ captureShortcut: 'Alt+Shift+S' });
+    const press = (target: EventTarget, init: KeyboardEventInit) =>
+      target.dispatchEvent(
+        new window.KeyboardEvent('keydown', { bubbles: true, composed: true, ...init })
+      );
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    press(input, { code: 'KeyS', altKey: true, shiftKey: true });
+    press(document.body, { code: 'KeyS', altKey: true });
+    await settle();
+    expect(captureScreenshot).not.toHaveBeenCalled();
+
+    press(document.body, { code: 'KeyS', altKey: true, shiftKey: true });
+    await settle();
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
+    expect((lastDialogProps?.media as unknown[]).length).toBe(1);
+
+    input.remove();
+    cleanup(container);
+  });
+
+  it('does not listen for a shortcut unless one is configured', async () => {
+    const container = await renderApp();
+    document.body.dispatchEvent(
+      new window.KeyboardEvent('keydown', {
+        bubbles: true,
+        code: 'KeyS',
+        altKey: true,
+        shiftKey: true,
+      })
+    );
+    await settle();
+    expect(captureScreenshot).not.toHaveBeenCalled();
+    cleanup(container);
   });
 });

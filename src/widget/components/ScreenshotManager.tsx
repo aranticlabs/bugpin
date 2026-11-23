@@ -1,11 +1,13 @@
 import { FunctionComponent } from 'preact';
-import { useState, useCallback, useRef } from 'preact/hooks';
+import { useState, useCallback, useEffect, useRef } from 'preact/hooks';
 import { Camera, Pencil, Download, Trash2, Play, Pause } from 'lucide-preact';
 import { cn } from '../lib/utils';
 import { Button } from './ui';
 import { MediaOptionToggle, MediaUploadButton, MediaCaptureFeedback } from './MediaPanelShared';
 import { useLocale } from '../hooks/use-locale.js';
 import { useObjectUrl } from '../hooks/use-object-url.js';
+import { isApplePlatform, isEditableTarget } from '../lib/keyboard.js';
+import { loadImageSize } from '../lib/image.js';
 import { getLocale, t } from '../i18n/index.js';
 import { getExtensionFromMimeType, type MediaData } from '../api/submit-form.js';
 import { formatMediaDetails } from '@shared/media-metadata';
@@ -44,6 +46,17 @@ interface ScreenshotManagerProps {
 
 const DEFAULT_MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+function getClipboardFiles(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+  const files: File[] = [];
+  for (const item of Array.from(clipboardData.items ?? [])) {
+    if (item.kind !== 'file') continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  return files.length > 0 ? files : Array.from(clipboardData.files ?? []);
+}
 
 export function formatMediaMeta(item: CapturedMedia): string {
   return [
@@ -203,25 +216,18 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
       setUploadError(null);
 
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const dataUrl = reader.result as string;
-
-        if (isImage(file.type)) {
-          const img = new Image();
-          img.onload = () => {
-            const item: CapturedMedia = {
-              id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-              dataUrl,
-              timestamp: new Date(),
-              annotated: false,
-              mimeType: file.type,
-              width: img.width,
-              height: img.height,
-            };
-            onUpload(item);
-          };
-          img.src = dataUrl;
-        }
+        const size = await loadImageSize(dataUrl);
+        if (!size) return;
+        onUpload({
+          id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          dataUrl,
+          timestamp: new Date(),
+          annotated: false,
+          mimeType: file.type,
+          ...size,
+        });
       };
       reader.readAsDataURL(file);
     },
@@ -269,6 +275,25 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
     },
     [processFile]
   );
+
+  // The paste event is composed, so a document listener sees pastes made while focus is inside
+  // the widget's shadow root as well as those made with focus on the host page body.
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || isEditableTarget(event)) return;
+      const files = getClipboardFiles(event.clipboardData).filter((file) => isImage(file.type));
+      if (files.length === 0) return;
+      event.preventDefault();
+      void (async () => {
+        for (const file of files) {
+          await processFile(file);
+        }
+      })();
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [processFile]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -343,7 +368,13 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
           onDrop={handleDrop}
         >
           {media.length === 0 ? (
-            <MediaUploadButton hasMedia={false} onClick={handleUploadClick} />
+            <MediaUploadButton
+              hasMedia={false}
+              onClick={handleUploadClick}
+              subtitle={t('screenshot.dropzone.subtitlePaste', {
+                shortcut: isApplePlatform() ? '\u2318V' : 'Ctrl+V',
+              })}
+            />
           ) : (
             <div class="grid grid-cols-2 gap-3">
               {media.map((item) => (

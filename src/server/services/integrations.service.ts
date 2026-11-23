@@ -28,7 +28,7 @@ export interface CreateIntegrationInput {
 
 export interface UpdateIntegrationInput {
   name?: string;
-  config?: IntegrationConfig;
+  config?: Partial<IntegrationConfig>;
   isActive?: boolean;
 }
 
@@ -80,12 +80,16 @@ export const integrationsService = {
       return Result.fail(configValidation.error!, 'INVALID_CONFIG');
     }
 
+    if (containsMaskedSecret(input.config)) {
+      return Result.fail('Secrets must not be masked values', 'INVALID_CONFIG');
+    }
+
     // Create integration
     const integrationData: CreateIntegrationData = {
       projectId: input.projectId,
       type: input.type,
       name: input.name.trim(),
-      config: input.config,
+      config: withoutSyncOwnedFields(input.config),
       isActive: true,
     };
 
@@ -152,11 +156,19 @@ export const integrationsService = {
       }
     }
 
-    // Validate config if provided
-    if (input.config !== undefined) {
-      const configValidation = validateConfig(existing.type, input.config);
+    const mergedConfig =
+      input.config !== undefined
+        ? mergeConfig(existing.type, existing.config, input.config)
+        : undefined;
+
+    if (mergedConfig !== undefined) {
+      const configValidation = validateConfig(existing.type, mergedConfig);
       if (!configValidation.success) {
         return Result.fail(configValidation.error!, 'INVALID_CONFIG');
+      }
+
+      if (existing.type === 'github' && changesSyncedRepository(existing.config, mergedConfig)) {
+        return Result.fail('Switch to manual sync before changing the repository', 'SYNC_ACTIVE');
       }
     }
 
@@ -166,8 +178,8 @@ export const integrationsService = {
       updates.name = input.name.trim();
     }
 
-    if (input.config !== undefined) {
-      updates.config = input.config;
+    if (mergedConfig !== undefined) {
+      updates.config = mergedConfig;
     }
 
     if (input.isActive !== undefined) {
@@ -388,6 +400,100 @@ export const integrationsService = {
 
 // Helper Functions
 
+const SECRET_CONFIG_KEYS = ['accessToken', 'apiToken', 'webhookUrl'] as const;
+
+// Written only by the sync-mode workflow, which also creates and removes the GitHub webhook.
+const SYNC_OWNED_CONFIG_KEYS = ['syncMode', 'webhookId', 'webhookSecret'] as const;
+
+const REQUIRED_CONFIG_KEYS: Partial<Record<IntegrationType, readonly string[]>> = {
+  github: ['owner', 'repo'],
+  jira: ['domain', 'email', 'projectKey', 'issueType'],
+  slack: ['notifyOn'],
+};
+
+const MASK = '****';
+// Matches the output of maskToken for values longer than eight characters.
+const MASKED_SECRET_PATTERN = /^[\s\S]{4}\*{4}[\s\S]{4}$/;
+
+function isMaskedSecret(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === MASK || MASKED_SECRET_PATTERN.test(trimmed);
+}
+
+function withoutSyncOwnedFields(config: IntegrationConfig): IntegrationConfig {
+  const record: Record<string, unknown> = { ...config };
+  for (const key of SYNC_OWNED_CONFIG_KEYS) {
+    delete record[key];
+  }
+  return record as unknown as IntegrationConfig;
+}
+
+function containsMaskedSecret(config: IntegrationConfig): boolean {
+  const record: Record<string, unknown> = { ...config };
+  return SECRET_CONFIG_KEYS.some((key) => {
+    const value = record[key];
+    return typeof value === 'string' && isMaskedSecret(value);
+  });
+}
+
+/**
+ * Build the config to persist on update.
+ *
+ * Required fields keep their stored values when omitted. A client can clear optional
+ * fields by omitting them. Secrets keep their stored value when the incoming value is
+ * missing, blank or a masked echo of an API response. Sync-owned fields always keep
+ * their stored value.
+ */
+function mergeConfig(
+  type: IntegrationType,
+  stored: IntegrationConfig,
+  incoming: Partial<IntegrationConfig>
+): IntegrationConfig {
+  const storedValues: Record<string, unknown> = { ...stored };
+  const merged: Record<string, unknown> = { ...incoming };
+
+  const restoreStored = (key: string) => {
+    if (storedValues[key] !== undefined) {
+      merged[key] = storedValues[key];
+    } else {
+      delete merged[key];
+    }
+  };
+
+  for (const key of REQUIRED_CONFIG_KEYS[type] ?? []) {
+    if (merged[key] === undefined) restoreStored(key);
+  }
+
+  for (const key of SECRET_CONFIG_KEYS) {
+    const value = merged[key];
+    const isNewSecret = typeof value === 'string' && value.trim() !== '' && !isMaskedSecret(value);
+    if (!isNewSecret) restoreStored(key);
+  }
+
+  for (const key of SYNC_OWNED_CONFIG_KEYS) {
+    restoreStored(key);
+  }
+
+  return merged as unknown as IntegrationConfig;
+}
+
+/**
+ * The automatic-sync webhook lives on the stored repository, so moving an
+ * automatically synced integration to another repository would keep receiving
+ * events from the old one.
+ */
+function changesSyncedRepository(stored: IntegrationConfig, next: IntegrationConfig): boolean {
+  const storedGithub = stored as GitHubIntegrationConfig;
+  if (storedGithub.syncMode !== 'automatic') return false;
+
+  const nextGithub = next as GitHubIntegrationConfig;
+  const isSameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return (
+    !isSameName(storedGithub.owner, nextGithub.owner) ||
+    !isSameName(storedGithub.repo, nextGithub.repo)
+  );
+}
+
 /**
  * Validate integration config based on type
  */
@@ -442,18 +548,17 @@ function maskIntegration(integration: Integration): Integration {
  * Mask sensitive fields in config
  */
 function maskConfig(config: IntegrationConfig): IntegrationConfig {
-  const masked = { ...config } as Record<string, unknown>;
+  const masked: Record<string, unknown> = { ...config };
 
-  // Mask common sensitive fields
-  if ('accessToken' in masked && typeof masked.accessToken === 'string') {
-    masked.accessToken = maskToken(masked.accessToken);
+  for (const key of SECRET_CONFIG_KEYS) {
+    const value = masked[key];
+    if (typeof value === 'string') {
+      masked[key] = maskToken(value);
+    }
   }
-  if ('apiToken' in masked && typeof masked.apiToken === 'string') {
-    masked.apiToken = maskToken(masked.apiToken);
-  }
-  if ('webhookUrl' in masked && typeof masked.webhookUrl === 'string') {
-    masked.webhookUrl = maskToken(masked.webhookUrl);
-  }
+
+  // Only the webhook receiver needs the signing secret, and it reads it from the database.
+  delete masked.webhookSecret;
 
   return masked as unknown as IntegrationConfig;
 }
@@ -463,7 +568,7 @@ function maskConfig(config: IntegrationConfig): IntegrationConfig {
  */
 function maskToken(token: string): string {
   if (token.length <= 8) {
-    return '****';
+    return MASK;
   }
-  return token.slice(0, 4) + '****' + token.slice(-4);
+  return token.slice(0, 4) + MASK + token.slice(-4);
 }

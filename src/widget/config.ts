@@ -68,6 +68,8 @@ export interface WidgetConfig {
   maxVideoUploadSize: number;
   maxRecordingDurationSeconds: number;
   recordingQuality: RecordingQuality;
+  /** Keyboard shortcut that runs BugPin.capture(), e.g. "Alt+Shift+S". Off when unset. */
+  captureShortcut?: string;
 }
 
 export const defaultConfig: WidgetConfig = {
