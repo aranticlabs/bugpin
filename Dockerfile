@@ -67,6 +67,9 @@ COPY src/portal/package.json ./src/portal/
 COPY src/shared-ui/package.json ./src/shared-ui/
 RUN bun install --production --frozen-lockfile --filter @bugpin/server
 
+# The server reads its version from the root manifest, so use the stamped copy
+COPY --from=builder /app/package.json ./package.json
+
 # Copy server source (Bun runs TypeScript directly)
 COPY src/server ./src/server
 COPY src/shared ./src/shared

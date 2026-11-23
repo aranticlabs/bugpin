@@ -16,6 +16,9 @@
       "project": ["**/*.{ts,tsx,js,jsx}", "!ee/**"],
       "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts", "tests/e2e/**/*.ts"]
     },
+    "src/widget": {
+      "entry": ["tests/browser/*.ts", "tests/browser/*.tsx"]
+    },
     "src/server": {
       "entry": ["scripts/*.ts"]
     },

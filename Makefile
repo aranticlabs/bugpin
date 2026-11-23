@@ -12,12 +12,12 @@ BUGPIN_TAG ?= latest
         dev dev-server dev-admin dev-portal dev-widget build-dev \
         build-local local deploy-local logs-local down-local \
         build-prod prod deploy-prod logs-prod down-prod \
-        typecheck test knip format \
+        typecheck test test-widget-touch knip format \
         seed-all seed-projects seed-user seed-reports \
         seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports \
         clean clean-db clean-uploads clean-data clean-deps clean-all clean-purge \
         version-check bump-version bump-patch bump-minor bump-major \
-        release release-widget retag
+        release release-widget finalize-widget retag
 
 # Colors
 GREEN := \033[0;32m
@@ -67,7 +67,8 @@ local:
 	@echo "Logs: make logs-local  Stop: make down-local"
 	@echo "Do not run make dev at the same time."
 
-deploy-local: build-local local
+deploy-local: build-local
+	@$(MAKE) local
 
 logs-local:
 	@$(LOCAL_COMPOSE) logs -f
@@ -90,7 +91,8 @@ prod:
 	@echo "Admin Console: http://localhost:7300/admin/  Portal frontend: http://localhost:7310/reporter-portal/"
 	@echo "Logs: make logs-prod  Stop: make down-prod"
 
-deploy-prod: build-prod prod
+deploy-prod: build-prod
+	@$(MAKE) prod
 
 logs-prod:
 	@$(PROD_COMPOSE) --profile separate-portal logs -f
@@ -110,6 +112,9 @@ typecheck:
 test:
 	@bun run test
 
+test-widget-touch:
+	@bun run --cwd src/widget test:touch
+
 knip:
 	@bun run knip
 
@@ -119,6 +124,12 @@ format:
 # ==============================================================================
 # Seed Data (host, writes to ./data)
 # ==============================================================================
+
+seed-projects seed-user seed-reports seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports: scripts/seed/seed.ts
+
+scripts/seed/seed.ts:
+	@echo "Seed commands require the local scripts/seed/seed.ts helper, which is excluded from Git." >&2
+	@exit 1
 
 seed-all:
 	@$(MAKE) seed-projects seed-user seed-reports
@@ -190,6 +201,7 @@ clean-deps:
 	@rm -rf src/portal/node_modules
 	@rm -rf src/shared-ui/node_modules
 	@rm -rf src/widget/node_modules
+	@rm -rf ee/node_modules
 	@echo "$(GREEN)[SUCCESS]$(NC) Dependencies removed"
 
 clean-all: clean clean-deps
@@ -213,7 +225,8 @@ clean-purge: clean clean-deps
 
 version-check:
 	@echo "$(BLUE)[INFO]$(NC) Checking version consistency..."
-	@ROOT_V=$$(node -p "require('./package.json').version"); \
+	@set -e; \
+	ROOT_V=$$(node -p "require('./package.json').version"); \
 	SERVER_V=$$(node -p "require('./src/server/package.json').version"); \
 	ADMIN_V=$$(node -p "require('./src/admin/package.json').version"); \
 	WIDGET_V=$$(node -p "require('./src/widget/package.json').version"); \
@@ -268,7 +281,8 @@ release:
 	@echo "$(BLUE)  BugPin Release v$(v)$(NC)"
 	@echo "$(BLUE)================================================$(NC)"
 	@echo ""
-	@BASE_VERSION=$$(echo "$(v)" | sed 's/-dev.*//'); \
+	@set -e; \
+	BASE_VERSION=$$(echo "$(v)" | sed 's/-dev.*//'); \
 	IS_DEV=$$(echo "$(v)" | grep -qE -- '(-dev|-beta)' && echo true || echo false); \
 	BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if [ "$$IS_DEV" = "true" ] && [ "$$BRANCH" != "dev" ]; then \
@@ -277,6 +291,10 @@ release:
 	fi; \
 	if [ "$$IS_DEV" = "false" ] && [ "$$BRANCH" != "main" ]; then \
 		echo "$(RED)[ERROR]$(NC) Production releases must be tagged from the main branch (currently on $$BRANCH)"; \
+		exit 1; \
+	fi; \
+	if [ "$$IS_DEV" = "false" ] && { ! git cat-file -e "HEAD:Changelog/v$(v).md" 2>/dev/null || ! git diff --quiet HEAD -- "Changelog/v$(v).md"; }; then \
+		echo "$(RED)[ERROR]$(NC) Changelog/v$(v).md must be committed without local changes. The release workflow uses it for the GitHub release notes."; \
 		exit 1; \
 	fi; \
 	echo "  Branch:  $$BRANCH"; \
@@ -307,9 +325,8 @@ release:
 		echo "$(BLUE)[INFO]$(NC) Bumping version to $(v)..."; \
 		$(MAKE) -s bump-version v=$(v); \
 		echo "$(BLUE)[INFO]$(NC) Committing changes..."; \
-		git add package.json src/server/package.json src/admin/package.json; \
-		git diff --cached --quiet && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
-		git commit -m "chore: bump version to $(v)"; \
+		git diff --quiet HEAD -- package.json src/server/package.json src/admin/package.json && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
+		git commit -m "chore: bump version to $(v)" -- package.json src/server/package.json src/admin/package.json; \
 		echo "$(BLUE)[INFO]$(NC) Pushing commit to $$BRANCH..."; \
 		git push origin $$BRANCH; \
 		echo "$(BLUE)[INFO]$(NC) Creating and pushing tag v$(v)..."; \
@@ -317,59 +334,12 @@ release:
 		git push origin v$(v); \
 		echo ""; \
 		echo "$(GREEN)[SUCCESS]$(NC) Production release v$(v) complete."; \
-		echo "  Image tags: $(v), latest"; \
+		echo "  GitHub release and Docker image build triggered."; \
 	fi
 
-release-widget:
-	@if [ -z "$(v)" ]; then \
-		echo "$(RED)[ERROR]$(NC) Version required. Usage: make release-widget v=X.Y.Z"; \
-		exit 1; \
-	fi
-	@if ! echo "$(v)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "$(RED)[ERROR]$(NC) Widget version must use stable X.Y.Z format"; \
-		exit 1; \
-	fi
-	@echo "$(BLUE)================================================$(NC)"
-	@echo "$(BLUE)  BugPin Widget Release v$(v)$(NC)"
-	@echo "$(BLUE)================================================$(NC)"
-	@echo ""
-	@set -e; \
-	CURRENT_V=$$(node -p "require('./src/widget/package.json').version"); \
-	echo "  Current: $$CURRENT_V"; \
-	echo "  New:     $(v)"; \
-	echo ""; \
-	echo "$(YELLOW)npm requires an active login session to publish.$(NC)"; \
-	echo "  If not logged in, run: npm login"; \
-	echo "  To check your session: npm whoami"; \
-	echo ""; \
-	printf "$(YELLOW)Are you logged into npm? [y/N]$(NC) "; \
-	read -r CONFIRM; \
-	if [ "$$CONFIRM" != "y" ] && [ "$$CONFIRM" != "Y" ]; then \
-		echo "$(RED)[ABORT]$(NC) Run 'npm login' first, then re-run this command."; \
-		exit 1; \
-	fi; \
-	echo ""; \
-	echo "$(BLUE)[INFO]$(NC) Verifying npm session..."; \
-	NPM_USER=$$(npm whoami 2>/dev/null); \
-	if [ -z "$$NPM_USER" ]; then \
-		echo "$(RED)[ERROR]$(NC) Not logged into npm. Run 'npm login' first."; \
-		exit 1; \
-	fi; \
-	echo "$(GREEN)[OK]$(NC) Logged in as $$NPM_USER"; \
-	echo ""; \
-	echo "$(BLUE)[INFO]$(NC) Bumping widget version to $(v)..."; \
-	node -e "const fs=require('fs');const p='./src/widget/package.json';const j=JSON.parse(fs.readFileSync(p));j.version='$(v)';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"; \
-	echo "$(BLUE)[INFO]$(NC) Building widget..."; \
-	(cd src/widget && bun run build); \
-	echo "$(BLUE)[INFO]$(NC) Publishing to npm..."; \
-	(cd src/widget && npm publish) || { \
-		echo ""; \
-		echo "$(RED)[ERROR]$(NC) npm publish failed. Check your login session with: npm whoami"; \
-		echo "  To log in, run: npm login"; \
-		exit 1; \
-	}; \
-	echo ""; \
-	echo "$(GREEN)[SUCCESS]$(NC) Widget v$(v) published to npm."
+release-widget finalize-widget: export WIDGET_VERSION = $(v)
+release-widget finalize-widget:
+	@bash src/widget/scripts/release.sh "$@"
 
 retag:
 	@if [ -z "$(v)" ]; then \
@@ -423,6 +393,7 @@ help:
 	section 'Checks'; \
 	row 'make typecheck' 'Type check all components and tests'; \
 	row 'make test' 'Run all tests'; \
+	row 'make test-widget-touch' 'Run widget touch tests in Chromium'; \
 	row 'make knip' 'Find unused code and dependencies'; \
 	row 'make format' 'Format with Prettier'; \
 	section 'Seed data'; \
@@ -440,13 +411,14 @@ help:
 	row 'make clean-purge' 'Remove build output, node_modules, and data/, asks first'; \
 	section 'Release'; \
 	row 'make version-check' 'Check package.json versions match'; \
-	row 'make bump-version v=1.2.3' 'Set every package version'; \
-	row 'make bump-patch|bump-minor|bump-major' 'Increment that part of every version'; \
+	row 'make bump-version v=1.2.3' 'Set the app version (root, server, Admin Console)'; \
+	row 'make bump-patch|bump-minor|bump-major' 'Increment that part of the app version'; \
 	row 'make release v=1.2.3' 'Tag a production release from main'; \
 	row 'make release v=1.2.3-dev' 'Tag a dev release from dev'; \
 	row 'make release v=1.2.3-beta.1' 'Tag a beta release from dev'; \
 	row 'make retag v=1.2.3' 'Delete and re-push a tag'; \
-	row 'make release-widget v=1.2.3' 'Bump the widget version and publish to npm'; \
+	row 'make release-widget v=1.2.3' 'Publish the widget to npm and tag widget-vX.Y.Z'; \
+	row 'make finalize-widget v=1.2.3' 'Verify an npm publication and finish pushing its release'; \
 	section 'Notes'; \
 	printf '  %s\n' \
 		'- Run make dev or make local, not both: they use the same ports.' \
