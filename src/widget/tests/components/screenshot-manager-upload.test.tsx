@@ -621,12 +621,10 @@ describe('ScreenshotManager paste', () => {
     await settle();
 
     const pdf = new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' });
-    paste(document.body, [clipboardItem(pdf)]);
+    expect(paste(document.body, [clipboardItem(pdf)]).defaultPrevented).toBe(false);
     await settle();
     expect(onUpload).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      t('screenshot.error.unsupportedFile', { type: 'application/pdf' })
-    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
 
     const huge = new File([new Uint8Array(11 * 1024 * 1024)], 'big.png', { type: 'image/png' });
     paste(document.body, [clipboardItem(huge)]);

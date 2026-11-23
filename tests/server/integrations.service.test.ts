@@ -347,6 +347,22 @@ describe('integrationsService.update config merge', () => {
     expect(persistedConfig).toMatchObject({ repo: 'other-repo', accessToken: 'token1234' });
   });
 
+  it('preserves the repository for token-only and labels-only updates', async () => {
+    for (const config of [{ accessToken: 'new-token' }, { labels: ['new'] }]) {
+      const result = await integrationsService.update('int_1', { config });
+      expect(result.success).toBe(true);
+      expect(persistedConfig).toMatchObject({ owner: 'org', repo: 'repo', ...config });
+    }
+  });
+
+  it('restores required fields passed as undefined', async () => {
+    const result = await integrationsService.update('int_1', {
+      config: { owner: undefined, repo: 'repo' },
+    });
+    expect(result.success).toBe(true);
+    expect(persistedConfig).toMatchObject({ owner: 'org', repo: 'repo' });
+  });
+
   it('lets the client clear optional non-secret fields by omitting them', async () => {
     const result = await integrationsService.update('int_1', {
       config: { owner: 'org', repo: 'repo' },

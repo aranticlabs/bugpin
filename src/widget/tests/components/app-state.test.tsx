@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 import { render } from 'preact';
 import type { WidgetConfig } from '../../config';
 import type { FormData as WidgetFormData } from '../../components/WidgetDialog';
 import { installDom } from '../helpers/dom';
 import { installFakeIndexedDB } from '../helpers/fake-indexeddb';
+import { recordingStore } from '../../storage/recording-store';
 import { draftStorage } from '../../storage/draft-storage';
 import type { SendOptions, SubmitReportInput } from '../../api/submit';
 import { t } from '../../i18n/index';
@@ -913,6 +914,68 @@ describe('Screenshot bar and capture API', () => {
     expect(lastDialogProps?.activeTab).toBe('media');
 
     cleanup(container);
+  });
+
+  it('ignores a close request while an external screenshot is pending', async () => {
+    const container = await renderApp();
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+    const pending = Promise.withResolvers<string>();
+    captureScreenshot.mockImplementationOnce(() => pending.promise);
+    document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+    await settle();
+    document.dispatchEvent(new window.CustomEvent('bugpin:close'));
+    await settle();
+    expect(container.querySelector('[aria-labelledby="bugpin-confirm-title"]')).toBeNull();
+    pending.resolve('data:image/png;base64,abc');
+    await settle();
+    expect(lastDialogProps?.media).toHaveLength(2);
+    cleanup(container);
+  });
+
+  it('keeps a screenshot captured while recovery is loading the stored draft', async () => {
+    const pending = Promise.withResolvers<null>();
+    const load = spyOn(draftStorage, 'load').mockImplementationOnce(() => pending.promise);
+    const recover = mock(async (): ReturnType<typeof recordingStore.recover> => null);
+    recover.mockResolvedValueOnce({
+      sessionId: 'recovered',
+      blob: new Blob(['clip']),
+      mimeType: 'video/webm',
+      durationMs: 1000,
+      startedAt: new Date().toISOString(),
+      hasAudio: false,
+      recordingQuality: 'standard',
+      width: 640,
+      height: 480,
+    });
+    const container = await renderApp(
+      { enableScreenRecording: true },
+      {
+        isRecordingSupported: () => true,
+        recordingStore: {
+          ...recordingStore,
+          recover,
+          expire: async () => false,
+          remove: async () => {},
+        },
+      }
+    );
+    try {
+      expect(load).toHaveBeenCalled();
+      document.dispatchEvent(new window.CustomEvent('bugpin:capture'));
+      await settle();
+      expect(lastDialogProps?.media).toHaveLength(1);
+      pending.resolve(null);
+      await settle();
+      const saved = await draftStorage.load(baseConfig.apiKey);
+      expect(saved?.media.map((item) => item.id)).toEqual([
+        expect.stringMatching(/^capture-/),
+        'recording-recovered',
+      ]);
+    } finally {
+      load.mockRestore();
+      cleanup(container);
+    }
   });
 
   it('uses DOM capture for bugpin:capture even in Screen Capture API mode', async () => {

@@ -157,7 +157,9 @@ export const integrationsService = {
     }
 
     const mergedConfig =
-      input.config !== undefined ? mergeConfig(existing.config, input.config) : undefined;
+      input.config !== undefined
+        ? mergeConfig(existing.type, existing.config, input.config)
+        : undefined;
 
     if (mergedConfig !== undefined) {
       const configValidation = validateConfig(existing.type, mergedConfig);
@@ -403,6 +405,12 @@ const SECRET_CONFIG_KEYS = ['accessToken', 'apiToken', 'webhookUrl'] as const;
 // Written only by the sync-mode workflow, which also creates and removes the GitHub webhook.
 const SYNC_OWNED_CONFIG_KEYS = ['syncMode', 'webhookId', 'webhookSecret'] as const;
 
+const REQUIRED_CONFIG_KEYS: Partial<Record<IntegrationType, readonly string[]>> = {
+  github: ['owner', 'repo'],
+  jira: ['domain', 'email', 'projectKey', 'issueType'],
+  slack: ['notifyOn'],
+};
+
 const MASK = '****';
 // Matches the output of maskToken for values longer than eight characters.
 const MASKED_SECRET_PATTERN = /^[\s\S]{4}\*{4}[\s\S]{4}$/;
@@ -431,12 +439,13 @@ function containsMaskedSecret(config: IntegrationConfig): boolean {
 /**
  * Build the config to persist on update.
  *
- * Regular fields come from the incoming config, so a client can still clear optional
+ * Required fields keep their stored values when omitted. A client can clear optional
  * fields by omitting them. Secrets keep their stored value when the incoming value is
  * missing, blank or a masked echo of an API response. Sync-owned fields always keep
  * their stored value.
  */
 function mergeConfig(
+  type: IntegrationType,
   stored: IntegrationConfig,
   incoming: Partial<IntegrationConfig>
 ): IntegrationConfig {
@@ -450,6 +459,10 @@ function mergeConfig(
       delete merged[key];
     }
   };
+
+  for (const key of REQUIRED_CONFIG_KEYS[type] ?? []) {
+    if (merged[key] === undefined) restoreStored(key);
+  }
 
   for (const key of SECRET_CONFIG_KEYS) {
     const value = merged[key];

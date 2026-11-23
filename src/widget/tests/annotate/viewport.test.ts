@@ -90,14 +90,15 @@ describe('annotation viewport', () => {
   });
 
   it('converts line-based wheel deltas and maps wheel direction to zoom direction', () => {
-    expect(wheelDeltaPx(3, 1)).toBe(48);
-    expect(wheelDeltaPx(120, 0)).toBe(120);
-    expect(wheelZoomFactor(-100, 0)).toBeGreaterThan(1);
-    expect(wheelZoomFactor(100, 0)).toBeLessThan(1);
-    expect(wheelZoomFactor(-100, 0) * wheelZoomFactor(100, 0)).toBeCloseTo(1);
+    expect(wheelDeltaPx(-1, 2, 600)).toBe(-600);
+    expect(wheelDeltaPx(3, 1, 600)).toBe(48);
+    expect(wheelDeltaPx(120, 0, 600)).toBe(120);
+    expect(wheelZoomFactor(-100)).toBeGreaterThan(1);
+    expect(wheelZoomFactor(100)).toBeLessThan(1);
+    expect(wheelZoomFactor(-100) * wheelZoomFactor(100)).toBeCloseTo(1);
     // Small pinch deltas follow the fingers; a mouse notch is capped.
-    expect(wheelZoomFactor(-10, 0)).toBeCloseTo(Math.exp(0.1));
-    expect(wheelZoomFactor(-100, 0)).toBe(1.25);
-    expect(wheelZoomFactor(3, 1)).toBe(0.8);
+    expect(wheelZoomFactor(-10)).toBeCloseTo(Math.exp(0.1));
+    expect(wheelZoomFactor(-100)).toBe(1.25);
+    expect(wheelZoomFactor(wheelDeltaPx(3, 1, 600))).toBe(0.8);
   });
 });

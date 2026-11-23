@@ -6,6 +6,8 @@ type DomGlobals = {
   localStorage: typeof globalThis.localStorage;
   navigator: typeof globalThis.navigator;
   HTMLElement: typeof globalThis.HTMLElement;
+  HTMLInputElement: typeof globalThis.HTMLInputElement;
+  HTMLTextAreaElement: typeof globalThis.HTMLTextAreaElement;
   Node: typeof globalThis.Node;
   Event: typeof globalThis.Event;
   CustomEvent: typeof globalThis.CustomEvent;
@@ -23,6 +25,8 @@ export function installDom(url = 'https://example.com'): () => void {
     localStorage: Object.prototype.hasOwnProperty.call(globalThis, 'localStorage'),
     navigator: Object.prototype.hasOwnProperty.call(globalThis, 'navigator'),
     HTMLElement: Object.prototype.hasOwnProperty.call(globalThis, 'HTMLElement'),
+    HTMLInputElement: Object.prototype.hasOwnProperty.call(globalThis, 'HTMLInputElement'),
+    HTMLTextAreaElement: Object.prototype.hasOwnProperty.call(globalThis, 'HTMLTextAreaElement'),
     Node: Object.prototype.hasOwnProperty.call(globalThis, 'Node'),
     Event: Object.prototype.hasOwnProperty.call(globalThis, 'Event'),
     CustomEvent: Object.prototype.hasOwnProperty.call(globalThis, 'CustomEvent'),
@@ -42,6 +46,8 @@ export function installDom(url = 'https://example.com'): () => void {
     localStorage: globalThis.localStorage,
     navigator: globalThis.navigator,
     HTMLElement: globalThis.HTMLElement,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
     Node: globalThis.Node,
     Event: globalThis.Event,
     CustomEvent: globalThis.CustomEvent,
@@ -66,6 +72,8 @@ export function installDom(url = 'https://example.com'): () => void {
   globalThis.localStorage = window.localStorage;
   globalThis.navigator = window.navigator as unknown as typeof globalThis.navigator;
   globalThis.HTMLElement = window.HTMLElement as typeof HTMLElement;
+  globalThis.HTMLInputElement = window.HTMLInputElement as typeof HTMLInputElement;
+  globalThis.HTMLTextAreaElement = window.HTMLTextAreaElement as typeof HTMLTextAreaElement;
   globalThis.Node = window.Node as typeof Node;
   globalThis.Event = window.Event as typeof Event;
   globalThis.CustomEvent = window.CustomEvent as typeof CustomEvent;
@@ -103,6 +111,16 @@ export function installDom(url = 'https://example.com'): () => void {
       delete (globalThis as Record<string, unknown>).HTMLElement;
     } else {
       globalThis.HTMLElement = original.HTMLElement;
+    }
+    if (!hadGlobal.HTMLInputElement && original.HTMLInputElement === undefined) {
+      delete (globalThis as Record<string, unknown>).HTMLInputElement;
+    } else {
+      globalThis.HTMLInputElement = original.HTMLInputElement;
+    }
+    if (!hadGlobal.HTMLTextAreaElement && original.HTMLTextAreaElement === undefined) {
+      delete (globalThis as Record<string, unknown>).HTMLTextAreaElement;
+    } else {
+      globalThis.HTMLTextAreaElement = original.HTMLTextAreaElement;
     }
     if (!hadGlobal.Node && original.Node === undefined) {
       delete (globalThis as Record<string, unknown>).Node;

@@ -9,12 +9,12 @@ IMAGE := registry.arantic.cloud/bugpin/bugpin
 .PHONY: help \
         dev dev-server dev-admin dev-widget build-dev \
         build-prod prod deploy-prod logs-prod down-prod \
-        typecheck test knip format \
+        typecheck test test-widget-touch knip format \
         seed-all seed-projects seed-user seed-reports \
         seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports \
         clean clean-db clean-uploads clean-data clean-deps clean-all clean-purge \
         version-check bump-version bump-patch bump-minor bump-major \
-        release release-widget retag
+        release release-widget finalize-widget retag
 
 # Colors
 GREEN := \033[0;32m
@@ -60,7 +60,8 @@ prod:
 	@echo "Logs: make logs-prod  Stop: make down-prod"
 	@echo "Do not run make dev at the same time."
 
-deploy-prod: build-prod prod
+deploy-prod: build-prod
+	@$(MAKE) prod
 
 logs-prod:
 	@$(PROD_COMPOSE) logs -f
@@ -79,6 +80,9 @@ typecheck:
 test:
 	@bun run test
 
+test-widget-touch:
+	@bun run --cwd src/widget test:touch
+
 knip:
 	@bun run knip
 
@@ -88,6 +92,12 @@ format:
 # ==============================================================================
 # Seed Data (host, writes to ./data)
 # ==============================================================================
+
+seed-projects seed-user seed-reports seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports: scripts/seed/seed.ts
+
+scripts/seed/seed.ts:
+	@echo "Seed commands require the local scripts/seed/seed.ts helper, which is excluded from Git." >&2
+	@exit 1
 
 seed-all:
 	@$(MAKE) seed-projects seed-user seed-reports
@@ -180,7 +190,8 @@ clean-purge: clean clean-deps
 
 version-check:
 	@echo "$(BLUE)[INFO]$(NC) Checking version consistency..."
-	@ROOT_V=$$(node -p "require('./package.json').version"); \
+	@set -e; \
+	ROOT_V=$$(node -p "require('./package.json').version"); \
 	SERVER_V=$$(node -p "require('./src/server/package.json').version"); \
 	ADMIN_V=$$(node -p "require('./src/admin/package.json').version"); \
 	WIDGET_V=$$(node -p "require('./src/widget/package.json').version"); \
@@ -291,79 +302,9 @@ release:
 		echo "  GitHub release and Docker image build triggered."; \
 	fi
 
-release-widget:
-	@if [ -z "$(v)" ]; then \
-		echo "$(RED)[ERROR]$(NC) Version required. Usage: make release-widget v=X.Y.Z"; \
-		exit 1; \
-	fi
-	@if ! echo "$(v)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "$(RED)[ERROR]$(NC) Widget version must use stable X.Y.Z format"; \
-		exit 1; \
-	fi
-	@if ! git cat-file -e "HEAD:Changelog/widget/v$(v).md" 2>/dev/null || ! git diff --quiet HEAD -- "Changelog/widget/v$(v).md"; then \
-		echo "$(RED)[ERROR]$(NC) Changelog/widget/v$(v).md must be committed without local changes. The widget release workflow needs it for the GitHub release notes."; \
-		exit 1; \
-	fi
-	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ "$$BRANCH" != "main" ]; then \
-		echo "$(RED)[ERROR]$(NC) Widget releases must be tagged from the main branch (currently on $$BRANCH)"; \
-		exit 1; \
-	fi
-	@if git rev-parse -q --verify "refs/tags/widget-v$(v)" >/dev/null || git ls-remote --exit-code --tags origin "refs/tags/widget-v$(v)" >/dev/null 2>&1; then \
-		echo "$(RED)[ERROR]$(NC) Tag widget-v$(v) already exists"; \
-		exit 1; \
-	fi
-	@echo "$(BLUE)================================================$(NC)"
-	@echo "$(BLUE)  BugPin Widget Release v$(v)$(NC)"
-	@echo "$(BLUE)================================================$(NC)"
-	@echo ""
-	@set -e; \
-	CURRENT_V=$$(node -p "require('./src/widget/package.json').version"); \
-	echo "  Current: $$CURRENT_V"; \
-	echo "  New:     $(v)"; \
-	echo ""; \
-	echo "$(YELLOW)npm requires an active login session to publish.$(NC)"; \
-	echo "  If not logged in, run: npm login"; \
-	echo "  To check your session: npm whoami"; \
-	echo ""; \
-	printf "$(YELLOW)Are you logged into npm? [y/N]$(NC) "; \
-	read -r CONFIRM; \
-	if [ "$$CONFIRM" != "y" ] && [ "$$CONFIRM" != "Y" ]; then \
-		echo "$(RED)[ABORT]$(NC) Run 'npm login' first, then re-run this command."; \
-		exit 1; \
-	fi; \
-	echo ""; \
-	echo "$(BLUE)[INFO]$(NC) Verifying npm session..."; \
-	NPM_USER=$$(npm whoami 2>/dev/null || true); \
-	if [ -z "$$NPM_USER" ]; then \
-		echo "$(RED)[ERROR]$(NC) Not logged into npm. Run 'npm login' first."; \
-		exit 1; \
-	fi; \
-	echo "$(GREEN)[OK]$(NC) Logged in as $$NPM_USER"; \
-	echo ""; \
-	echo "$(BLUE)[INFO]$(NC) Bumping widget version to $(v)..."; \
-	node -e "const fs=require('fs');const p='./src/widget/package.json';const j=JSON.parse(fs.readFileSync(p));j.version='$(v)';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"; \
-	echo "$(BLUE)[INFO]$(NC) Building widget..."; \
-	(cd src/widget && bun run build); \
-	echo "$(BLUE)[INFO]$(NC) Publishing to npm..."; \
-	(cd src/widget && npm publish) || { \
-		echo ""; \
-		echo "$(RED)[ERROR]$(NC) npm publish failed. Check your login session with: npm whoami"; \
-		echo "  To log in, run: npm login"; \
-		exit 1; \
-	}; \
-	echo "$(GREEN)[OK]$(NC) Widget v$(v) published to npm."; \
-	echo "$(BLUE)[INFO]$(NC) Committing widget version bump..."; \
-	git diff --quiet HEAD -- src/widget/package.json && echo "$(YELLOW)[SKIP]$(NC) No changes to commit" || \
-	git commit -m "chore(widget): bump version to $(v)" -- src/widget/package.json; \
-	echo "$(BLUE)[INFO]$(NC) Pushing commit to main..."; \
-	git push origin main; \
-	echo "$(BLUE)[INFO]$(NC) Creating and pushing tag widget-v$(v)..."; \
-	git tag widget-v$(v); \
-	git push origin widget-v$(v); \
-	echo ""; \
-	echo "$(GREEN)[SUCCESS]$(NC) Widget v$(v) published to npm and tagged widget-v$(v)."; \
-	echo "  The GitHub release is created from Changelog/widget/v$(v).md."
+release-widget finalize-widget: export WIDGET_VERSION = $(v)
+release-widget finalize-widget:
+	@bash src/widget/scripts/release.sh "$@"
 
 retag:
 	@if [ -z "$(v)" ]; then \
@@ -410,6 +351,7 @@ help:
 	section 'Checks'; \
 	row 'make typecheck' 'Type check all components and EE'; \
 	row 'make test' 'Run all tests'; \
+	row 'make test-widget-touch' 'Run widget touch tests in Chromium'; \
 	row 'make knip' 'Find unused code and dependencies'; \
 	row 'make format' 'Format with Prettier'; \
 	section 'Seed data'; \
@@ -434,6 +376,7 @@ help:
 	row 'make release v=1.2.3-beta.1' 'Tag a beta release from dev'; \
 	row 'make retag v=1.2.3' 'Delete and re-push a tag'; \
 	row 'make release-widget v=1.2.3' 'Publish the widget to npm and tag widget-vX.Y.Z'; \
+	row 'make finalize-widget v=1.2.3' 'Verify an npm publication and finish pushing its release'; \
 	section 'Notes'; \
 	printf '  %s\n' \
 		'- Run make dev or make prod, not both: they use the same port 7300.' \

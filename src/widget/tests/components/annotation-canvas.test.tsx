@@ -349,6 +349,7 @@ describe('AnnotationCanvas', () => {
     type MockCanvas = {
       viewportTransform: Vpt;
       backgroundImage?: unknown;
+      defaultCursor?: string;
       events?: Map<string, unknown>;
       getZoom: () => number;
       getObjects: () => unknown[];
@@ -579,6 +580,27 @@ describe('AnnotationCanvas', () => {
       cleanup();
     });
 
+    it('keeps a pinch anchored when the view resizes between finger moves', async () => {
+      const { canvas, canvasEl, cleanup } = await renderCanvas();
+      const touch = touchDispatcher(canvasEl);
+      touch('touchstart', [
+        [300, 300],
+        [500, 300],
+      ]);
+      touch('touchmove', [
+        [200, 300],
+        [600, 300],
+      ]);
+      resizeView(1032, 632);
+      const afterResize: Vpt = [...canvas.viewportTransform];
+      touch('touchmove', [
+        [200, 300],
+        [600, 300],
+      ]);
+      expect(canvas.viewportTransform).toEqual(afterResize);
+      cleanup();
+    });
+
     it('removes a text box the first finger created when the touch becomes a pinch', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
@@ -597,10 +619,24 @@ describe('AnnotationCanvas', () => {
       canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
       expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
 
-      touch('touchstart', [
-        [300, 300],
-        [400, 300],
-      ]);
+      const zoom = container.querySelector<HTMLButtonElement>('button[aria-label="Zoom in"]')!;
+      touchDispatcher(zoom)(
+        'touchstart',
+        [
+          [300, 300],
+          [500, 500],
+        ],
+        [canvasEl, zoom]
+      );
+      touch(
+        'touchstart',
+        [
+          [300, 300],
+          [500, 500],
+          [400, 300],
+        ],
+        [canvasEl, zoom, canvasEl]
+      );
       expect(canvas.getObjects()).toHaveLength(objectsBefore);
 
       touch('touchend', []);
@@ -690,6 +726,56 @@ describe('AnnotationCanvas', () => {
 
       canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
       expect(canvas.getObjects()).toHaveLength(objectsBefore + 1);
+      cleanup();
+    });
+
+    it('does not start pan mode when Space is pressed on a focused Zoom in button', async () => {
+      const { container, canvas, cleanup } = await renderCanvas();
+      const zoomInButton = container.querySelector(
+        'button[aria-label="Zoom in"]'
+      ) as HTMLButtonElement;
+      expect(zoomInButton.disabled).toBe(false);
+
+      zoomInButton.focus();
+      expect(document.activeElement).toBe(zoomInButton);
+
+      const space = new window.KeyboardEvent('keydown', {
+        key: ' ',
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      zoomInButton.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(canvas.defaultCursor).toBe('default');
+      cleanup();
+    });
+
+    it('prevents mouse focus on tool buttons so Space starts pan mode', async () => {
+      const { container, canvas, cleanup } = await renderCanvas();
+      const rectangleButton = container.querySelector(
+        'button[aria-label="Rectangle"]'
+      ) as HTMLButtonElement;
+
+      const mouseDown = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      rectangleButton.dispatchEvent(mouseDown);
+      expect(mouseDown.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(document.body);
+
+      rectangleButton.click();
+      await waitFor(() => canvas.defaultCursor === 'crosshair', 'Rectangle tool not active');
+
+      const space = new window.KeyboardEvent('keydown', {
+        key: ' ',
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      document.body.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(true);
+      expect(canvas.defaultCursor).toBe('grab');
       cleanup();
     });
   });
