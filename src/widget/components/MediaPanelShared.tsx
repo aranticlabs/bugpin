@@ -38,7 +38,8 @@ export const MediaOptionToggle: FunctionComponent<{
 export const MediaUploadButton: FunctionComponent<{
   hasMedia: boolean;
   onClick: () => void;
-}> = ({ hasMedia, onClick }) => (
+  subtitle?: string;
+}> = ({ hasMedia, onClick, subtitle }) => (
   <button
     type="button"
     onClick={onClick}
@@ -65,7 +66,9 @@ export const MediaUploadButton: FunctionComponent<{
         <span class="text-sm font-medium mb-1 text-foreground">
           {t('screenshot.dropzone.title')}
         </span>
-        <span class="text-xs text-muted-foreground">{t('screenshot.dropzone.subtitle')}</span>
+        <span class="text-xs text-muted-foreground">
+          {subtitle ?? t('screenshot.dropzone.subtitle')}
+        </span>
       </>
     )}
   </button>

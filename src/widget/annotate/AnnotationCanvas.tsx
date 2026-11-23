@@ -15,13 +15,29 @@ import {
   Redo2,
   Trash2,
   ZoomOut,
-  Maximize,
   ZoomIn,
+  Maximize2,
+  Minimize2,
 } from 'lucide-preact';
 import { cn } from '../lib/utils';
-import { Button } from '../components/ui';
+import { Button, Tooltip } from '../components/ui';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import {
+  clampZoom,
+  constrainViewport,
+  fitViewport,
+  panBy,
+  sceneScaleFor,
+  wheelDeltaPx,
+  wheelZoomFactor,
+  zoomAtPoint,
+  zoomLimits,
+  type Size,
+  type ViewportPoint,
+  type ViewportTransform,
+  type ZoomLimits,
+} from './viewport';
 
 export type AnnotationTool =
   'select' | 'pan' | 'pen' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'pixelate';
@@ -64,8 +80,68 @@ if (!(fabric.FabricObject.prototype as unknown as Record<symbol, boolean>)[TO_OB
 
 interface AnnotationCanvasProps {
   screenshot: string;
+  isMaximized: boolean;
+  onToggleMaximize: () => void;
   onSave: (annotatedImage: string, annotations: object) => void;
   onCancel: () => void;
+}
+
+interface Scene {
+  size: Size;
+  /** Scene units per screenshot pixel. */
+  scale: number;
+}
+
+interface ZoomState {
+  zoom: number;
+  limits: ZoomLimits;
+  sceneScale: number;
+}
+
+interface PinchState {
+  view: Size;
+  lastTouches: Touch[];
+  startDistance: number;
+  startMidpoint: ViewportPoint;
+  startViewport: ViewportTransform;
+}
+
+/** Safari's non-standard trackpad and touch pinch event. */
+interface GestureEvent extends UIEvent {
+  scale: number;
+  clientX: number;
+  clientY: number;
+}
+
+/** Fabric internals for abandoning a pointer interaction that a pinch interrupts. */
+interface FabricInteractionState {
+  _isCurrentlyDrawing?: boolean;
+  _groupSelector?: unknown;
+  _currentTransform?: {
+    target: fabric.FabricObject;
+    original: Partial<Record<keyof fabric.FabricObject, unknown>>;
+  } | null;
+  contextTop?: CanvasRenderingContext2D;
+}
+
+const TRANSFORM_KEYS = [
+  'left',
+  'top',
+  'scaleX',
+  'scaleY',
+  'skewX',
+  'skewY',
+  'angle',
+  'flipX',
+  'flipY',
+] as const;
+
+const ZOOM_STEP = 1.2;
+// Float slack so a zoom clamped to a limit counts as having reached it.
+const ZOOM_LIMIT_TOLERANCE = 1.0001;
+
+function preventMouseFocus(e: JSX.TargetedMouseEvent<HTMLButtonElement>): void {
+  e.preventDefault();
 }
 
 const COLORS = [
@@ -96,12 +172,6 @@ function regeneratePixelate(
     objWithData.data.generationId = generationId;
   }
 
-  // Save and reset viewport for accurate coordinate mapping
-  const currentZoom = canvas.getZoom();
-  const currentViewport = canvas.viewportTransform?.slice() || [1, 0, 0, 1, 0, 0];
-  canvas.setZoom(1);
-  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-  canvas.renderAll();
   obj.setCoords();
 
   // Get current bounds in canvas space
@@ -111,15 +181,7 @@ function regeneratePixelate(
   const width = bounds.width;
   const height = bounds.height;
 
-  if (width < 5 || height < 5) {
-    // Restore viewport
-    canvas.setZoom(currentZoom);
-    canvas.setViewportTransform(
-      currentViewport as [number, number, number, number, number, number]
-    );
-    canvas.renderAll();
-    return;
-  }
+  if (width <= 0 || height <= 0) return;
 
   const bgElement = bgImage.getElement() as HTMLImageElement;
   const scaleX = bgImage.scaleX || 1;
@@ -131,8 +193,8 @@ function regeneratePixelate(
 
   // Create temp canvas to extract region
   const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = width;
-  tempCanvas.height = height;
+  tempCanvas.width = Math.ceil(width);
+  tempCanvas.height = Math.ceil(height);
   const tempCtx = tempCanvas.getContext('2d');
 
   if (tempCtx) {
@@ -145,8 +207,8 @@ function regeneratePixelate(
       height / scaleY,
       0,
       0,
-      width,
-      height
+      tempCanvas.width,
+      tempCanvas.height
     );
 
     // Apply pixelate filter directly to the temp canvas
@@ -158,52 +220,45 @@ function regeneratePixelate(
     const filteredElement = tempFabricImg.getElement() as HTMLCanvasElement;
 
     // Check if this generation is still current (not stale)
-    if (objWithData.data?.generationId !== generationId) {
-      // Stale - a newer regeneration is in progress, abort
-      canvas.setZoom(currentZoom);
-      canvas.setViewportTransform(
-        currentViewport as [number, number, number, number, number, number]
-      );
-      canvas.renderAll();
-      return;
-    }
+    if (objWithData.data?.generationId !== generationId) return;
 
     // Update the fabric image's element directly with canvas (no async image load needed)
     obj.setElement(filteredElement);
 
-    // Reset scale since we regenerated at correct size
     obj.set({
-      scaleX: 1,
-      scaleY: 1,
-      width: width,
-      height: height,
+      scaleX: width / tempCanvas.width,
+      scaleY: height / tempCanvas.height,
     });
 
     // Update metadata (preserve blockSize)
     objWithData.data = { type: 'pixelate', blockSize, generationId };
   }
 
-  // Restore viewport and render
-  canvas.setZoom(currentZoom);
-  canvas.setViewportTransform(currentViewport as [number, number, number, number, number, number]);
   canvas.renderAll();
 }
 
 export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   screenshot,
+  isMaximized,
+  onToggleMaximize,
   onSave,
   onCancel,
 }) => {
   useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const canvasHostRef = useRef<HTMLDivElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [activeColor, setActiveColor] = useState('#ef4444');
   const [strokeWidth, setStrokeWidth] = useState(4);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomState, setZoomState] = useState<ZoomState>({
+    zoom: 1,
+    limits: { min: 1, max: 1 },
+    sceneScale: 1,
+  });
   const [isPanning, setIsPanning] = useState(false);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
@@ -211,6 +266,81 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   const isPanningRef = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const originalDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
+  const viewSizeRef = useRef<Size>({ width: 0, height: 0 });
+  // While true, resizing the view refits the scene instead of keeping the user's zoom.
+  const isFitRef = useRef(true);
+  const gestureActiveRef = useRef(false);
+  // Objects that existed before the first finger landed; anything newer is undone if
+  // the touch turns into a pinch.
+  const objectsBeforeTouchRef = useRef<Set<fabric.FabricObject> | null>(null);
+
+  const applyViewport = useCallback((vpt: ViewportTransform) => {
+    const canvas = fabricRef.current;
+    const scene = sceneRef.current;
+    if (!canvas || !scene) return;
+    canvas.setViewportTransform(vpt);
+    canvas.requestRenderAll();
+    const limits = zoomLimits(viewSizeRef.current, scene.size, scene.scale);
+    // Panning keeps the zoom, so skip the re-render unless something shown changes.
+    setZoomState((previous) =>
+      previous.zoom === vpt[0] &&
+      previous.sceneScale === scene.scale &&
+      previous.limits.min === limits.min &&
+      previous.limits.max === limits.max
+        ? previous
+        : { zoom: vpt[0], limits, sceneScale: scene.scale }
+    );
+  }, []);
+
+  /** Applies a user zoom or pan; one that changes nothing keeps the view fitted. */
+  const moveViewport = useCallback(
+    (next: ViewportTransform) => {
+      const current = fabricRef.current?.viewportTransform;
+      if (current && next.every((value, index) => value === current[index])) return;
+      isFitRef.current = false;
+      applyViewport(next);
+    },
+    [applyViewport]
+  );
+
+  const fitToView = useCallback(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    isFitRef.current = true;
+    applyViewport(fitViewport(viewSizeRef.current, scene.size));
+  }, [applyViewport]);
+
+  const zoomTo = useCallback(
+    (zoom: number, point: ViewportPoint) => {
+      const canvas = fabricRef.current;
+      const scene = sceneRef.current;
+      if (!canvas || !scene) return;
+      const view = viewSizeRef.current;
+      const limits = zoomLimits(view, scene.size, scene.scale);
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      moveViewport(
+        constrainViewport(zoomAtPoint(vpt, point, clampZoom(zoom, limits)), view, scene.size)
+      );
+    },
+    [moveViewport]
+  );
+
+  const panViewport = useCallback(
+    (dx: number, dy: number) => {
+      const canvas = fabricRef.current;
+      const scene = sceneRef.current;
+      if (!canvas || !scene) return;
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      moveViewport(constrainViewport(panBy(vpt, dx, dy), viewSizeRef.current, scene.size));
+    },
+    [moveViewport]
+  );
+
+  const measureView = useCallback((): Size => {
+    const wrapper = canvasWrapperRef.current;
+    return { width: wrapper?.clientWidth ?? 0, height: wrapper?.clientHeight ?? 0 };
+  }, []);
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -221,34 +351,55 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       selection: true,
     });
     fabricRef.current = canvas;
+    viewSizeRef.current = measureView();
+    canvas.setDimensions(viewSizeRef.current);
 
     // Load screenshot as background
     fabric.FabricImage.fromURL(screenshot).then((img) => {
-      // Store original dimensions for high-quality export
-      originalDimensionsRef.current = {
-        width: img.width || 800,
-        height: img.height || 600,
+      const original = { width: img.width || 800, height: img.height || 600 };
+      originalDimensionsRef.current = original;
+
+      const scale = sceneScaleFor(viewSizeRef.current, original);
+      sceneRef.current = {
+        size: { width: original.width * scale, height: original.height * scale },
+        scale,
       };
 
-      // Scale image to fit container while maintaining aspect ratio
-      // Get actual available space from the canvas wrapper element
-      const wrapperRect = canvasWrapperRef.current?.getBoundingClientRect();
-      const maxWidth = wrapperRect ? wrapperRect.width - 32 : 800; // 32px for padding
-      const maxHeight = wrapperRect ? wrapperRect.height - 32 : 600;
-
-      const scale = Math.min(maxWidth / (img.width || 800), maxHeight / (img.height || 600));
-
-      canvas.setDimensions({
-        width: (img.width || 800) * scale,
-        height: (img.height || 600) * scale,
-      });
-
-      img.scaleToWidth(canvas.width!);
+      img.set({ scaleX: scale, scaleY: scale });
       canvas.backgroundImage = img;
-      canvas.renderAll();
+      // Only the screenshot is exported, so hide anything drawn past its edges.
+      canvas.clipPath = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: original.width * scale,
+        height: original.height * scale,
+        strokeWidth: 0,
+        absolutePositioned: true,
+      });
+      fitToView();
 
       // Save initial state
       saveToHistory();
+    });
+
+    // Ctrl/Cmd + wheel (and trackpad pinch, which browsers report the same way) zooms
+    // around the pointer; a plain wheel pans.
+    canvas.on('mouse:wheel', (opt) => {
+      const e = opt.e as WheelEvent;
+      e.preventDefault();
+      if (gestureActiveRef.current) return;
+      const mode = e.deltaMode;
+      const view = viewSizeRef.current;
+      const horizontal = e.shiftKey && e.deltaX === 0 && !e.ctrlKey && !e.metaKey;
+      const dy = wheelDeltaPx(e.deltaY, mode, horizontal ? view.width : view.height);
+      if (e.ctrlKey || e.metaKey) {
+        zoomTo(canvas.getZoom() * wheelZoomFactor(dy), canvas.getViewportPoint(e));
+        return;
+      }
+      const dx = wheelDeltaPx(e.deltaX, mode, view.width);
+      // Windows reports shift + wheel as vertical delta with shiftKey set.
+      if (horizontal) panViewport(-dy, 0);
+      else panViewport(-dx, -dy);
     });
 
     // Set up drawing brush
@@ -282,8 +433,247 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     return () => {
       canvasEl?.removeEventListener('contextmenu', preventContextMenu);
       canvas.dispose();
+      if (fabricRef.current === canvas) {
+        fabricRef.current = null;
+      }
     };
   }, [screenshot]);
+
+  // Keep the canvas filling the work area; refit, or keep the user's zoom centered.
+  useEffect(() => {
+    const wrapper = canvasWrapperRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const previous = viewSizeRef.current;
+      const view = measureView();
+      if (view.width === previous.width && view.height === previous.height) return;
+
+      viewSizeRef.current = view;
+      canvas.setDimensions(view);
+      const scene = sceneRef.current;
+      if (!scene) return;
+      if (isFitRef.current) {
+        fitToView();
+        return;
+      }
+      const vpt = canvas.viewportTransform as ViewportTransform;
+      const shifted = panBy(
+        vpt,
+        (view.width - previous.width) / 2,
+        (view.height - previous.height) / 2
+      );
+      const zoom = clampZoom(shifted[0], zoomLimits(view, scene.size, scene.scale));
+      const center = { x: view.width / 2, y: view.height / 2 };
+      applyViewport(constrainViewport(zoomAtPoint(shifted, center, zoom), view, scene.size));
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [applyViewport, fitToView, measureView]);
+
+  // Two-finger pinch on touch screens and Safari's gesture events. Touch events are
+  // intercepted in the capture phase so Fabric never sees the second finger; whatever the
+  // first finger started is cancelled, and the final touchend still reaches Fabric so it
+  // can release its document listeners.
+  useEffect(() => {
+    const wrapper = canvasWrapperRef.current;
+    if (!wrapper) return;
+
+    let pinch: PinchState | null = null;
+    let touchSessionBlocked = false;
+    let gestureStart: { zoom: number } | null = null;
+
+    const toViewportPoint = (clientX: number, clientY: number): ViewportPoint => {
+      const rect = wrapper.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+
+    // Only fingers that landed on the canvas take part in drawing and pinching; a finger
+    // resting on the toolbar or the zoom controls must not turn a drawing gesture into a pinch.
+    const canvasTouches = (touches: TouchList): Touch[] =>
+      Array.from(touches).filter(
+        (touch) =>
+          !(touch.target instanceof Node) ||
+          (canvasHostRef.current ?? wrapper).contains(touch.target)
+      );
+
+    const readPinch = (touches: Touch[]) => {
+      const [a, b] = [touches[0], touches[1]];
+      return {
+        distance: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+        midpoint: toViewportPoint((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2),
+      };
+    };
+
+    const cancelPointerInteraction = () => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const drawingCanvas = canvas as unknown as { _drawingShape?: fabric.FabricObject };
+      if (isDrawingRef.current && drawingCanvas._drawingShape) {
+        canvas.remove(drawingCanvas._drawingShape);
+      }
+      drawingCanvas._drawingShape = undefined;
+      isDrawingRef.current = false;
+
+      const before = objectsBeforeTouchRef.current;
+      if (before) {
+        canvas
+          .getObjects()
+          .filter((obj) => !before.has(obj))
+          .forEach((obj) => {
+            if (obj instanceof fabric.IText && obj.isEditing) obj.exitEditing();
+            if (canvas.getActiveObject() === obj) canvas.discardActiveObject();
+            canvas.remove(obj);
+          });
+      }
+
+      const internals = canvas as unknown as FabricInteractionState;
+      const transform = internals._currentTransform;
+      if (transform) {
+        const restored: Record<string, unknown> = {};
+        TRANSFORM_KEYS.forEach((key) => {
+          if (key in transform.original) restored[key] = transform.original[key];
+        });
+        transform.target.set(restored);
+        transform.target.setCoords();
+        internals._currentTransform = null;
+      }
+      internals._groupSelector = null;
+      internals._isCurrentlyDrawing = false;
+      if (internals.contextTop) canvas.clearContext(internals.contextTop);
+      canvas.requestRenderAll();
+    };
+
+    const startPinch = (touches: Touch[]) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const { distance, midpoint } = readPinch(touches);
+      pinch = {
+        view: viewSizeRef.current,
+        lastTouches: touches,
+        startDistance: Math.max(distance, 1),
+        startMidpoint: midpoint,
+        startViewport: [...(canvas.viewportTransform as ViewportTransform)],
+      };
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const touches = canvasTouches(e.touches);
+      if (touches.length === 1 && !touchSessionBlocked && objectsBeforeTouchRef.current === null) {
+        objectsBeforeTouchRef.current = new Set(fabricRef.current?.getObjects() ?? []);
+        return;
+      }
+      if (touches.length < 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!touchSessionBlocked) {
+        touchSessionBlocked = true;
+        cancelPointerInteraction();
+      }
+      startPinch(touches);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchSessionBlocked) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const scene = sceneRef.current;
+      const touches = canvasTouches(e.touches);
+      if (!pinch || touches.length < 2 || !scene) return;
+
+      if (pinch.view !== viewSizeRef.current) startPinch(pinch.lastTouches);
+      pinch.lastTouches = touches;
+      const { distance, midpoint } = readPinch(touches);
+      const start = pinch.startViewport;
+      const view = viewSizeRef.current;
+      const zoom = clampZoom(
+        start[0] * (distance / pinch.startDistance),
+        zoomLimits(view, scene.size, scene.scale)
+      );
+      // Keep the scene point that was under the starting midpoint under the current one,
+      // so moving both fingers pans while spreading them zooms.
+      const sceneX = (pinch.startMidpoint.x - start[4]) / start[0];
+      const sceneY = (pinch.startMidpoint.y - start[5]) / start[3];
+      const vpt: ViewportTransform = [
+        zoom,
+        0,
+        0,
+        zoom,
+        midpoint.x - sceneX * zoom,
+        midpoint.y - sceneY * zoom,
+      ];
+      moveViewport(constrainViewport(vpt, view, scene.size));
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touches = canvasTouches(e.touches);
+      if (touches.length === 0) {
+        // The gesture is over, so a later pinch must not undo what it drew.
+        touchSessionBlocked = false;
+        pinch = null;
+        objectsBeforeTouchRef.current = null;
+        return;
+      }
+      if (!touchSessionBlocked) return;
+      e.stopPropagation();
+      if (touches.length >= 2) startPinch(touches);
+      else pinch = null;
+    };
+
+    const handleTouchCancel = (e: TouchEvent) => {
+      const canvas = fabricRef.current;
+      if (canvas?.mainTouchId !== undefined && e.touches.length === 0) {
+        cancelPointerInteraction();
+        // Fabric only tears down its document listeners and restores mouse input on touchend.
+        canvas._onTouchEnd(e);
+      }
+      if (e.touches.length === 0) handleTouchEnd(e);
+    };
+
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+      gestureActiveRef.current = true;
+      gestureStart = { zoom: fabricRef.current?.getZoom() ?? 1 };
+    };
+
+    const handleGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (touchSessionBlocked || !gestureStart) return;
+      const gesture = e as GestureEvent;
+      const point = Number.isFinite(gesture.clientX)
+        ? toViewportPoint(gesture.clientX, gesture.clientY)
+        : { x: viewSizeRef.current.width / 2, y: viewSizeRef.current.height / 2 };
+      zoomTo(gestureStart.zoom * gesture.scale, point);
+    };
+
+    const handleGestureEnd = (e: Event) => {
+      e.preventDefault();
+      gestureActiveRef.current = false;
+      gestureStart = null;
+    };
+
+    const capture = { capture: true, passive: false };
+    wrapper.addEventListener('touchstart', handleTouchStart, capture);
+    wrapper.addEventListener('touchmove', handleTouchMove, capture);
+    wrapper.addEventListener('touchend', handleTouchEnd, capture);
+    wrapper.addEventListener('touchcancel', handleTouchEnd, capture);
+    document.addEventListener('touchcancel', handleTouchCancel, capture);
+    wrapper.addEventListener('gesturestart', handleGestureStart);
+    wrapper.addEventListener('gesturechange', handleGestureChange);
+    wrapper.addEventListener('gestureend', handleGestureEnd);
+    return () => {
+      wrapper.removeEventListener('touchstart', handleTouchStart, capture);
+      wrapper.removeEventListener('touchmove', handleTouchMove, capture);
+      wrapper.removeEventListener('touchend', handleTouchEnd, capture);
+      wrapper.removeEventListener('touchcancel', handleTouchEnd, capture);
+      document.removeEventListener('touchcancel', handleTouchCancel, capture);
+      wrapper.removeEventListener('gesturestart', handleGestureStart);
+      wrapper.removeEventListener('gesturechange', handleGestureChange);
+      wrapper.removeEventListener('gestureend', handleGestureEnd);
+    };
+  }, [moveViewport, zoomTo]);
 
   // Update brush when color/width changes
   useEffect(() => {
@@ -334,31 +724,43 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     setCanRedo(false);
   }, []);
 
-  const undo = useCallback(() => {
-    if (!fabricRef.current || historyIndexRef.current <= 0) return;
+  const restoreHistory = useCallback((index: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
 
-    historyIndexRef.current--;
-    const json = historyRef.current[historyIndexRef.current];
+    historyIndexRef.current = index;
+    const json = historyRef.current[index];
 
-    fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
-      fabricRef.current?.renderAll();
+    canvas.loadFromJSON(JSON.parse(json)).then(() => {
+      if (fabricRef.current !== canvas) return;
+      // loadFromJSON replaces canvas objects with new instances; rebase any active touch
+      // snapshot so a subsequent pinch does not remove the restored annotations.
+      if (objectsBeforeTouchRef.current !== null) {
+        objectsBeforeTouchRef.current = new Set(canvas.getObjects());
+      }
+      const drawingCanvas = canvas as unknown as { _drawingShape?: fabric.FabricObject };
+      if (
+        drawingCanvas._drawingShape &&
+        !canvas.getObjects().includes(drawingCanvas._drawingShape)
+      ) {
+        drawingCanvas._drawingShape = undefined;
+        isDrawingRef.current = false;
+      }
+      canvas.renderAll();
       setCanUndo(historyIndexRef.current > 0);
       setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
     });
   }, []);
+
+  const undo = useCallback(() => {
+    if (!fabricRef.current || historyIndexRef.current <= 0) return;
+    restoreHistory(historyIndexRef.current - 1);
+  }, [restoreHistory]);
 
   const redo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
-
-    historyIndexRef.current++;
-    const json = historyRef.current[historyIndexRef.current];
-
-    fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
-      fabricRef.current?.renderAll();
-      setCanUndo(historyIndexRef.current > 0);
-      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
-    });
-  }, []);
+    restoreHistory(historyIndexRef.current + 1);
+  }, [restoreHistory]);
 
   // Handle shape drawing
   const handleCanvasMouseDown = useCallback(
@@ -436,7 +838,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           (shape as fabric.FabricObject & { _isArrow?: boolean })._isArrow = true;
           break;
 
-        case 'text':
+        case 'text': {
+          // Text started in the margin around the screenshot would be clipped out of view
+          // while still in edit mode and catching keystrokes.
+          const size = sceneRef.current?.size;
+          if (
+            size &&
+            (pointer.x < 0 || pointer.y < 0 || pointer.x > size.width || pointer.y > size.height)
+          ) {
+            isDrawingRef.current = false;
+            return;
+          }
           shape = new fabric.IText(t('annotation.defaultText'), {
             left: pointer.x,
             top: pointer.y,
@@ -450,6 +862,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           (shape as fabric.IText).enterEditing();
           isDrawingRef.current = false;
           return;
+        }
 
         case 'pixelate':
           // Create placeholder rect during drawing, will be replaced with pixelated image on mouse up
@@ -534,25 +947,13 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         if (isPixelateShape && canvas.backgroundImage) {
           const rect = drawingShape as fabric.Rect;
 
-          // Save current zoom and viewport state
           const currentZoom = canvas.getZoom();
-          const currentViewport = canvas.viewportTransform?.slice() || [1, 0, 0, 1, 0, 0];
-
-          // Reset to identity transform for accurate coordinate mapping
-          canvas.setZoom(1);
-          canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-          canvas.renderAll();
           rect.setCoords();
 
-          // Get rect bounds accounting for any object transforms
-          const bounds = rect.getBoundingRect();
-          const left = bounds.left;
-          const top = bounds.top;
-          const width = bounds.width;
-          const height = bounds.height;
+          const { left, top, width, height } = rect;
 
           // Only create pixelated region if it has meaningful size
-          if (width > 5 && height > 5) {
+          if (rect.width * currentZoom > 5 && rect.height * currentZoom > 5) {
             // Get the background image
             const bgImage = canvas.backgroundImage as fabric.FabricImage;
             const bgElement = bgImage.getElement() as HTMLImageElement;
@@ -563,8 +964,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
             // Create temp canvas to extract region at canvas resolution
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = width;
-            tempCanvas.height = height;
+            tempCanvas.width = Math.ceil(width);
+            tempCanvas.height = Math.ceil(height);
             const tempCtx = tempCanvas.getContext('2d');
 
             if (tempCtx) {
@@ -577,8 +978,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
                 height / scaleY,
                 0,
                 0,
-                width,
-                height
+                tempCanvas.width,
+                tempCanvas.height
               );
 
               // Apply pixelate filter - smaller blocks for finer pixelation
@@ -588,6 +989,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
               const regionImage = new fabric.FabricImage(tempCanvas, {
                 left,
                 top,
+                scaleX: width / tempCanvas.width,
+                scaleY: height / tempCanvas.height,
                 selectable: true,
                 hasControls: true,
                 hasBorders: true,
@@ -611,11 +1014,6 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             canvas.remove(rect);
           }
 
-          // Restore zoom and viewport
-          canvas.setZoom(currentZoom);
-          canvas.setViewportTransform(
-            currentViewport as [number, number, number, number, number, number]
-          );
           canvas.renderAll();
         } else if (
           (drawingShape as fabric.FabricObject & { _isArrow?: boolean })._isArrow &&
@@ -739,7 +1137,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
     // Calculate multiplier to export at original resolution
     const originalDimensions = originalDimensionsRef.current;
-    const multiplier = originalDimensions ? originalDimensions.width / (canvas.width || 1) : 1;
+    const scene = sceneRef.current;
+    const multiplier = scene ? 1 / scene.scale : 1;
 
     // Regenerate pixelate patches at export resolution for crisp redaction
     const pixelateObjects: {
@@ -789,8 +1188,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           // Get bounds and regenerate at export resolution
           obj.setCoords();
           const bounds = obj.getBoundingRect();
-          const exportWidth = bounds.width * multiplier;
-          const exportHeight = bounds.height * multiplier;
+          const exportWidth = Math.max(1, Math.ceil(bounds.width * multiplier));
+          const exportHeight = Math.max(1, Math.ceil(bounds.height * multiplier));
 
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = exportWidth;
@@ -826,8 +1225,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             obj.set({
               width: exportWidth,
               height: exportHeight,
-              scaleX: 1 / multiplier,
-              scaleY: 1 / multiplier,
+              scaleX: bounds.width / exportWidth,
+              scaleY: bounds.height / exportHeight,
             });
           }
         }
@@ -835,11 +1234,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.renderAll();
     }
 
-    // Get annotated image as data URL at original resolution
+    // Export exactly the screenshot's area at its original resolution. Zooming the viewport
+    // instead of passing a multiplier keeps the output size an exact integer.
+    canvas.setViewportTransform([multiplier, 0, 0, multiplier, 0, 0]);
     const dataUrl = canvas.toDataURL({
       format: 'png',
       quality: 1,
-      multiplier: multiplier,
+      multiplier: 1,
+      left: 0,
+      top: 0,
+      width: originalDimensions?.width ?? canvas.width,
+      height: originalDimensions?.height ?? canvas.height,
     });
 
     // Restore pixelate objects to canvas resolution (synchronous, no onload needed)
@@ -875,36 +1280,18 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     }
   }, [saveToHistory]);
 
-  const handleZoomIn = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    const newZoom = Math.min(zoomLevel * 1.2, 3); // Max 3x zoom
+  const viewCenter = (): ViewportPoint => ({
+    x: viewSizeRef.current.width / 2,
+    y: viewSizeRef.current.height / 2,
+  });
 
-    // Zoom to center of viewport
-    const center = new fabric.Point(canvas.width! / 2, canvas.height! / 2);
-    canvas.zoomToPoint(center, newZoom);
-    setZoomLevel(newZoom);
-  }, [zoomLevel]);
+  const handleZoomIn = useCallback(() => {
+    zoomTo(zoomState.zoom * ZOOM_STEP, viewCenter());
+  }, [zoomState.zoom, zoomTo]);
 
   const handleZoomOut = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    const newZoom = Math.max(zoomLevel / 1.2, 0.5); // Min 0.5x zoom
-
-    // Zoom to center of viewport
-    const center = new fabric.Point(canvas.width! / 2, canvas.height! / 2);
-    canvas.zoomToPoint(center, newZoom);
-    setZoomLevel(newZoom);
-  }, [zoomLevel]);
-
-  const handleZoomReset = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    setZoomLevel(1);
-    canvas.setZoom(1);
-    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); // Reset pan as well
-    canvas.renderAll();
-  }, []);
+    zoomTo(zoomState.zoom / ZOOM_STEP, viewCenter());
+  }, [zoomState.zoom, zoomTo]);
 
   // Panning functionality (hold Space to pan)
   useEffect(() => {
@@ -930,10 +1317,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     const handleMouseMove = (opt: fabric.TPointerEventInfo) => {
       if (isPanningRef.current && lastPosRef.current) {
         const evt = opt.e as MouseEvent;
-        const vpt = canvas.viewportTransform!;
-        vpt[4] += evt.clientX - lastPosRef.current.x;
-        vpt[5] += evt.clientY - lastPosRef.current.y;
-        canvas.requestRenderAll();
+        panViewport(evt.clientX - lastPosRef.current.x, evt.clientY - lastPosRef.current.y);
         lastPosRef.current = { x: evt.clientX, y: evt.clientY };
       }
     };
@@ -957,7 +1341,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       canvas.off('mouse:move', handleMouseMove);
       canvas.off('mouse:up', handleMouseUp);
     };
-  }, [isPanning, activeTool]);
+  }, [isPanning, activeTool, panViewport]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -976,7 +1360,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       }
 
       // Space key for pan mode
-      if (e.key === ' ' && !isPanning) {
+      if (
+        e.key === ' ' &&
+        !isPanning &&
+        !e
+          .composedPath()
+          .some(
+            (target) =>
+              target instanceof HTMLElement &&
+              target.matches('button, input, textarea, select, [contenteditable="true"]')
+          )
+      ) {
         e.preventDefault();
         setIsPanning(true);
         if (fabricRef.current) {
@@ -1025,167 +1419,228 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     icon: JSX.Element;
     label: string;
   }) => (
-    <button
-      class={cn(
-        'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors',
-        'hover:bg-foreground/10 hover:text-foreground',
-        '[&_svg]:w-4.5 [&_svg]:h-4.5',
-        activeTool === tool && 'bg-primary/10 text-primary'
-      )}
-      onClick={() => setActiveTool(tool)}
-      title={label}
-    >
-      {icon}
-    </button>
+    <Tooltip content={label} side="bottom">
+      <button
+        class={cn(
+          'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors',
+          'hover:bg-foreground/10 hover:text-foreground',
+          '[&_svg]:w-4.5 [&_svg]:h-4.5',
+          activeTool === tool && 'bg-primary/10 text-primary'
+        )}
+        onMouseDown={preventMouseFocus}
+        onClick={() => setActiveTool(tool)}
+        aria-label={label}
+      >
+        {icon}
+      </button>
+    </Tooltip>
   );
 
   return (
     <div class="h-full min-h-0 flex flex-col">
       {/* Toolbar */}
-      <div class="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
-        <div class="flex items-center gap-1">
-          <ToolButton
-            tool="select"
-            label={t('annotation.toolbar.select')}
-            icon={<MousePointer2 />}
-          />
-          <ToolButton tool="pan" label={t('annotation.toolbar.pan')} icon={<Move />} />
-          <ToolButton tool="pen" label={t('annotation.toolbar.pen')} icon={<Pencil />} />
-          <ToolButton tool="line" label={t('annotation.toolbar.line')} icon={<Slash />} />
-          <ToolButton tool="arrow" label={t('annotation.toolbar.arrow')} icon={<MoveUpRight />} />
-          <ToolButton
-            tool="rectangle"
-            label={t('annotation.toolbar.rectangle')}
-            icon={<Square />}
-          />
-          <ToolButton tool="circle" label={t('annotation.toolbar.circle')} icon={<Circle />} />
-          <ToolButton tool="text" label={t('annotation.toolbar.text')} icon={<Type />} />
-          <ToolButton
-            tool="pixelate"
-            label={t('annotation.toolbar.pixelate')}
-            icon={<HatGlasses />}
-          />
+      <div class="shrink-0 flex items-start gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
+        <div class="flex flex-1 min-w-0 flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-1">
+            <ToolButton
+              tool="select"
+              label={t('annotation.toolbar.select')}
+              icon={<MousePointer2 />}
+            />
+            <ToolButton tool="pan" label={t('annotation.toolbar.pan')} icon={<Move />} />
+            <ToolButton tool="pen" label={t('annotation.toolbar.pen')} icon={<Pencil />} />
+            <ToolButton tool="line" label={t('annotation.toolbar.line')} icon={<Slash />} />
+            <ToolButton tool="arrow" label={t('annotation.toolbar.arrow')} icon={<MoveUpRight />} />
+            <ToolButton
+              tool="rectangle"
+              label={t('annotation.toolbar.rectangle')}
+              icon={<Square />}
+            />
+            <ToolButton tool="circle" label={t('annotation.toolbar.circle')} icon={<Circle />} />
+            <ToolButton tool="text" label={t('annotation.toolbar.text')} icon={<Type />} />
+            <ToolButton
+              tool="pixelate"
+              label={t('annotation.toolbar.pixelate')}
+              icon={<HatGlasses />}
+            />
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Colors */}
+          <div class="flex items-center gap-1">
+            {COLORS.map(({ value: color, labelKey }) => (
+              <Tooltip key={color} content={t(labelKey)} side="bottom">
+                <button
+                  class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
+                  onMouseDown={preventMouseFocus}
+                  onClick={() => setActiveColor(color)}
+                  aria-label={t(labelKey)}
+                  aria-pressed={activeColor === color}
+                >
+                  <span
+                    class={cn(
+                      'block rounded-full transition-all',
+                      activeColor === color
+                        ? 'w-5 h-5 ring-2 ring-foreground ring-offset-1 ring-offset-muted'
+                        : 'w-6 h-6 group-hover:scale-110'
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Stroke Width */}
+          <div class="flex items-center gap-1">
+            {STROKE_WIDTHS.map((width) => (
+              <Tooltip
+                key={width}
+                content={t('annotation.toolbar.strokeWidth', { width })}
+                side="bottom"
+              >
+                <button
+                  class={cn(
+                    'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent cursor-pointer transition-colors',
+                    'hover:bg-foreground/10',
+                    strokeWidth === width && 'bg-primary/10'
+                  )}
+                  onMouseDown={preventMouseFocus}
+                  onClick={() => setStrokeWidth(width)}
+                  aria-label={t('annotation.toolbar.strokeWidth', { width })}
+                >
+                  <span class="w-5 bg-foreground rounded-full" style={{ height: `${width}px` }} />
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+
+          <div class="w-px h-6 bg-border" />
+
+          {/* Undo/Redo */}
+          <div class="flex items-center gap-1">
+            <Tooltip content={t('annotation.toolbar.undo')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label={t('annotation.toolbar.undo')}
+              >
+                <Undo2 />
+              </button>
+            </Tooltip>
+            <Tooltip content={t('annotation.toolbar.redo')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label={t('annotation.toolbar.redo')}
+              >
+                <Redo2 />
+              </button>
+            </Tooltip>
+            <Tooltip content={t('annotation.toolbar.delete')} side="bottom">
+              <button
+                class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
+                onClick={deleteSelected}
+                aria-label={t('annotation.toolbar.delete')}
+              >
+                <Trash2 />
+              </button>
+            </Tooltip>
+          </div>
         </div>
 
-        <div class="w-px h-6 bg-border" />
-
-        {/* Colors */}
-        <div class="flex items-center gap-1">
-          {COLORS.map(({ value: color, labelKey }) => (
-            <button
-              key={color}
-              class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
-              onClick={() => setActiveColor(color)}
-              title={t(labelKey)}
-              aria-label={t(labelKey)}
-              aria-pressed={activeColor === color}
-            >
-              <span
-                class={cn(
-                  'block rounded-full transition-all',
-                  activeColor === color
-                    ? 'w-5 h-5 ring-2 ring-foreground ring-offset-1 ring-offset-muted'
-                    : 'w-6 h-6 group-hover:scale-110'
-                )}
-                style={{ backgroundColor: color }}
-              />
-            </button>
-          ))}
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Stroke Width */}
-        <div class="flex items-center gap-1">
-          {STROKE_WIDTHS.map((width) => (
-            <button
-              key={width}
-              class={cn(
-                'flex items-center justify-center w-8 h-8 border-none rounded bg-transparent cursor-pointer transition-colors',
-                'hover:bg-foreground/10',
-                strokeWidth === width && 'bg-primary/10'
-              )}
-              onClick={() => setStrokeWidth(width)}
-              title={t('annotation.toolbar.strokeWidth', { width })}
-            >
-              <span class="w-5 bg-foreground rounded-full" style={{ height: `${width}px` }} />
-            </button>
-          ))}
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Undo/Redo */}
-        <div class="flex items-center gap-1">
+        <Tooltip
+          content={t(isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize')}
+          side="bottom"
+          align="end"
+        >
           <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={undo}
-            disabled={!canUndo}
-            title={t('annotation.toolbar.undo')}
+            class="hidden sm:flex shrink-0 items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground [&_svg]:w-4.5 [&_svg]:h-4.5"
+            onMouseDown={preventMouseFocus}
+            onClick={onToggleMaximize}
+            aria-label={t(
+              isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize'
+            )}
           >
-            <Undo2 />
+            {isMaximized ? <Minimize2 /> : <Maximize2 />}
           </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={redo}
-            disabled={!canRedo}
-            title={t('annotation.toolbar.redo')}
-          >
-            <Redo2 />
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={deleteSelected}
-            title={t('annotation.toolbar.delete')}
-          >
-            <Trash2 />
-          </button>
-        </div>
-
-        <div class="w-px h-6 bg-border" />
-
-        {/* Zoom Controls */}
-        <div class="flex items-center gap-1">
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomOut}
-            disabled={zoomLevel <= 0.5}
-            title={t('annotation.toolbar.zoomOut')}
-          >
-            <ZoomOut />
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomReset}
-            title={t('annotation.toolbar.zoomReset', { percent: Math.round(zoomLevel * 100) })}
-          >
-            <Maximize />
-          </button>
-          <button
-            class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
-            onClick={handleZoomIn}
-            disabled={zoomLevel >= 3}
-            title={t('annotation.toolbar.zoomIn')}
-          >
-            <ZoomIn />
-          </button>
-        </div>
+        </Tooltip>
       </div>
 
       {/* Canvas */}
       <div
-        class="flex-auto min-h-0 min-w-[700px] overflow-auto flex items-center justify-center p-4 bg-muted"
+        class="relative flex-auto min-h-0 min-w-0 overflow-hidden bg-muted"
         ref={canvasWrapperRef}
       >
-        <canvas ref={canvasRef} />
+        <div class="absolute inset-0" ref={canvasHostRef}>
+          <canvas ref={canvasRef} />
+        </div>
+
+        {/* Zoom Controls */}
+        <div class="absolute bottom-3 right-3 flex items-center gap-0.5 p-1 rounded-lg border border-solid border-border bg-background text-foreground [box-shadow:0_4px_12px_rgb(0_0_0/0.15)]">
+          <Tooltip content={t('annotation.toolbar.zoomOut')} side="top">
+            <button
+              class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onMouseDown={preventMouseFocus}
+              onClick={handleZoomOut}
+              disabled={zoomState.zoom <= zoomState.limits.min * ZOOM_LIMIT_TOLERANCE}
+              aria-label={t('annotation.toolbar.zoomOut')}
+            >
+              <ZoomOut />
+            </button>
+          </Tooltip>
+          <Tooltip content={t('annotation.toolbar.zoomFit')} side="top">
+            <button
+              class="flex items-center justify-center min-w-12 h-8 px-1.5 border-none rounded bg-transparent text-xs font-medium tabular-nums text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground"
+              onMouseDown={preventMouseFocus}
+              onClick={fitToView}
+              aria-label={t('annotation.toolbar.zoomFit')}
+            >
+              {Math.round(zoomState.zoom * zoomState.sceneScale * 100)}%
+            </button>
+          </Tooltip>
+          <Tooltip content={t('annotation.toolbar.zoomIn')} side="top" align="end">
+            <button
+              class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onMouseDown={preventMouseFocus}
+              onClick={handleZoomIn}
+              disabled={zoomState.zoom >= zoomState.limits.max / ZOOM_LIMIT_TOLERANCE}
+              aria-label={t('annotation.toolbar.zoomIn')}
+            >
+              <ZoomIn />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Actions */}
-      <div class="shrink-0 flex gap-3 p-4 border-t border-solid border-border bg-muted">
-        <Button variant="outline" class="flex-1" onClick={onCancel}>
+      <div
+        class={cn(
+          'shrink-0 flex gap-3 p-4 border-t border-solid border-border bg-muted',
+          isMaximized && 'sm:justify-end'
+        )}
+      >
+        <Button
+          variant="outline"
+          class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')}
+          onMouseDown={preventMouseFocus}
+          onClick={onCancel}
+        >
           {t('annotation.buttons.cancel')}
         </Button>
-        <Button class="flex-1" onClick={handleSave}>
+        <Button
+          class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')}
+          onMouseDown={preventMouseFocus}
+          onClick={handleSave}
+        >
           {t('annotation.buttons.done')}
         </Button>
       </div>

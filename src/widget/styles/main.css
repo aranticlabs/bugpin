@@ -103,6 +103,15 @@
   --text-xl--line-height: 28px;
   --text-2xl: 24px;
   --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 40px;
+  --text-5xl: 48px;
+  --text-6xl: 60px;
+  --text-7xl: 72px;
+  --text-8xl: 96px;
+  --text-9xl: 128px;
 
   --container-3xs: 256px;
   --container-2xs: 288px;
@@ -324,6 +333,27 @@
     --warning-foreground: #0a0a0a;
     --info: #38bdf8;
     --info-foreground: #0a0a0a;
+  }
+
+  /* Light capture bar shown on dark host pages, independent of the dialog theme */
+  .bugpin-capture-bar-light {
+    color-scheme: light;
+    color: var(--foreground);
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --muted: #f5f5f5;
+    --border: color-mix(in srgb, var(--foreground) 11%, var(--background));
+    --input: color-mix(in srgb, var(--foreground) 11%, var(--background));
+    --ring: color-mix(in srgb, var(--foreground) 38%, var(--background));
+    --muted-foreground: color-mix(in srgb, var(--foreground) 57%, var(--background));
+    --destructive: #b91c1c;
+    --destructive-foreground: #fafafa;
+    --success: #047857;
+    --success-foreground: #fafafa;
+    --warning: #92400e;
+    --warning-foreground: #fafafa;
+    --info: #0369a1;
+    --info-foreground: #fafafa;
   }
 
   @media (prefers-reduced-motion: reduce) {

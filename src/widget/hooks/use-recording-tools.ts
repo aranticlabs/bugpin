@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { isApplePlatform, isEditableTarget } from '../lib/keyboard.js';
 
 export type RecordingTool = 'cursor' | 'pen' | 'laser';
 
@@ -41,19 +42,8 @@ const SHORTCUT_CODES: Record<string, 'cursor' | 'pen' | 'laser' | 'clickEffects'
   KeyZ: 'undo',
 };
 
-function isApplePlatform(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
-}
-
 export function formatShortcut(letter: string): string {
   return isApplePlatform() ? `\u2325${letter}` : `Alt+${letter}`;
-}
-
-function isEditableTarget(event: KeyboardEvent): boolean {
-  const target = event.composedPath()[0];
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || !!target.closest('input, textarea, select, [contenteditable]');
 }
 
 export function useRecordingTools(enabled: boolean) {

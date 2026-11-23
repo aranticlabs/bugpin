@@ -391,7 +391,7 @@ describe('widget components', () => {
       />
     );
     expect(html).toContain('Screenshots (1)');
-    expect(html).toContain('Capture Screenshot');
+    expect(html).toContain('Open Screenshot Tool');
   });
 
   it('shows upload progress when submitting', () => {

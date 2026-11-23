@@ -11,21 +11,20 @@ import {
   Pencil,
   Square,
   Target,
-  Trash2,
+  X,
   TriangleAlert,
   Undo2,
 } from 'lucide-preact';
 import { cn } from '../lib/utils';
+import { Alert, Card, Popover, Separator } from './ui';
 import {
-  Alert,
-  Button,
-  type ButtonProps,
-  Card,
-  Popover,
-  Separator,
-  Tooltip,
-  type TooltipSide,
-} from './ui';
+  CAPTURE_BAR_CLASS,
+  CAPTURE_BAR_SHADOW_CLASS,
+  CaptureBarButton,
+  useCaptureBar,
+  useCaptureBarThemeClass,
+  type CaptureBarPosition,
+} from './CaptureBar';
 import { RecordingAnnotationLayer } from './RecordingAnnotationLayer';
 import { useLocale } from '../hooks/use-locale.js';
 import {
@@ -36,20 +35,12 @@ import {
 } from '../hooks/use-recording-tools';
 import { t } from '../i18n/index.js';
 
-const VIEWPORT_MARGIN = 8;
 const NEAR_LIMIT_MS = 30_000;
-const TOOLTIP_CLEARANCE = 90;
 const PEN_TRAY_OFFSET = 14;
 const PEN_TRAY_OFFSET_BELOW_WARNING = 58;
 const ACTIVE_TOOL_CLASS = 'bg-foreground text-background hover:bg-foreground/90';
-const BAR_SHADOW_CLASS = 'shadow-2xl shadow-black/50 ring-1 ring-white/25';
 
-export interface RecordingBarPosition {
-  x: number;
-  y: number;
-}
-
-interface RecordingBarProps {
+interface VideoCaptureBarProps {
   isReady: boolean;
   isCountingDown: boolean;
   countdown: number;
@@ -58,8 +49,8 @@ interface RecordingBarProps {
   isPaused: boolean;
   hasMicrophone: boolean;
   isWholeScreen: boolean;
-  position: RecordingBarPosition | null;
-  onPositionChange: (position: RecordingBarPosition) => void;
+  position: CaptureBarPosition | null;
+  onPositionChange: (position: CaptureBarPosition) => void;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -73,35 +64,7 @@ export function formatDuration(durationMs: number): string {
   return `${Math.floor(totalSeconds / 60)}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function clampToViewport(bar: HTMLElement, x: number, y: number): RecordingBarPosition {
-  const { width, height } = bar.getBoundingClientRect();
-  const maxX = Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN);
-  const maxY = Math.max(VIEWPORT_MARGIN, window.innerHeight - height - VIEWPORT_MARGIN);
-  return {
-    x: Math.min(Math.max(VIEWPORT_MARGIN, x), maxX),
-    y: Math.min(Math.max(VIEWPORT_MARGIN, y), maxY),
-  };
-}
-
-interface BarButtonProps extends ButtonProps {
-  label: string;
-  shortcut?: string;
-  side: TooltipSide;
-}
-
-const BarButton: FunctionComponent<BarButtonProps> = ({
-  label,
-  shortcut,
-  side,
-  class: className,
-  ...props
-}) => (
-  <Tooltip content={shortcut ? `${label} (${shortcut})` : label} side={side}>
-    <Button size="icon" aria-label={label} class={cn('h-9 w-9', className)} {...props} />
-  </Tooltip>
-);
-
-export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
+export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
   isReady,
   isCountingDown,
   countdown,
@@ -120,28 +83,11 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
 }) => {
   useLocale();
   const tools = useRecordingTools(!isCountingDown);
-  const barRef = useRef<HTMLDivElement>(null);
+  const { barRef, style, positionClass, tooltipSide, handlePointerDown, barHandlers } =
+    useCaptureBar(position, onPositionChange, [isReady, isCountingDown]);
+  const themeClass = useCaptureBarThemeClass(position);
   const countdownRef = useRef<HTMLSpanElement>(null);
   const keepFocusRef = useRef(false);
-  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null);
-  const positionRef = useRef(position);
-  positionRef.current = position;
-
-  useEffect(() => {
-    const keepInViewport = () => {
-      const bar = barRef.current;
-      const current = positionRef.current;
-      if (bar && current) onPositionChange(clampToViewport(bar, current.x, current.y));
-    };
-
-    keepInViewport();
-    window.addEventListener('resize', keepInViewport);
-    return () => window.removeEventListener('resize', keepInViewport);
-  }, [isReady, isCountingDown, onPositionChange]);
-
-  useEffect(() => {
-    barRef.current?.showPopover?.();
-  }, []);
 
   // Starting replaces the focused record button, so focus is carried to the countdown
   // and then to the stop button instead of falling back to the page.
@@ -162,34 +108,11 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
     onStart();
   }, [onStart]);
 
-  const handlePointerDown = useCallback((event: JSX.TargetedPointerEvent<HTMLDivElement>) => {
-    const bar = barRef.current;
-    if (!bar || event.button !== 0) return;
-    const rect = bar.getBoundingClientRect();
-    dragOffsetRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    bar.setPointerCapture?.(event.pointerId);
-  }, []);
-
-  const handlePointerMove = useCallback(
-    (event: JSX.TargetedPointerEvent<HTMLDivElement>) => {
-      const bar = barRef.current;
-      const offset = dragOffsetRef.current;
-      if (!bar || !offset) return;
-      onPositionChange(clampToViewport(bar, event.clientX - offset.x, event.clientY - offset.y));
-    },
-    [onPositionChange]
-  );
-
-  const handlePointerUp = useCallback(() => {
-    dragOffsetRef.current = null;
-  }, []);
-
-  const tooltipSide: TooltipSide = !position || position.y < TOOLTIP_CLEARANCE ? 'bottom' : 'top';
   const showWarning = !isCountingDown && isWholeScreen;
   const hasStrokes = tools.strokes.length > 0;
 
   const toolButton = (tool: RecordingTool, label: string, shortcut: string, icon: JSX.Element) => (
-    <BarButton
+    <CaptureBarButton
       label={label}
       shortcut={shortcut}
       side={tooltipSide}
@@ -199,7 +122,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
       onClick={() => tools.setTool(tool)}
     >
       {icon}
-    </BarButton>
+    </CaptureBarButton>
   );
 
   return (
@@ -217,15 +140,9 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
         cardRef={barRef}
         data-bugpin-exclude
         popover="manual"
-        class={cn(
-          'bugpin-theme-dark fixed inset-auto z-top m-0 flex w-max max-w-[calc(100vw-16px)] cursor-default select-none flex-col gap-1.5 overflow-visible p-1.5',
-          BAR_SHADOW_CLASS,
-          !position && 'left-1/2 top-5 -translate-x-1/2'
-        )}
-        style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        class={cn(CAPTURE_BAR_CLASS, themeClass, CAPTURE_BAR_SHADOW_CLASS, positionClass)}
+        style={style}
+        {...barHandlers}
       >
         <div class="flex flex-wrap items-center justify-center gap-1.5">
           <div
@@ -306,10 +223,10 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                         ? PEN_TRAY_OFFSET_BELOW_WARNING
                         : PEN_TRAY_OFFSET
                     }
-                    class={cn('flex items-center gap-1 p-1.5', BAR_SHADOW_CLASS)}
+                    class={cn('flex items-center gap-1 p-1.5', CAPTURE_BAR_SHADOW_CLASS)}
                   >
                     {PEN_COLORS.map(({ value, labelKey }) => (
-                      <BarButton
+                      <CaptureBarButton
                         key={value}
                         label={t(labelKey)}
                         side={tooltipSide}
@@ -322,10 +239,10 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                           class="w-4 h-4 rounded-full border border-solid border-border"
                           style={{ backgroundColor: value }}
                         />
-                      </BarButton>
+                      </CaptureBarButton>
                     ))}
                     <Separator orientation="vertical" class="mx-1 h-5" />
-                    <BarButton
+                    <CaptureBarButton
                       label={t('recording.tool.undo')}
                       shortcut={formatShortcut('Z')}
                       side={tooltipSide}
@@ -335,8 +252,8 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                       onClick={tools.undo}
                     >
                       <Undo2 class="w-4 h-4" />
-                    </BarButton>
-                    <BarButton
+                    </CaptureBarButton>
+                    <CaptureBarButton
                       label={t('recording.tool.clear')}
                       side={tooltipSide}
                       variant="ghost"
@@ -345,7 +262,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                       onClick={tools.clear}
                     >
                       <Eraser class="w-4 h-4" />
-                    </BarButton>
+                    </CaptureBarButton>
                   </Popover>
                 </div>
                 {toolButton(
@@ -354,7 +271,7 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                   formatShortcut('L'),
                   <Target class="w-4 h-4" />
                 )}
-                <BarButton
+                <CaptureBarButton
                   label={t('recording.tool.clickEffects')}
                   shortcut={formatShortcut('C')}
                   side={tooltipSide}
@@ -364,13 +281,13 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                   onClick={tools.toggleClickEffects}
                 >
                   <MousePointerClick class="w-4 h-4" />
-                </BarButton>
+                </CaptureBarButton>
               </div>
 
               <Separator orientation="vertical" class="h-5 max-[640px]:hidden" />
 
               <div class="flex items-center gap-0.5">
-                <BarButton
+                <CaptureBarButton
                   label={isPaused ? t('recording.resume') : t('recording.pause')}
                   side={tooltipSide}
                   variant="ghost"
@@ -382,8 +299,8 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                   disabled={isReady}
                 >
                   <Pause class="w-4 h-4" />
-                </BarButton>
-                <BarButton
+                </CaptureBarButton>
+                <CaptureBarButton
                   label={t(isReady ? 'recording.record' : 'recording.stop')}
                   side={tooltipSide}
                   variant="destructive"
@@ -397,19 +314,19 @@ export const RecordingBar: FunctionComponent<RecordingBarProps> = ({
                     <Square class="w-4 h-4 fill-current" aria-hidden="true" />
                   )}
                   <span>{t(isReady ? 'recording.startShort' : 'recording.stop')}</span>
-                </BarButton>
+                </CaptureBarButton>
               </div>
             </>
           )}
 
-          <BarButton
+          <CaptureBarButton
             label={t('recording.discard')}
             side={tooltipSide}
             variant="ghost"
             onClick={onDiscard}
           >
-            <Trash2 class="w-4 h-4" />
-          </BarButton>
+            <X class="w-4 h-4" />
+          </CaptureBarButton>
         </div>
 
         {showWarning && (

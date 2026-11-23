@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { ComponentChild, render } from 'preact';
 import { useState } from 'preact/hooks';
-import {
-  formatDuration,
-  RecordingBar,
-  type RecordingBarPosition,
-} from '../../components/RecordingBar';
+import { formatDuration, VideoCaptureBar } from '../../components/VideoCaptureBar';
+import type { CaptureBarPosition } from '../../components/CaptureBar';
 import { ScreenCaptureConsentDialog } from '../../components/ScreenCaptureConsentDialog';
 import { ScreenRecordingPanel } from '../../components/ScreenRecordingPanel';
 import type { CapturedMedia } from '../../components/ScreenshotManager';
@@ -112,7 +109,7 @@ function pointAt(target: Element): void {
 }
 
 async function mountPen(): Promise<HTMLCanvasElement> {
-  await mount(<RecordingBar {...barProps} />);
+  await mount(<VideoCaptureBar {...barProps} />);
   button(t('recording.tool.pen'))?.click();
   await settle();
   return container.querySelector('[data-recording-pen]') as HTMLCanvasElement;
@@ -206,7 +203,7 @@ afterEach(() => {
   globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
 });
 
-describe('RecordingBar', () => {
+describe('VideoCaptureBar', () => {
   it('formats durations as minutes and seconds', () => {
     expect(formatDuration(0)).toBe('0:00');
     expect(formatDuration(65_900)).toBe('1:05');
@@ -215,7 +212,7 @@ describe('RecordingBar', () => {
 
   it('keeps the tools available with a compact record action before recording', async () => {
     const onStart = mock(noop);
-    await mount(<RecordingBar {...barProps} isReady onStart={onStart} />);
+    await mount(<VideoCaptureBar {...barProps} isReady onStart={onStart} />);
     expect(container.textContent).not.toContain('READY');
     expect(container.textContent).not.toContain('0:05');
     expect(button(t('recording.pause'))?.disabled).toBe(true);
@@ -230,7 +227,7 @@ describe('RecordingBar', () => {
   });
 
   it('shows the countdown with discard as the only control', async () => {
-    await mount(<RecordingBar {...barProps} isCountingDown countdown={2} />);
+    await mount(<VideoCaptureBar {...barProps} isCountingDown countdown={2} />);
 
     expect(container.textContent).toContain(t('recording.countdown', { seconds: 2 }));
     expect(button(t('recording.discard'))).not.toBeNull();
@@ -239,7 +236,7 @@ describe('RecordingBar', () => {
   });
 
   it('starts at top center until it is dragged', async () => {
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     const bar = container.querySelector('[data-bugpin-exclude]') as HTMLElement;
 
     for (const name of ['left-1/2', 'top-5', '-translate-x-1/2']) {
@@ -254,17 +251,17 @@ describe('RecordingBar', () => {
   it('opens tooltips below the bar at the top and above it once dragged lower', async () => {
     const tooltip = () =>
       button(t('recording.pause'))?.parentElement?.querySelector('[role="tooltip"]') as HTMLElement;
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     expect(tooltip().classList.contains('top-[calc(100%+6px)]')).toBe(true);
     expect(tooltip().classList.contains('bottom-[calc(100%+6px)]')).toBe(false);
 
-    await mount(<RecordingBar {...barProps} position={{ x: 100, y: 500 }} />);
+    await mount(<VideoCaptureBar {...barProps} position={{ x: 100, y: 500 }} />);
     expect(tooltip().classList.contains('bottom-[calc(100%+6px)]')).toBe(true);
     expect(tooltip().classList.contains('top-[calc(100%+6px)]')).toBe(false);
   });
 
   it('shows elapsed and maximum time outside any live region', async () => {
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
 
     expect(container.textContent).toContain('0:05 / 3:00');
     expect(container.querySelector('[role="status"]')).toBeNull();
@@ -279,7 +276,7 @@ describe('RecordingBar', () => {
 
   it('offers resume while paused', async () => {
     const onResume = mock(noop);
-    await mount(<RecordingBar {...barProps} isPaused onResume={onResume} />);
+    await mount(<VideoCaptureBar {...barProps} isPaused onResume={onResume} />);
 
     button(t('recording.resume'))?.click();
 
@@ -310,7 +307,7 @@ describe('RecordingBar', () => {
     const getContext = spyOn(window.HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
       context as unknown as CanvasRenderingContext2D
     );
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     button(t('recording.tool.pen'))?.click();
     await settle();
     const pen = container.querySelector('[data-recording-pen]') as HTMLCanvasElement;
@@ -380,7 +377,7 @@ describe('RecordingBar', () => {
       configurable: true,
       value: () => target,
     });
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     button(t('recording.tool.pen'))?.click();
     await settle();
     const pen = container.querySelector('[data-recording-pen]') as HTMLCanvasElement;
@@ -549,29 +546,29 @@ describe('RecordingBar', () => {
 
   it('carries keyboard focus from record through the countdown to stop', async () => {
     const onStart = mock(noop);
-    await mount(<RecordingBar {...barProps} isReady onStart={onStart} />);
+    await mount(<VideoCaptureBar {...barProps} isReady onStart={onStart} />);
     const record = button(t('recording.record'));
     record?.focus();
     record?.click();
     expect(onStart).toHaveBeenCalledTimes(1);
 
-    await mount(<RecordingBar {...barProps} isCountingDown onStart={onStart} />);
+    await mount(<VideoCaptureBar {...barProps} isCountingDown onStart={onStart} />);
     expect(document.activeElement?.getAttribute('role')).toBe('status');
 
-    await mount(<RecordingBar {...barProps} onStart={onStart} />);
+    await mount(<VideoCaptureBar {...barProps} onStart={onStart} />);
     expect(document.activeElement).toBe(button(t('recording.stop')));
   });
 
   it('leaves focus alone when record is clicked from outside the bar', async () => {
-    await mount(<RecordingBar {...barProps} isReady />);
+    await mount(<VideoCaptureBar {...barProps} isReady />);
     button(t('recording.record'))?.click();
-    await mount(<RecordingBar {...barProps} isCountingDown />);
+    await mount(<VideoCaptureBar {...barProps} isCountingDown />);
 
     expect(document.activeElement).toBe(document.body);
   });
 
   it('shows the whole screen warning in a status region', async () => {
-    await mount(<RecordingBar {...barProps} isWholeScreen />);
+    await mount(<VideoCaptureBar {...barProps} isWholeScreen />);
 
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       t('recording.warning.wholeScreen')
@@ -579,16 +576,16 @@ describe('RecordingBar', () => {
   });
 
   it('is excluded from DOM capture and shows a microphone icon when active', async () => {
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     const svgCount = container.querySelectorAll('svg').length;
-    await mount(<RecordingBar {...barProps} hasMicrophone />);
+    await mount(<VideoCaptureBar {...barProps} hasMicrophone />);
 
     expect(container.querySelector('[data-bugpin-exclude]')).not.toBeNull();
     expect(container.querySelectorAll('svg').length).toBe(svgCount + 1);
   });
 
   it('keeps the tools hidden during the countdown', async () => {
-    await mount(<RecordingBar {...barProps} isCountingDown />);
+    await mount(<VideoCaptureBar {...barProps} isCountingDown />);
 
     expect(button(t('recording.tool.pen'))).toBeNull();
     expect(button(t('recording.tool.laser'))).toBeNull();
@@ -603,7 +600,7 @@ describe('RecordingBar', () => {
     const showPopover = mock(noop);
     const original = window.HTMLElement.prototype.showPopover;
     window.HTMLElement.prototype.showPopover = showPopover;
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     await new Promise((resolve) => setTimeout(resolve, 150));
     window.HTMLElement.prototype.showPopover = original;
 
@@ -616,25 +613,25 @@ describe('RecordingBar', () => {
 
   it('repeats the page background only when the capture can be restricted', async () => {
     const backdrop = () => container.querySelector('[data-recording-backdrop]') as HTMLElement;
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     expect(backdrop()).toBeNull();
 
     const scope = globalThis as unknown as { RestrictionTarget?: unknown };
     scope.RestrictionTarget = { fromElement: async () => ({}) };
     document.body.style.backgroundColor = 'rgb(12, 34, 56)';
     render(null, container);
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     delete scope.RestrictionTarget;
 
     expect(backdrop()?.style.backgroundColor).toBe('rgb(12, 34, 56)');
   });
 
   it('frames the page in red and turns the frame gray while paused', async () => {
-    await mount(<RecordingBar {...barProps} />);
+    await mount(<VideoCaptureBar {...barProps} />);
     const frame = () => container.querySelector('[data-recording-frame]') as HTMLElement;
     expect(frame().classList.contains('inset-ring-destructive')).toBe(true);
 
-    await mount(<RecordingBar {...barProps} isPaused />);
+    await mount(<VideoCaptureBar {...barProps} isPaused />);
     expect(frame().classList.contains('inset-ring-muted-foreground')).toBe(true);
     expect(frame().classList.contains('inset-ring-destructive')).toBe(false);
   });
@@ -673,7 +670,7 @@ describe('RecordingBar', () => {
     };
 
     it('starts on the cursor with click effects on', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
 
       expect(pressed(t('recording.tool.cursor'))).toBe('true');
       expect(pressed(t('recording.tool.pen'))).toBe('false');
@@ -682,7 +679,7 @@ describe('RecordingBar', () => {
     });
 
     it('lets the pen capture the page and shows its options only while active', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       expect(button(t('recording.color.red'))).toBeNull();
 
       button(t('recording.tool.pen'))?.click();
@@ -698,7 +695,7 @@ describe('RecordingBar', () => {
     });
 
     it('enables undo and clear once a stroke exists', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       await press('p');
       expect(button(t('recording.tool.undo'))?.disabled).toBe(true);
       expect(button(t('recording.tool.clear'))?.disabled).toBe(true);
@@ -718,7 +715,7 @@ describe('RecordingBar', () => {
     });
 
     it('undoes a stroke with the keyboard', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       await press('p');
       await draw();
 
@@ -728,7 +725,7 @@ describe('RecordingBar', () => {
     });
 
     it('leaves plain keys and the page undo shortcut to the host page', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       await press('p');
       await draw();
 
@@ -743,7 +740,7 @@ describe('RecordingBar', () => {
     });
 
     it('switches tools with the keyboard', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
 
       await press('l');
       expect(pressed(t('recording.tool.laser'))).toBe('true');
@@ -758,7 +755,7 @@ describe('RecordingBar', () => {
     });
 
     it('ignores shortcuts while typing in a field', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       const input = document.createElement('input');
       document.body.appendChild(input);
 
@@ -804,7 +801,7 @@ describe('RecordingBar', () => {
       );
       const cancelFrame = spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(noop);
       try {
-        await mount(<RecordingBar {...barProps} />);
+        await mount(<VideoCaptureBar {...barProps} />);
         document.body.dispatchEvent(
           new window.MouseEvent('pointerdown', { bubbles: true, clientX: 50, clientY: 60 })
         );
@@ -820,7 +817,7 @@ describe('RecordingBar', () => {
         frame(performance.now());
         expect(colors).toContain('#02658D');
 
-        await mount(<RecordingBar {...barProps} isReady />);
+        await mount(<VideoCaptureBar {...barProps} isReady />);
         colors.length = 0;
         primary = '#ff00aa';
         document.body.dispatchEvent(
@@ -838,7 +835,7 @@ describe('RecordingBar', () => {
     });
 
     it('smooths coalesced laser samples into abutting curves with one glow and expires the trail', async () => {
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       await press('l');
       await afterPaint();
       const quadraticCurveTo = mock<CanvasRenderingContext2D['quadraticCurveTo']>(noop);
@@ -913,7 +910,7 @@ describe('RecordingBar', () => {
         [...document.head.querySelectorAll('style')].filter((style) =>
           style.textContent?.includes('cursor: none')
         );
-      await mount(<RecordingBar {...barProps} />);
+      await mount(<VideoCaptureBar {...barProps} />);
       expect(cursorStyles()).toHaveLength(0);
 
       await press('l');
@@ -927,12 +924,12 @@ describe('RecordingBar', () => {
   });
 
   describe('dragging', () => {
-    let latest: RecordingBarPosition | null;
+    let latest: CaptureBarPosition | null;
 
-    const Harness = ({ initial }: { initial: RecordingBarPosition | null }) => {
+    const Harness = ({ initial }: { initial: CaptureBarPosition | null }) => {
       const [position, setPosition] = useState(initial);
       latest = position;
-      return <RecordingBar {...barProps} position={position} onPositionChange={setPosition} />;
+      return <VideoCaptureBar {...barProps} position={position} onPositionChange={setPosition} />;
     };
 
     const bar = () => container.querySelector('[data-bugpin-exclude]') as HTMLElement;

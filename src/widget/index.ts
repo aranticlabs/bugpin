@@ -262,6 +262,9 @@ async function initFromScriptTag(scriptElement: HTMLScriptElement): Promise<void
     ...(dataButtonText && {
       buttonText: { project: { en: dataButtonText }, global: null, builtin: null },
     }),
+    ...(scriptElement.getAttribute('data-capture-shortcut') && {
+      captureShortcut: scriptElement.getAttribute('data-capture-shortcut') as string,
+    }),
     ...(scriptElement.getAttribute('data-theme') && {
       theme: scriptElement.getAttribute('data-theme') as 'light' | 'dark',
     }),
@@ -286,6 +289,7 @@ declare global {
       ) => Promise<void>;
       open: () => void;
       close: () => void;
+      capture: () => void;
       setLanguage: (code: string) => LocaleCode | null;
       getLanguage: () => LocaleCode;
     };
@@ -344,6 +348,14 @@ const BugPin = {
    */
   close: () => {
     document.dispatchEvent(new CustomEvent('bugpin:close'));
+  },
+
+  /**
+   * Screenshot the page as it is right now (open menus, hover states) and open
+   * the bug report dialog with the screenshot attached
+   */
+  capture: () => {
+    document.dispatchEvent(new CustomEvent('bugpin:capture'));
   },
 
   /**
