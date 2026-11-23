@@ -103,7 +103,10 @@ done
 expect_failure env FAIL_BUILD=1 make release-widget v=2.0.0
 bump_commit=$(git rev-parse HEAD)
 grep -q "git revert $bump_commit" "$work/output"
-! grep -q 'git reset --hard' "$work/output"
+if grep -q 'git reset --hard' "$work/output"; then
+  echo "Unexpected hard reset advice in release output" >&2
+  exit 1
+fi
 grep -q edited-during-build src/widget/index.ts
 git restore src/widget/index.ts
 git revert --no-edit "$bump_commit" >/dev/null
