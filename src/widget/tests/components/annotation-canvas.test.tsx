@@ -696,7 +696,10 @@ describe('AnnotationCanvas', () => {
       canvas.loadFromJSON = () =>
         new Promise<void>((resolve) => {
           finishRestore = () => {
-            canvas.getObjects().slice().forEach((obj) => canvas.remove(obj));
+            canvas
+              .getObjects()
+              .slice()
+              .forEach((obj) => canvas.remove(obj));
             canvas.add(restoredAnnotation);
             resolve();
           };
@@ -756,7 +759,10 @@ describe('AnnotationCanvas', () => {
       canvas.loadFromJSON = () =>
         new Promise<void>((resolve) => {
           finishRestore = () => {
-            canvas.getObjects().slice().forEach((obj) => canvas.remove(obj));
+            canvas
+              .getObjects()
+              .slice()
+              .forEach((obj) => canvas.remove(obj));
             canvas.add(restoredAnnotation);
             resolve();
           };
