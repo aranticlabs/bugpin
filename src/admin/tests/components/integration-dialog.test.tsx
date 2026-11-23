@@ -197,4 +197,42 @@ describe('IntegrationDialog', () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('omits the masked access token when saving without a new token', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const maskedIntegration: Integration = {
+      ...baseIntegration,
+      config: {
+        owner: 'octo',
+        repo: 'repo',
+        accessToken: 'ghp_****abcd',
+        syncMode: 'automatic',
+        webhookId: '42',
+      },
+    };
+
+    render(
+      <IntegrationDialog
+        open={true}
+        onClose={onClose}
+        integration={maskedIntegration}
+        projectId="project-1"
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /update/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateIntegration).toHaveBeenCalledWith({
+        id: 'integration-1',
+        data: {
+          name: 'GitHub Main',
+          config: { owner: 'octo', repo: 'repo', fileTransferMode: 'link' },
+        },
+      });
+    });
+
+    expect(onClose).toHaveBeenCalled();
+  });
 });
