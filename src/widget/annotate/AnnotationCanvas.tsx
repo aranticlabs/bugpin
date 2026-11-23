@@ -99,6 +99,8 @@ interface ZoomState {
 }
 
 interface PinchState {
+  view: Size;
+  lastTouches: Touch[];
   startDistance: number;
   startMidpoint: ViewportPoint;
   startViewport: ViewportTransform;
@@ -138,6 +140,10 @@ const ZOOM_STEP = 1.2;
 // Float slack so a zoom clamped to a limit counts as having reached it.
 const ZOOM_LIMIT_TOLERANCE = 1.0001;
 
+function preventMouseFocus(e: JSX.TargetedMouseEvent<HTMLButtonElement>): void {
+  e.preventDefault();
+}
+
 const COLORS = [
   { value: '#ef4444', labelKey: 'annotation.color.red' },
   { value: '#f97316', labelKey: 'annotation.color.orange' },
@@ -166,12 +172,6 @@ function regeneratePixelate(
     objWithData.data.generationId = generationId;
   }
 
-  // Save and reset viewport for accurate coordinate mapping
-  const currentZoom = canvas.getZoom();
-  const currentViewport = canvas.viewportTransform?.slice() || [1, 0, 0, 1, 0, 0];
-  canvas.setZoom(1);
-  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-  canvas.renderAll();
   obj.setCoords();
 
   // Get current bounds in canvas space
@@ -181,15 +181,7 @@ function regeneratePixelate(
   const width = bounds.width;
   const height = bounds.height;
 
-  if (width < 5 || height < 5) {
-    // Restore viewport
-    canvas.setZoom(currentZoom);
-    canvas.setViewportTransform(
-      currentViewport as [number, number, number, number, number, number]
-    );
-    canvas.renderAll();
-    return;
-  }
+  if (width <= 0 || height <= 0) return;
 
   const bgElement = bgImage.getElement() as HTMLImageElement;
   const scaleX = bgImage.scaleX || 1;
@@ -201,8 +193,8 @@ function regeneratePixelate(
 
   // Create temp canvas to extract region
   const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = width;
-  tempCanvas.height = height;
+  tempCanvas.width = Math.ceil(width);
+  tempCanvas.height = Math.ceil(height);
   const tempCtx = tempCanvas.getContext('2d');
 
   if (tempCtx) {
@@ -215,8 +207,8 @@ function regeneratePixelate(
       height / scaleY,
       0,
       0,
-      width,
-      height
+      tempCanvas.width,
+      tempCanvas.height
     );
 
     // Apply pixelate filter directly to the temp canvas
@@ -228,34 +220,20 @@ function regeneratePixelate(
     const filteredElement = tempFabricImg.getElement() as HTMLCanvasElement;
 
     // Check if this generation is still current (not stale)
-    if (objWithData.data?.generationId !== generationId) {
-      // Stale - a newer regeneration is in progress, abort
-      canvas.setZoom(currentZoom);
-      canvas.setViewportTransform(
-        currentViewport as [number, number, number, number, number, number]
-      );
-      canvas.renderAll();
-      return;
-    }
+    if (objWithData.data?.generationId !== generationId) return;
 
     // Update the fabric image's element directly with canvas (no async image load needed)
     obj.setElement(filteredElement);
 
-    // Reset scale since we regenerated at correct size
     obj.set({
-      scaleX: 1,
-      scaleY: 1,
-      width: width,
-      height: height,
+      scaleX: width / tempCanvas.width,
+      scaleY: height / tempCanvas.height,
     });
 
     // Update metadata (preserve blockSize)
     objWithData.data = { type: 'pixelate', blockSize, generationId };
   }
 
-  // Restore viewport and render
-  canvas.setZoom(currentZoom);
-  canvas.setViewportTransform(currentViewport as [number, number, number, number, number, number]);
   canvas.renderAll();
 }
 
@@ -392,6 +370,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         top: 0,
         width: original.width * scale,
         height: original.height * scale,
+        strokeWidth: 0,
         absolutePositioned: true,
       });
       fitToView();
@@ -406,17 +385,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       const e = opt.e as WheelEvent;
       e.preventDefault();
       if (gestureActiveRef.current) return;
+      const mode = e.deltaMode;
+      const view = viewSizeRef.current;
+      const horizontal = e.shiftKey && e.deltaX === 0 && !e.ctrlKey && !e.metaKey;
+      const dy = wheelDeltaPx(e.deltaY, mode, horizontal ? view.width : view.height);
       if (e.ctrlKey || e.metaKey) {
-        zoomTo(
-          canvas.getZoom() * wheelZoomFactor(e.deltaY, e.deltaMode),
-          canvas.getViewportPoint(e)
-        );
+        zoomTo(canvas.getZoom() * wheelZoomFactor(dy), canvas.getViewportPoint(e));
         return;
       }
-      const dx = wheelDeltaPx(e.deltaX, e.deltaMode);
-      const dy = wheelDeltaPx(e.deltaY, e.deltaMode);
+      const dx = wheelDeltaPx(e.deltaX, mode, view.width);
       // Windows reports shift + wheel as vertical delta with shiftKey set.
-      if (e.shiftKey && dx === 0) panViewport(-dy, 0);
+      if (horizontal) panViewport(-dy, 0);
       else panViewport(-dx, -dy);
     });
 
@@ -569,6 +548,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       if (!canvas) return;
       const { distance, midpoint } = readPinch(touches);
       pinch = {
+        view: viewSizeRef.current,
+        lastTouches: touches,
         startDistance: Math.max(distance, 1),
         startMidpoint: midpoint,
         startViewport: [...(canvas.viewportTransform as ViewportTransform)],
@@ -577,7 +558,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
     const handleTouchStart = (e: TouchEvent) => {
       const touches = canvasTouches(e.touches);
-      if (touches.length === 1 && !touchSessionBlocked) {
+      if (touches.length === 1 && !touchSessionBlocked && objectsBeforeTouch === null) {
         objectsBeforeTouch = new Set(fabricRef.current?.getObjects() ?? []);
         return;
       }
@@ -599,6 +580,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       const touches = canvasTouches(e.touches);
       if (!pinch || touches.length < 2 || !scene) return;
 
+      if (pinch.view !== viewSizeRef.current) startPinch(pinch.lastTouches);
+      pinch.lastTouches = touches;
       const { distance, midpoint } = readPinch(touches);
       const start = pinch.startViewport;
       const view = viewSizeRef.current;
@@ -636,6 +619,16 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       else pinch = null;
     };
 
+    const handleTouchCancel = (e: TouchEvent) => {
+      const canvas = fabricRef.current;
+      if (canvas?.mainTouchId !== undefined && e.touches.length === 0) {
+        cancelPointerInteraction();
+        // Fabric only tears down its document listeners and restores mouse input on touchend.
+        canvas._onTouchEnd(e);
+      }
+      if (e.touches.length === 0) handleTouchEnd(e);
+    };
+
     const handleGestureStart = (e: Event) => {
       e.preventDefault();
       gestureActiveRef.current = true;
@@ -663,6 +656,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     wrapper.addEventListener('touchmove', handleTouchMove, capture);
     wrapper.addEventListener('touchend', handleTouchEnd, capture);
     wrapper.addEventListener('touchcancel', handleTouchEnd, capture);
+    document.addEventListener('touchcancel', handleTouchCancel, capture);
     wrapper.addEventListener('gesturestart', handleGestureStart);
     wrapper.addEventListener('gesturechange', handleGestureChange);
     wrapper.addEventListener('gestureend', handleGestureEnd);
@@ -671,6 +665,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       wrapper.removeEventListener('touchmove', handleTouchMove, capture);
       wrapper.removeEventListener('touchend', handleTouchEnd, capture);
       wrapper.removeEventListener('touchcancel', handleTouchEnd, capture);
+      document.removeEventListener('touchcancel', handleTouchCancel, capture);
       wrapper.removeEventListener('gesturestart', handleGestureStart);
       wrapper.removeEventListener('gesturechange', handleGestureChange);
       wrapper.removeEventListener('gestureend', handleGestureEnd);
@@ -937,25 +932,13 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         if (isPixelateShape && canvas.backgroundImage) {
           const rect = drawingShape as fabric.Rect;
 
-          // Save current zoom and viewport state
           const currentZoom = canvas.getZoom();
-          const currentViewport = canvas.viewportTransform?.slice() || [1, 0, 0, 1, 0, 0];
-
-          // Reset to identity transform for accurate coordinate mapping
-          canvas.setZoom(1);
-          canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-          canvas.renderAll();
           rect.setCoords();
 
-          // Get rect bounds accounting for any object transforms
-          const bounds = rect.getBoundingRect();
-          const left = bounds.left;
-          const top = bounds.top;
-          const width = bounds.width;
-          const height = bounds.height;
+          const { left, top, width, height } = rect;
 
           // Only create pixelated region if it has meaningful size
-          if (width > 5 && height > 5) {
+          if (rect.width * currentZoom > 5 && rect.height * currentZoom > 5) {
             // Get the background image
             const bgImage = canvas.backgroundImage as fabric.FabricImage;
             const bgElement = bgImage.getElement() as HTMLImageElement;
@@ -966,8 +949,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
             // Create temp canvas to extract region at canvas resolution
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = width;
-            tempCanvas.height = height;
+            tempCanvas.width = Math.ceil(width);
+            tempCanvas.height = Math.ceil(height);
             const tempCtx = tempCanvas.getContext('2d');
 
             if (tempCtx) {
@@ -980,8 +963,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
                 height / scaleY,
                 0,
                 0,
-                width,
-                height
+                tempCanvas.width,
+                tempCanvas.height
               );
 
               // Apply pixelate filter - smaller blocks for finer pixelation
@@ -991,6 +974,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
               const regionImage = new fabric.FabricImage(tempCanvas, {
                 left,
                 top,
+                scaleX: width / tempCanvas.width,
+                scaleY: height / tempCanvas.height,
                 selectable: true,
                 hasControls: true,
                 hasBorders: true,
@@ -1014,11 +999,6 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             canvas.remove(rect);
           }
 
-          // Restore zoom and viewport
-          canvas.setZoom(currentZoom);
-          canvas.setViewportTransform(
-            currentViewport as [number, number, number, number, number, number]
-          );
           canvas.renderAll();
         } else if (
           (drawingShape as fabric.FabricObject & { _isArrow?: boolean })._isArrow &&
@@ -1193,8 +1173,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           // Get bounds and regenerate at export resolution
           obj.setCoords();
           const bounds = obj.getBoundingRect();
-          const exportWidth = bounds.width * multiplier;
-          const exportHeight = bounds.height * multiplier;
+          const exportWidth = Math.max(1, Math.ceil(bounds.width * multiplier));
+          const exportHeight = Math.max(1, Math.ceil(bounds.height * multiplier));
 
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = exportWidth;
@@ -1230,8 +1210,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             obj.set({
               width: exportWidth,
               height: exportHeight,
-              scaleX: 1 / multiplier,
-              scaleY: 1 / multiplier,
+              scaleX: bounds.width / exportWidth,
+              scaleY: bounds.height / exportHeight,
             });
           }
         }
@@ -1365,7 +1345,17 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       }
 
       // Space key for pan mode
-      if (e.key === ' ' && !isPanning) {
+      if (
+        e.key === ' ' &&
+        !isPanning &&
+        !e
+          .composedPath()
+          .some(
+            (target) =>
+              target instanceof HTMLElement &&
+              target.matches('button, input, textarea, select, [contenteditable="true"]')
+          )
+      ) {
         e.preventDefault();
         setIsPanning(true);
         if (fabricRef.current) {
@@ -1422,6 +1412,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           '[&_svg]:w-4.5 [&_svg]:h-4.5',
           activeTool === tool && 'bg-primary/10 text-primary'
         )}
+        onMouseDown={preventMouseFocus}
         onClick={() => setActiveTool(tool)}
         aria-label={label}
       >
@@ -1435,7 +1426,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       {/* Toolbar */}
       <div class="shrink-0 flex items-start gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
         <div class="flex flex-1 min-w-0 flex-wrap items-center gap-2">
-          <div class="flex items-center gap-1">
+          <div class="flex flex-wrap items-center gap-1">
             <ToolButton
               tool="select"
               label={t('annotation.toolbar.select')}
@@ -1467,6 +1458,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
               <Tooltip key={color} content={t(labelKey)} side="bottom">
                 <button
                   class="group flex w-6 h-6 items-center justify-center border-none bg-transparent p-0 cursor-pointer"
+                  onMouseDown={preventMouseFocus}
                   onClick={() => setActiveColor(color)}
                   aria-label={t(labelKey)}
                 >
@@ -1500,6 +1492,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
                     'hover:bg-foreground/10',
                     strokeWidth === width && 'bg-primary/10'
                   )}
+                  onMouseDown={preventMouseFocus}
                   onClick={() => setStrokeWidth(width)}
                   aria-label={t('annotation.toolbar.strokeWidth', { width })}
                 >
@@ -1516,6 +1509,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             <Tooltip content={t('annotation.toolbar.undo')} side="bottom">
               <button
                 class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
                 onClick={undo}
                 disabled={!canUndo}
                 aria-label={t('annotation.toolbar.undo')}
@@ -1526,6 +1520,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             <Tooltip content={t('annotation.toolbar.redo')} side="bottom">
               <button
                 class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
                 onClick={redo}
                 disabled={!canRedo}
                 aria-label={t('annotation.toolbar.redo')}
@@ -1536,6 +1531,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
             <Tooltip content={t('annotation.toolbar.delete')} side="bottom">
               <button
                 class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+                onMouseDown={preventMouseFocus}
                 onClick={deleteSelected}
                 aria-label={t('annotation.toolbar.delete')}
               >
@@ -1552,6 +1548,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         >
           <button
             class="hidden sm:flex shrink-0 items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground [&_svg]:w-4.5 [&_svg]:h-4.5"
+            onMouseDown={preventMouseFocus}
             onClick={onToggleMaximize}
             aria-label={t(
               isMaximized ? 'annotation.toolbar.restore' : 'annotation.toolbar.maximize'
@@ -1576,6 +1573,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           <Tooltip content={t('annotation.toolbar.zoomOut')} side="top">
             <button
               class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onMouseDown={preventMouseFocus}
               onClick={handleZoomOut}
               disabled={zoomState.zoom <= zoomState.limits.min * ZOOM_LIMIT_TOLERANCE}
               aria-label={t('annotation.toolbar.zoomOut')}
@@ -1586,6 +1584,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           <Tooltip content={t('annotation.toolbar.zoomFit')} side="top">
             <button
               class="flex items-center justify-center min-w-12 h-8 px-1.5 border-none rounded bg-transparent text-xs font-medium tabular-nums text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground"
+              onMouseDown={preventMouseFocus}
               onClick={fitToView}
               aria-label={t('annotation.toolbar.zoomFit')}
             >
@@ -1595,6 +1594,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
           <Tooltip content={t('annotation.toolbar.zoomIn')} side="top" align="end">
             <button
               class="flex items-center justify-center w-8 h-8 border-none rounded bg-transparent text-muted-foreground cursor-pointer transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:w-4.5 [&_svg]:h-4.5"
+              onMouseDown={preventMouseFocus}
               onClick={handleZoomIn}
               disabled={zoomState.zoom >= zoomState.limits.max / ZOOM_LIMIT_TOLERANCE}
               aria-label={t('annotation.toolbar.zoomIn')}
@@ -1615,11 +1615,16 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         <Button
           variant="outline"
           class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')}
+          onMouseDown={preventMouseFocus}
           onClick={onCancel}
         >
           {t('annotation.buttons.cancel')}
         </Button>
-        <Button class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')} onClick={handleSave}>
+        <Button
+          class={cn('flex-1', isMaximized && 'sm:flex-none sm:w-30')}
+          onMouseDown={preventMouseFocus}
+          onClick={handleSave}
+        >
           {t('annotation.buttons.done')}
         </Button>
       </div>

@@ -115,12 +115,13 @@ export function constrainViewport(
 }
 
 /** Converts a wheel delta to pixels; Firefox reports mouse wheels in lines. */
-export function wheelDeltaPx(delta: number, deltaMode: number): number {
+export function wheelDeltaPx(delta: number, deltaMode: number, pageSize: number): number {
+  if (deltaMode === 2) return delta * pageSize;
   return deltaMode === 1 ? delta * LINE_HEIGHT_PX : delta;
 }
 
 /** Zoom multiplier for a ctrl/meta wheel event, including trackpad pinches. */
-export function wheelZoomFactor(deltaY: number, deltaMode: number): number {
-  const factor = Math.exp(-wheelDeltaPx(deltaY, deltaMode) / WHEEL_ZOOM_DIVISOR);
+export function wheelZoomFactor(deltaPx: number): number {
+  const factor = Math.exp(-deltaPx / WHEEL_ZOOM_DIVISOR);
   return Math.min(Math.max(factor, 1 / MAX_WHEEL_ZOOM_STEP), MAX_WHEEL_ZOOM_STEP);
 }
