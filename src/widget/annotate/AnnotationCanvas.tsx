@@ -271,6 +271,9 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   // While true, resizing the view refits the scene instead of keeping the user's zoom.
   const isFitRef = useRef(true);
   const gestureActiveRef = useRef(false);
+  // Objects that existed before the first finger landed; anything newer is undone if
+  // the touch turns into a pinch.
+  const objectsBeforeTouchRef = useRef<Set<fabric.FabricObject> | null>(null);
 
   const applyViewport = useCallback((vpt: ViewportTransform) => {
     const canvas = fabricRef.current;
@@ -430,6 +433,9 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     return () => {
       canvasEl?.removeEventListener('contextmenu', preventContextMenu);
       canvas.dispose();
+      if (fabricRef.current === canvas) {
+        fabricRef.current = null;
+      }
     };
   }, [screenshot]);
 
@@ -477,9 +483,6 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
     let pinch: PinchState | null = null;
     let touchSessionBlocked = false;
-    // Objects that existed before the first finger landed; anything newer is undone if
-    // the touch turns into a pinch.
-    let objectsBeforeTouch: Set<fabric.FabricObject> | null = null;
     let gestureStart: { zoom: number } | null = null;
 
     const toViewportPoint = (clientX: number, clientY: number): ViewportPoint => {
@@ -514,7 +517,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       drawingCanvas._drawingShape = undefined;
       isDrawingRef.current = false;
 
-      const before = objectsBeforeTouch;
+      const before = objectsBeforeTouchRef.current;
       if (before) {
         canvas
           .getObjects()
@@ -558,8 +561,8 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
     const handleTouchStart = (e: TouchEvent) => {
       const touches = canvasTouches(e.touches);
-      if (touches.length === 1 && !touchSessionBlocked && objectsBeforeTouch === null) {
-        objectsBeforeTouch = new Set(fabricRef.current?.getObjects() ?? []);
+      if (touches.length === 1 && !touchSessionBlocked && objectsBeforeTouchRef.current === null) {
+        objectsBeforeTouchRef.current = new Set(fabricRef.current?.getObjects() ?? []);
         return;
       }
       if (touches.length < 2) return;
@@ -610,7 +613,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
         // The gesture is over, so a later pinch must not undo what it drew.
         touchSessionBlocked = false;
         pinch = null;
-        objectsBeforeTouch = null;
+        objectsBeforeTouchRef.current = null;
         return;
       }
       if (!touchSessionBlocked) return;
@@ -721,31 +724,43 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
     setCanRedo(false);
   }, []);
 
-  const undo = useCallback(() => {
-    if (!fabricRef.current || historyIndexRef.current <= 0) return;
+  const restoreHistory = useCallback((index: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
 
-    historyIndexRef.current--;
-    const json = historyRef.current[historyIndexRef.current];
+    historyIndexRef.current = index;
+    const json = historyRef.current[index];
 
-    fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
-      fabricRef.current?.renderAll();
+    canvas.loadFromJSON(JSON.parse(json)).then(() => {
+      if (fabricRef.current !== canvas) return;
+      // loadFromJSON replaces canvas objects with new instances; rebase any active touch
+      // snapshot so a subsequent pinch does not remove the restored annotations.
+      if (objectsBeforeTouchRef.current !== null) {
+        objectsBeforeTouchRef.current = new Set(canvas.getObjects());
+      }
+      const drawingCanvas = canvas as unknown as { _drawingShape?: fabric.FabricObject };
+      if (
+        drawingCanvas._drawingShape &&
+        !canvas.getObjects().includes(drawingCanvas._drawingShape)
+      ) {
+        drawingCanvas._drawingShape = undefined;
+        isDrawingRef.current = false;
+      }
+      canvas.renderAll();
       setCanUndo(historyIndexRef.current > 0);
       setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
     });
   }, []);
+
+  const undo = useCallback(() => {
+    if (!fabricRef.current || historyIndexRef.current <= 0) return;
+    restoreHistory(historyIndexRef.current - 1);
+  }, [restoreHistory]);
 
   const redo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
-
-    historyIndexRef.current++;
-    const json = historyRef.current[historyIndexRef.current];
-
-    fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
-      fabricRef.current?.renderAll();
-      setCanUndo(historyIndexRef.current > 0);
-      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
-    });
-  }, []);
+    restoreHistory(historyIndexRef.current + 1);
+  }, [restoreHistory]);
 
   // Handle shape drawing
   const handleCanvasMouseDown = useCallback(

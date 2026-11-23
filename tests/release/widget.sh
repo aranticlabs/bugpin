@@ -14,6 +14,7 @@ cat > "$work/bin/bun" <<'STUB'
 set -eu
 [[ $1 == install ]] && exit 0
 echo edited-during-build > "$FIXTURE/repo/src/widget/index.ts"
+[[ -z ${FAIL_BUILD:-} ]] || exit 1
 mkdir -p dist
 cp index.ts dist/widget.js
 STUB
@@ -97,6 +98,18 @@ for change in branch commit; do
   grep -q 'Checkout changed' "$work/output"
   git switch -q main
 done
+[[ ! -e "$work/published" ]]
+
+expect_failure env FAIL_BUILD=1 make release-widget v=2.0.0
+bump_commit=$(git rev-parse HEAD)
+grep -q "git revert $bump_commit" "$work/output"
+if grep -q 'git reset --hard' "$work/output"; then
+  echo "Unexpected hard reset advice in release output" >&2
+  exit 1
+fi
+grep -q edited-during-build src/widget/index.ts
+git restore src/widget/index.ts
+git revert --no-edit "$bump_commit" >/dev/null
 [[ ! -e "$work/published" ]]
 
 printf '#!/bin/sh\nexit 1\n' > "$work/origin/hooks/pre-receive"
