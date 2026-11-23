@@ -150,6 +150,12 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Install Chromium system dependencies
+        run: bun run --cwd src/widget playwright-core install-deps chromium
+
+      - name: Test annotation touch cleanup in Chromium
+        run: make test-widget-touch
+
   build:
     name: Build
     runs-on: ubuntu-latest

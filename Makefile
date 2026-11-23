@@ -9,7 +9,7 @@ IMAGE := registry.arantic.cloud/bugpin/bugpin
 .PHONY: help \
         dev dev-server dev-admin dev-widget build-dev \
         build-prod prod deploy-prod logs-prod down-prod \
-        typecheck test knip format \
+        typecheck test test-widget-touch knip format \
         seed-all seed-projects seed-user seed-reports \
         seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports \
         clean clean-db clean-uploads clean-data clean-deps clean-all clean-purge \
@@ -78,6 +78,9 @@ typecheck:
 
 test:
 	@bun run test
+
+test-widget-touch:
+	@bun run --cwd src/widget test:touch
 
 knip:
 	@bun run knip
@@ -410,6 +413,7 @@ help:
 	section 'Checks'; \
 	row 'make typecheck' 'Type check all components and EE'; \
 	row 'make test' 'Run all tests'; \
+	row 'make test-widget-touch' 'Run widget touch tests in Chromium'; \
 	row 'make knip' 'Find unused code and dependencies'; \
 	row 'make format' 'Format with Prettier'; \
 	section 'Seed data'; \
