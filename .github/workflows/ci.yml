@@ -150,6 +150,9 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Test widget release recovery
+        run: bash tests/release/widget.sh
+
       - name: Install Chromium system dependencies
         run: bun run --cwd src/widget playwright-core install-deps chromium
 
