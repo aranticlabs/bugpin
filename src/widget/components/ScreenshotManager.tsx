@@ -281,7 +281,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       if (event.defaultPrevented || isEditableTarget(event)) return;
-      const files = getClipboardFiles(event.clipboardData);
+      const files = getClipboardFiles(event.clipboardData).filter((file) => isImage(file.type));
       if (files.length === 0) return;
       event.preventDefault();
       void (async () => {
