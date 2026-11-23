@@ -60,7 +60,8 @@ prod:
 	@echo "Logs: make logs-prod  Stop: make down-prod"
 	@echo "Do not run make dev at the same time."
 
-deploy-prod: build-prod prod
+deploy-prod: build-prod
+	@$(MAKE) prod
 
 logs-prod:
 	@$(PROD_COMPOSE) logs -f
@@ -91,6 +92,12 @@ format:
 # ==============================================================================
 # Seed Data (host, writes to ./data)
 # ==============================================================================
+
+seed-projects seed-user seed-reports seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports: scripts/seed/seed.ts
+
+scripts/seed/seed.ts:
+	@echo "Seed commands require the local scripts/seed/seed.ts helper, which is excluded from Git." >&2
+	@exit 1
 
 seed-all:
 	@$(MAKE) seed-projects seed-user seed-reports
@@ -183,7 +190,8 @@ clean-purge: clean clean-deps
 
 version-check:
 	@echo "$(BLUE)[INFO]$(NC) Checking version consistency..."
-	@ROOT_V=$$(node -p "require('./package.json').version"); \
+	@set -e; \
+	ROOT_V=$$(node -p "require('./package.json').version"); \
 	SERVER_V=$$(node -p "require('./src/server/package.json').version"); \
 	ADMIN_V=$$(node -p "require('./src/admin/package.json').version"); \
 	WIDGET_V=$$(node -p "require('./src/widget/package.json').version"); \
