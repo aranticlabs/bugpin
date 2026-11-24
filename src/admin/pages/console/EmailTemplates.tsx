@@ -99,6 +99,7 @@ const LOCALE_LABELS: Record<LocaleCode, string> = {
   es: 'Español',
   it: 'Italiano',
   ja: '日本語 (JP)',
+  'pt-BR': 'Português (BR)',
   zh: '中文 (简体) (CN)',
 };
 

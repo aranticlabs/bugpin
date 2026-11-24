@@ -4,7 +4,7 @@ import type { PasswordPolicy } from './password-policy';
 
 // Locale Types
 
-export type LocaleCode = 'en' | 'de' | 'fr' | 'nl' | 'es' | 'it' | 'ja' | 'zh';
+export type LocaleCode = 'en' | 'de' | 'fr' | 'nl' | 'es' | 'it' | 'ja' | 'pt-BR' | 'zh';
 
 export const SUPPORTED_LOCALES: readonly LocaleCode[] = [
   'en',
@@ -14,6 +14,7 @@ export const SUPPORTED_LOCALES: readonly LocaleCode[] = [
   'es',
   'it',
   'ja',
+  'pt-BR',
   'zh',
 ] as const;
 

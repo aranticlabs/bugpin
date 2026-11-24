@@ -84,11 +84,15 @@ describe('normalizeLocale', () => {
     });
   });
 
-  describe('unsupported primary tags resolve to null', () => {
-    it('returns null for pt-BR', () => {
-      expect(normalizeLocale('pt-BR')).toBeNull();
+  describe('Portuguese variants', () => {
+    it('folds pt, pt-BR and pt-PT to pt-BR', () => {
+      expect(normalizeLocale('pt')).toBe('pt-BR');
+      expect(normalizeLocale('pt-BR')).toBe('pt-BR');
+      expect(normalizeLocale('pt-PT')).toBe('pt-BR');
     });
+  });
 
+  describe('unsupported primary tags resolve to null', () => {
     it('returns null for ru, ar, ko, pl, cs', () => {
       expect(normalizeLocale('ru')).toBeNull();
       expect(normalizeLocale('ar')).toBeNull();
@@ -252,7 +256,7 @@ describe('resolveSubmitLocale', () => {
     it('falls back to the project default for unsupported claimed locales', () => {
       expect(
         resolveSubmitLocale({
-          claimed: 'pt-BR',
+          claimed: 'ko-KR',
           projectMode: 'auto',
           projectDefault: 'es',
         })
@@ -286,7 +290,7 @@ describe('resolveSubmitLocale', () => {
     it('falls back to en when both claimed and project default are invalid', () => {
       expect(
         resolveSubmitLocale({
-          claimed: 'pt-BR',
+          claimed: 'ko-KR',
           projectMode: 'auto',
           projectDefault: 'xx',
         })

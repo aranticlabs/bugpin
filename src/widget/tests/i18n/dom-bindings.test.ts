@@ -120,7 +120,7 @@ describe('installLanguageObservers', () => {
       });
 
       document.dispatchEvent(
-        new CustomEvent('bugpin:set-language', { detail: { language: 'pt-BR' } })
+        new CustomEvent('bugpin:set-language', { detail: { language: 'ko-KR' } })
       );
 
       expect(getLocale()).toBe('nl');
@@ -167,7 +167,7 @@ describe('publicSetLanguage', () => {
     document.addEventListener('bugpin:language-changed', () => {
       dispatched = true;
     });
-    expect(publicSetLanguage('pt-BR')).toBeNull();
+    expect(publicSetLanguage('ko-KR')).toBeNull();
     expect(getLocale()).toBe('en');
     expect(dispatched).toBe(false);
   });

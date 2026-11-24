@@ -8,5 +8,6 @@ export const tooltipLauncherDefaults: Record<LocaleCode, string> = {
   es: '¿Has encontrado un error?',
   it: 'Hai trovato un bug?',
   ja: 'バグを見つけましたか？',
+  'pt-BR': 'Encontrou um problema?',
   zh: '发现 bug 了？',
 };

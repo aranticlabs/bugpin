@@ -7,6 +7,7 @@ import nl from './locales/nl.js';
 import es from './locales/es.js';
 import it from './locales/it.js';
 import ja from './locales/ja.js';
+import ptBR from './locales/pt-BR.js';
 import zh from './locales/zh.js';
 import { normalizeLocale } from './normalize.js';
 import { resolveLiveSwitch } from './detect.js';
@@ -22,6 +23,7 @@ const catalogs: Record<LocaleCode, LocaleCatalog> = {
   es,
   it,
   ja,
+  'pt-BR': ptBR,
   zh,
 };
 

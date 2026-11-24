@@ -6,6 +6,7 @@ import nl from './nl.js';
 import es from './es.js';
 import it from './it.js';
 import ja from './ja.js';
+import ptBR from './pt-BR.js';
 import zh from './zh.js';
 
 export const reporterConfirmation: ReporterTemplateDefaults = {
@@ -16,5 +17,6 @@ export const reporterConfirmation: ReporterTemplateDefaults = {
   es,
   it,
   ja,
+  'pt-BR': ptBR,
   zh,
 };

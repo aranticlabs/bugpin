@@ -61,6 +61,7 @@ const LOCALE_OPTIONS: { code: string; label: string }[] = [
   { code: 'es', label: 'Español' },
   { code: 'it', label: 'Italiano' },
   { code: 'ja', label: '日本語 (JP)' },
+  { code: 'pt-BR', label: 'Português (BR)' },
   { code: 'zh', label: '中文 (简体) (CN)' },
 ];
 

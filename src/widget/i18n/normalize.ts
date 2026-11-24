@@ -10,6 +10,8 @@ export function normalizeLocale(input: unknown): LocaleCode | null {
   const primary = subtags[0];
   if (!primary) return null;
 
+  if (primary === 'pt') return 'pt-BR';
+
   if (primary === 'zh') {
     const script = subtags.find((tag) => tag.length === 4);
     if (script === 'hant') return null;

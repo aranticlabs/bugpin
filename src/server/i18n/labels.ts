@@ -8,6 +8,12 @@ export const statusLabels: Record<LocaleCode, Record<ReportStatus, string>> = {
   es: { open: 'Abierto', in_progress: 'En progreso', resolved: 'Resuelto', closed: 'Cerrado' },
   it: { open: 'Aperto', in_progress: 'In corso', resolved: 'Risolto', closed: 'Chiuso' },
   ja: { open: 'オープン', in_progress: '対応中', resolved: '解決済み', closed: 'クローズ' },
+  'pt-BR': {
+    open: 'Aberto',
+    in_progress: 'Em andamento',
+    resolved: 'Resolvido',
+    closed: 'Fechado',
+  },
   zh: { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' },
 };
 
@@ -31,6 +37,7 @@ export const priorityLabels: Record<LocaleCode, Record<ReportPriority, string>> 
   es: { lowest: 'Mínima', low: 'Baja', medium: 'Media', high: 'Alta', highest: 'Máxima' },
   it: { lowest: 'Minima', low: 'Bassa', medium: 'Media', high: 'Alta', highest: 'Massima' },
   ja: { lowest: '最低', low: '低', medium: '中', high: '高', highest: '最高' },
+  'pt-BR': { lowest: 'Mínima', low: 'Baixa', medium: 'Média', high: 'Alta', highest: 'Máxima' },
   zh: { lowest: '最低', low: '低', medium: '中', high: '高', highest: '最高' },
 };
 
