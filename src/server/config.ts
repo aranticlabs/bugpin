@@ -18,6 +18,11 @@ const configSchema = z.object({
   port: z.coerce.number().int().min(1).max(65535),
   host: z.string().min(1),
   proxyTokenFile: z.string().optional(),
+  appUrl: z
+    .string()
+    .url('APP_URL must be a valid URL')
+    .refine((value) => /^https?:\/\//i.test(value), 'APP_URL must use http or https')
+    .optional(),
   trustProxy: z.enum(['auto', 'always', 'never', 'token'], {
     message: 'TRUST_PROXY must be auto, true, false or token',
   }),
@@ -101,6 +106,7 @@ function loadConfig() {
     port: readEnv('PORT') ?? (isDevelopment ? 4300 : 7300),
     host: readEnv('HOST') ?? '0.0.0.0',
     proxyTokenFile: readEnv('PROXY_TOKEN_FILE'),
+    appUrl: readEnv('APP_URL')?.trim().replace(/\/+$/, ''),
   };
 
   const parsed = configSchema.parse(env);

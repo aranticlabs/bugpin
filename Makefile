@@ -39,10 +39,10 @@ dev:
 	@echo "Reporter Portal HMR: http://localhost:7300/reporter-portal/"
 	@echo "  (separate origin: set Portal Base URL to http://127.0.0.1:7310)"
 	@echo "Do not run make local at the same time."
-	@bun run dev
+	@APP_URL=$${APP_URL:-http://localhost:7300} bun run dev
 
 dev-server:
-	@bun run dev:server
+	@APP_URL=$${APP_URL:-http://localhost:7300} bun run dev:server
 
 dev-admin:
 	@bun run dev:admin

@@ -10,11 +10,12 @@ function loadAdminConfig(env: Record<string, string>) {
   const dataDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-config-'));
   try {
     const script = `const { config } = await import(${JSON.stringify(configPath)});
-console.log(JSON.stringify({ email: config.adminEmail, password: config.adminPassword, trustProxy: config.trustProxy }));`;
+console.log(JSON.stringify({ email: config.adminEmail, password: config.adminPassword, trustProxy: config.trustProxy, appUrl: config.appUrl ?? null }));`;
     const baseEnv = { ...process.env };
     delete baseEnv.ADMIN_EMAIL;
     delete baseEnv.ADMIN_PASSWORD;
     delete baseEnv.TRUST_PROXY;
+    delete baseEnv.APP_URL;
     const result = Bun.spawnSync([process.execPath, '-e', script], {
       env: { ...baseEnv, NODE_ENV: 'test', DATA_DIR: dataDir, ...env },
     });
@@ -88,5 +89,28 @@ describe('TRUST_PROXY', () => {
     const result = loadAdminConfig({ TRUST_PROXY: 'sometimes' });
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('TRUST_PROXY must be auto, true, false or token');
+  });
+});
+
+describe('APP_URL', () => {
+  it('is unset by default and when empty', () => {
+    expect(JSON.parse(loadAdminConfig({}).stdout).appUrl).toBeNull();
+    expect(JSON.parse(loadAdminConfig({ APP_URL: '  ' }).stdout).appUrl).toBeNull();
+  });
+
+  it('trims whitespace and trailing slashes', () => {
+    const result = loadAdminConfig({ APP_URL: ' http://localhost:7300/ ' });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).appUrl).toBe('http://localhost:7300');
+  });
+
+  it('refuses to start with an invalid URL or a non-http scheme', () => {
+    const invalid = loadAdminConfig({ APP_URL: 'localhost:7300' });
+    expect(invalid.exitCode).not.toBe(0);
+    expect(invalid.stderr).toContain('APP_URL must');
+
+    const ftp = loadAdminConfig({ APP_URL: 'ftp://bugpin.example.com' });
+    expect(ftp.exitCode).not.toBe(0);
+    expect(ftp.stderr).toContain('APP_URL must use http or https');
   });
 });

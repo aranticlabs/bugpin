@@ -21,6 +21,8 @@ services:
       HOST: 0.0.0.0
       DATA_DIR: /data
       TRUST_PROXY: 'false'
+      # Used only while the Application URL setting is empty.
+      APP_URL: http://localhost:7300
     expose:
       - '4300'
     volumes:

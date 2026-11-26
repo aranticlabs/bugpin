@@ -29,6 +29,8 @@ services:
       # Initial admin account, used only when no users exist yet
       # - ADMIN_EMAIL=admin@example.com
       # - ADMIN_PASSWORD=choose-a-strong-initial-password
+      # Application URL, used only while the setting in the Admin Console is empty
+      # - APP_URL=https://bugpin.example.com
       # Which proxies may set X-Forwarded-For: auto (loopback and private networks, default
       # when unset), true (any proxy) or false (none). This quick start publishes port 7300
       # without a proxy, so forwarded headers are ignored. Switch to auto behind a reverse

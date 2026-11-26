@@ -1,5 +1,6 @@
 import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
+import { config } from '../config.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { isSecurePortalUrl } from '../utils/portal-url.js';
 import { settingsCacheService } from './settings-cache.service.js';
@@ -152,6 +153,17 @@ function redactSecrets(settings: AppSettings): AppSettings {
 // Service
 
 export const settingsService = {
+  /**
+   * Fills an empty Application URL from APP_URL. A URL saved in the Admin Console always wins.
+   */
+  async seedAppUrl(appUrl = config.appUrl): Promise<boolean> {
+    if (!appUrl || (await settingsRepo.getAll()).appUrl) return false;
+    await settingsRepo.updateAll({ appUrl });
+    settingsCacheService.invalidate();
+    logger.info('Application URL set from APP_URL', { appUrl });
+    return true;
+  },
+
   /**
    * Get all application settings, including stored secrets (server-side use only)
    */
