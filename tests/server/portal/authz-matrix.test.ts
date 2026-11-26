@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { portalOperatorAuthService } from '../../../src/server/services/portal-operator-auth.service';
+import { portalOperatorsRepo } from '../../../src/server/database/repositories/portal-operators.repo';
+import { clearAllRateLimits } from '../../../src/server/middleware/rate-limit';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
@@ -11,6 +14,7 @@ import { settingsRepo } from '../../../src/server/database/repositories/settings
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { sessionsRepo } from '../../../src/server/database/repositories/sessions.repo';
 import { config } from '../../../src/server/config';
+import { hashToken } from '../../../src/server/utils/secure-token';
 import { Result } from '../../../src/server/utils/result';
 import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../../src/shared/types';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
@@ -25,7 +29,10 @@ type Caller =
   | 'disabled-project'
   | 'staff'
   | 'anonymous'
-  | 'bearer';
+  | 'bearer'
+  | 'operator'
+  | 'operator-disabled-project'
+  | 'operator-stale';
 const callers: Caller[] = [
   'owner',
   'other',
@@ -35,6 +42,9 @@ const callers: Caller[] = [
   'staff',
   'anonymous',
   'bearer',
+  'operator',
+  'operator-disabled-project',
+  'operator-stale',
 ];
 interface MatrixRow {
   method: 'GET' | 'HEAD' | 'POST' | 'PATCH';
@@ -42,6 +52,8 @@ interface MatrixRow {
   publicStatus?: number | null;
   resource?: boolean;
   submission?: boolean;
+  write?: boolean;
+  body?: unknown;
 }
 const matrix: MatrixRow[] = [
   { method: 'GET', path: '/config', publicStatus: 200 },
@@ -52,12 +64,26 @@ const matrix: MatrixRow[] = [
   { method: 'POST', path: '/auth/resend', publicStatus: 200 },
   { method: 'POST', path: '/auth/exchange', publicStatus: 400 },
   { method: 'POST', path: '/auth/logout', publicStatus: null },
+  {
+    method: 'POST',
+    path: '/auth/team/login',
+    publicStatus: 401,
+    body: { email: 'nobody@example.com', password: 'wrong-password' },
+  },
+  {
+    method: 'POST',
+    path: '/auth/team/two-factor',
+    publicStatus: 401,
+    body: { challengeToken: 'unknown-challenge', code: '123456' },
+  },
+  { method: 'POST', path: '/auth/team/verify/preview', publicStatus: 200 },
+  { method: 'POST', path: '/auth/team/verify/exchange', publicStatus: 400 },
   { method: 'GET', path: '/me', publicStatus: null },
-  { method: 'PATCH', path: '/me' },
+  { method: 'PATCH', path: '/me', write: true },
   { method: 'GET', path: '/projects' },
-  { method: 'GET', path: '/events' },
-  { method: 'POST', path: '/reports', submission: true },
-  { method: 'POST', path: '/reports/:id/messages', resource: true },
+  { method: 'GET', path: '/events', write: true },
+  { method: 'POST', path: '/reports', submission: true, write: true },
+  { method: 'POST', path: '/reports/:id/messages', resource: true, write: true },
   { method: 'GET', path: '/reports' },
   { method: 'GET', path: '/reports/:id', resource: true },
   { method: 'GET', path: '/reports/:id/files/:fileId', resource: true },
@@ -71,6 +97,8 @@ beforeEach(async () => {
     smtpEnabled: false,
     reporterPortalLimits: { ...DEFAULT_REPORTER_PORTAL_LIMITS, loginExchangesPerIpPer15Min: 100 },
   });
+  settingsCacheService.invalidate();
+  await settingsRepo.updateAll({ portalTeamSignIn: true });
   settingsCacheService.invalidate();
   getDb().run(
     "INSERT INTO users (id, email, name, password_hash, role) VALUES ('staff', 'staff@example.com', 'Staff', 'unused', 'admin')"
@@ -94,8 +122,28 @@ beforeEach(async () => {
 });
 afterEach(() => close());
 
+async function operatorCookie(caller: Caller): Promise<string> {
+  portalOperatorsRepo.setVerifiedEmail('staff', 'staff@example.com');
+  const grant = await portalOperatorAuthService.createSession('staff');
+  getDb().run(
+    "UPDATE reports SET reporter_id = NULL, claimable_email = 'claim@example.com' WHERE id = ?",
+    ['matrix-report']
+  );
+  getDb().run('UPDATE projects SET settings = ? WHERE id = ?', [
+    JSON.stringify({ reporterPortal: { enabled: caller !== 'operator-disabled-project' } }),
+    'matrix-project',
+  ]);
+  if (caller === 'operator-stale')
+    getDb().run('UPDATE portal_operator_sessions SET revoked_at = ? WHERE token_hash = ?', [
+      new Date().toISOString(),
+      hashToken(grant.secret),
+    ]);
+  return `bugpin_portal_operator_session=${grant.secret}`;
+}
+
 async function credential(caller: Caller): Promise<string> {
   if (caller === 'anonymous' || caller === 'bearer') return '';
+  if (caller.startsWith('operator')) return operatorCookie(caller);
   if (caller === 'staff') {
     const session = await sessionsRepo.create({
       userId: 'staff',
@@ -148,6 +196,7 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
           : [''];
       for (const variant of variants) {
         const fileRequest = row.path.includes('/files/');
+        clearAllRateLimits();
         const form = new FormData();
         form.set('projectId', 'matrix-project');
         form.set('title', 'New feedback');
@@ -168,36 +217,47 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
                   body: row.submission
                     ? form
                     : JSON.stringify(
-                        row.path === '/auth/request'
-                          ? { email: 'request@example.com' }
-                          : row.method === 'PATCH'
-                            ? { displayName: 'Updated name' }
-                            : row.path.endsWith('/messages')
-                              ? { body: 'Reporter reply' }
-                              : { token: 'invalid' }
+                        row.body ??
+                          (row.path === '/auth/request'
+                            ? { email: 'request@example.com' }
+                            : row.method === 'PATCH'
+                              ? { displayName: 'Updated name' }
+                              : row.path.endsWith('/messages')
+                                ? { body: 'Reporter reply' }
+                                : { token: 'invalid' })
                       ),
                 }
               : {}),
           }
         );
-        const authenticated = ['owner', 'other', 'disabled-project'].includes(caller);
+        const reporterSession = ['owner', 'other', 'disabled-project'].includes(caller);
+        const teamSession = ['operator', 'operator-disabled-project'].includes(caller);
+        const authenticated = reporterSession || (teamSession && !row.write);
         const expected =
           row.publicStatus ??
-          (!authenticated
-            ? 401
-            : row.submission
-              ? caller === 'owner'
-                ? 201
-                : 404
-              : row.resource
-                ? caller !== 'owner'
-                  ? 404
-                  : fileRequest && variant
+          (teamSession && row.write
+            ? 403
+            : !authenticated
+              ? 401
+              : teamSession && row.resource
+                ? caller === 'operator'
+                  ? fileRequest && variant
                     ? 206
-                    : row.method === 'POST'
-                      ? 201
-                      : 200
-                : 200);
+                    : 200
+                  : 404
+                : row.submission
+                  ? caller === 'owner'
+                    ? 201
+                    : 404
+                  : row.resource
+                    ? caller !== 'owner'
+                      ? 404
+                      : fileRequest && variant
+                        ? 206
+                        : row.method === 'POST'
+                          ? 201
+                          : 200
+                    : 200);
         expect({
           endpoint: `${row.method} ${row.path}`,
           caller,
@@ -210,10 +270,12 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
           status: expected,
         });
         expect(response.headers.get('cache-control')).toBe(
-          fileRequest && caller === 'owner' ? 'private, no-store' : 'no-store'
+          fileRequest && (caller === 'owner' || caller === 'operator')
+            ? 'private, no-store'
+            : 'no-store'
         );
         expect(response.headers.get('access-control-allow-origin')).toBeNull();
-        if (row.path === '/events' && authenticated) {
+        if (row.path === '/events' && response.status === 200) {
           const reader = response.body!.getReader();
           expect(new TextDecoder().decode((await reader.read()).value)).toContain(': connected');
           await reader.cancel();
@@ -232,7 +294,21 @@ it('applies the endpoint matrix to every caller type without accepting staff cre
             body.projects ??
             body.reports ??
             Object.values(body.columns!).flatMap((column) => column.reports);
-          expect(items.length).toBe(caller === 'owner' ? 1 : 0);
+          expect({ path: row.path, variant, caller, count: items.length }).toEqual({
+            path: row.path,
+            variant,
+            caller,
+            count:
+              caller === 'owner'
+                ? 1
+                : caller === 'operator' && row.path === '/projects'
+                  ? 1
+                  : caller === 'operator'
+                    ? getDb()
+                        .query<{ count: number }, []>('SELECT COUNT(*) AS count FROM reports')
+                        .get()!.count
+                    : 0,
+          });
         }
       }
     }

@@ -10,8 +10,13 @@ const ACCOUNT_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ACCOUNT_FAILURES = 10;
 const ACCOUNT_LOCK_MS = 15 * 60 * 1000;
 
+// A challenge opened by the Reporter Portal team sign-in must never complete a staff login,
+// and the reverse, so every challenge is bound to the flow that created it.
+export type LoginChallengePurpose = 'staff' | 'portal';
+
 export interface PendingLogin {
   userId: string;
+  purpose: LoginChallengePurpose;
   ipAddress?: string;
   userAgent?: string;
   expiresAt: number;
@@ -42,10 +47,15 @@ const cleanupInterval = setInterval(() => {
 cleanupInterval.unref?.();
 
 export const loginChallengeService = {
-  create(userId: string, meta: { ipAddress?: string; userAgent?: string } = {}): string {
+  create(
+    userId: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+    purpose: LoginChallengePurpose = 'staff'
+  ): string {
     const token = randomBytes(32).toString('base64url');
     pendingLogins.set(token, {
       userId,
+      purpose,
       ...meta,
       expiresAt: Date.now() + CHALLENGE_TTL_MS,
       failedAttempts: 0,
@@ -53,9 +63,9 @@ export const loginChallengeService = {
     return token;
   },
 
-  get(token: string): PendingLogin | null {
+  get(token: string, purpose: LoginChallengePurpose = 'staff'): PendingLogin | null {
     const pending = pendingLogins.get(token);
-    if (!pending) return null;
+    if (!pending || pending.purpose !== purpose) return null;
     if (pending.expiresAt < Date.now()) {
       pendingLogins.delete(token);
       return null;
@@ -68,8 +78,12 @@ export const loginChallengeService = {
    * means parallel requests on one challenge cannot all slip under the limits while the
    * first verification is still running.
    */
-  beginAttempt(token: string, now = Date.now()): AttemptResult {
-    const pending = this.get(token);
+  beginAttempt(
+    token: string,
+    now = Date.now(),
+    purpose: LoginChallengePurpose = 'staff'
+  ): AttemptResult {
+    const pending = this.get(token, purpose);
     if (!pending) return { ok: false, reason: 'expired' };
     if (pending.failedAttempts >= MAX_FAILED_ATTEMPTS) {
       pendingLogins.delete(token);

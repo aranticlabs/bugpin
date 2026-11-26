@@ -45,7 +45,7 @@ function mount(path = '/', token = '', controls?: ReactNode) {
           {controls}
           <BrandingProvider>
             <MemoryRouter initialEntries={[path]}>
-              <App initialToken={token} />
+              <App initialToken={token ? { kind: 'reporter', token } : null} />
             </MemoryRouter>
           </BrandingProvider>
         </I18nProvider>
@@ -122,7 +122,8 @@ it('removes the fragment before the first request and exchanges only after Conti
       });
     })
   );
-  mount('/login', token);
+  expect(token?.kind).toBe('reporter');
+  mount('/login', token?.token);
   await screen.findByRole('heading', { name: 'Sign in as j***@example.com?' });
   expect(exchanges).toBe(0);
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -135,7 +136,7 @@ it.each(['main-content', 'section', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repea
   'leaves non-token fragment %s unchanged',
   (fragment) => {
     window.history.replaceState(null, '', `/reporter-portal/login#${fragment}`);
-    expect(takeLoginToken()).toBe('');
+    expect(takeLoginToken()).toBeNull();
     expect(window.location.hash).toBe(`#${fragment}`);
   }
 );

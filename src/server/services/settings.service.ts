@@ -2,7 +2,7 @@ import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { config } from '../config.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
-import { isSecurePortalUrl } from '../utils/portal-url.js';
+import { isSecurePortalUrl, securePortalBaseUrl } from '../utils/portal-url.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { cleanupService } from './cleanup.service.js';
 import { emailService } from './email.service.js';
@@ -31,6 +31,7 @@ import type {
   TwoFactorPolicy,
 } from '@shared/types';
 import type { PasswordPolicy } from '@shared/password-policy';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 
 // Types
 
@@ -42,6 +43,7 @@ export interface UpdateSettingsInput {
   appName?: string;
   appUrl?: string;
   portalBaseUrl?: string;
+  portalTeamSignIn?: boolean;
   reporterPortalLimits?: Partial<AppSettings['reporterPortalLimits']>;
   retentionDays?: number;
   rateLimitPerMinute?: number;
@@ -387,6 +389,15 @@ export const settingsService = {
     if (input.appName !== undefined) updates.appName = input.appName.trim();
     if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
     if (input.portalBaseUrl !== undefined) updates.portalBaseUrl = portalBaseUrl;
+    if (input.portalTeamSignIn !== undefined) updates.portalTeamSignIn = input.portalTeamSignIn;
+    // Team sign-in that becomes unavailable ends every team session, so making it available
+    // again revives none.
+    const teamSignInBefore = current.portalTeamSignIn && securePortalBaseUrl(current) !== null;
+    const teamSignInAfter =
+      (input.portalTeamSignIn ?? current.portalTeamSignIn) &&
+      securePortalBaseUrl({ appUrl, portalBaseUrl }) !== null;
+    if (teamSignInBefore && !teamSignInAfter)
+      portalOperatorsRepo.revokeAll(new Date().toISOString());
     if (input.reporterPortalLimits !== undefined) {
       updates.reporterPortalLimits = mergeDefined(
         current.reporterPortalLimits,

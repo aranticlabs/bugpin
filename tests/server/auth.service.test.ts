@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'bun:test
 import { authService } from '../../src/server/services/auth.service';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
+import { portalOperatorsRepo } from '../../src/server/database/repositories/portal-operators.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { logger } from '../../src/server/utils/logger';
@@ -12,6 +13,8 @@ import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 
 const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
+const originalPortalOperatorsRepo = { ...portalOperatorsRepo };
+let revokedTeamSessionsFor: string | null = null;
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
 const originalTwoFactorRepo = { ...twoFactorRepo };
@@ -56,6 +59,10 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  revokedTeamSessionsFor = null;
+  portalOperatorsRepo.revokeAllForUser = (id) => {
+    revokedTeamSessionsFor = id;
+  };
   userWithPassword = { ...baseUser, passwordHash: validHash };
   sessionById = baseSession;
   userById = baseUser;
@@ -126,6 +133,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(portalOperatorsRepo, originalPortalOperatorsRepo);
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
@@ -230,6 +238,7 @@ describe('authService.changePassword', () => {
     expect(result.success).toBe(true);
     expect(updatedPasswordId).toBe(baseUser.id);
     expect(deletedUserSessionsId).toBe(baseUser.id);
+    expect(revokedTeamSessionsFor).toBe(baseUser.id);
   });
 
   it('keeps current session when currentSessionId is provided', async () => {
@@ -241,6 +250,7 @@ describe('authService.changePassword', () => {
     );
     expect(result.success).toBe(true);
     expect(updatedPasswordId).toBe(baseUser.id);
+    expect(revokedTeamSessionsFor).toBe(baseUser.id);
     expect(deletedUserSessionsId).toBeNull();
     expect(deletedUserSessionsExceptId).toEqual({
       userId: baseUser.id,

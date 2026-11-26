@@ -1,29 +1,43 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { PortalMe } from '@shared/portal-types';
+import type { PortalMe, PortalOperator } from '@shared/portal-types';
 import { portalApi } from '../api/reports';
 import { PortalApiError, portalFetch } from '../api/client';
 import { isPrivatePortalQuery } from '../api/private-query';
 
+interface PortalSession {
+  reporter: PortalMe | null;
+  operator: PortalOperator | null;
+}
+
+const signedOut: PortalSession = { reporter: null, operator: null };
+
 const AuthContext = createContext<{
   reporter: PortalMe | null;
+  /** Set for a staff member in the read-only team view */
+  operator: PortalOperator | null;
+  signedIn: boolean;
   loading: boolean;
   error: boolean;
   expired: boolean;
   refresh: () => void;
   reconcileSession: () => Promise<void>;
   signIn: (reporter: PortalMe) => Promise<void>;
+  signInOperator: (operator: PortalOperator) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (
     changes: Partial<Pick<PortalMe, 'displayName' | 'locale' | 'emailUpdates'>>
   ) => Promise<void>;
 } | null>(null);
 
-async function loadReporter(signal?: AbortSignal): Promise<PortalMe | null> {
+async function loadSession(signal?: AbortSignal): Promise<PortalSession> {
   try {
-    return (await portalFetch<{ reporter: PortalMe }>('/me', { signal })).reporter;
+    const me = await portalFetch<{ reporter?: PortalMe; operator?: PortalOperator }>('/me', {
+      signal,
+    });
+    return { reporter: me.reporter ?? null, operator: me.operator ?? null };
   } catch (error) {
-    if (error instanceof PortalApiError && error.status === 401) return null;
+    if (error instanceof PortalApiError && error.status === 401) return signedOut;
     throw error;
   }
 }
@@ -32,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const sessionGeneration = useRef(0);
   const [expired, setExpired] = useState(false);
-  const [reporter, setReporter] = useState<PortalMe | null>(null);
+  const [session, setSession] = useState<PortalSession>(signedOut);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -45,10 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = sessionGeneration.current;
     setLoading(true);
     setFailed(false);
-    void loadReporter(abort.signal)
-      .then((reporter) => {
-        if (!abort.signal.aborted && generation === sessionGeneration.current)
-          setReporter(reporter);
+    void loadSession(abort.signal)
+      .then((loaded) => {
+        if (!abort.signal.aborted && generation === sessionGeneration.current) setSession(loaded);
       })
       .catch(() => {
         if (abort.signal.aborted) return;
@@ -65,19 +78,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionGeneration.current++;
       void client.cancelQueries({ predicate: isPrivatePortalQuery });
       clearPrivateData();
-      setReporter(null);
+      setSession(signedOut);
       setExpired(true);
     };
     window.addEventListener('bugpin:portal-session-expired', expire);
     return () => window.removeEventListener('bugpin:portal-session-expired', expire);
   }, [client]);
 
-  async function replaceSession(reporter: PortalMe | null) {
+  async function replaceSession(next: PortalSession) {
     const generation = ++sessionGeneration.current;
     await client.cancelQueries({ predicate: isPrivatePortalQuery });
     if (generation !== sessionGeneration.current) return;
     clearPrivateData();
-    setReporter(reporter);
+    setSession(next);
     setExpired(false);
   }
 
@@ -87,27 +100,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (generation !== sessionGeneration.current) return;
     clearPrivateData();
     try {
-      const reporter = await loadReporter();
-      if (generation === sessionGeneration.current) setReporter(reporter);
+      const loaded = await loadSession();
+      if (generation === sessionGeneration.current) setSession(loaded);
     } catch {
-      if (generation === sessionGeneration.current) setReporter(null);
+      if (generation === sessionGeneration.current) setSession(signedOut);
     }
   }
 
   return (
     <AuthContext.Provider
       value={{
-        reporter,
+        reporter: session.reporter,
+        operator: session.operator,
+        signedIn: Boolean(session.reporter || session.operator),
         loading,
         error: failed,
         expired,
         refresh: () => setAttempt((value) => value + 1),
         reconcileSession,
-        signIn: replaceSession,
+        signIn: (reporter) => replaceSession({ reporter, operator: null }),
+        signInOperator: (operator) => replaceSession({ reporter: null, operator }),
         updateProfile: async (changes) => {
           const generation = sessionGeneration.current;
           const updated = await portalApi.profile(changes);
-          if (generation === sessionGeneration.current) setReporter(updated);
+          if (generation === sessionGeneration.current)
+            setSession({ reporter: updated, operator: null });
         },
         signOut: async () => {
           try {
@@ -115,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch (error) {
             if (!(error instanceof PortalApiError && error.status === 401)) throw error;
           }
-          await replaceSession(null);
+          await replaceSession(signedOut);
         },
       }}
     >

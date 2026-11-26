@@ -845,6 +845,7 @@ export interface AppSettings {
   appName: string;
   appUrl: string;
   portalBaseUrl: string;
+  portalTeamSignIn: boolean;
   reporterPortalLimits: ReporterPortalLimits;
   retentionDays: number;
   rateLimitPerMinute: number;

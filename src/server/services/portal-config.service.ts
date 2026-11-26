@@ -1,5 +1,6 @@
 import { brandingService } from './branding.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
+import { portalOperatorAuthService } from './portal-operator-auth.service.js';
 import { Result } from '../utils/result.js';
 import { SUPPORTED_LOCALES } from '@shared/types';
 
@@ -27,6 +28,7 @@ export const portalConfigService = {
       },
       hideFooterBranding: Boolean(whiteLabel?.enabled && whiteLabel.hideFooterBranding),
       locales: SUPPORTED_LOCALES,
+      teamSignIn: await portalOperatorAuthService.enabled(),
     });
   },
 };

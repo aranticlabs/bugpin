@@ -70,14 +70,6 @@ function copyColumns(db: Database, table: string): Record<string, string> {
 }
 
 const migrations: Record<string, Migration> = {
-  '019_add_reporter_reply_preferences.sql': {
-    isSatisfied: (db) =>
-      hasColumn(db, 'notification_preferences', 'notify_on_reporter_reply') &&
-      hasColumn(db, 'project_notification_defaults', 'default_notify_on_reporter_reply') &&
-      db.query("SELECT 1 FROM settings WHERE key = 'default_notify_on_reporter_reply'").get() !==
-        null,
-    apply: addMissingColumns,
-  },
   '003_add_reporter_locale.sql': {
     isSatisfied: (db) => hasColumn(db, 'reports', 'reporter_locale'),
     apply: addMissingColumns,
@@ -188,6 +180,26 @@ const migrations: Record<string, Migration> = {
       hasColumn(db, 'files', 'message_id') &&
       hasColumn(db, 'files', 'uploaded_by_reporter_id') &&
       schemaMatches(db, FILE_MESSAGE_INDEXES),
+    apply: addMissingColumns,
+  },
+  '019_add_reporter_reply_preferences.sql': {
+    isSatisfied: (db) =>
+      hasColumn(db, 'notification_preferences', 'notify_on_reporter_reply') &&
+      hasColumn(db, 'project_notification_defaults', 'default_notify_on_reporter_reply') &&
+      db.query("SELECT 1 FROM settings WHERE key = 'default_notify_on_reporter_reply'").get() !==
+        null,
+    apply: addMissingColumns,
+  },
+  '020_add_portal_operator_access.sql': {
+    isSatisfied: (db) =>
+      hasColumn(db, 'users', 'portal_verified_email') &&
+      hasObjects(db, [
+        'portal_operator_sessions',
+        'portal_operator_tokens',
+        'idx_portal_operator_sessions_user',
+        'idx_portal_operator_sessions_expiry',
+        'idx_portal_operator_tokens_user',
+      ]),
     apply: addMissingColumns,
   },
 };

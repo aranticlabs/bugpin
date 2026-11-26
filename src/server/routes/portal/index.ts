@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { portalOriginCheck } from '../../middleware/origin-check.js';
-import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
+import { portalReaderAuthMiddleware } from '../../middleware/reporter-auth.js';
 import { portalConfigService } from '../../services/portal-config.service.js';
 import { unsubscribeRoutes } from './unsubscribe.js';
 import { portalAuthRoutes } from './auth.js';
@@ -40,8 +40,10 @@ portalRoutes.route('/', portalFilesRoutes);
 portalRoutes.route('/', portalMessagesRoutes);
 portalRoutes.route('/', portalSubmissionsRoutes);
 portalRoutes.route('/', portalEventsRoutes);
-portalRoutes.get('/me', reporterAuthMiddleware, (c) =>
-  c.json({ success: true, reporter: c.get('reporter') })
+portalRoutes.get('/me', portalReaderAuthMiddleware, (c) =>
+  c.get('portalScope').kind === 'operator'
+    ? c.json({ success: true, operator: c.get('portalOperator') })
+    : c.json({ success: true, reporter: c.get('reporter') })
 );
 portalRoutes.get('/config', async (c) => {
   const result = await portalConfigService.get();

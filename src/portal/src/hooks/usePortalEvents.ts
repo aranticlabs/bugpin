@@ -3,9 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthProvider';
 import { portalFetch, PortalApiError } from '../api/client';
 import { isPrivatePortalQuery } from '../api/private-query';
+import type { PortalMe } from '@shared/portal-types';
 
 export function usePortalEvents() {
-  const { reporter } = useAuth();
+  const { reporter, reconcileSession } = useAuth();
   const client = useQueryClient();
   const [offline, setOffline] = useState(false);
   useEffect(() => {
@@ -42,9 +43,15 @@ export function usePortalEvents() {
       if (checking || abort.signal.aborted || source !== events) return;
       checking = true;
       try {
-        await portalFetch('/me', { signal: abort.signal });
-        if (!abort.signal.aborted && source === events && source.readyState === EventSource.CLOSED)
-          schedule(connect);
+        const me = await portalFetch<{ reporter?: PortalMe }>('/me', { signal: abort.signal });
+        if (abort.signal.aborted || source !== events) return;
+        // Another tab signed in to a different account and replaced the session cookie.
+        if (me.reporter?.id !== reporter?.id) {
+          stop();
+          void reconcileSession();
+          return;
+        }
+        if (source.readyState === EventSource.CLOSED) schedule(connect);
       } catch (error) {
         if (abort.signal.aborted || source !== events) return;
         if (error instanceof PortalApiError && error.status === 401) {

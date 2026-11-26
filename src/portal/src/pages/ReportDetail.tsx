@@ -12,6 +12,7 @@ import { Button } from '@shared-ui/components/ui/button';
 import { portalApi } from '../api/reports';
 import { PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../auth/AuthProvider';
 import { useProjects } from '../hooks/useProjects';
 import { FilePreview } from '../components/FilePreview';
 import { PlainText } from '../components/PlainText';
@@ -22,6 +23,7 @@ import { AuthCard } from '../components/AuthCard';
 export function ReportDetail() {
   const { id = '' } = useParams();
   const { t, locale } = useI18n();
+  const auth = useAuth();
   const projects = useProjects();
   const client = useQueryClient();
   const query = useQuery({
@@ -36,7 +38,7 @@ export function ReportDetail() {
     return query.error instanceof PortalApiError && query.error.status === 404 ? (
       <div role="status">
         <AuthCard title={t('notFound')}>
-          <Link to="/reports">{t('myFeedback')}</Link>
+          <Link to="/reports">{t(auth.operator ? 'teamFeedback' : 'myFeedback')}</Link>
         </AuthCard>
       </div>
     ) : (
@@ -78,7 +80,7 @@ export function ReportDetail() {
       <Button asChild variant="link" className="px-0 underline dark:text-foreground">
         <Link to="/reports">
           <span aria-hidden="true">← </span>
-          {t('myFeedback')}
+          {t(auth.operator ? 'teamFeedback' : 'myFeedback')}
         </Link>
       </Button>
       <h1 className="break-words text-2xl font-semibold [overflow-wrap:anywhere]">
@@ -141,7 +143,15 @@ export function ReportDetail() {
             />
           ) : (
             <Card className="space-y-3 p-4">
-              <p role="status">{t(report.status === 'closed' ? 'reportClosed' : 'messagingOff')}</p>
+              <p role="status">
+                {t(
+                  auth.operator
+                    ? 'teamReadOnlyReply'
+                    : report.status === 'closed'
+                      ? 'reportClosed'
+                      : 'messagingOff'
+                )}
+              </p>
               {report.status === 'closed' && report.canSubmitNewFeedback && (
                 <Button asChild>
                   <Link to={`/new?projectId=${encodeURIComponent(report.project.id)}`}>

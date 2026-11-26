@@ -22,6 +22,7 @@ const settingsSchema = z
       .max(100, 'Application name must be 100 characters or less'),
     appUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
     portalBaseUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
+    portalTeamSignIn: z.boolean(),
     updateCheckEnabled: z.boolean(),
   })
   .superRefine((values, context) => {
@@ -76,6 +77,7 @@ export function Settings() {
         appName: settings.appName || '',
         appUrl: settings.appUrl || '',
         portalBaseUrl: settings.portalBaseUrl || '',
+        portalTeamSignIn: settings.portalTeamSignIn ?? false,
         updateCheckEnabled: settings.updateCheckEnabled ?? true,
       },
     [settings]
@@ -92,6 +94,7 @@ export function Settings() {
       appName: '',
       appUrl: '',
       portalBaseUrl: '',
+      portalTeamSignIn: false,
       updateCheckEnabled: true,
     },
     // Reloaded settings replace only the fields the user has not edited.
@@ -169,6 +172,23 @@ export function Settings() {
             {errors.portalBaseUrl && (
               <p className="text-xs text-destructive">{errors.portalBaseUrl.message}</p>
             )}
+          </SettingRow>
+          <SettingRow
+            label="Team Sign-in to the Reporter Portal"
+            htmlFor="portal-team-sign-in"
+            description="Lets every BugPin user sign in to the Reporter Portal with their account for a read-only view of reporter feedback. The first sign-in confirms the user's email address."
+          >
+            <Controller
+              control={control}
+              name="portalTeamSignIn"
+              render={({ field }) => (
+                <Switch
+                  id="portal-team-sign-in"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
+            />
           </SettingRow>
           <SettingRow
             label="Check for Updates"

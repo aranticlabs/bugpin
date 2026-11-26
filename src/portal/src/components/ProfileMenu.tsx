@@ -46,7 +46,8 @@ export function ProfileMenu() {
   const [logoutFailed, setLogoutFailed] = useState(false);
   const logout = useMutation({ mutationFn: auth.signOut, onError: () => setLogoutFailed(true) });
   const update = useMutation({ mutationFn: auth.updateProfile, onSuccess: () => setOpen(false) });
-  if (!auth.reporter) return null;
+  const accountName = auth.reporter?.displayName ?? auth.operator?.name;
+  if (accountName === undefined) return null;
   const busy = update.isPending || logout.isPending;
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -57,45 +58,49 @@ export function ProfileMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="h-11 max-w-full" disabled={busy}>
-            <span className="truncate">{auth.reporter.displayName}</span>
+            <span className="truncate">{accountName}</span>
             <span aria-hidden="true">▾</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={() => {
-              setName(auth.reporter?.displayName ?? '');
-              update.reset();
-              setOpen(true);
-            }}
-          >
-            {t('displayName')}
-          </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{t('language')}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuRadioGroup
-                value={locale}
-                onValueChange={(value) => {
-                  const next = normalizeLocale(value);
-                  if (next) update.mutate({ locale: next });
+          {auth.reporter && (
+            <>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setName(auth.reporter?.displayName ?? '');
+                  update.reset();
+                  setOpen(true);
                 }}
               >
-                {Object.entries(languages).map(([value, label]) => (
-                  <DropdownMenuRadioItem value={value} key={value}>
-                    {label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuCheckboxItem
-            checked={auth.reporter.emailUpdates}
-            onCheckedChange={(emailUpdates) => update.mutate({ emailUpdates })}
-          >
-            {t('emailUpdates')}
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuSeparator />
+                {t('displayName')}
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{t('language')}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup
+                    value={locale}
+                    onValueChange={(value) => {
+                      const next = normalizeLocale(value);
+                      if (next) update.mutate({ locale: next });
+                    }}
+                  >
+                    {Object.entries(languages).map(([value, label]) => (
+                      <DropdownMenuRadioItem value={value} key={value}>
+                        {label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuCheckboxItem
+                checked={auth.reporter.emailUpdates}
+                onCheckedChange={(emailUpdates) => update.mutate({ emailUpdates })}
+              >
+                {t('emailUpdates')}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem
             onSelect={() => {
               setLogoutFailed(false);

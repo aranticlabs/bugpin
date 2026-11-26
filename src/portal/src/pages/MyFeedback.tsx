@@ -17,6 +17,7 @@ import {
 import { portalApi } from '../api/reports';
 import { useProjects } from '../hooks/useProjects';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../auth/AuthProvider';
 import { useBranding } from '../branding/BrandingProvider';
 import { QueryState } from '../components/QueryState';
 
@@ -66,6 +67,7 @@ function FeedbackList({
   onUnread: (count: number) => void;
 }) {
   const { t } = useI18n();
+  const { operator } = useAuth();
   const query = useInfiniteQuery({
     queryKey: ['portal', 'reports', 'list', projectId, status],
     queryFn: ({ pageParam, signal }) =>
@@ -82,7 +84,9 @@ function FeedbackList({
   return (
     <div className="space-y-4">
       {!reports.length && (
-        <p className="rounded-lg border border-dashed p-6 text-center">{t('emptyFeedback')}</p>
+        <p className="rounded-lg border border-dashed p-6 text-center">
+          {t(operator ? 'emptyTeamFeedback' : 'emptyFeedback')}
+        </p>
       )}
       <ul className="divide-y rounded-lg border">
         {reports.map((report) => (
@@ -209,6 +213,7 @@ function FeedbackBoard({
 
 export function MyFeedback() {
   const { t, locale } = useI18n();
+  const heading = useAuth().operator ? 'teamFeedback' : 'myFeedback';
   const branding = useBranding();
   const projects = useProjects();
   const [search, setSearch] = useSearchParams();
@@ -217,11 +222,11 @@ export function MyFeedback() {
   const status = REPORT_STATUSES.find((value) => value === search.get('status'));
   const board = search.get('view') === 'board';
   useEffect(() => {
-    document.title = `${unread ? `(${unread}) ` : ''}${t('myFeedback')} | ${branding?.appName ?? 'BugPin'}`;
+    document.title = `${unread ? `(${unread}) ` : ''}${t(heading)} | ${branding?.appName ?? 'BugPin'}`;
     return () => {
       document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
     };
-  }, [unread, locale, branding?.appName]);
+  }, [unread, locale, branding?.appName, heading]);
   function filter(key: string, value: string) {
     const next = new URLSearchParams(search);
     if (value === 'all') next.delete(key);
@@ -230,7 +235,7 @@ export function MyFeedback() {
   }
   return (
     <div className="min-w-0 space-y-6">
-      <h1 className="text-2xl font-semibold">{t('myFeedback')}</h1>
+      <h1 className="text-2xl font-semibold">{t(heading)}</h1>
       <div className="flex flex-wrap items-center gap-3">
         {projects.data && projects.data.length > 1 && (
           <Select value={projectId ?? 'all'} onValueChange={(value) => filter('projectId', value)}>

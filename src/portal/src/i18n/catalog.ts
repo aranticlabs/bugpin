@@ -1,6 +1,8 @@
 import en from './locales/en';
+import type { TeamMessageKey } from './team';
 
 export type Catalog = Record<keyof typeof en, string>;
+export type MessageKey = keyof Catalog | TeamMessageKey;
 export type Locale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'ja' | 'nl' | 'zh';
 
 export function normalizeLocale(value: string): Locale | null {

@@ -15,6 +15,7 @@ import type {
   AuthenticationResponseJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/server';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 
 // Types
 
@@ -76,6 +77,14 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
   return await Bun.password.verify(password, hash);
 }
 
+// Unknown and disabled accounts still pay for one bcrypt comparison, so response time does not
+// reveal which emails belong to staff accounts.
+let timingHash: Promise<string> | undefined;
+async function equalizeTiming(password: string): Promise<void> {
+  timingHash ??= hashPassword(crypto.randomUUID());
+  await verifyPassword(password, await timingHash);
+}
+
 // Service
 
 export const authService = {
@@ -88,30 +97,9 @@ export const authService = {
     ipAddress?: string,
     userAgent?: string
   ): Promise<Result<LoginOutcome>> {
-    // Find user by email
-    const userWithPassword = await usersRepo.findByEmailWithPassword(email);
-
-    if (!userWithPassword) {
-      logger.warn('Login failed: user not found', { email });
-      return Result.fail('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
-
-    // Check if user is active
-    if (!userWithPassword.isActive) {
-      logger.warn('Login failed: user inactive', { email });
-      return Result.fail('Account is disabled', 'ACCOUNT_DISABLED');
-    }
-
-    // Verify password
-    const isValid = await verifyPassword(password, userWithPassword.passwordHash);
-
-    if (!isValid) {
-      logger.warn('Login failed: invalid password', { email });
-      return Result.fail('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
-
-    // Remove password hash from user object
-    const { passwordHash: _, ...user } = userWithPassword;
+    const verified = await this.verifyCredentials(email, password);
+    if (!verified.success) return verified;
+    const user = verified.value;
 
     // With a second factor, the password only opens a short-lived challenge
     if (await twoFactorService.hasSecondFactor(user.id)) {
@@ -131,6 +119,38 @@ export const authService = {
     const result = await createSessionForUser(user, ipAddress, userAgent);
     logger.info('User logged in', { userId: user.id, email: user.email });
     return Result.ok(result);
+  },
+
+  /**
+   * Check an email and password without creating a session
+   */
+  async verifyCredentials(email: string, password: string): Promise<Result<User>> {
+    const userWithPassword = await usersRepo.findByEmailWithPassword(email);
+
+    if (!userWithPassword) {
+      await equalizeTiming(password);
+      logger.warn('Login failed: user not found', { email });
+      return Result.fail('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // Check if user is active
+    if (!userWithPassword.isActive) {
+      await equalizeTiming(password);
+      logger.warn('Login failed: user inactive', { email });
+      return Result.fail('Account is disabled', 'ACCOUNT_DISABLED');
+    }
+
+    // Verify password
+    const isValid = await verifyPassword(password, userWithPassword.passwordHash);
+
+    if (!isValid) {
+      logger.warn('Login failed: invalid password', { email });
+      return Result.fail('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // Remove password hash from user object
+    const { passwordHash: _, ...user } = userWithPassword;
+    return Result.ok(user);
   },
 
   /**
@@ -308,6 +328,7 @@ export const authService = {
     await usersRepo.updatePassword(userId, newHash);
 
     // Invalidate all other sessions, keep the current one active
+    portalOperatorsRepo.revokeAllForUser(userId, new Date().toISOString());
     if (currentSessionId) {
       await sessionsRepo.deleteByUserIdExcept(userId, currentSessionId);
     } else {

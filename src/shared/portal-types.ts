@@ -78,3 +78,18 @@ export interface PortalMe {
   locale: string;
   emailUpdates: boolean;
 }
+
+export interface PortalOperator {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export type PortalTeamLoginResult =
+  | { status: 'signedIn'; operator: PortalOperator }
+  | {
+      status: 'twoFactorRequired';
+      challengeToken: string;
+      methods: { totp: boolean; recoveryCode: true };
+    }
+  | { status: 'verificationSent'; maskedEmail: string };

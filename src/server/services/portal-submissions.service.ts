@@ -30,7 +30,7 @@ export const portalSubmissionsService = {
   ): Promise<
     Result<{ maxSize: number; errorCode: 'PAYLOAD_TOO_LARGE' | 'UPLOAD_QUOTA_EXCEEDED' }>
   > {
-    const projects = await portalReportsService.projects(reporterId);
+    const projects = await portalReportsService.projects({ kind: 'reporter', reporterId });
     if (!projects.success) return projects;
     const sizeMb = Math.max(
       0,
@@ -228,7 +228,7 @@ export const portalSubmissionsService = {
           integration ? syncQueueService.enqueue(id, integration.id) : undefined
         )
         .catch(() => logger.warn('Failed to queue report sync', { reportId: id }));
-      return await portalReportsService.detail(id, reporterId);
+      return await portalReportsService.detail(id, { kind: 'reporter', reporterId });
     } catch (error) {
       logger.error('Failed to save portal feedback', error, { reportId: id });
       return Result.fail('Failed to save feedback', 'SUBMISSION_WRITE_FAILED');

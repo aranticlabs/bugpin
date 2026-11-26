@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { hasColumn, MigrationRunner } from './migration-runner.js';
 import {
   REPORTERS_SCHEMA,
+  PORTAL_OPERATOR_SCHEMA,
   REPORTS_SCHEMA,
   REPORT_HISTORY_SCHEMA,
   REPORT_PORTAL_INDEXES,
@@ -250,6 +251,7 @@ export async function initSchema(): Promise<void> {
   `);
 
   db.exec(REPORTERS_SCHEMA);
+  db.exec(PORTAL_OPERATOR_SCHEMA);
   db.exec(REPORTS_SCHEMA);
 
   // Add source column to existing databases before creating indexes that depend on it.

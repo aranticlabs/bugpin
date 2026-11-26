@@ -1,6 +1,7 @@
 import {
   portalReportsRepo,
   type PortalFileRow,
+  type PortalScope,
 } from '../database/repositories/portal-reports.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { createStoredFileHandle, type StoredFileHandle } from '../storage/files.js';
@@ -56,7 +57,7 @@ function toPortalMessage(
 
 export const portalReportsService = {
   access(reportId: string, reporterId: string): Result<void> {
-    return portalReportsRepo.detail(reportId, reporterId)
+    return portalReportsRepo.detail(reportId, { kind: 'reporter', reporterId })
       ? Result.ok(undefined)
       : Result.fail('Report not found', 'NOT_FOUND');
   },
@@ -68,20 +69,20 @@ export const portalReportsService = {
       message.files.map((file) => toPortalFile(message.reportId, file))
     );
   },
-  async projects(reporterId: string): Promise<Result<PortalProject[]>> {
+  async projects(scope: PortalScope): Promise<Result<PortalProject[]>> {
     const settings = await settingsCacheService.getAll();
     return Result.ok(
-      portalReportsRepo.projects(reporterId).map((project) => ({
+      portalReportsRepo.projects(scope).map((project) => ({
         id: project.id,
         name: project.name,
-        allowNewFeedback: project.allowNewFeedback === 1,
+        allowNewFeedback: scope.kind === 'reporter' && project.allowNewFeedback === 1,
         maxImageMb: project.maxImageMb ?? settings.screenshot.maxImageUploadSizeMb,
         maxVideoMb: project.maxVideoMb ?? settings.screenshot.maxVideoUploadSizeMb,
       }))
     );
   },
 
-  list(reporterId: string, input: PortalReportQuery): Result<PortalReportList | PortalReportBoard> {
+  list(scope: PortalScope, input: PortalReportQuery): Result<PortalReportList | PortalReportBoard> {
     let cursor: PortalReportCursor | undefined;
     if (input.cursor) {
       try {
@@ -95,7 +96,7 @@ export const portalReportsService = {
       }
     }
     const page = (status = input.status): PortalReportList => {
-      const result = portalReportsRepo.list(reporterId, { ...input, status, cursor });
+      const result = portalReportsRepo.list(scope, { ...input, status, cursor });
       const rows = result.rows.slice(0, input.limit);
       const last = rows.at(-1);
       return {
@@ -136,11 +137,14 @@ export const portalReportsService = {
     return Result.ok({ columns, unreadCount });
   },
 
-  async detail(reportId: string, reporterId: string): Promise<Result<PortalReportDetail>> {
+  async detail(reportId: string, scope: PortalScope): Promise<Result<PortalReportDetail>> {
     const settings = await settingsCacheService.getAll();
     return portalReportsRepo.transaction(() => {
-      const row = portalReportsRepo.detail(reportId, reporterId);
+      const row = portalReportsRepo.detail(reportId, scope);
       if (!row) return Result.fail('Report not found', 'NOT_FOUND');
+      const readOnly = scope.kind === 'operator';
+      // The team view shows the thread as the current owner sees it.
+      const perspective = scope.kind === 'reporter' ? scope.reporterId : (row.ownerId ?? '');
       const files = portalReportsRepo.files(reportId);
       const messages = portalReportsRepo.messages(reportId);
       const byMessage = new Map<string | null, PortalFile[]>();
@@ -160,17 +164,18 @@ export const portalReportsService = {
         updatedAt: row.updatedAt,
         files: byMessage.get(null) ?? [],
         messages: messages.map((message) =>
-          toPortalMessage(message, reporterId, byMessage.get(message.id) ?? [])
+          toPortalMessage(message, perspective, byMessage.get(message.id) ?? [])
         ),
         canReply:
+          !readOnly &&
           row.status !== 'closed' &&
           row.notifyReporter !== 0 &&
           (row.messagingEnabled === null
             ? (settings.reporterNotifications?.messagingEnabled ?? true)
             : row.messagingEnabled === 1),
-        canSubmitNewFeedback: row.allowNewFeedback === 1,
+        canSubmitNewFeedback: !readOnly && row.allowNewFeedback === 1,
       };
-      portalReportsRepo.markSeen(reportId, new Date().toISOString());
+      if (!readOnly) portalReportsRepo.markSeen(reportId, new Date().toISOString());
       return Result.ok(report);
     });
   },
@@ -178,12 +183,12 @@ export const portalReportsService = {
   file(
     reportId: string,
     fileId: string,
-    reporterId: string
+    scope: PortalScope
   ): Result<{
     file: PortalFileRow & { filename: string };
     handle: StoredFileHandle;
   }> {
-    const file = portalReportsRepo.file(reportId, fileId, reporterId);
+    const file = portalReportsRepo.file(reportId, fileId, scope);
     if (!file) return Result.fail('File not found', 'NOT_FOUND');
     return Result.ok({ file, handle: createStoredFileHandle(file.path) });
   },

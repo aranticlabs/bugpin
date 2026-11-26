@@ -14,6 +14,7 @@ interface PortalConfig {
   };
   hideFooterBranding: boolean;
   locales: Locale[];
+  teamSignIn: boolean;
 }
 const BrandingContext = createContext<PortalConfig | undefined>(undefined);
 

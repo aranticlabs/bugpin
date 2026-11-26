@@ -1,10 +1,15 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { portalRoutes } from '../../../src/server/routes/portal';
 import { config } from '../../../src/server/config';
-import { closeDatabase, initDatabase, initSchema } from '../../../src/server/database/database';
+import {
+  closeDatabase,
+  getDb,
+  initDatabase,
+  initSchema,
+} from '../../../src/server/database/database';
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { clearAllRateLimits } from '../../../src/server/middleware/rate-limit';
@@ -32,6 +37,15 @@ export async function openPortalDatabase(): Promise<() => void> {
   });
   await initDatabase();
   await initSchema();
+  getDb().exec(
+    readFileSync(
+      join(
+        import.meta.dir,
+        '../../../src/server/database/migrations/020_add_portal_operator_access.sql'
+      ),
+      'utf8'
+    )
+  );
   await settingsRepo.updateAll({
     appUrl: portalOrigin,
     smtpEnabled: true,

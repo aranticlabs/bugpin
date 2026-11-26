@@ -14,6 +14,7 @@ import {
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type { TwoFactorPolicy, TwoFactorStatus, User, UserRole } from '@shared/types';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 
 const TOTP_SECRET_PURPOSE = 'totp-secret';
 const RECOVERY_CODE_COUNT = 10;
@@ -228,6 +229,7 @@ export const twoFactorService = {
     await twoFactorRepo.resetUser(userId);
     // A reset usually follows a lost or stolen device, so existing sign-ins and API tokens end too
     const sessionsEnded = await sessionsRepo.deleteByUserId(userId);
+    portalOperatorsRepo.revokeAllForUser(userId, new Date().toISOString());
     const tokensRevoked = await apiTokensRepo.revokeAllForUser(userId);
     logger.warn('Two-factor authentication reset', { userId, sessionsEnded, tokensRevoked });
     return Result.ok(undefined);

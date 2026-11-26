@@ -5,6 +5,7 @@ import { usersService } from './users.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type { ApiToken, User } from '@shared/types';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 
 async function findUser(id: string): Promise<Result<User>> {
   const user = await usersRepo.findById(id);
@@ -45,6 +46,7 @@ export const userAccessService = {
     const found = await findUser(id);
     if (!found.success) return found;
     const ended = await sessionsRepo.deleteByUserId(id);
+    portalOperatorsRepo.revokeAllForUser(id, new Date().toISOString());
     logger.info('Sessions ended by an administrator', { userId: id, ended });
     return Result.ok(ended);
   },

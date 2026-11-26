@@ -7,6 +7,7 @@ import { gamificationService } from '../../src/server/services/gamification.serv
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { sessionsRepo } from '../../src/server/database/repositories/sessions.repo';
 import { apiTokensRepo } from '../../src/server/database/repositories/api-tokens.repo';
+import { portalOperatorsRepo } from '../../src/server/database/repositories/portal-operators.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import type { Project, User } from '../../src/shared/types';
 import { passwordPolicyService } from '../../src/server/services/password-policy.service';
@@ -30,6 +31,7 @@ const originalUsersRepo = { ...usersRepo };
 const originalGamificationService = { ...gamificationService };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalApiTokensRepo = { ...apiTokensRepo };
+const originalPortalOperatorsRepo = { ...portalOperatorsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalHash = Bun.password.hash;
 const originalVerify = Bun.password.verify;
@@ -44,6 +46,7 @@ let userById: User | null = baseUser;
 let userByEmail: User | null = baseUser;
 let otherSignInAdmins = 1;
 let revokedTokensFor: string | null;
+let revokedTeamSessionsFor: string | null;
 let storedPasswordHash: string | null = 'hash';
 let projects: Project[] = [];
 
@@ -61,7 +64,11 @@ beforeEach(() => {
   userByEmail = baseUser;
   otherSignInAdmins = 1;
   revokedTokensFor = null;
+  revokedTeamSessionsFor = null;
   storedPasswordHash = 'hash';
+  portalOperatorsRepo.revokeAllForUser = (id) => {
+    revokedTeamSessionsFor = id;
+  };
   projects = [];
 
   usersRepo.emailExists = async () => emailExistsValue;
@@ -105,6 +112,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.assign(passwordPolicyService, originalPasswordPolicyService);
+  Object.assign(portalOperatorsRepo, originalPortalOperatorsRepo);
   Object.assign(twoFactorRepo, originalTwoFactorRepo);
   Object.assign(usersRepo, originalUsersRepo);
   Object.assign(gamificationService, originalGamificationService);
@@ -343,6 +351,7 @@ describe('usersService.resetPassword', () => {
     expect(result.success).toBe(true);
     expect(deletedSessionsFor).toBe('usr_1');
     expect(revokedTokensFor).toBe('usr_1');
+    expect(revokedTeamSessionsFor).toBe('usr_1');
   });
 });
 

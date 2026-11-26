@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@shared-ui/components/ui/select';
 import { useAuth } from './auth/AuthProvider';
-import { takeLoginToken } from './auth/login-token';
+import { takeLoginToken, type LoginToken } from './auth/login-token';
 import { useBranding } from './branding/BrandingProvider';
 import { useI18n } from './i18n/I18nProvider';
 import { normalizeLocale } from './i18n/catalog';
@@ -21,9 +21,13 @@ import { ReportDetail } from './pages/ReportDetail';
 import { NewFeedback } from './pages/NewFeedback';
 import { usePortalEvents } from './hooks/usePortalEvents';
 import { LoginContinue } from './pages/LoginContinue';
+import { TeamLogin } from './pages/TeamLogin';
+import { TeamLoginContinue } from './pages/TeamLoginContinue';
 
-export function App({ initialToken = '' }: { initialToken?: string }) {
-  const [token, setToken] = useState(initialToken);
+export function App({ initialToken = null }: { initialToken?: LoginToken | null }) {
+  const [loginToken, setLoginToken] = useState<LoginToken | null>(initialToken);
+  const token = loginToken?.kind === 'reporter' ? loginToken.token : '';
+  const teamToken = loginToken?.kind === 'team' ? loginToken.token : '';
   const [tokenGeneration, setTokenGeneration] = useState(0);
   const offline = usePortalEvents();
   const auth = useAuth();
@@ -34,7 +38,7 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
     const capture = () => {
       const next = takeLoginToken();
       if (next) {
-        setToken(next);
+        setLoginToken(next);
         setTokenGeneration((generation) => generation + 1);
       }
     };
@@ -43,11 +47,11 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
   }, []);
   useEffect(() => {
     document.getElementById('main-content')?.focus();
-  }, [location.pathname, auth.reporter?.id]);
+  }, [location.pathname, auth.reporter?.id, auth.operator?.id]);
   useEffect(() => {
-    if (location.pathname !== '/reports' || !auth.reporter)
+    if (location.pathname !== '/reports' || !auth.signedIn)
       document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
-  }, [location.pathname, branding?.appName, locale, auth.reporter?.id]);
+  }, [location.pathname, branding?.appName, locale, auth.signedIn]);
   const logo = branding?.branding;
   return (
     <div className="flex min-h-dvh flex-col">
@@ -69,9 +73,9 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
               />
             </picture>
           </Link>
-          {auth.reporter ? (
+          {auth.signedIn ? (
             <ProfileMenu />
-          ) : (
+          ) : location.pathname.startsWith('/team-login') ? null : (
             <Select
               value={locale}
               onValueChange={(value) => {
@@ -103,6 +107,11 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
             {t('reconnecting')}
           </p>
         )}
+        {auth.operator && !auth.loading && (
+          <p role="status" className="mb-4 rounded-md border bg-muted p-3 text-sm">
+            {t('teamViewBanner')}
+          </p>
+        )}
         {auth.loading ? (
           <p role="status">{t('loading')}</p>
         ) : auth.error ? (
@@ -120,7 +129,7 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
                   <LoginContinue
                     key={tokenGeneration}
                     token={token}
-                    clearToken={() => setToken('')}
+                    clearToken={() => setLoginToken(null)}
                   />
                 ) : (
                   <LoginRequest />
@@ -128,15 +137,44 @@ export function App({ initialToken = '' }: { initialToken?: string }) {
               }
             />
             <Route
-              path="/"
-              element={auth.reporter ? <Navigate to="/reports" replace /> : <LoginRequest />}
+              path="/team-login"
+              element={auth.signedIn ? <Navigate to="/reports" replace /> : <TeamLogin />}
             />
-            <Route path="/reports" element={auth.reporter ? <MyFeedback /> : <LoginRequest />} />
+            <Route
+              path="/team-login/verify"
+              element={
+                teamToken ? (
+                  <TeamLoginContinue
+                    key={tokenGeneration}
+                    token={teamToken}
+                    clearToken={() => setLoginToken(null)}
+                  />
+                ) : (
+                  <Navigate to="/team-login" replace />
+                )
+              }
+            />
+            <Route
+              path="/"
+              element={auth.signedIn ? <Navigate to="/reports" replace /> : <LoginRequest />}
+            />
+            <Route path="/reports" element={auth.signedIn ? <MyFeedback /> : <LoginRequest />} />
             <Route
               path="/reports/:id"
-              element={auth.reporter ? <ReportDetail /> : <LoginRequest />}
+              element={auth.signedIn ? <ReportDetail /> : <LoginRequest />}
             />
-            <Route path="/new" element={auth.reporter ? <NewFeedback /> : <LoginRequest />} />
+            <Route
+              path="/new"
+              element={
+                auth.reporter ? (
+                  <NewFeedback />
+                ) : auth.operator ? (
+                  <Navigate to="/reports" replace />
+                ) : (
+                  <LoginRequest />
+                )
+              }
+            />
             <Route
               path="*"
               element={

@@ -728,6 +728,7 @@ export const schemas = {
       appName: z.string().min(1).max(100).optional(),
       appUrl: z.string().optional(),
       portalBaseUrl: z.string().max(2048).optional(),
+      portalTeamSignIn: z.boolean().optional(),
       reporterPortalLimits: reporterPortalLimitsSchema.optional(),
       privacy: z
         .object({

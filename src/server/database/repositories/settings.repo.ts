@@ -168,6 +168,7 @@ const KEY_MAP: Record<string, string> = {
   appName: 'app_name',
   appUrl: 'app_url',
   portalBaseUrl: 'portal_base_url',
+  portalTeamSignIn: 'portal_team_sign_in',
   reporterPortalLimits: 'reporter_portal_limits',
   retentionDays: 'retention_days',
   rateLimitPerMinute: 'rate_limit_per_minute',
@@ -337,6 +338,7 @@ function readAll(): AppSettings {
     appName: (settings.appName as string) ?? 'BugPin',
     appUrl: (settings.appUrl as string) ?? '',
     portalBaseUrl: (settings.portalBaseUrl as string) ?? '',
+    portalTeamSignIn: (settings.portalTeamSignIn as boolean) ?? false,
     reporterPortalLimits: {
       ...DEFAULT_REPORTER_PORTAL_LIMITS,
       ...(settings.reporterPortalLimits as Partial<AppSettings['reporterPortalLimits']>),

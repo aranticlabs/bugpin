@@ -33,3 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id, project_
 CREATE INDEX IF NOT EXISTS idx_reports_claimable ON reports(claimable_email) WHERE reporter_id IS NULL AND claimable_email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_reports_reporter_activity ON reports(project_id, last_reporter_activity_at) WHERE last_reporter_activity_at IS NOT NULL;
 `;
+
+// The users column arrives through the migration itself, so a bootstrapped table keeps the
+// same column order as an upgraded one.
+export const PORTAL_OPERATOR_SCHEMA = fs
+  .readFileSync(path.join(config.migrationsDir, '020_add_portal_operator_access.sql'), 'utf8')
+  .replace(/ALTER TABLE \w+ ADD COLUMN [^;]+;/g, '');

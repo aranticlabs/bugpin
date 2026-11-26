@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
+import { portalReaderAuthMiddleware } from '../../middleware/reporter-auth.js';
 import { portalReportsService } from '../../services/portal-reports.service.js';
 import { createFileResponse } from '../../utils/range.js';
 
@@ -7,12 +7,12 @@ export const portalFilesRoutes = new Hono();
 portalFilesRoutes.on(
   ['GET', 'HEAD'],
   '/reports/:id/files/:fileId',
-  reporterAuthMiddleware,
+  portalReaderAuthMiddleware,
   async (c) => {
     const result = portalReportsService.file(
       c.req.param('id'),
       c.req.param('fileId'),
-      c.get('reporter').id
+      c.get('portalScope')
     );
     if (!result.success)
       return c.json({ success: false, error: result.code, message: result.error }, 404);

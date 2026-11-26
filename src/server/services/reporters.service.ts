@@ -4,6 +4,7 @@ import type { ReportOwnerChangedEvent } from '@shared/types';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { reporterAuthTokensRepo } from '../database/repositories/reporter-auth-tokens.repo.js';
 import { reporterSessionsRepo } from '../database/repositories/reporter-sessions.repo.js';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
@@ -157,6 +158,7 @@ export const reportersService = {
     const sessions = reporterSessionsRepo.deleteOlderThan(
       new Date(now - 7 * 86400000).toISOString()
     );
+    portalOperatorsRepo.deleteOlderThan(new Date(now - 86400000).toISOString());
     const { retentionDays } = await settingsRepo.getAll();
     let reporters = 0;
     if (retentionDays > 0) {

@@ -8,8 +8,25 @@ const reportTables = 'reports r JOIN projects p ON p.id = r.project_id';
 const unread = `EXISTS (SELECT 1 FROM report_messages m WHERE m.report_id = r.id
   AND m.author_kind = 'staff' AND m.hidden_at IS NULL
   AND (r.owner_seen_at IS NULL OR julianday(m.created_at) > julianday(r.owner_seen_at)))`;
-const summaryColumns = `r.id, r.title, r.status, p.id AS projectId, p.name AS projectName,
-  r.created_at AS createdAt, r.updated_at AS updatedAt, ${unread} AS unread`;
+
+/** Whose reports a portal request may read: one reporter's own, or every reporter-facing report for the read-only team view */
+export type PortalScope = { kind: 'reporter'; reporterId: string } | { kind: 'operator' };
+
+function scoped(scope: PortalScope): { where: string; params: string[] } {
+  return scope.kind === 'reporter'
+    ? { where: visibleReport, params: [scope.reporterId] }
+    : {
+        where: `(r.reporter_id IS NOT NULL OR r.claimable_email IS NOT NULL) AND ${enabledProject}`,
+        params: [],
+      };
+}
+
+// The team view has no reader of its own, so it never reports or clears unread state.
+function summaryColumns(scope: PortalScope): string {
+  return `r.id, r.title, r.status, p.id AS projectId, p.name AS projectName,
+  r.created_at AS createdAt, r.updated_at AS updatedAt,
+  ${scope.kind === 'reporter' ? unread : '0'} AS unread`;
+}
 
 interface SummaryRow {
   id: string;
@@ -23,6 +40,7 @@ interface SummaryRow {
 }
 
 interface DetailRow extends SummaryRow {
+  ownerId: string | null;
   description: string | null;
   assigneeName: string | null;
   allowNewFeedback: number | null;
@@ -138,20 +156,21 @@ export const portalReportsRepo = {
     );
   },
 
-  projects(reporterId: string): ProjectRow[] {
+  projects(scope: PortalScope): ProjectRow[] {
+    const { where, params } = scoped(scope);
     return getDb()
-      .query<ProjectRow, [string]>(
+      .query<ProjectRow, string[]>(
         `SELECT DISTINCT p.id, p.name,
       json_extract(p.settings, '$.reporterPortal.allowNewFeedback') AS allowNewFeedback,
       json_extract(p.settings, '$.screenshot.maxImageUploadSizeMb') AS maxImageMb,
       json_extract(p.settings, '$.screenshot.maxVideoUploadSizeMb') AS maxVideoMb
-      FROM ${reportTables} WHERE ${visibleReport} ORDER BY p.name, p.id`
+      FROM ${reportTables} WHERE ${where} ORDER BY p.name, p.id`
       )
-      .all(reporterId);
+      .all(...params);
   },
 
   list(
-    reporterId: string,
+    scope: PortalScope,
     input: {
       projectId?: string;
       status?: ReportStatus;
@@ -159,8 +178,9 @@ export const portalReportsRepo = {
       limit: number;
     }
   ): { rows: SummaryRow[]; total: number; unreadCount: number } {
-    const where = [visibleReport];
-    const params: (string | number)[] = [reporterId];
+    const visible = scoped(scope);
+    const where = [visible.where];
+    const params: (string | number)[] = [...visible.params];
     if (input.projectId) {
       where.push('p.id = ?');
       params.push(input.projectId);
@@ -171,7 +191,8 @@ export const portalReportsRepo = {
     }
     const counts = getDb()
       .query<{ total: number; unreadCount: number }, (string | number)[]>(
-        `SELECT COUNT(*) AS total, COALESCE(SUM(${unread}), 0) AS unreadCount
+        `SELECT COUNT(*) AS total,
+      ${scope.kind === 'reporter' ? `COALESCE(SUM(${unread}), 0)` : '0'} AS unreadCount
       FROM ${reportTables} WHERE ${where.join(' AND ')}`
       )
       .get(...params)!;
@@ -183,24 +204,26 @@ export const portalReportsRepo = {
     }
     const rows = getDb()
       .query<SummaryRow, (string | number)[]>(
-        `SELECT ${summaryColumns} FROM ${reportTables} WHERE ${where.join(' AND ')}
+        `SELECT ${summaryColumns(scope)} FROM ${reportTables} WHERE ${where.join(' AND ')}
       ORDER BY julianday(r.updated_at) DESC, r.id ASC LIMIT ?`
       )
       .all(...params, input.limit + 1);
     return { rows, ...counts };
   },
 
-  detail(reportId: string, reporterId: string): DetailRow | null {
+  detail(reportId: string, scope: PortalScope): DetailRow | null {
+    const { where, params } = scoped(scope);
     return getDb()
-      .query<DetailRow, [string, string]>(
-        `SELECT ${summaryColumns}, r.original_description AS description, u.name AS assigneeName,
+      .query<DetailRow, string[]>(
+        `SELECT ${summaryColumns(scope)}, r.reporter_id AS ownerId,
+      r.original_description AS description, u.name AS assigneeName,
       json_extract(p.settings, '$.reporterPortal.allowNewFeedback') AS allowNewFeedback,
       json_extract(p.settings, '$.notifyReporter') AS notifyReporter,
       json_extract(p.settings, '$.reporterNotifications.messagingEnabled') AS messagingEnabled
       FROM ${reportTables} LEFT JOIN users u ON u.id = r.assigned_to
-      WHERE ${visibleReport} AND r.id = ?`
+      WHERE ${where} AND r.id = ?`
       )
-      .get(reporterId, reportId);
+      .get(...params, reportId);
   },
 
   messages(reportId: string): MessageRow[] {
@@ -227,17 +250,18 @@ export const portalReportsRepo = {
   file(
     reportId: string,
     fileId: string,
-    reporterId: string
+    scope: PortalScope
   ): (PortalFileRow & { path: string; filename: string }) | null {
+    const { where, params } = scoped(scope);
     return getDb()
-      .query<PortalFileRow & { path: string; filename: string }, [string, string, string]>(
+      .query<PortalFileRow & { path: string; filename: string }, string[]>(
         `SELECT ${fileColumns}, f.path, f.filename FROM ${reportTables}
       JOIN files f ON f.report_id = r.id
       LEFT JOIN report_messages m ON m.id = f.message_id AND m.report_id = r.id
-      WHERE ${visibleReport} AND r.id = ? AND f.id = ?
+      WHERE ${where} AND r.id = ? AND f.id = ?
       AND (f.message_id IS NULL OR (m.id IS NOT NULL AND m.hidden_at IS NULL))`
       )
-      .get(reporterId, reportId, fileId);
+      .get(...params, reportId, fileId);
   },
 
   markSeen(reportId: string, now: string): void {
