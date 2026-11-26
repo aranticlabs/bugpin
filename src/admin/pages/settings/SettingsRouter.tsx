@@ -81,6 +81,9 @@ const Capture = lazyWithRetry(() =>
 const NotificationDefaults = lazyWithRetry(() =>
   import('../console/NotificationDefaults').then((m) => ({ default: m.NotificationDefaults }))
 );
+const ReporterPortalDefaults = lazyWithRetry(() =>
+  import('../console/ReporterPortalDefaults').then((m) => ({ default: m.ReporterPortalDefaults }))
+);
 const Branding = lazyWithRetry(() =>
   import('../console/Branding').then((m) => ({ default: m.Branding }))
 );
@@ -297,6 +300,14 @@ export function SettingsRouter() {
         element={
           <SettingsPage adminOnly>
             <NotificationDefaults />
+          </SettingsPage>
+        }
+      />
+      <Route
+        path="project-defaults/reporter-portal"
+        element={
+          <SettingsPage adminOnly>
+            <ReporterPortalDefaults />
           </SettingsPage>
         }
       />

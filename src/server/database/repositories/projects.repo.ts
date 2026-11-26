@@ -9,6 +9,7 @@ import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
 } from '../../utils/wrap-legacy-localized-string.js';
+import { portalSetting } from '../reporter-portal-sql.js';
 
 // Database Row Type
 
@@ -83,7 +84,7 @@ export const projectsRepo = {
       getDb()
         .query(
           `SELECT 1 FROM projects WHERE deleted_at IS NULL
-      AND json_extract(settings, '$.reporterPortal.enabled') = 1 LIMIT 1`
+      AND ${portalSetting('projects', 'enabled')} = 1 LIMIT 1`
         )
         .get() !== null
     );

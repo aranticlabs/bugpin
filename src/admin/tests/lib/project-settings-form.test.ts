@@ -33,13 +33,31 @@ describe('project portal settings updates', () => {
       expect(
         buildProjectSettingsUpdate(saved, { ...form, reporterPortal }, undefined).reporterPortal
       ).toEqual(reporterPortal);
-    const off = projectSettingsToForm(undefined, null);
+    const inherited = projectSettingsToForm(undefined, null);
+    expect(inherited.useCustomReporterPortal).toBe(false);
+    expect(buildProjectSettingsUpdate(undefined, inherited, undefined)).not.toHaveProperty(
+      'reporterPortal'
+    );
     expect(
       buildProjectSettingsUpdate(
         undefined,
-        { ...off, reporterPortal: { enabled: true, allowNewFeedback: false } },
+        {
+          ...inherited,
+          useCustomReporterPortal: true,
+          reporterPortal: { enabled: true, allowNewFeedback: false },
+        },
         undefined
       ).reporterPortal
     ).toEqual({ enabled: true, allowNewFeedback: false });
+  });
+
+  it('clears a portal override so the project inherits the defaults again', () => {
+    const saved = { reporterPortal: { enabled: true, allowNewFeedback: false } };
+    const form = projectSettingsToForm(saved, null);
+    expect(form.useCustomReporterPortal).toBe(true);
+    expect(
+      buildProjectSettingsUpdate(saved, { ...form, useCustomReporterPortal: false }, undefined)
+        .reporterPortal
+    ).toBeNull();
   });
 });

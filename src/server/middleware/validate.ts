@@ -729,6 +729,10 @@ export const schemas = {
       appUrl: z.string().optional(),
       portalBaseUrl: z.string().max(2048).optional(),
       portalTeamSignIn: z.boolean().optional(),
+      reporterPortal: z
+        .object({ enabled: z.boolean().optional(), allowNewFeedback: z.boolean().optional() })
+        .strict()
+        .optional(),
       reporterPortalLimits: reporterPortalLimitsSchema.optional(),
       privacy: z
         .object({

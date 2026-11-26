@@ -28,7 +28,7 @@ it.each([
     expect(
       projectPortalUrl(
         { settings: { reporterPortal: { enabled, allowNewFeedback: false } } },
-        { appUrl, portalBaseUrl }
+        { appUrl, portalBaseUrl, reporterPortal: { enabled: false, allowNewFeedback: false } }
       )
     ).toBe(expected);
   }

@@ -29,6 +29,7 @@ import { reportHistoryRepo } from '../database/repositories/report-history.repo.
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { normalizeUrl } from '../utils/validators.js';
+import { effectiveReporterPortal } from '@shared/reporter-portal';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
   Report,
@@ -394,6 +395,10 @@ async function createForProject(
     }
   }
 
+  const portalEnabled = effectiveReporterPortal(
+    project.settings,
+    await settingsCacheService.getAll()
+  ).enabled;
   const reportData: CreateReportData = {
     projectId: project.id,
     source: options.source,
@@ -407,9 +412,7 @@ async function createForProject(
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
     claimableEmail:
-      options.source === 'widget' &&
-      project.settings.reporterPortal?.enabled &&
-      input.reporterEmail?.trim()
+      options.source === 'widget' && portalEnabled && input.reporterEmail?.trim()
         ? normalizeEmail(input.reporterEmail)
         : undefined,
     submissionId: input.submissionId,

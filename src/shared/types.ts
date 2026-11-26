@@ -463,7 +463,8 @@ export interface ProjectLanguageSettings {
 // Project Types
 
 export interface ProjectSettings {
-  reporterPortal?: ReporterPortalProjectSettings;
+  // Missing or null: inherit the instance-wide Reporter Portal defaults. null clears an override on PATCH.
+  reporterPortal?: ReporterPortalProjectSettings | null;
   defaultAssigneeUserId?: string | null;
   widgetLauncherButton?: WidgetLauncherButtonSettings;
   widgetDialog?: WidgetDialogSettings;
@@ -897,6 +898,8 @@ export interface AppSettings {
   adminButton: AdminButtonColors;
   // Reporter notification settings
   reporterNotifications: ReporterNotificationSettings;
+  // Reporter Portal defaults for projects without their own setting
+  reporterPortal: ReporterPortalProjectSettings;
   // Email templates (optional - uses defaults if not set)
   emailTemplates?: EmailTemplates;
   // Language settings (instance-wide default)

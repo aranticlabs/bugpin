@@ -243,8 +243,9 @@ describe('ProjectSettingsPanel', () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness initial="reporter-portal" />);
     await user.click(
-      await screen.findByRole('switch', { name: 'Let reporters see their feedback' })
+      await screen.findByRole('switch', { name: 'Use custom reporter portal settings' })
     );
+    await user.click(screen.getByRole('switch', { name: 'Let reporters see their feedback' }));
     await user.click(screen.getByRole('switch', { name: 'Allow new feedback from the portal' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() =>

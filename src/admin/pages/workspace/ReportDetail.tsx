@@ -96,6 +96,7 @@ import {
 } from '@shared/types';
 import { formatMediaDetails, type MediaMetadata } from '@shared/media-metadata';
 import { RECORDING_QUALITY_LABELS } from '@shared/recording-quality';
+import { effectiveReporterPortal } from '@shared/reporter-portal';
 
 const UNASSIGNED_VALUE = '__unassigned__';
 const PRIORITY_ORDER: ReportPriority[] = ['lowest', 'low', 'medium', 'high', 'highest'];
@@ -684,7 +685,9 @@ export function ReportDetail() {
             messagingEnabled={messagingEnabled}
             hasRecipient={hasRecipient}
             portalEnabled={
-              projectData ? (projectData.settings?.reporterPortal?.enabled ?? false) : undefined
+              projectData
+                ? effectiveReporterPortal(projectData.settings, settingsData).enabled
+                : undefined
             }
             projectActive={projectData?.isActive}
             hasOwner={Boolean(report.reporterId)}

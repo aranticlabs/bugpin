@@ -16,6 +16,7 @@ import { DEFAULT_LANGUAGE_SETTINGS } from '../../LanguageSettingsForm';
 import { resolveDiagnosticSettings } from '../../DiagnosticsSettingsForm';
 
 export interface ProjectSettingsForm {
+  useCustomReporterPortal: boolean;
   reporterPortal: ReporterPortalProjectSettings;
   useCustomWidgetDialog: boolean;
   widgetDialogSettings: Partial<ThemeColors>;
@@ -83,6 +84,7 @@ export function projectSettingsToForm(
   };
 
   return {
+    useCustomReporterPortal: !!settings?.reporterPortal,
     reporterPortal: normalizeReporterPortal(settings?.reporterPortal),
     useCustomWidgetDialog: hasKeys(widgetDialog),
     widgetDialogSettings: widgetDialog,
@@ -214,8 +216,11 @@ export function buildProjectSettingsUpdate(
   );
 
   update.defaultAssigneeUserId = form.defaultAssigneeUserId;
-  const reporterPortal = normalizeReporterPortal(form.reporterPortal);
-  if (!sameValue(normalizeReporterPortal(savedPortal), reporterPortal))
+  // Sent only when it changed, so unrelated saves never re-check the portal prerequisites.
+  const reporterPortal = form.useCustomReporterPortal
+    ? normalizeReporterPortal(form.reporterPortal)
+    : null;
+  if (!sameValue(savedPortal ? normalizeReporterPortal(savedPortal) : null, reporterPortal))
     update.reporterPortal = reporterPortal;
   update.language = form.useCustomLanguage ? form.languageSettings : null;
 

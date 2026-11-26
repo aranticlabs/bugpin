@@ -22,6 +22,7 @@ const globalSettings = {
     notifyOnAssignment: true,
     messagingEnabled: true,
   },
+  reporterPortal: { enabled: false, allowNewFeedback: false },
 };
 
 function Harness({
@@ -70,9 +71,20 @@ describe('Project Reporter Portal', () => {
     ).toEqual(['/settings/general', '/settings/email', '/settings/general']);
   });
 
+  it('shows the inherited defaults read-only until Custom is turned on', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+    expect(screen.getByText('Inherited')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Let reporters see their feedback' })).toBeDisabled();
+    await user.click(screen.getByRole('switch', { name: 'Use custom reporter portal settings' }));
+    expect(screen.queryByText('Inherited')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Let reporters see their feedback' })).toBeEnabled();
+  });
+
   it('clears new-feedback permission when the portal is switched off', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Harness />);
+    await user.click(screen.getByRole('switch', { name: 'Use custom reporter portal settings' }));
     const enabled = screen.getByRole('switch', { name: 'Let reporters see their feedback' });
     const newFeedback = screen.getByRole('switch', { name: 'Allow new feedback from the portal' });
     expect(enabled).not.toBeChecked();

@@ -101,6 +101,62 @@ export const reporterOwnershipService = {
     });
   },
 
+  /**
+   * Makes every untouched report in a portal-enabled project claimable by its contact email.
+   * Reports with an invalid email or an unlicensed project are skipped.
+   */
+  claimExisting(userId: string): Result<number> {
+    const changes: ReportOwnerChangedEvent[] = [];
+    const result = reportersRepo.transaction(() => {
+      let count = 0;
+      for (const report of reporterOwnershipRepo.claimableCandidates()) {
+        if (!isValidEmail(normalizeEmail(report.reporterEmail))) continue;
+        if (!checkProjectLicense(report.projectId).success) continue;
+        const set = this.setInTransaction(
+          report.id,
+          { claimableEmail: report.reporterEmail },
+          userId,
+          changes
+        );
+        if (set.success) count++;
+      }
+      return Result.ok(count);
+    });
+    if (result.success) this.announceBulk(changes);
+    return result;
+  },
+
+  /**
+   * A bulk claim has no previous owners. Staff views refresh once per project instead of once per
+   * report, and owner webhooks go out one after another instead of all at once.
+   */
+  announceBulk(changes: ReportOwnerChangedEvent[]): void {
+    const projects = new Map<string, string>();
+    for (const change of changes)
+      if (!projects.has(change.projectId)) projects.set(change.projectId, change.reportId);
+    for (const [projectId, reportId] of projects)
+      realtimeService.publish('report.updated', { reportId, projectId });
+    void (async () => {
+      for (const change of changes) {
+        try {
+          await getEEHooks().onReportOwnerChanged(change);
+        } catch {
+          logger.warn('Owner webhook dispatch failed', { reportId: change.reportId });
+        }
+      }
+    })();
+  },
+
+  countClaimable(): number {
+    return reporterOwnershipRepo
+      .claimableCandidates()
+      .filter(
+        (report) =>
+          isValidEmail(normalizeEmail(report.reporterEmail)) &&
+          checkProjectLicense(report.projectId).success
+      ).length;
+  },
+
   remove(reportId: string, userId: string): Result<void> {
     const changes: ReportOwnerChangedEvent[] = [];
     const result = reportersRepo.transaction<Result<void>>(() => {

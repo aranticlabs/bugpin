@@ -26,6 +26,7 @@ function createBaseSettings(): AppSettings {
     appUrl: 'https://example.com',
     portalBaseUrl: '',
     portalTeamSignIn: false,
+    reporterPortal: { enabled: false, allowNewFeedback: false },
     reporterPortalLimits: DEFAULT_REPORTER_PORTAL_LIMITS,
     retentionDays: 90,
     rateLimitPerMinute: 10,

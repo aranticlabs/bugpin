@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { proxyTokenService } from '../../services/proxy-token.service.js';
 import { staffOriginCheck } from '../../middleware/origin-check.js';
 import { settingsService } from '../../services/settings.service.js';
+import { reporterPortalSettingsService } from '../../services/reporter-portal-settings.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { emailService } from '../../services/email.service.js';
 import { templateService } from '../../services/template.service.js';
@@ -65,6 +66,22 @@ settings.post('/proxy-token/regenerate', authorize(['admin']), staffOriginCheck,
   if (!result.success)
     return c.json({ success: false, error: result.code, message: result.error }, 500);
   return c.json({ success: true, enabled: true, ...result.value });
+});
+
+// Reporter Portal defaults: prerequisites and existing reports that could become claimable
+
+settings.get('/reporter-portal', authorize(['admin']), async (c) =>
+  c.json({ success: true, ...(await reporterPortalSettingsService.overview()) })
+);
+
+settings.post('/reporter-portal/claim-existing', authorize(['admin']), (c) => {
+  const result = reporterPortalSettingsService.makeExistingReportsClaimable(c.get('user').id);
+  if (!result.success)
+    return c.json(
+      { success: false, error: result.code, message: result.error },
+      errorStatus(result.code)
+    );
+  return c.json({ success: true, count: result.value });
 });
 
 // Get Settings (Admin only)

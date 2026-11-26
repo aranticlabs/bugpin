@@ -32,6 +32,7 @@ import type { MediaFile } from './reports.service.js';
 import type { ReportOwner } from '@shared/reporter-types';
 import { normalizeEmail } from '../utils/email-normalize.js';
 import { isValidEmail } from '../utils/validators.js';
+import { effectiveReporterPortal } from '@shared/reporter-portal';
 
 export type MessageUpload = MediaFile | File;
 
@@ -80,7 +81,7 @@ function checkAccess(
     (author.kind === 'reporter' &&
       (!context.projectIsActive ||
         context.reporterId !== author.reporterId ||
-        !context.settings.reporterPortal?.enabled))
+        !effectiveReporterPortal(context.settings, settings).enabled))
   ) {
     return Result.fail('Report not found', 'NOT_FOUND');
   }
@@ -108,9 +109,11 @@ function checkAccess(
   return Result.ok(context);
 }
 
-function needsPortalAccess(context: MessageWriteContext): boolean {
+function needsPortalAccess(context: MessageWriteContext, settings: AppSettings): boolean {
   return Boolean(
-    context.settings.reporterPortal?.enabled && !context.reporterId && !context.claimableEmail
+    effectiveReporterPortal(context.settings, settings).enabled &&
+    !context.reporterId &&
+    !context.claimableEmail
   );
 }
 
@@ -139,7 +142,11 @@ async function writeMessage(
     let settings = await settingsCacheService.getAll();
     const access = checkAccess(reportId, author, settings, true, invitationEmail);
     if (!access.success) return access;
-    if (author.kind === 'staff' && needsPortalAccess(access.value) && !confirmPortalAccess)
+    if (
+      author.kind === 'staff' &&
+      needsPortalAccess(access.value, settings) &&
+      !confirmPortalAccess
+    )
       return Result.fail('Confirm that this message grants portal access', 'CONFIRMATION_REQUIRED');
     const screenshot = access.value.settings.screenshot;
     const maxImageMb = screenshot?.maxImageUploadSizeMb ?? settings.screenshot.maxImageUploadSizeMb;
@@ -213,7 +220,11 @@ async function writeMessage(
     const result = transaction((): Result<ReportMessage> => {
       const current = checkAccess(reportId, author, settings, true, invitationEmail);
       if (!current.success) return current;
-      if (author.kind === 'staff' && needsPortalAccess(current.value) && !confirmPortalAccess)
+      if (
+        author.kind === 'staff' &&
+        needsPortalAccess(current.value, settings) &&
+        !confirmPortalAccess
+      )
         return Result.fail(
           'Confirm that this message grants portal access',
           'CONFIRMATION_REQUIRED'
@@ -250,7 +261,7 @@ async function writeMessage(
       if (!message) return Result.fail('Author is no longer available', 'UNAUTHORIZED');
       if (
         author.kind === 'staff' &&
-        (invitationEmail !== undefined || needsPortalAccess(current.value))
+        (invitationEmail !== undefined || needsPortalAccess(current.value, settings))
       ) {
         const ownership = reporterOwnershipService.setInTransaction(
           reportId,
@@ -430,18 +441,19 @@ export const reportMessagesService = {
     const report = await reportsRepo.findById(reportId);
     if (!report) return Result.fail('Report not found', 'NOT_FOUND');
     const project = await projectsRepo.findById(report.projectId);
+    const portalEnabled =
+      !!project &&
+      effectiveReporterPortal(project.settings, await settingsCacheService.getAll()).enabled;
     const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
     const email = reporterCorrespondenceService.recipient(report);
     return Result.ok({
-      visible: Boolean(
-        project?.isActive && project.settings.reporterPortal?.enabled && report.reporterId
-      ),
+      visible: Boolean(project?.isActive && portalEnabled && report.reporterId),
       ownerEmail: owner?.email ?? null,
       correspondentEmail: email,
       ownerLastLoginAt: owner?.lastLoginAt ?? null,
       emailSuppressed: email ? reporterSuppressionService.isSuppressed(email) : false,
       requiresPortalAccessConfirmation: Boolean(
-        project?.settings.reporterPortal?.enabled && !report.reporterId && !report.claimableEmail
+        portalEnabled && !report.reporterId && !report.claimableEmail
       ),
     });
   },

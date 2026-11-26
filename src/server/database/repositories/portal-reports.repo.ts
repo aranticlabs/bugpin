@@ -1,8 +1,9 @@
 import { getDb, transaction } from '../database.js';
 import type { FileType, MessageAuthorKind, ReportStatus, ProjectSettings } from '@shared/types';
 import type { PortalReportCursor } from '../../utils/portal-schemas.js';
+import { portalSetting } from '../reporter-portal-sql.js';
 
-const enabledProject = `p.deleted_at IS NULL AND p.is_active = 1 AND json_extract(p.settings, '$.reporterPortal.enabled') = 1`;
+const enabledProject = `p.deleted_at IS NULL AND p.is_active = 1 AND ${portalSetting('p', 'enabled')} = 1`;
 const visibleReport = `r.reporter_id = ? AND ${enabledProject}`;
 const reportTables = 'reports r JOIN projects p ON p.id = r.project_id';
 const unread = `EXISTS (SELECT 1 FROM report_messages m WHERE m.report_id = r.id
@@ -112,7 +113,7 @@ export const portalReportsRepo = {
       FROM projects p JOIN reporters a ON a.id = ? AND a.suspended_at IS NULL
       LEFT JOIN users u ON u.id = json_extract(p.settings, '$.defaultAssigneeUserId') AND u.is_active = 1
         AND (u.invitation_sent_at IS NULL OR u.invitation_accepted_at IS NOT NULL)
-      WHERE p.id = ? AND ${enabledProject} AND json_extract(p.settings, '$.reporterPortal.allowNewFeedback') = 1
+      WHERE p.id = ? AND ${enabledProject} AND ${portalSetting('p', 'allowNewFeedback')} = 1
       AND EXISTS (SELECT 1 FROM reports r WHERE r.project_id = p.id AND r.reporter_id = a.id)`
       )
       .get(reporterId, projectId);
@@ -161,7 +162,7 @@ export const portalReportsRepo = {
     return getDb()
       .query<ProjectRow, string[]>(
         `SELECT DISTINCT p.id, p.name,
-      json_extract(p.settings, '$.reporterPortal.allowNewFeedback') AS allowNewFeedback,
+      ${portalSetting('p', 'allowNewFeedback')} AS allowNewFeedback,
       json_extract(p.settings, '$.screenshot.maxImageUploadSizeMb') AS maxImageMb,
       json_extract(p.settings, '$.screenshot.maxVideoUploadSizeMb') AS maxVideoMb
       FROM ${reportTables} WHERE ${where} ORDER BY p.name, p.id`
@@ -217,7 +218,7 @@ export const portalReportsRepo = {
       .query<DetailRow, string[]>(
         `SELECT ${summaryColumns(scope)}, r.reporter_id AS ownerId,
       r.original_description AS description, u.name AS assigneeName,
-      json_extract(p.settings, '$.reporterPortal.allowNewFeedback') AS allowNewFeedback,
+      ${portalSetting('p', 'allowNewFeedback')} AS allowNewFeedback,
       json_extract(p.settings, '$.notifyReporter') AS notifyReporter,
       json_extract(p.settings, '$.reporterNotifications.messagingEnabled') AS messagingEnabled
       FROM ${reportTables} LEFT JOIN users u ON u.id = r.assigned_to

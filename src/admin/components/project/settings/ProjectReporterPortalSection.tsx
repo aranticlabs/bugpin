@@ -8,10 +8,12 @@ import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { Switch } from '../../ui/switch';
 import { Alert, AlertDescription } from '../../ui/alert';
 import type { AppSettings, Project } from '@shared/types';
 import type { ProjectSettingsForm, UpdateProjectSettingsForm } from './projectSettingsForm';
+import { DEFAULT_REPORTER_PORTAL } from '@shared/reporter-portal';
+import { ReporterPortalSwitches } from '../../ReporterPortalSwitches';
+import { CustomSwitch, InheritedBadge, InheritedFields } from './ProjectSettingsControls';
 
 const prerequisites = [
   { key: 'appUrl', label: 'Application URL configured', path: '/settings/general' },
@@ -31,11 +33,13 @@ export function ProjectReporterPortalSection({
   update: UpdateProjectSettingsForm;
   project: Pick<Project, 'settings' | 'reporterPortalPrerequisites' | 'licenseLocked'> | undefined;
   globalSettings:
-    Pick<AppSettings, 'appUrl' | 'portalBaseUrl' | 'reporterNotifications'> | undefined;
+    | Pick<AppSettings, 'appUrl' | 'portalBaseUrl' | 'reporterNotifications' | 'reporterPortal'>
+    | undefined;
 }) {
   const missing = project?.reporterPortalPrerequisites;
   const ready = missing !== undefined && missing.length === 0;
   const portal = form.reporterPortal;
+  const inherited = globalSettings?.reporterPortal ?? DEFAULT_REPORTER_PORTAL;
   const emailSettings = project?.settings.reporterNotifications ?? {};
   const emailEnabled =
     project?.settings.notifyReporter !== false &&
@@ -77,45 +81,36 @@ export function ProjectReporterPortalSection({
       <SettingsCard
         title="Reporter Portal"
         description="Let reporters sign in to follow their feedback and talk to your team."
+        badge={!form.useCustomReporterPortal && <InheritedBadge />}
+        action={
+          <CustomSwitch
+            id="use-custom-reporter-portal"
+            label="Use custom reporter portal settings"
+            checked={form.useCustomReporterPortal}
+            onCheckedChange={(checked) =>
+              update(
+                // A new override starts from the inherited values.
+                checked
+                  ? { useCustomReporterPortal: true, reporterPortal: inherited }
+                  : { useCustomReporterPortal: false }
+              )
+            }
+          />
+        }
       >
         <div className="min-w-0 space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <Label htmlFor="enable-reporter-portal">Let reporters see their feedback</Label>
-              <p className="text-sm text-muted-foreground">
-                Reporters can access their owned reports in this project.
-              </p>
-            </div>
-            <Switch
-              id="enable-reporter-portal"
-              checked={portal.enabled}
-              disabled={(!ready && !portal.enabled) || project?.licenseLocked}
-              onCheckedChange={(enabled) =>
-                update({
-                  reporterPortal: { enabled, allowNewFeedback: enabled && portal.allowNewFeedback },
-                })
-              }
+          <InheritedFields
+            custom={form.useCustomReporterPortal}
+            defaultsPath="/settings/project-defaults/reporter-portal"
+          >
+            <ReporterPortalSwitches
+              value={form.useCustomReporterPortal ? portal : inherited}
+              onChange={(reporterPortal) => update({ reporterPortal })}
+              ready={ready}
+              disabled={!form.useCustomReporterPortal || project?.licenseLocked}
+              scope="project"
             />
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <Label htmlFor="allow-portal-feedback">Allow new feedback from the portal</Label>
-              <p className="text-sm text-muted-foreground">
-                Reporters who already own a report in this project can submit new feedback through
-                the portal.
-              </p>
-            </div>
-            <Switch
-              id="allow-portal-feedback"
-              checked={portal.allowNewFeedback}
-              disabled={
-                ((!portal.enabled || !ready) && !portal.allowNewFeedback) || project?.licenseLocked
-              }
-              onCheckedChange={(allowNewFeedback) =>
-                update({ reporterPortal: { ...portal, allowNewFeedback } })
-              }
-            />
-          </div>
+          </InheritedFields>
           <p className="text-sm text-muted-foreground">
             Portal access and email updates are independent. Reporters can read their feedback even
             when update emails or messaging are disabled. Update emails respect each reporter's

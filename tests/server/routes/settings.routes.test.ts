@@ -41,6 +41,7 @@ function settingsWithSecrets(): AppSettings {
     appName: 'BugPin',
     appUrl: 'http://localhost',
     portalBaseUrl: '',
+    reporterPortal: { enabled: false, allowNewFeedback: false },
     smtpEnabled: true,
     smtpConfig: {
       host: 'smtp.example.com',

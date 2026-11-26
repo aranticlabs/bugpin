@@ -1,7 +1,8 @@
 import { getDb } from '../database.js';
+import { portalSetting } from '../reporter-portal-sql.js';
 
 const enabledProject = `SELECT id FROM projects WHERE deleted_at IS NULL
-  AND json_extract(settings, '$.reporterPortal.enabled') = 1`;
+  AND ${portalSetting('projects', 'enabled')} = 1`;
 
 interface OwnershipRecord {
   id: string;
@@ -48,6 +49,22 @@ export const reporterOwnershipRepo = {
       [email]
     );
   },
+  /**
+   * Reports in portal-enabled projects with a contact email but no owner or claim, which staff
+   * never made an ownership decision on
+   */
+  claimableCandidates(): Array<{ id: string; projectId: string; reporterEmail: string }> {
+    return getDb()
+      .query<{ id: string; projectId: string; reporterEmail: string }, []>(
+        `SELECT r.id, r.project_id AS projectId, TRIM(r.reporter_email) AS reporterEmail
+       FROM reports r WHERE r.reporter_id IS NULL AND r.claimable_email IS NULL
+       AND TRIM(COALESCE(r.reporter_email, '')) != '' AND r.project_id IN (${enabledProject})
+       AND NOT EXISTS (SELECT 1 FROM report_history h WHERE h.report_id = r.id
+         AND h.action IN ('owner_assigned', 'owner_removed', 'claimable_set'))`
+      )
+      .all();
+  },
+
   attachClaimable(reporterId: string, email: string): Array<{ id: string; projectId: string }> {
     return getDb()
       .query<{ id: string; projectId: string }, [string, string]>(

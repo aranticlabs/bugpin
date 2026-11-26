@@ -12,12 +12,14 @@ import type {
   BrandingSettings,
   AdminButtonColors,
   ReporterNotificationSettings,
+  ReporterPortalProjectSettings,
   LocalizedString,
   ProjectLanguageSettings,
   PrivacySettings,
   DiagnosticSettings,
 } from '@shared/types';
 import { DEFAULT_DIAGNOSTIC_SETTINGS, DEFAULT_REPORTER_PORTAL_LIMITS } from '@shared/types';
+import { DEFAULT_REPORTER_PORTAL } from '@shared/reporter-portal';
 import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
@@ -191,6 +193,7 @@ const KEY_MAP: Record<string, string> = {
   notifications: 'notifications',
   branding: 'branding',
   reporterNotifications: 'reporter_notifications',
+  reporterPortal: 'reporter_portal',
   adminButton: 'admin_button',
   emailTemplates: 'email_templates',
   language: 'language',
@@ -396,6 +399,10 @@ function readAll(): AppSettings {
     reporterNotifications: {
       ...DEFAULT_REPORTER_NOTIFICATIONS,
       ...(settings.reporterNotifications as Partial<ReporterNotificationSettings>),
+    },
+    reporterPortal: {
+      ...DEFAULT_REPORTER_PORTAL,
+      ...(settings.reporterPortal as Partial<ReporterPortalProjectSettings>),
     },
     // Branding settings
     branding: {

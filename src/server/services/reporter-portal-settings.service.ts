@@ -5,11 +5,16 @@ import { isSecurePortalUrl } from '../utils/portal-url.js';
 import { validateSmtpConfig } from '../utils/validators.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { Result } from '../utils/result.js';
-import type { ProjectSettings } from '@shared/types';
+import { reporterOwnershipService } from './reporter-ownership.service.js';
+import type { AppSettings, ProjectSettings, ReporterPortalProjectSettings } from '@shared/types';
+import { effectiveReporterPortal } from '@shared/reporter-portal';
 
 export const reporterPortalSettingsService = {
-  async checkPrerequisites(): Promise<Result<void>> {
-    const settings = await settingsCacheService.getAll();
+  /** Checks the stored settings, or the values a settings update is about to save */
+  async checkPrerequisites(
+    candidate?: Pick<AppSettings, 'appUrl' | 'portalBaseUrl' | 'smtpEnabled' | 'smtpConfig'>
+  ): Promise<Result<void>> {
+    const settings = candidate ?? (await settingsCacheService.getAll());
     const missing: string[] = [];
     if (!settings.appUrl) missing.push('appUrl');
     if (!settings.smtpEnabled || !validateSmtpConfig(settings.smtpConfig).success)
@@ -29,18 +34,48 @@ export const reporterPortalSettingsService = {
   },
 
   async validate(settings: ProjectSettings, previous?: ProjectSettings): Promise<Result<void>> {
-    if (settings.reporterPortal?.allowNewFeedback && !settings.reporterPortal.enabled)
+    if (settings.reporterPortal || !previous)
+      return this.validatePortal(
+        settings.reporterPortal ?? undefined,
+        previous?.reporterPortal ?? undefined
+      );
+    // Returning to the defaults needs the prerequisites only when it turns something on.
+    const defaults = await settingsCacheService.getAll();
+    const next = effectiveReporterPortal(settings, defaults);
+    const before = effectiveReporterPortal(previous, defaults);
+    return (next.enabled && !before.enabled) || (next.allowNewFeedback && !before.allowNewFeedback)
+      ? this.checkPrerequisites()
+      : Result.ok(undefined);
+  },
+
+  /** The same rules apply to a project override and to the instance defaults */
+  async validatePortal(
+    portal: ReporterPortalProjectSettings | undefined,
+    previous?: ReporterPortalProjectSettings,
+    candidate?: Parameters<typeof this.checkPrerequisites>[0]
+  ): Promise<Result<void>> {
+    if (portal?.allowNewFeedback && !portal.enabled)
       return Result.fail(
         'Enable the reporter portal before allowing new feedback',
         'INVALID_REPORTER_PORTAL_SETTINGS'
       );
     const disablingSubmissions =
-      previous?.reporterPortal?.enabled &&
-      previous.reporterPortal.allowNewFeedback &&
-      !settings.reporterPortal?.allowNewFeedback;
-    return settings.reporterPortal?.enabled && !disablingSubmissions
-      ? this.checkPrerequisites()
+      previous?.enabled && previous.allowNewFeedback && !portal?.allowNewFeedback;
+    return portal?.enabled && !disablingSubmissions
+      ? this.checkPrerequisites(candidate)
       : Result.ok(undefined);
+  },
+
+  async overview(): Promise<{ prerequisites: string[]; claimableReports: number }> {
+    const prerequisites = await this.checkPrerequisites();
+    return {
+      prerequisites: prerequisites.success ? [] : (prerequisites.details ?? []),
+      claimableReports: reporterOwnershipService.countClaimable(),
+    };
+  },
+
+  makeExistingReportsClaimable(userId: string): Result<number> {
+    return reporterOwnershipService.claimExisting(userId);
   },
 
   async testLogin(projectId: string, email: string): Promise<Result<void>> {

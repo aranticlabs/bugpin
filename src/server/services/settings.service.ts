@@ -32,6 +32,8 @@ import type {
 } from '@shared/types';
 import type { PasswordPolicy } from '@shared/password-policy';
 import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
+import { reporterPortalSettingsService } from './reporter-portal-settings.service.js';
+import { realtimeService } from './realtime.service.js';
 
 // Types
 
@@ -44,6 +46,7 @@ export interface UpdateSettingsInput {
   appUrl?: string;
   portalBaseUrl?: string;
   portalTeamSignIn?: boolean;
+  reporterPortal?: Partial<AppSettings['reporterPortal']>;
   reporterPortalLimits?: Partial<AppSettings['reporterPortalLimits']>;
   retentionDays?: number;
   rateLimitPerMinute?: number;
@@ -366,9 +369,28 @@ export const settingsService = {
         return Result.fail('Invalid Portal Base URL', 'INVALID_PORTAL_BASE_URL');
       }
     }
+    // Portal checks see the values this request saves, not only the stored ones.
+    let reporterPortal = current.reporterPortal;
+    if (input.reporterPortal !== undefined) {
+      reporterPortal = mergeDefined(current.reporterPortal, input.reporterPortal);
+      const valid = await reporterPortalSettingsService.validatePortal(
+        reporterPortal,
+        current.reporterPortal,
+        {
+          appUrl,
+          portalBaseUrl,
+          smtpEnabled: input.smtpEnabled ?? current.smtpEnabled,
+          smtpConfig,
+        }
+      );
+      if (!valid.success) return valid;
+    }
     const secureAppUrl = isSecurePortalUrl(appUrl);
     const securePortalUrl = !portalBaseUrl || isSecurePortalUrl(portalBaseUrl);
-    if ((!secureAppUrl || !securePortalUrl) && projectsRepo.hasEnabledReporterPortal()) {
+    if (
+      (!secureAppUrl || !securePortalUrl) &&
+      (reporterPortal.enabled || projectsRepo.hasEnabledReporterPortal())
+    ) {
       if (!secureAppUrl)
         return Result.fail(
           'A secure Application URL is required while a reporter portal is enabled',
@@ -380,7 +402,9 @@ export const settingsService = {
           'INVALID_PORTAL_BASE_URL'
         );
     }
+
     const updates: Partial<AppSettings> = {};
+    if (input.reporterPortal !== undefined) updates.reporterPortal = reporterPortal;
 
     // System settings
     if (input.invitationExpirationDays !== undefined)
@@ -456,6 +480,16 @@ export const settingsService = {
 
     // Invalidate settings cache to force reload on next access
     settingsCacheService.invalidate();
+
+    // Open portal streams of projects that follow the defaults recheck their access.
+    if (
+      reporterPortal.enabled !== current.reporterPortal.enabled ||
+      reporterPortal.allowNewFeedback !== current.reporterPortal.allowNewFeedback
+    ) {
+      for (const project of await projectsRepo.findAll())
+        if (!project.settings.reporterPortal)
+          realtimeService.invalidatePortalAccess({ projectId: project.id });
+    }
 
     logger.info('Settings updated', { updates: Object.keys(updates) });
     return Result.ok(redactSecrets(settings));
