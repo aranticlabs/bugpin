@@ -10,6 +10,19 @@ export default defineConfig({
     react(),
     tailwindcss(),
     {
+      // Production redirects the bare base path, while the Vite dev server answers it with 404.
+      name: 'portal-base-redirect',
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const [pathname, query] = (request.url ?? '').split(/\?(.*)/s);
+          if (pathname !== '/reporter-portal') return next();
+          response.statusCode = 302;
+          response.setHeader('Location', `/reporter-portal/${query ? `?${query}` : ''}`);
+          response.end();
+        });
+      },
+    },
+    {
       name: 'portal-boundary',
       generateBundle(_options, bundle) {
         for (const output of Object.values(bundle)) {
@@ -34,7 +47,8 @@ export default defineConfig({
   },
   build: { outDir: '../../dist/portal', emptyOutDir: true, sourcemap: false },
   server: {
-    host: process.env.BUGPIN_DEV_HOST ?? 'localhost',
+    // The default Portal Base URL is http://127.0.0.1:7310, and `localhost` can bind IPv6 only.
+    host: process.env.BUGPIN_DEV_HOST ?? '127.0.0.1',
     port: 7310,
     strictPort: true,
     proxy: {

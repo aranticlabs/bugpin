@@ -65,7 +65,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/reporter-portal': {
-        target: process.env.BUGPIN_PORTAL_DEV_TARGET ?? 'http://localhost:7310',
+        target: process.env.BUGPIN_PORTAL_DEV_TARGET ?? 'http://127.0.0.1:7310',
         changeOrigin: false,
         xfwd: false,
         ws: true,

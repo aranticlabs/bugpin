@@ -34,7 +34,10 @@ DATA_DIR ?= data
 # ==============================================================================
 
 dev:
-	@echo "Server: http://localhost:4300  Admin Console HMR: http://localhost:7300/admin/  Portal HMR: http://127.0.0.1:7310/reporter-portal/"
+	@echo "Server: http://localhost:4300"
+	@echo "Admin Console HMR: http://localhost:7300/admin/"
+	@echo "Reporter Portal HMR: http://localhost:7300/reporter-portal/"
+	@echo "  (separate origin: set Portal Base URL to http://127.0.0.1:7310)"
 	@echo "Do not run make local at the same time."
 	@bun run dev
 
@@ -63,7 +66,8 @@ build-local:
 local:
 	@$(LOCAL_COMPOSE) up -d -V
 	@echo "Admin Console HMR: http://localhost:7300/admin/"
-	@echo "Reporter Portal HMR: http://127.0.0.1:7310/reporter-portal/"
+	@echo "Reporter Portal HMR: http://localhost:7300/reporter-portal/"
+	@echo "  (separate origin: set Portal Base URL to http://127.0.0.1:7310)"
 	@echo "Logs: make logs-local  Stop: make down-local"
 	@echo "Do not run make dev at the same time."
 
@@ -88,7 +92,9 @@ build-prod:
 
 prod:
 	@BUGPIN_TAG=$(BUGPIN_TAG) $(PROD_COMPOSE) --profile separate-portal up -d --pull never
-	@echo "Admin Console: http://localhost:7300/admin/  Portal frontend: http://localhost:7310/reporter-portal/"
+	@echo "Admin Console: http://localhost:7300/admin/"
+	@echo "Reporter Portal: http://localhost:7300/reporter-portal/"
+	@echo "  (separate origin: set Portal Base URL to http://127.0.0.1:7310)"
 	@echo "Logs: make logs-prod  Stop: make down-prod"
 
 deploy-prod: build-prod
