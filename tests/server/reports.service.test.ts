@@ -17,6 +17,7 @@ import { usersService } from '../../src/server/services/users.service';
 import { reportHistoryService } from '../../src/server/services/report-history.service';
 import { Result } from '../../src/server/utils/result';
 import { config } from '../../src/server/config';
+import { resolveLocalFilePath } from '../../src/server/storage/files';
 import { logger } from '../../src/server/utils/logger';
 import type { Report, ReportMetadata, Project, AppSettings } from '../../src/shared/types';
 import { createDefaultHooks } from '../../src/server/types/ee-plugin';
@@ -473,7 +474,9 @@ describe('reportsService.create', () => {
         height: 1080,
       });
       expect(storedFile.sizeBytes).toBe(corruptRecording.length);
-      expect(await Bun.file(storedFile.path).bytes()).toEqual(corruptRecording);
+      expect(await Bun.file(resolveLocalFilePath(storedFile.path)).bytes()).toEqual(
+        corruptRecording
+      );
       expect(warningCalls).toContainEqual({
         message: 'Recording remux failed, storing original',
         context: expect.objectContaining({ code }),
@@ -502,7 +505,9 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(true);
     expect(fileCreateRecords).toHaveLength(1);
-    const saved = Buffer.from(await Bun.file(fileCreateRecords[0]!.path).arrayBuffer());
+    const saved = Buffer.from(
+      await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).arrayBuffer()
+    );
     expect(saved.indexOf('moov')).toBeGreaterThan(0);
     expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
   });
@@ -527,7 +532,7 @@ describe('reportsService.create', () => {
     });
 
     expect(result.success).toBe(true);
-    const saved = await Bun.file(fileCreateRecords[0]!.path).bytes();
+    const saved = await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes();
     expect(Array.from(saved.subarray(0, 4))).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
     expect(saved).not.toEqual(recording);
   });
@@ -545,7 +550,7 @@ describe('reportsService.create', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(video);
+    expect(await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes()).toEqual(video);
   });
 
   it('falls back one failed recording without affecting another recording', async () => {
@@ -575,8 +580,12 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(true);
     expect(fileCreateRecords).toHaveLength(2);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(validMp4Buffer);
-    const saved = Buffer.from(await Bun.file(fileCreateRecords[1]!.path).arrayBuffer());
+    expect(await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes()).toEqual(
+      validMp4Buffer
+    );
+    const saved = Buffer.from(
+      await Bun.file(resolveLocalFilePath(fileCreateRecords[1]!.path)).arrayBuffer()
+    );
     expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
     expect(saved).not.toEqual(recording);
   });

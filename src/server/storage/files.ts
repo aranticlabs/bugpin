@@ -358,7 +358,7 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
 
   return {
     id: fileId,
-    path: filePath,
+    path: path.relative(config.dataDir, filePath).split(path.sep).join('/'),
     filename: storedFilename,
     mimeType,
     sizeBytes: buffer.length,
@@ -457,9 +457,18 @@ export interface StoredFileHandle {
   readRange(start: number, end: number): Promise<Blob | Uint8Array | null>;
 }
 
+/**
+ * Local file records store paths relative to the data directory so the database stays valid when
+ * the data directory is mounted or restored at a different location. Absolute paths are still
+ * accepted for records that could not be rewritten.
+ */
+export function resolveLocalFilePath(storedPath: string): string {
+  return path.isAbsolute(storedPath) ? storedPath : path.resolve(config.dataDir, storedPath);
+}
+
 export function createStoredFileHandle(filePath: string): StoredFileHandle {
   if (!isS3Url(filePath)) {
-    const resolvedPath = path.resolve(config.projectRoot, filePath);
+    const resolvedPath = resolveLocalFilePath(filePath);
     return {
       kind: 'local',
       async exists() {
@@ -514,7 +523,7 @@ export function createStoredFileHandle(filePath: string): StoredFileHandle {
 }
 
 export async function readStoredFile(filePath: string): Promise<Buffer | null> {
-  if (!isS3Url(filePath)) return readFile(path.resolve(config.projectRoot, filePath));
+  if (!isS3Url(filePath)) return readFile(resolveLocalFilePath(filePath));
   const provider = getEEHooks().getStorageProvider();
   if (!provider) return null;
   const result = await provider.read(filePath);
@@ -543,7 +552,7 @@ export async function deleteFile(filePath: string): Promise<boolean> {
       return false;
     }
 
-    filePath = path.resolve(config.projectRoot, filePath);
+    filePath = resolveLocalFilePath(filePath);
     // Local file deletion
     if (!fs.existsSync(filePath)) return true;
     fs.unlinkSync(filePath);

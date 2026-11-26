@@ -17,6 +17,8 @@ import {
   validateFile,
   validateFileContent,
   createStoredFileHandle,
+  readStoredFile,
+  resolveLocalFilePath,
 } from '../../src/server/storage/files';
 import { getEEHooks, registerEEHooks } from '../../src/server/utils/ee-hooks';
 import { Result } from '../../src/server/utils/result';
@@ -96,19 +98,63 @@ describe('file storage', () => {
       data: pngBuffer,
     });
 
-    expect(fileExists(saved.path)).toBe(true);
+    expect(saved.path).toBe(`uploads/screenshots/rpt_1/${saved.filename}`);
+    const localPath = resolveLocalFilePath(saved.path);
+    expect(localPath).toBe(path.join(tempDir, 'uploads', 'screenshots', 'rpt_1', saved.filename));
+    expect(fileExists(localPath)).toBe(true);
     expect(saved.width).toBe(1);
     expect(saved.height).toBe(1);
 
-    const data = readFile(saved.path);
+    const data = readFile(localPath);
     expect(data?.length).toBe(pngBuffer.length);
+    expect((await readStoredFile(saved.path))?.length).toBe(pngBuffer.length);
 
-    const stats = getFileStats(saved.path);
+    const stats = getFileStats(localPath);
     expect(stats?.size).toBe(pngBuffer.length);
 
     const deleted = await deleteFile(saved.path);
     expect(deleted).toBe(true);
-    expect(fileExists(saved.path)).toBe(false);
+    expect(fileExists(localPath)).toBe(false);
+  });
+
+  it('reads relative paths from a relocated data directory', async () => {
+    const saved = await saveFile({
+      reportId: 'rpt_moved',
+      type: 'screenshot',
+      filename: 'shot.png',
+      mimeType: 'image/png',
+      data: pngBuffer,
+    });
+    const relocated = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-files-moved-'));
+    try {
+      fs.cpSync(path.join(tempDir, 'uploads'), path.join(relocated, 'uploads'), {
+        recursive: true,
+      });
+      fs.rmSync(path.join(tempDir, 'uploads', 'screenshots', 'rpt_moved'), { recursive: true });
+      config.dataDir = relocated;
+      expect(await createStoredFileHandle(saved.path).exists()).toBe(true);
+      expect((await readStoredFile(saved.path))?.length).toBe(pngBuffer.length);
+      expect(await deleteFile(saved.path)).toBe(true);
+      expect(fs.existsSync(path.join(relocated, saved.path))).toBe(false);
+    } finally {
+      config.dataDir = tempDir;
+      fs.rmSync(relocated, { recursive: true, force: true });
+    }
+  });
+
+  it('still reads records that store an absolute path', async () => {
+    const saved = await saveFile({
+      reportId: 'rpt_absolute',
+      type: 'attachment',
+      filename: 'note.txt',
+      mimeType: 'text/plain',
+      data: Buffer.from('absolute'),
+    });
+    const absolute = path.join(tempDir, saved.path);
+    expect(resolveLocalFilePath(absolute)).toBe(absolute);
+    expect((await readStoredFile(absolute))?.toString()).toBe('absolute');
+    expect(await deleteFile(absolute)).toBe(true);
+    expect(fs.existsSync(absolute)).toBe(false);
   });
 
   it('handles missing files gracefully', async () => {
@@ -126,7 +172,7 @@ describe('file storage', () => {
       data: Buffer.from([0x00, 0x01]),
     });
 
-    expect(saved.path.startsWith(config.screenshotsDir)).toBe(true);
+    expect(saved.path).toBe(`uploads/screenshots/rpt_video/${saved.filename}`);
   });
 
   it('stores attachments with fallback extension', async () => {
@@ -138,7 +184,7 @@ describe('file storage', () => {
       data: Buffer.from([0x00, 0x01]),
     });
 
-    expect(saved.path.startsWith(config.attachmentsDir)).toBe(true);
+    expect(saved.path).toBe(`uploads/attachments/rpt_attach/${saved.filename}`);
     expect(saved.filename.endsWith('.bin')).toBe(true);
   });
 
