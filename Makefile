@@ -128,8 +128,13 @@ format:
 	@bun run format
 
 # ==============================================================================
-# Seed Data (host, writes to ./data)
+# Seed Data (runs inside bugpin-server-local while it is up, otherwise on the host)
 # ==============================================================================
+
+SEED_CONTAINER := bugpin-server-local
+SEED_CONTAINER_RUNNING = $(shell docker ps -q --filter name=^$(SEED_CONTAINER)$$ --filter status=running --filter "label=com.docker.compose.project.working_dir=$(CURDIR)" 2>/dev/null)
+# The image holds a build-time copy of scripts/seed, so the current one is copied in before each run.
+SEED = $(if $(SEED_CONTAINER_RUNNING),docker exec $(SEED_CONTAINER) mkdir -p /app/scripts/seed && docker cp -q scripts/seed/. $(SEED_CONTAINER):/app/scripts/seed/ && docker exec $(SEED_CONTAINER) bun scripts/seed/seed.ts,bun scripts/seed/seed.ts)
 
 seed-projects seed-user seed-reports seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports: scripts/seed/seed.ts
 
@@ -141,25 +146,25 @@ seed-all:
 	@$(MAKE) seed-projects seed-user seed-reports
 
 seed-projects:
-	@bun scripts/seed/seed.ts projects
+	@$(SEED) projects
 
 seed-user:
-	@bun scripts/seed/seed.ts users
+	@$(SEED) users
 
 seed-reports:
-	@bun scripts/seed/seed.ts reports
+	@$(SEED) reports
 
 seed-clean-all:
-	@bun scripts/seed/seed.ts clean-all
+	@$(SEED) clean-all
 
 seed-clean-projects:
-	@bun scripts/seed/seed.ts clean-projects
+	@$(SEED) clean-projects
 
 seed-clean-user:
-	@bun scripts/seed/seed.ts clean-users
+	@$(SEED) clean-users
 
 seed-clean-reports:
-	@bun scripts/seed/seed.ts clean-reports
+	@$(SEED) clean-reports
 
 # ==============================================================================
 # Clean
