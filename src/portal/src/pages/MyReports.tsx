@@ -72,7 +72,7 @@ function ReportRow({ report }: { report: PortalReportSummary }) {
     <li>
       <Link
         to={`/reports/${encodeURIComponent(report.id)}`}
-        className="flex w-full gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+        className="flex w-full gap-4 px-5 py-4 text-left transition-colors hover:bg-primary-tint"
       >
         <ReportStatusIcon status={report.status} className="mt-1" />
         <div className="min-w-0 flex-1 space-y-1.5">
@@ -354,7 +354,7 @@ export function MyReports() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t(heading)}</h1>
+      <h1 className="text-2xl font-bold">{t(heading)}</h1>
       <Tabs
         value={status ?? 'all'}
         onValueChange={(value) => filter('status', value === 'all' ? undefined : value)}

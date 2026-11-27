@@ -131,10 +131,7 @@ export function Dashboard() {
               {GREETINGS[dayPartFor(now.getHours())]}, {firstName}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {today} ·{' '}
-              <time dateTime={now.toISOString()} className="tabular-nums">
-                {formatClockTime(now)}
-              </time>
+              {today} · <time dateTime={now.toISOString()}>{formatClockTime(now)}</time>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

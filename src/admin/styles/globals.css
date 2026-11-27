@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 @import '../../shared-ui/styles/tokens.css';
+@import '../../shared-ui/styles/base.css';
 
 @source '../../shared-ui';
 
@@ -41,7 +43,7 @@
 
 /* Template variable placeholder in the email editor and its source rendering */
 @utility variable-chip {
-  @apply inline-flex items-center rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary;
+  @apply inline-flex items-center rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-medium text-primary;
 }
 
 /* Active/Inactive status */
@@ -70,44 +72,12 @@
 
 /* Base styles */
 @layer base {
-  * {
-    @apply border-border;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
-  }
-
-  /* Browsers without scrollbar-color support (Safari) only style scrollbars through these */
-  *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background: var(--muted-foreground);
-    background-clip: padding-box;
-    border: 3px solid transparent;
-    border-radius: 9999px;
-  }
-
-  *::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
   html {
     @apply h-full;
-    color-scheme: light;
-  }
-
-  html.dark {
-    color-scheme: dark;
   }
 
   body {
-    @apply h-full bg-background text-foreground antialiased;
+    @apply h-full;
   }
 
   #root {

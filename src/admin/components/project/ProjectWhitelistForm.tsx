@@ -92,6 +92,7 @@ export function ProjectWhitelistForm({ value, onChange }: ProjectWhitelistFormPr
           <div className="flex gap-2">
             <Input
               placeholder="example.com"
+              className="font-mono"
               value={newOrigin}
               onChange={(e) => setNewOrigin(e.target.value)}
               onKeyDown={(e) => {

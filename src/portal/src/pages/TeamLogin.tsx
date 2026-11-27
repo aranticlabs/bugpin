@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@shared-ui/components/ui/button';
 import { Input } from '@shared-ui/components/ui/input';
+import { cn } from '@shared-ui/lib/utils';
 import { Label } from '@shared-ui/components/ui/label';
 import type { PortalTeamLoginResult } from '@shared/portal-types';
 import { PortalApiError, portalFetch } from '../api/client';
@@ -126,7 +127,7 @@ export function TeamLogin() {
               maxLength={useRecovery ? 20 : 10}
               value={code}
               onChange={(event) => setCode(event.target.value)}
-              className="h-11"
+              className={cn('h-11', useRecovery && 'font-mono')}
             />
           </div>
           {errorMessage}

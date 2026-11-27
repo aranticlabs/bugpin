@@ -134,7 +134,7 @@ function ChartTooltipContent({
                 style={{ '--indicator-color': color } as React.CSSProperties}
               />
               <span className="text-muted-foreground">{itemConfig?.label ?? item.name}</span>
-              <span className="ml-auto pl-3 font-mono font-medium tabular-nums text-foreground">
+              <span className="ml-auto pl-3 font-medium text-foreground">
                 {value === null ? '–' : valueFormatter ? valueFormatter(value, key) : value}
               </span>
             </div>

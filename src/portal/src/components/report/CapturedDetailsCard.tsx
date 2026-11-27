@@ -68,7 +68,7 @@ export function CapturedDetailsCard({ environment }: { environment: PortalReport
           {viewport && (
             <>
               <dt className="text-muted-foreground">{t('screen')}</dt>
-              <dd className="tabular-nums">
+              <dd>
                 {viewport.width} × {viewport.height}
               </dd>
             </>

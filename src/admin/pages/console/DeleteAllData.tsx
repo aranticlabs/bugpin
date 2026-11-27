@@ -88,7 +88,7 @@ export function DeleteAllData() {
               id="delete-all-confirmation"
               value={confirmation}
               onChange={(e) => setConfirmation(e.target.value)}
-              className="placeholder:font-mono"
+              className="font-mono"
               placeholder={CONFIRMATION_WORD}
               autoComplete="off"
               disabled={mutation.isPending}

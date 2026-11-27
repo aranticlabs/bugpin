@@ -172,7 +172,7 @@ export function FileDropzone({
                   <span className="truncate" title={file.name}>
                     {file.name}
                   </span>
-                  <span className="shrink-0 tabular-nums">{formatFileSize(file.size)}</span>
+                  <span className="shrink-0">{formatFileSize(file.size)}</span>
                 </div>
               </li>
             ))}

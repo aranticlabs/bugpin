@@ -74,9 +74,7 @@ export function ReportDetail() {
         </Link>
       </Button>
       <div className="space-y-2">
-        <h1 className="break-words text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
-          {report.title}
-        </h1>
+        <h1 className="break-words text-2xl font-bold [overflow-wrap:anywhere]">{report.title}</h1>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <ReportStatusLabel status={report.status} label={t(report.status)} />
           <span className="break-words">{report.project.name}</span>

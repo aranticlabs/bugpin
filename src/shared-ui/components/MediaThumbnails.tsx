@@ -124,7 +124,7 @@ export function MediaThumbnails({
               </button>
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t px-2 py-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 truncate">{item.label}</span>
-                {item.details && <span className="tabular-nums">{item.details}</span>}
+                {item.details && <span>{item.details}</span>}
               </div>
               <a
                 href={item.url}

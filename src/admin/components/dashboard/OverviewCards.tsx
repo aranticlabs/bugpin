@@ -145,7 +145,7 @@ function KpiCard({ definition, kpi }: { definition: KpiDefinition; kpi: Dashboar
         </div>
         <div className="space-y-1">
           <div className="flex items-end justify-between gap-3">
-            <span className="text-3xl font-semibold tabular-nums tracking-tight">
+            <span className="text-3xl font-semibold tracking-tight">
               {definition.format(kpi.value)}
             </span>
             {delta && (
@@ -294,9 +294,7 @@ export function BacklogPriorityCard({
           {REPORT_PRIORITIES.map((priority) => (
             <div key={priority} className="flex items-center gap-2 text-sm">
               <ReportPriorityLabel priority={priority} />
-              <span className="ml-auto tabular-nums text-muted-foreground">
-                {backlog[priority]}
-              </span>
+              <span className="ml-auto text-muted-foreground">{backlog[priority]}</span>
             </div>
           ))}
         </div>

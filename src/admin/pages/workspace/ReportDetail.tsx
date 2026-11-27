@@ -627,7 +627,7 @@ export function ReportDetail() {
                               })}
                             </span>
                           )}
-                          <span className="min-w-0 break-words tabular-nums">{details}</span>
+                          <span className="min-w-0 break-words">{details}</span>
                         </div>
                         <a
                           href={fileUrl}

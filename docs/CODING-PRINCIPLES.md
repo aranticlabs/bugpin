@@ -227,6 +227,20 @@ export function MyComponent() {}
 
 **Comments**: Minimal, no decorative separators (`// ======`). Method JSDoc allowed for complex functions only.
 
+## Typography
+
+The Admin Console and the Reporter Portal use Geist for all text and numbers. Geist Mono (`font-mono`) is only for text where every character must be exact, so 0 and O or 1, l and I can't be confused. `code` and `pre` use Geist Mono automatically.
+
+| Font       | Use for                                                           | Examples                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Geist Mono | Keys, tokens, secrets and codes that people copy, compare or type | API keys and token prefixes, proxy and license keys, S3 Access Key ID, recovery codes (list and sign-in field), authenticator secret, hex colors |
+| Geist Mono | Technical source and captured data                                | Email template source and variables, embed snippets, console logs, network errors, cookie and storage keys, allowed origins, stack traces        |
+| Geist Mono | Words that must be typed exactly to confirm                       | `DELETE`, `license` (label and input)                                                                                                            |
+| Geist      | KPIs, counts, times, dates and sizes                              | Dashboard KPIs, sidebar and tab counts, unread badges, pagination, chart values, clock, file sizes, image and screen sizes                       |
+| Geist      | Codes made of digits only                                         | 6-digit authenticator codes                                                                                                                      |
+
+Numbers use regular digits. Don't add `tabular-nums`: Geist's fixed-width digits look like Geist Mono.
+
 ## Widget Constraints
 
 - Bundle size: ≤190KB gzipped (IIFE; ESM build may be larger)

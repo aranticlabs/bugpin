@@ -147,7 +147,7 @@ function SortablePinnedProject({
           title={labelWithCount(project.name, project.activeReportsCount)}
         >
           <span className="truncate">{project.name}</span>
-          <span className="ml-auto pl-2 text-xs tabular-nums text-muted-foreground">
+          <span className="ml-auto pl-2 text-xs text-muted-foreground">
             {project.activeReportsCount}
           </span>
         </Link>

@@ -125,9 +125,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
           <p className="font-medium">
             Level {game.level} · {levelTitle(game.level)}
           </p>
-          <p className="text-sm tabular-nums text-muted-foreground">
-            {game.xp.toLocaleString()} XP
-          </p>
+          <p className="text-sm text-muted-foreground">{game.xp.toLocaleString()} XP</p>
         </div>
         <Progress value={percent} className="h-2" aria-label="Progress to the next level" />
         <p className="text-xs text-muted-foreground">
@@ -155,7 +153,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
               >
                 <span
                   className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums',
+                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium',
                     done && 'bg-success/15 text-success',
                     current && 'bg-primary text-primary-foreground',
                     !done && !current && 'bg-muted'
@@ -176,9 +174,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
                     You are here
                   </Badge>
                 )}
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {xp.toLocaleString()} XP
-                </span>
+                <span className="text-xs text-muted-foreground">{xp.toLocaleString()} XP</span>
               </li>
             );
           })}
@@ -195,9 +191,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
             {REPORT_PRIORITIES.map((priority) => (
               <div key={priority} className="flex items-center justify-between px-3 py-2">
                 <ReportPriorityLabel priority={priority} />
-                <span className="text-sm font-medium tabular-nums">
-                  +{XP_BY_PRIORITY[priority]}
-                </span>
+                <span className="text-sm font-medium">+{XP_BY_PRIORITY[priority]}</span>
               </div>
             ))}
           </div>
@@ -214,7 +208,7 @@ function LevelsTab({ game }: { game: GamificationProgress }) {
                 <MessageSquare className="size-4 shrink-0 text-sky-500" aria-hidden />
                 Message to a reporter
               </span>
-              <span className="text-sm font-medium tabular-nums">+{XP_PER_REPORTER_MESSAGE}</span>
+              <span className="text-sm font-medium">+{XP_PER_REPORTER_MESSAGE}</span>
             </div>
           </div>
         </div>
@@ -258,7 +252,7 @@ function AchievementCard({ achievement }: { achievement: AchievementProgress }) 
               className="h-1"
               aria-label={`${copy.title} progress`}
             />
-            <p className="text-2xs tabular-nums text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               {achievement.current} / {achievement.target}
             </p>
           </div>
