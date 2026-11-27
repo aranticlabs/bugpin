@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -9,6 +9,8 @@ import {
   readFile,
   deleteFile,
   deleteReportFiles,
+  isReportDeleting,
+  withReportDeletionFence,
   getFileStats,
   fileExists,
   saveAvatar,
@@ -618,5 +620,62 @@ it('checks remote object existence through provider metadata without reading con
     expect(await handle.exists()).toBe(false);
   } finally {
     registerEEHooks(originalHooks);
+  }
+});
+
+it('drains a late file row while a remote object deletion is pending', async () => {
+  const reportId = 'rpt_concurrent';
+  const makeFile = (id: string) => ({
+    id,
+    reportId,
+    path: `s3://uploads/${id}`,
+    filename: id,
+    sizeBytes: 1,
+    type: 'attachment' as const,
+    mimeType: 'text/plain',
+    messageId: null,
+    uploadedByReporterId: null,
+    createdAt: new Date().toISOString(),
+  });
+  const first = makeFile('first.txt');
+  const late = makeFile('late.txt');
+  const files = new Map([[first.id, first]]);
+  const objects = new Set([first.path, late.path]);
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const hooks = getEEHooks();
+  const provider: StorageProvider = {
+    acceptsUploads: () => false,
+    read: async () => Result.fail('unused'),
+    upload: async () => Result.fail('unused'),
+    exists: async (key) => Result.ok(objects.has(key)),
+    testConnection: async () => Result.ok(undefined),
+    getStatus: async () => Result.ok({ enabled: true, configured: true }),
+    delete: async (key) => {
+      if (key === first.path) {
+        started.resolve();
+        await resume.promise;
+      }
+      objects.delete(key);
+      return Result.ok(undefined);
+    },
+  };
+  registerEEHooks({ ...hooks, getStorageProvider: () => provider });
+  const list = spyOn(filesRepo, 'findByReportId').mockImplementation(async () => [
+    ...files.values(),
+  ]);
+  try {
+    const deletion = withReportDeletionFence(reportId, () => deleteReportFiles(reportId));
+    await started.promise;
+    expect(isReportDeleting(reportId)).toBe(true);
+    files.set(late.id, late);
+    resume.resolve();
+    expect(await deletion).toBe(2);
+    expect(isReportDeleting(reportId)).toBe(false);
+    expect(objects.size).toBe(0);
+  } finally {
+    resume.resolve();
+    list.mockRestore();
+    registerEEHooks(hooks);
   }
 });

@@ -15,7 +15,13 @@ import { notificationsService } from './notifications.service.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { uploadQuotaService } from './upload-quota.service.js';
 import { videoQuotaService } from './video-quota.service.js';
-import { saveFile, deleteFile, validateFile, ALLOWED_MEDIA_MIME_TYPES } from '../storage/files.js';
+import {
+  saveFile,
+  deleteFile,
+  isReportDeleting,
+  validateFile,
+  ALLOWED_MEDIA_MIME_TYPES,
+} from '../storage/files.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { MAX_MESSAGE_FILES, MESSAGE_BODY_OVERHEAD_BYTES } from '../utils/request-limits.js';
 import { Result } from '../utils/result.js';
@@ -73,6 +79,7 @@ function checkAccess(
   writing = true,
   invitationEmail?: string
 ): Result<MessageWriteContext> {
+  if (writing && isReportDeleting(reportId)) return Result.fail('Report not found', 'NOT_FOUND');
   if (!reportMessagesRepo.hasAuthor(author))
     return Result.fail('Author is no longer available', 'UNAUTHORIZED');
   const context = reportMessagesRepo.writeContext(reportId);

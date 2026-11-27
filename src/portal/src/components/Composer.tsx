@@ -46,8 +46,14 @@ export function Composer({
     },
   });
   useEffect(() => {
-    if (mutation.isError && failedRevision.current !== refreshedAt) mutation.reset();
-  }, [refreshedAt, mutation.isError, mutation.reset]);
+    if (
+      mutation.isError &&
+      failedRevision.current !== refreshedAt &&
+      mutation.error instanceof PortalApiError &&
+      [403, 404, 409].includes(mutation.error.status)
+    )
+      mutation.reset();
+  }, [refreshedAt, mutation.isError, mutation.error, mutation.reset]);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!mutation.isPending && (body.trim() || files.length)) mutation.mutate();

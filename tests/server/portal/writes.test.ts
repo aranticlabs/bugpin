@@ -15,6 +15,7 @@ import { syncQueueService } from '../../../src/server/services/integrations/sync
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { clearAllRateLimits } from '../../../src/server/middleware/rate-limit';
+import { acquireUploadSlot, resetUploadSlots } from '../../../src/server/utils/upload-concurrency';
 import { getEEHooks } from '../../../src/server/utils/ee-hooks';
 import { config } from '../../../src/server/config';
 import { Result } from '../../../src/server/utils/result';
@@ -79,6 +80,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await tick();
   mock.restore();
+  resetUploadSlots();
   close();
 });
 function tick() {
@@ -772,4 +774,88 @@ it('rejects real chunked multipart overflows without persisting reports, message
   expect(count('report_messages')).toBe(0);
   expect(count('files')).toBe(1);
   expect(diskFiles()).toEqual([]);
+});
+
+it('caps upload slots per reporter and globally and releases each slot only once', () => {
+  const first = acquireUploadSlot('a')!;
+  const second = acquireUploadSlot('a')!;
+  expect(acquireUploadSlot('a')).toBeNull();
+  first();
+  first();
+  const third = acquireUploadSlot('a')!;
+  expect(acquireUploadSlot('a')).toBeNull();
+  second();
+  third();
+  const held = Array.from({ length: 10 }, (_, index) => acquireUploadSlot(`key-${index}`, 2, 10));
+  expect(held.every((release) => release !== null)).toBe(true);
+  expect(acquireUploadSlot('other', 2, 10)).toBeNull();
+  held[0]!();
+  const freed = acquireUploadSlot('other', 2, 10);
+  expect(freed).not.toBeNull();
+  freed!();
+  for (const release of held) release!();
+});
+
+it('refuses a third concurrent upload from one reporter and frees slots when uploads end', async () => {
+  const held: Array<{ fail: () => void; response: Promise<Response> }> = [];
+  for (const path of ['/reports', `/reports/${reportId}/messages`]) {
+    let fail: () => void = () => {};
+    let reading: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        start(controller) {
+          fail = () => controller.error(new Error('client went away'));
+        },
+        pull() {
+          reading();
+          return new Promise<void>(() => {});
+        },
+      },
+      { highWaterMark: 0 }
+    );
+    const response = app.request(
+      new Request(`${portalOrigin}/api/portal${path}`, {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          Origin: portalOrigin,
+          'X-BugPin-Portal': '1',
+          'content-type': 'multipart/form-data; boundary=boundary',
+          'content-length': '1024',
+        },
+        body,
+      })
+    );
+    held.push({ fail, response: Promise.resolve(response) });
+    await started;
+  }
+  try {
+    for (const response of [submit(), multipart(`/reports/${reportId}/messages`, new FormData())]) {
+      const refused = await response;
+      expect(refused.status).toBe(429);
+      expect(await refused.json()).toEqual({
+        success: false,
+        error: 'RATE_LIMITED',
+        message: 'Too many concurrent uploads',
+      });
+    }
+    for (const path of ['/reports', `/reports/${reportId}/messages`]) {
+      const request = new Request(`${portalOrigin}/api/portal${path}`, {
+        method: 'POST',
+        headers: { Cookie: cookie, Origin: portalOrigin, 'X-BugPin-Portal': '1' },
+        body: new FormData(),
+      });
+      request.headers.delete('content-length');
+      expect((await app.request(request)).status).toBe(429);
+      expect(request.bodyUsed).toBe(false);
+    }
+    expect((await reply()).status).toBe(201);
+  } finally {
+    for (const upload of held) upload.fail();
+  }
+  for (const upload of held) expect((await upload.response).status).toBe(400);
+  expect((await submit()).status).toBe(201);
 });

@@ -17,6 +17,7 @@ import {
   initSchema,
   runMigrations,
 } from '../../src/server/database/database';
+import { portalSubmissionsService } from '../../src/server/services/portal-submissions.service';
 import { reportMessagesRepo } from '../../src/server/database/repositories/report-messages.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import { reportMessagesService } from '../../src/server/services/report-messages.service';
@@ -893,4 +894,61 @@ it('emits metadata-only file webhooks after commit and emits no events for rolle
   ).toBe(false);
   expect(messageCreated).not.toHaveBeenCalled();
   expect(ownerChanged).not.toHaveBeenCalled();
+});
+
+it('accepts text-only replies when earlier uploads exceed the daily quota', async () => {
+  const usage = spyOn(filesRepo, 'getSizeByReporterSince').mockReturnValue(Number.MAX_SAFE_INTEGER);
+  try {
+    expect(
+      (await reportMessagesService.sendReporter('report', 'reporter', 'Text only')).success
+    ).toBe(true);
+    expect(usage).not.toHaveBeenCalled();
+  } finally {
+    usage.mockRestore();
+  }
+});
+
+it('rejects both authors during deletion and discards a file staged before deletion began', async () => {
+  const staged = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const save = storage.saveFile;
+  const upload = spyOn(storage, 'saveFile').mockImplementation(async (options) => {
+    const file = await save(options);
+    staged.resolve();
+    await resume.promise;
+    return file;
+  });
+  try {
+    const pending = reportMessagesService.sendReporter('report', 'reporter', '', [image()]);
+    await staged.promise;
+    await storage.withReportDeletionFence('report', async () => {
+      resume.resolve();
+      expect(await pending).toMatchObject({ code: 'NOT_FOUND' });
+      expect(
+        await reportMessagesService.send('report', 'staff', '', undefined, [image()])
+      ).toMatchObject({ code: 'NOT_FOUND' });
+      expect(
+        await reportMessagesService.sendReporter('report', 'reporter', '', [image()])
+      ).toMatchObject({ code: 'NOT_FOUND' });
+      expect(upload).toHaveBeenCalledTimes(1);
+    });
+    expect(counts()).toEqual({ messages: 0, files: 0 });
+    expect(stagedFiles()).toEqual([]);
+  } finally {
+    resume.resolve();
+    upload.mockRestore();
+  }
+});
+
+it('rejects submission uploads before quota checks when no project allows new reports', async () => {
+  projectSettings({ reporterPortal: { enabled: true, allowNewReports: false } });
+  const usage = spyOn(filesRepo, 'getSizeByReporterSince');
+  try {
+    expect(await portalSubmissionsService.uploadBodyLimit('reporter')).toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(usage).not.toHaveBeenCalled();
+  } finally {
+    usage.mockRestore();
+  }
 });

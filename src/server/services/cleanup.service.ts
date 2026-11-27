@@ -1,7 +1,7 @@
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
-import { deleteReportFiles } from '../storage/files.js';
+import { deleteReportFiles, withReportDeletionFence } from '../storage/files.js';
 import { logger } from '../utils/logger.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { realtimeService } from './realtime.service.js';
@@ -57,18 +57,20 @@ async function deleteReportsByIds(
 
   for (const reportId of reportIds) {
     try {
-      await deleteReportFiles(reportId);
-      await filesRepo.deleteByReportId(reportId);
+      await withReportDeletionFence(reportId, async () => {
+        await deleteReportFiles(reportId);
+        await filesRepo.deleteByReportId(reportId);
 
-      const owner = reporterOwnershipRepo.findByReportId(reportId);
-      if (await reportsRepo.delete(reportId)) {
-        if (owner?.reporterId) owners.add(owner.reporterId);
-        deleted++;
-        logger.debug('Deleted report', { reportId });
-      } else {
-        errors++;
-        logger.warn('Failed to delete report', { reportId });
-      }
+        const owner = reporterOwnershipRepo.findByReportId(reportId);
+        if (await reportsRepo.delete(reportId)) {
+          if (owner?.reporterId) owners.add(owner.reporterId);
+          deleted++;
+          logger.debug('Deleted report', { reportId });
+        } else {
+          errors++;
+          logger.warn('Failed to delete report', { reportId });
+        }
+      });
     } catch (error) {
       errors++;
       logger.error('Error deleting report', error, { reportId });

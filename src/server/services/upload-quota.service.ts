@@ -10,6 +10,7 @@ export const uploadQuotaService = {
   },
   // Run the check and file inserts in the same synchronous transaction.
   check(reporterId: string, incomingBytes: number, limitMb: number): Result<void> {
+    if (incomingBytes <= 0) return Result.ok(undefined);
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     if (
       filesRepo.getSizeByReporterSince(reporterId, since) + incomingBytes >

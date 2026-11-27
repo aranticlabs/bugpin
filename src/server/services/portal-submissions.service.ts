@@ -32,11 +32,10 @@ export const portalSubmissionsService = {
   > {
     const projects = await portalReportsService.projects({ kind: 'reporter', reporterId });
     if (!projects.success) return projects;
+    const eligible = projects.value.filter((project) => project.allowNewReports);
+    if (!eligible.length) return Result.fail('Report submissions are disabled', 'NOT_FOUND');
     const sizeMb = Math.max(
-      0,
-      ...projects.value
-        .filter((p) => p.allowNewReports)
-        .map((p) => Math.max(p.maxImageMb, p.maxVideoMb))
+      ...eligible.map((project) => Math.max(project.maxImageMb, project.maxVideoMb))
     );
     const settings = await settingsCacheService.getAll();
     const remaining = uploadQuotaService.remaining(

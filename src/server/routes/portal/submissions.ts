@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
-import { portalRateLimit } from '../../middleware/portal-rate-limit.js';
+import { limitPortalUploads, portalRateLimit } from '../../middleware/portal-rate-limit.js';
 import { portalSubmissionsService } from '../../services/portal-submissions.service.js';
 import { errorStatus } from '../../utils/http-status.js';
 import { MAX_MESSAGE_FILES } from '../../utils/request-limits.js';
@@ -12,7 +12,13 @@ portalSubmissionsRoutes.post(
   reporterAuthMiddleware,
   portalRateLimit('submissionsPerReporterPerHour', 3600),
   portalRateLimit('submissionsPerReporterPerDay', 86400),
+  limitPortalUploads,
   async (c, next) => {
+    if (!c.req.header('content-type')?.includes('multipart/form-data'))
+      return c.json(
+        { success: false, error: 'VALIDATION_ERROR', message: 'Expected a report form' },
+        400
+      );
     const result = await portalSubmissionsService.uploadBodyLimit(c.get('reporter').id);
     if (!result.success)
       return c.json(
@@ -33,11 +39,6 @@ portalSubmissionsRoutes.post(
     })(c, next);
   },
   async (c) => {
-    if (!c.req.header('content-type')?.includes('multipart/form-data'))
-      return c.json(
-        { success: false, error: 'VALIDATION_ERROR', message: 'Expected a report form' },
-        400
-      );
     try {
       const form = await c.req.raw.formData();
       const values = [...form.getAll('files[]'), ...form.getAll('files')];

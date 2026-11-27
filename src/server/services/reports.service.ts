@@ -8,7 +8,10 @@ import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import {
   saveFile,
+  deleteFile,
   deleteReportFiles,
+  isReportDeleting,
+  withReportDeletionFence,
   createStoredFileHandle,
   type StoredFileHandle,
   validateFile,
@@ -1016,23 +1019,23 @@ export const reportsService = {
     if (!access.success) return access;
 
     try {
-      await deleteReportFiles(id);
+      const deleted = await withReportDeletionFence(id, async () => {
+        await deleteReportFiles(id);
+        await filesRepo.deleteByReportId(id);
+        const owner = reporterOwnershipRepo.findByReportId(id);
+        const removed = await reportsRepo.delete(id);
+        if (removed && owner?.reporterId)
+          realtimeService.invalidatePortalAccess({ reporterId: owner.reporterId });
+        return removed;
+      });
+      if (!deleted) return Result.fail('Report not found', 'NOT_FOUND');
     } catch (error) {
-      logger.error('Failed to delete report files', error, { reportId: id });
+      logger.error('Failed to delete report', error, { reportId: id });
       return Result.fail(
         'Stored files could not be deleted; retry deletion',
         'STORAGE_DELETE_FAILED'
       );
     }
-
-    // Delete file records (cascade will handle this, but be explicit)
-    await filesRepo.deleteByReportId(id);
-
-    // Capture ownership immediately before the synchronous delete commits.
-    const owner = reporterOwnershipRepo.findByReportId(id);
-    const deleted = await reportsRepo.delete(id);
-    if (deleted && owner?.reporterId)
-      realtimeService.invalidatePortalAccess({ reporterId: owner.reporterId });
 
     // Trigger webhooks via EE hooks after deletion (async, don't block)
     getEEHooks()
@@ -1110,6 +1113,9 @@ export const reportsService = {
     reportId: string,
     file: { data: Buffer | Uint8Array; filename: string; mimeType: string; type: FileType }
   ): Promise<Result<void>> {
+    if (isReportDeleting(reportId)) {
+      return Result.fail('Report not found', 'NOT_FOUND');
+    }
     const report = await reportsRepo.findById(reportId);
 
     if (!report) {
@@ -1136,6 +1142,7 @@ export const reportsService = {
       return Result.fail(validation.error, validation.code);
     }
 
+    let unrecordedPath: string | undefined;
     try {
       const savedFile = await saveFile({
         reportId,
@@ -1145,6 +1152,12 @@ export const reportsService = {
         data: file.data,
       });
 
+      if (isReportDeleting(reportId)) {
+        await deleteFile(savedFile.path);
+        return Result.fail('Report not found', 'NOT_FOUND');
+      }
+
+      unrecordedPath = savedFile.path;
       await filesRepo.create({
         reportId,
         type: file.type,
@@ -1156,9 +1169,11 @@ export const reportsService = {
         height: savedFile.height,
       });
 
+      unrecordedPath = undefined;
       logger.info('File added to report', { reportId, fileId: savedFile.id, type: file.type });
       return Result.ok(undefined);
     } catch (error) {
+      if (unrecordedPath) await deleteFile(unrecordedPath);
       logger.error('Failed to add file to report', error, { reportId });
       return Result.fail('Failed to save file', 'FILE_SAVE_FAILED');
     }

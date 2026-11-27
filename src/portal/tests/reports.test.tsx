@@ -11,7 +11,7 @@ import type {
   PortalReportSummary,
 } from '@shared/portal-types';
 import { REPORT_STATUSES } from '@shared/types';
-import { portalFetch } from '../src/api/client';
+import { PortalApiError, portalFetch } from '../src/api/client';
 import { App } from '../src/App';
 import { AuthProvider } from '../src/auth/AuthProvider';
 import { I18nProvider } from '../src/i18n/I18nProvider';
@@ -1224,4 +1224,56 @@ it('offers the theme switch in the header before sign-in', async () => {
   await user.click(await screen.findByRole('menuitemradio', { name: 'Light' }));
   expect(document.documentElement).toHaveClass('light');
   expect(localStorage.getItem('bugpin-portal-theme')).toBe('light');
+});
+
+it('maps non-JSON 413 responses to PAYLOAD_TOO_LARGE and other non-JSON errors to REQUEST_FAILED', async () => {
+  server.use(
+    http.post(
+      '/api/portal/reports/report/messages',
+      () =>
+        new HttpResponse('<html>413 Request Entity Too Large</html>', {
+          status: 413,
+          headers: { 'Content-Type': 'text/html' },
+        })
+    ),
+    http.get(
+      '/api/portal/reports/bad-gateway',
+      () =>
+        new HttpResponse('Bad Gateway', { status: 502, headers: { 'Content-Type': 'text/plain' } })
+    )
+  );
+  await expect(portalFetch('/reports/report/messages', { method: 'POST' })).rejects.toMatchObject({
+    status: 413,
+    code: 'PAYLOAD_TOO_LARGE',
+  } satisfies Partial<PortalApiError>);
+  await expect(portalFetch('/reports/bad-gateway')).rejects.toMatchObject({
+    status: 502,
+    code: 'REQUEST_FAILED',
+  } satisfies Partial<PortalApiError>);
+});
+
+it('keeps a 413 upload quota error in the composer across a background report refresh', async () => {
+  const originalFetch = globalThis.fetch;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/reports/report/messages') && init?.method === 'POST') {
+      return Response.json({ success: false, error: 'UPLOAD_QUOTA_EXCEEDED' }, { status: 413 });
+    }
+    return originalFetch(input, init);
+  });
+  const client = mount('/reports/report');
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('Message'), 'Quota draft');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('upload quota');
+  const before = client.getQueryState(['portal', 'report', 'report'])!.dataUpdateCount;
+  act(() => {
+    TestEventSource.instances[0].dispatchEvent(new Event('report.updated'));
+  });
+  await waitFor(() =>
+    expect(client.getQueryState(['portal', 'report', 'report'])!.dataUpdateCount).toBeGreaterThan(
+      before
+    )
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('upload quota');
+  expect(screen.getByLabelText('Message')).toHaveValue('Quota draft');
 });

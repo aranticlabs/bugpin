@@ -20,8 +20,23 @@ export async function portalFetch<T>(path: string, init: RequestInit = {}): Prom
     !path.startsWith('/auth/')
   )
     window.dispatchEvent(new Event('bugpin:portal-session-expired'));
-  const body: { success?: boolean; error?: string } = await response.json();
-  if (!response.ok || !body.success)
-    throw new PortalApiError(response.status, body.error ?? 'REQUEST_FAILED');
+  let parsed: unknown;
+  try {
+    parsed = await response.json();
+  } catch {
+    throw new PortalApiError(
+      response.status,
+      response.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'REQUEST_FAILED'
+    );
+  }
+  const body =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { success?: boolean; error?: string })
+      : null;
+  if (!response.ok || !body?.success)
+    throw new PortalApiError(
+      response.status,
+      body?.error ?? (response.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'REQUEST_FAILED')
+    );
   return body as T;
 }

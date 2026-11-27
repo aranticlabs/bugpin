@@ -564,14 +564,42 @@ export async function deleteFile(filePath: string): Promise<boolean> {
   }
 }
 
+const deletingReports = new Set<string>();
+
+export function isReportDeleting(reportId: string): boolean {
+  return deletingReports.has(reportId);
+}
+
+export async function withReportDeletionFence<T>(
+  reportId: string,
+  work: () => Promise<T>
+): Promise<T> {
+  if (isReportDeleting(reportId)) throw new Error('Report deletion is already in progress');
+  deletingReports.add(reportId);
+  try {
+    return await work();
+  } finally {
+    deletingReports.delete(reportId);
+  }
+}
+
 /**
  * Delete stored files before removing their database references.
  */
 export async function deleteReportFiles(reportId: string): Promise<number> {
+  const seen = new Set<string>();
   let count = 0;
-  for (const file of await filesRepo.findByReportId(reportId)) {
-    if (!(await deleteFile(file.path))) throw new Error(`Unable to delete stored file ${file.id}`);
-    count++;
+  while (true) {
+    const files = (await filesRepo.findByReportId(reportId)).filter(
+      (file) => !seen.has(`${file.id}\0${file.path}`)
+    );
+    if (!files.length) break;
+    for (const file of files) {
+      if (!(await deleteFile(file.path)))
+        throw new Error(`Unable to delete stored file ${file.id}`);
+      seen.add(`${file.id}\0${file.path}`);
+      count++;
+    }
   }
 
   for (const dir of [config.screenshotsDir, config.attachmentsDir]) {

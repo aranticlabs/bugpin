@@ -952,8 +952,11 @@ describe('reportsService.addFile', () => {
     expect(result.success).toBe(true);
   });
 
-  it('returns failure when saving file throws', async () => {
-    filesRepo.create = async () => {
+  it('removes the saved file when its database insert fails', async () => {
+    let storedPath = '';
+    filesRepo.create = async (record) => {
+      storedPath = resolveLocalFilePath(record.path);
+      expect(fs.existsSync(storedPath)).toBe(true);
       throw new Error('DB error');
     };
     const result = await reportsService.addFile('rpt_1', {
@@ -963,6 +966,8 @@ describe('reportsService.addFile', () => {
       type: 'screenshot',
     });
     expect(result.success).toBe(false);
+    expect(storedPath).not.toBe('');
+    expect(fs.existsSync(storedPath)).toBe(false);
   });
 
   it('rejects file with invalid MIME type', async () => {
