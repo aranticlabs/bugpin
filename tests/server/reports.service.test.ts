@@ -5,6 +5,9 @@ import { tmpdir } from 'os';
 import { reportsService } from '../../src/server/services/reports.service';
 import * as videoRemuxService from '../../src/server/services/video-remux.service';
 import { reporterOwnershipRepo } from '../../src/server/database/repositories/reporter-ownership.repo';
+import { getDb } from '../../src/server/database/database';
+import { openPortalDatabase } from './portal/helpers';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
@@ -82,6 +85,7 @@ const baseReport: Report = {
 };
 
 const originalOwnershipRepo = { ...reporterOwnershipRepo };
+const originalInsertHistory = reportHistoryRepo.insert;
 const originalReportsRepo = { ...reportsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalFilesRepo = { ...filesRepo };
@@ -145,10 +149,13 @@ beforeEach(() => {
   };
   reportsRepo.findById = async () => reportById;
   reportsRepo.find = async () => ({ data: [baseReport], total: 1, nextCursor: null });
-  reportsRepo.update = async (_id, updates) => {
+  reportsRepo.findByIdSync = () => reportById;
+  reportsRepo.transaction = (work) => work();
+  reportsRepo.applyUpdate = (_id, updates) => {
     updatePayload = updates;
-    return updatedReport ? { ...updatedReport, ...updates } : null;
+    reportById = updatedReport ? { ...updatedReport, ...updates } : null;
   };
+  reportHistoryRepo.insert = () => 'history';
   reportsRepo.delete = async () => true;
   reportsRepo.bulkUpdate = async () => 3;
   reportsRepo.getStats = async () =>
@@ -233,6 +240,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.assign(reporterOwnershipRepo, originalOwnershipRepo);
+  reportHistoryRepo.insert = originalInsertHistory;
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(filesRepo, originalFilesRepo);
@@ -982,4 +990,47 @@ describe('reportsService.addFile', () => {
       expect(result.code).toBe('INVALID_FILE_CONTENT');
     }
   });
+});
+
+it('accepts 500 characters on update and rejects longer titles', async () => {
+  expect((await reportsService.update(baseReport.id, { title: 'x'.repeat(500) })).success).toBe(
+    true
+  );
+  expect(await reportsService.update(baseReport.id, { title: 'x'.repeat(501) })).toMatchObject({
+    code: 'INVALID_TITLE',
+  });
+});
+
+it('records consecutive status transitions from concurrent staff updates and rolls back failed history writes', async () => {
+  const close = await openPortalDatabase();
+  Object.assign(reportsRepo, originalReportsRepo);
+  reportHistoryRepo.insert = originalInsertHistory;
+  try {
+    getDb()
+      .exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+      INSERT INTO reports (id, project_id, title, metadata) VALUES ('report', 'project', 'Report', '{}');`);
+    const results = await Promise.all([
+      reportsService.update('report', { status: 'in_progress' }),
+      reportsService.update('report', { status: 'resolved' }),
+    ]);
+    expect(results.every((result) => result.success)).toBe(true);
+    expect(
+      getDb().query('SELECT old_value, new_value FROM report_history ORDER BY rowid').all()
+    ).toEqual([
+      { old_value: 'open', new_value: 'in_progress' },
+      { old_value: 'in_progress', new_value: 'resolved' },
+    ]);
+    reportHistoryRepo.insert = () => {
+      throw new Error('Write failed');
+    };
+    expect(await reportsService.update('report', { status: 'closed' })).toMatchObject({
+      code: 'UPDATE_FAILED',
+    });
+    expect(await reportsService.bulkUpdate(['report'], { status: 'closed' })).toMatchObject({
+      code: 'UPDATE_FAILED',
+    });
+    expect(reportsRepo.findByIdSync('report')?.status).toBe('resolved');
+  } finally {
+    close();
+  }
 });

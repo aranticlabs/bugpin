@@ -1,44 +1,9 @@
 import { Hono } from 'hono';
 import { githubSyncService } from '../../services/integrations/github-sync.service.js';
-import { integrationsRepo } from '../../database/repositories/integrations.repo.js';
+import { errorStatus } from '../../utils/http-status.js';
 import { logger } from '../../utils/logger.js';
-import type { GitHubIntegrationConfig } from '@shared/types';
 
 const githubWebhook = new Hono();
-
-// Verify GitHub webhook signature using Bun's crypto
-async function verifyWebhookSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): Promise<boolean> {
-  if (!signature.startsWith('sha256=')) {
-    return false;
-  }
-
-  const receivedHash = signature.slice(7);
-
-  try {
-    // Use Bun's CryptoHasher for HMAC-SHA256
-    const hmac = new Bun.CryptoHasher('sha256', secret);
-    hmac.update(payload);
-    const expectedHash = hmac.digest('hex');
-
-    // Constant-time comparison
-    if (receivedHash.length !== expectedHash.length) {
-      return false;
-    }
-
-    let result = 0;
-    for (let i = 0; i < receivedHash.length; i++) {
-      result |= receivedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
-    }
-
-    return result === 0;
-  } catch {
-    return false;
-  }
-}
 
 // GitHub Webhook Handler
 githubWebhook.post('/:integrationId', async (c) => {
@@ -59,39 +24,8 @@ githubWebhook.post('/:integrationId', async (c) => {
     hasSignature: !!signature,
   });
 
-  // Get integration
-  const integration = await integrationsRepo.findById(integrationId);
-  if (!integration) {
-    logger.warn('GitHub webhook for unknown integration', { integrationId });
-    return c.json({ error: 'Integration not found' }, 404);
-  }
-
-  if (integration.type !== 'github') {
-    logger.warn('GitHub webhook for non-GitHub integration', { integrationId });
-    return c.json({ error: 'Invalid integration type' }, 400);
-  }
-
-  if (!integration.isActive) {
-    logger.warn('GitHub webhook for inactive integration', { integrationId });
-    return c.json({ error: 'Integration not found' }, 404);
-  }
-
-  const config = integration.config as GitHubIntegrationConfig;
-
-  if (!config.webhookSecret) {
-    logger.warn('GitHub webhook secret not configured', { integrationId });
-    return c.json({ error: 'Webhook not configured' }, 401);
-  }
-  if (!signature) {
-    logger.warn('GitHub webhook missing signature', { integrationId });
-    return c.json({ error: 'Missing signature' }, 401);
-  }
-
-  const isValid = await verifyWebhookSignature(rawBody, signature, config.webhookSecret);
-  if (!isValid) {
-    logger.warn('GitHub webhook signature mismatch', { integrationId });
-    return c.json({ error: 'Invalid signature' }, 401);
-  }
+  const verified = await githubSyncService.verifyWebhook(integrationId, rawBody, signature);
+  if (!verified.success) return c.json({ error: verified.error }, errorStatus(verified.code));
 
   // Parse payload
   let payload: {

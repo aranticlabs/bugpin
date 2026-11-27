@@ -5,7 +5,9 @@ import { githubSyncService } from '../../src/server/services/integrations/github
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { githubService } from '../../src/server/services/integrations/github.service';
+import { realtimeService } from '../../src/server/services/realtime.service';
 import { settingsService } from '../../src/server/services/settings.service';
 import { logger } from '../../src/server/utils/logger';
 import { Result } from '../../src/server/utils/result';
@@ -58,7 +60,9 @@ const baseIntegration: Integration = {
 const originalReportsRepo = { ...reportsRepo };
 const originalIntegrationsRepo = { ...integrationsRepo };
 const originalFilesRepo = { ...filesRepo };
+const originalReportHistoryRepo = { ...reportHistoryRepo };
 const originalGithubService = { ...githubService };
+const originalRealtimeService = { ...realtimeService };
 const originalSettingsService = { ...settingsService };
 const originalLogger = { ...logger };
 const originalAccess = projectLicenseService.checkAccess;
@@ -86,6 +90,11 @@ beforeEach(() => {
   createWebhookSecret = null;
 
   reportsRepo.findById = async () => reportById;
+  reportsRepo.findByIdSync = () => reportById;
+  reportsRepo.transaction = (fn) => fn();
+  reportsRepo.applyUpdate = (_id, payload) => {
+    updateStatusPayload = payload;
+  };
   reportsRepo.updateGitHubSyncStatus = async (_id, payload) => {
     updateSyncPayload = payload;
     return reportById;
@@ -97,6 +106,9 @@ beforeEach(() => {
     return reportById;
   };
   reportsRepo.findUnsyncedByProject = async () => [];
+
+  reportHistoryRepo.insert = () => 'hist_1';
+  realtimeService.publish = () => undefined;
 
   integrationsRepo.findById = async () => integrationById;
   integrationsRepo.findByProjectId = async () => [baseIntegration];
@@ -142,7 +154,9 @@ afterEach(() => {
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(integrationsRepo, originalIntegrationsRepo);
   Object.assign(filesRepo, originalFilesRepo);
+  Object.assign(reportHistoryRepo, originalReportHistoryRepo);
   Object.assign(githubService, originalGithubService);
+  Object.assign(realtimeService, originalRealtimeService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(logger, originalLogger);
   projectLicenseService.checkAccess = originalAccess;
@@ -407,11 +421,8 @@ describe('githubSyncService', () => {
   });
 
   it('updates report status from webhook', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'open',
-      }) as Report;
+    reportById = { ...baseReport, status: 'open', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'closed', {
       number: 123,
@@ -441,11 +452,8 @@ describe('githubSyncService', () => {
   });
 
   it('does not update when status already resolved', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'resolved',
-      }) as Report;
+    reportById = { ...baseReport, status: 'resolved', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'closed', {
       number: 123,
@@ -456,11 +464,8 @@ describe('githubSyncService', () => {
   });
 
   it('reopens report status from webhook', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'resolved',
-      }) as Report;
+    reportById = { ...baseReport, status: 'resolved', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'reopened', {
       number: 123,

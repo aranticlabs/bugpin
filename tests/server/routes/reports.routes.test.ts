@@ -490,6 +490,27 @@ describe('reports routes', () => {
     expect(res.status).toBe(403);
   });
 
+  it('returns a server error when a report update cannot be saved', async () => {
+    const failUpdate = async () => Result.fail<never>('Failed to save report', 'UPDATE_FAILED');
+    reportsService.update = failUpdate;
+    reportsService.bulkUpdate = failUpdate;
+    for (const [path, method, body] of [
+      ['rpt_1', 'PATCH', { status: 'resolved' }],
+      ['bulk-update', 'POST', { ids: ['rpt_1'], updates: { status: 'resolved' } }],
+    ] as const) {
+      const response = await createApp().request(`http://localhost/reports/${path}`, {
+        method,
+        headers: {
+          cookie: 'session=sess_1',
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(500);
+    }
+  });
+
   it('bulk updates reports', async () => {
     const app = createApp();
     const res = await app.request('http://localhost/reports/bulk-update', {

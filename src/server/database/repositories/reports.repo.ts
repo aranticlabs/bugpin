@@ -388,9 +388,9 @@ export const reportsRepo = {
   },
 
   /**
-   * Find a report by ID
+   * Find a report by ID synchronously (for use inside SQLite transactions)
    */
-  async findById(id: string): Promise<Report | null> {
+  findByIdSync(id: string): Report | null {
     const db = getDb();
     const row = db
       .query(
@@ -405,6 +405,13 @@ export const reportsRepo = {
       )
       .get(id) as ReportRow | null;
     return row ? mapRowToReport(row) : null;
+  },
+
+  /**
+   * Find a report by ID
+   */
+  async findById(id: string): Promise<Report | null> {
+    return this.findByIdSync(id);
   },
 
   /**

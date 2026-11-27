@@ -852,108 +852,54 @@ export const reportsService = {
    * Update a report
    */
   async update(id: string, input: UpdateReportInput, userId?: string): Promise<Result<Report>> {
-    const existing = await reportsRepo.findById(id);
+    let result: Result<{ report: Report; changes: ReportChanges }>;
+    try {
+      const assignee = await validateAssignee(input.assignedTo);
+      result = reportsRepo.transaction((): Result<{ report: Report; changes: ReportChanges }> => {
+        const existing = reportsRepo.findByIdSync(id);
+        if (!existing) return Result.fail('Report not found', 'NOT_FOUND');
+        const access = checkProjectLicense(existing.projectId);
+        if (!access.success) return access;
+        if (!assignee.success) return assignee;
 
-    if (!existing) {
-      return Result.fail('Report not found', 'NOT_FOUND');
-    }
+        const updates: Partial<Report> = {};
+        if (input.title !== undefined) {
+          if (input.title.trim().length < 4)
+            return Result.fail('Title must be at least 4 characters', 'INVALID_TITLE');
+          if (input.title.length > 500)
+            return Result.fail('Title must be at most 500 characters', 'INVALID_TITLE');
+          updates.title = input.title.trim();
+        }
+        if (input.description !== undefined) updates.description = input.description.trim();
+        if (input.status !== undefined) Object.assign(updates, statusUpdates(input.status, userId));
+        if (input.priority !== undefined) updates.priority = input.priority;
+        if (input.assignedTo !== undefined) updates.assignedTo = input.assignedTo ?? undefined;
 
-    const access = checkProjectLicense(existing.projectId);
-    if (!access.success) return access;
-
-    // Validate title if provided
-    if (input.title !== undefined) {
-      if (input.title.trim().length < 4) {
-        return Result.fail('Title must be at least 4 characters', 'INVALID_TITLE');
-      }
-      if (input.title.length > 200) {
-        return Result.fail('Title must be at most 200 characters', 'INVALID_TITLE');
-      }
-    }
-
-    // Build update object
-    const updates: Partial<Report> = {};
-
-    if (input.title !== undefined) {
-      updates.title = input.title.trim();
-    }
-
-    if (input.description !== undefined) {
-      updates.description = input.description.trim();
-    }
-
-    if (input.status !== undefined) {
-      Object.assign(updates, statusUpdates(input.status, userId));
-    }
-
-    if (input.priority !== undefined) {
-      updates.priority = input.priority;
-    }
-
-    if (input.assignedTo !== undefined) {
-      const assigneeValidation = await validateAssignee(input.assignedTo);
-      if (!assigneeValidation.success) {
-        return assigneeValidation;
-      }
-
-      updates.assignedTo = input.assignedTo ?? undefined;
-    }
-
-    const report = await reportsRepo.update(id, updates, Boolean(userId));
-
-    if (!report) {
+        reportsRepo.applyUpdate(id, updates, Boolean(userId));
+        const report = reportsRepo.findByIdSync(id);
+        if (!report) throw new Error('Updated report not found');
+        const changes: ReportChanges = {};
+        for (const [field, action] of [
+          ['status', 'status_changed'],
+          ['priority', 'priority_changed'],
+          ['assignedTo', 'assignee_changed'],
+        ] as const) {
+          const oldValue = existing[field] ?? null;
+          const newValue = report[field] ?? null;
+          if (oldValue === newValue) continue;
+          changes[field] = { old: oldValue, new: newValue };
+          reportHistoryRepo.insert({ reportId: id, userId, action, oldValue, newValue });
+        }
+        return Result.ok({ report, changes });
+      });
+    } catch (error) {
+      logger.error('Failed to update report', error, { reportId: id });
       return Result.fail('Failed to update report', 'UPDATE_FAILED');
     }
-
-    logger.info('Report updated', { reportId: id, updates: Object.keys(updates) });
-
-    // Build changes object for webhooks
-    const changes: ReportChanges = {};
-    if (input.status !== undefined && input.status !== existing.status) {
-      changes.status = { old: existing.status, new: input.status };
-    }
-    if (input.priority !== undefined && input.priority !== existing.priority) {
-      changes.priority = { old: existing.priority, new: input.priority };
-    }
-    const previousAssignee = existing.assignedTo ?? null;
-    const nextAssignee =
-      input.assignedTo !== undefined ? (input.assignedTo ?? null) : previousAssignee;
-    if (input.assignedTo !== undefined && nextAssignee !== previousAssignee) {
-      changes.assignedTo = { old: previousAssignee, new: nextAssignee };
-    }
-
-    if (changes.status) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'status_changed',
-        changes.status.old as string,
-        changes.status.new as string
-      );
-    }
-
-    if (changes.priority) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'priority_changed',
-        changes.priority.old as string,
-        changes.priority.new as string
-      );
-    }
-
-    if (changes.assignedTo) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'assignee_changed',
-        (changes.assignedTo.old as string | null) ?? null,
-        (changes.assignedTo.new as string | null) ?? null
-      );
-    }
-
-    announceReportChanges(report, changes);
-    return Result.ok(report);
+    if (!result.success) return result;
+    logger.info('Report updated', { reportId: id, updates: Object.keys(input) });
+    announceReportChanges(result.value.report, result.value.changes);
+    return Result.ok(result.value.report);
   },
 
   /**
@@ -1139,9 +1085,8 @@ export const reportsService = {
 
     for (const id of ids) {
       const result = await this.update(id, updates, userId);
-      if (result.success) {
-        count += 1;
-      }
+      if (result.success) count += 1;
+      else if (result.code === 'UPDATE_FAILED') return result;
     }
 
     logger.info('Bulk update completed', { count, updates: Object.keys(updates) });

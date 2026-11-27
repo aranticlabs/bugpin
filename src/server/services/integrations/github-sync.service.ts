@@ -1,4 +1,7 @@
+import { timingSafeEqual } from 'node:crypto';
 import { reportsRepo } from '../../database/repositories/reports.repo.js';
+import { reportHistoryRepo } from '../../database/repositories/report-history.repo.js';
+import { realtimeService } from '../realtime.service.js';
 import { integrationsRepo } from '../../database/repositories/integrations.repo.js';
 import { filesRepo } from '../../database/repositories/files.repo.js';
 import { githubService } from './github.service.js';
@@ -32,9 +35,32 @@ const RETRY_CONFIG = {
   delays: [1000, 5000, 15000], // 1s, 5s, 15s
 };
 
-// Service
+function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  const digest = new Bun.CryptoHasher('sha256', secret).update(payload).digest('hex');
+  const expected = Buffer.from(`sha256=${digest}`);
+  const supplied = Buffer.from(signature);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
 
 export const githubSyncService = {
+  async verifyWebhook(
+    integrationId: string,
+    payload: string,
+    signature: string
+  ): Promise<Result<void>> {
+    const integration = await integrationsRepo.findById(integrationId);
+    if (!integration) return Result.fail('Integration not found', 'NOT_FOUND');
+    if (integration.type !== 'github')
+      return Result.fail('Invalid integration type', 'INVALID_INTEGRATION_TYPE');
+    if (!integration.isActive) return Result.fail('Integration not found', 'NOT_FOUND');
+    const { webhookSecret } = integration.config as GitHubIntegrationConfig;
+    if (!webhookSecret) return Result.fail('Webhook not configured', 'UNAUTHORIZED');
+    if (!signature) return Result.fail('Missing signature', 'UNAUTHORIZED');
+    if (!verifyWebhookSignature(payload, signature, webhookSecret))
+      return Result.fail('Invalid signature', 'UNAUTHORIZED');
+    return Result.ok(undefined);
+  },
+
   /**
    * Sync a single report to GitHub
    * Creates a new issue or updates existing one
@@ -438,24 +464,40 @@ export const githubSyncService = {
       return Result.ok(undefined);
     }
 
-    // Map GitHub issue state to report status
     let newStatus: ReportStatus | undefined;
-
-    if (action === 'closed' && issue.state === 'closed') {
-      // Issue was closed
-      if (report.status !== 'resolved' && report.status !== 'closed') {
-        newStatus = 'resolved';
-      }
-    } else if (action === 'reopened' && issue.state === 'open') {
-      // Issue was reopened
-      if (report.status === 'resolved' || report.status === 'closed') {
-        newStatus = 'open';
-      }
+    try {
+      newStatus = reportsRepo.transaction((): ReportStatus | undefined => {
+        const current = reportsRepo.findByIdSync(report.id);
+        if (
+          !current ||
+          current.projectId !== integration.projectId ||
+          current.githubIssueNumber !== issue.number
+        )
+          return;
+        const resolved = current.status === 'closed' || current.status === 'resolved';
+        let status: ReportStatus;
+        if (action === 'closed' && issue.state === 'closed' && !resolved) status = 'resolved';
+        else if (action === 'reopened' && issue.state === 'open' && resolved) status = 'open';
+        else return;
+        reportsRepo.applyUpdate(current.id, { status });
+        reportHistoryRepo.insert({
+          reportId: current.id,
+          action: 'status_changed',
+          oldValue: current.status,
+          newValue: status,
+        });
+        return status;
+      });
+    } catch (error) {
+      logger.error('Failed to apply GitHub issue status', error, { reportId: report.id });
+      return Result.fail('Failed to update report status', 'UPDATE_FAILED');
     }
 
     if (newStatus) {
-      await reportsRepo.update(report.id, { status: newStatus });
-
+      realtimeService.publish('report.updated', {
+        reportId: report.id,
+        projectId: report.projectId,
+      });
       logger.info('Report status updated from GitHub webhook', {
         reportId: report.id,
         issueNumber: issue.number,

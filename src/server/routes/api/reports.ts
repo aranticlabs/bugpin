@@ -277,7 +277,7 @@ reports.patch(
     const result = await reportsService.update(id, body, user.id);
 
     if (!result.success) {
-      const status = result.code === 'NOT_FOUND' ? 404 : 400;
+      const status = updateErrorStatus(result.code);
       return c.json({ success: false, error: result.code, message: result.error }, status);
     }
 
@@ -317,7 +317,7 @@ function boardMoveFor(
   };
 }
 
-function boardMoveErrorStatus(code: string | undefined): 404 | 500 | 400 {
+function updateErrorStatus(code: string | undefined): 404 | 500 | 400 {
   return code === 'NOT_FOUND' ? 404 : code === 'UPDATE_FAILED' ? 500 : 400;
 }
 
@@ -339,7 +339,7 @@ reports.post(
     if (!result.success) {
       return c.json(
         { success: false, error: result.code, message: result.error },
-        boardMoveErrorStatus(result.code)
+        updateErrorStatus(result.code)
       );
     }
 
@@ -365,7 +365,7 @@ reports.patch(
     if (!result.success) {
       return c.json(
         { success: false, error: result.code, message: result.error },
-        boardMoveErrorStatus(result.code)
+        updateErrorStatus(result.code)
       );
     }
 
@@ -404,7 +404,10 @@ reports.post(
     const result = await reportsService.bulkUpdate(ids, updates, user.id);
 
     if (!result.success) {
-      return c.json({ success: false, error: result.code, message: result.error }, 400);
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'UPDATE_FAILED' ? 500 : 400
+      );
     }
 
     return c.json({
