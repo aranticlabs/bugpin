@@ -141,7 +141,7 @@ const ptBR: WidgetCatalog = {
     'O envio de vídeos está pausado neste projeto. Remova o vídeo para enviar.',
   'submit.error.rejected':
     'O envio foi recusado. Os anexos podem estar grandes demais. Remova ou reduza os anexos e tente de novo.',
-  'submit.queued': 'Relato salvo. Ele será enviado sozinho quando a conexão voltar.',
+  'submit.queued': 'Relato salvo. Ele será enviado automaticamente quando a conexão voltar.',
 
   'toast.success.submit': 'Relato enviado com sucesso!',
   'toast.error.submit': 'Não foi possível enviar o relato',

@@ -24,6 +24,7 @@ const TOOLTIP_BUILTIN_PREVIEW = {
   es: '¿Has encontrado un error?',
   it: 'Hai trovato un bug?',
   ja: 'バグを見つけましたか？',
+  'pt-BR': 'Encontrou um problema?',
   zh: '发现 bug 了？',
 } as const;
 

@@ -15,32 +15,26 @@ import { Button as UIButton } from '../../components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { WidgetLauncherButtonSettingsForm } from '../../components/WidgetLauncherButtonSettingsForm';
+import { SUPPORTED_LOCALES } from '@shared/types';
 import type {
   AppSettings,
   GlobalWidgetLauncherButtonSettings,
+  LocaleCode,
   WidgetLauncherButtonSettings,
 } from '@shared/types';
 
+const optionalLocaleFields = Object.fromEntries(
+  SUPPORTED_LOCALES.filter((code) => code !== 'en').map((code) => [code, z.string().optional()])
+) as Record<Exclude<LocaleCode, 'en'>, z.ZodOptional<z.ZodString>>;
+
 const localizedStringWithEnSchema = z.object({
   en: z.string().trim().min(1, 'English value is required'),
-  de: z.string().optional(),
-  fr: z.string().optional(),
-  nl: z.string().optional(),
-  es: z.string().optional(),
-  it: z.string().optional(),
-  ja: z.string().optional(),
-  zh: z.string().optional(),
+  ...optionalLocaleFields,
 });
 
 const localizedStringSchema = z.object({
   en: z.string(),
-  de: z.string().optional(),
-  fr: z.string().optional(),
-  nl: z.string().optional(),
-  es: z.string().optional(),
-  it: z.string().optional(),
-  ja: z.string().optional(),
-  zh: z.string().optional(),
+  ...optionalLocaleFields,
 });
 
 const buttonSettingsSchema = z.object({
