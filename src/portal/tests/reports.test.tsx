@@ -135,7 +135,26 @@ beforeEach(() => {
     http.get('/api/portal/config', () =>
       HttpResponse.json({
         success: true,
-        config: { appName: 'BugPin', hideFooterBranding: false, branding: {} },
+        config: {
+          appName: 'BugPin',
+          hideFooterBranding: false,
+          branding: {
+            buttonColors: {
+              lightButtonColor: '#02658D',
+              lightTextColor: '#ffffff',
+              lightButtonHoverColor: '#024F6F',
+              lightTextHoverColor: '#ffffff',
+              darkButtonColor: '#02658D',
+              darkTextColor: '#ffffff',
+              darkButtonHoverColor: '#036F9B',
+              darkTextHoverColor: '#ffffff',
+            },
+            logoLightUrl: null,
+            logoDarkUrl: null,
+            faviconLightVersion: '1',
+            faviconDarkVersion: '1',
+          },
+        },
       })
     ),
     http.get('/api/portal/projects', () =>

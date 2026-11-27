@@ -10,7 +10,7 @@ export const portalConfigService = {
     if (!branding.success) return branding;
     const settings = await settingsCacheService.getAll();
     const {
-      primaryColor,
+      adminThemeColors,
       logoLightUrl,
       logoDarkUrl,
       faviconLightVersion,
@@ -20,7 +20,7 @@ export const portalConfigService = {
     return Result.ok({
       appName: settings.appName,
       branding: {
-        primaryColor,
+        buttonColors: adminThemeColors,
         logoLightUrl,
         logoDarkUrl,
         faviconLightVersion,

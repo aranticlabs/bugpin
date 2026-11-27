@@ -6,14 +6,16 @@ test('keeps branded link buttons readable and underlined in dark mode', async ({
 }) => {
   await page.route('**/api/portal/config', async (route) => {
     const response = await route.fetch();
-    const body = (await response.json()) as { config: { branding: { primaryColor: string } } };
-    body.config.branding.primaryColor = '#02658D';
+    const body = (await response.json()) as {
+      config: { branding: { buttonColors: { lightButtonColor: string } } };
+    };
+    body.config.branding.buttonColors.lightButtonColor = '#7c3aed';
     await route.fulfill({ response, json: body });
   });
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(`${runtime.portalOrigin}/reporter-portal/login#${'A'.repeat(43)}`);
   const link = page.getByRole('link', { name: 'Request a new link' });
-  await expect(link).toHaveCSS('color', 'rgb(2, 101, 141)');
+  await expect(link).toHaveCSS('color', 'rgb(124, 58, 237)');
   await expect(link).toHaveCSS('text-decoration-line', 'underline');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveClass(/dark/);

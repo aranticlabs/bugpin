@@ -29,7 +29,16 @@ const config = {
   hideFooterBranding: false,
   locales: ['en'],
   branding: {
-    primaryColor: '#0369a1',
+    buttonColors: {
+      lightButtonColor: '#0369a1',
+      lightTextColor: '#ffffff',
+      lightButtonHoverColor: '#075985',
+      lightTextHoverColor: '#ffffff',
+      darkButtonColor: '#0369a1',
+      darkTextColor: '#ffffff',
+      darkButtonHoverColor: '#0284c7',
+      darkTextHoverColor: '#ffffff',
+    },
     logoLightUrl: null,
     logoDarkUrl: null,
     faviconLightVersion: '1',
@@ -472,7 +481,7 @@ it('uses the account locale and respects white-label footer suppression', async 
   expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
 });
 
-it('keeps button text readable with a bright custom brand color', async () => {
+it('applies the Admin Console button colors in light and dark themes', async () => {
   server.use(
     http.get('/api/portal/reports/:id', ({ params }) =>
       HttpResponse.json({
@@ -498,15 +507,29 @@ it('keeps button text readable with a bright custom brand color', async () => {
     http.get('/api/portal/config', () =>
       HttpResponse.json({
         success: true,
-        config: { ...config, branding: { ...config.branding, primaryColor: '#ffff00' } },
+        config: {
+          ...config,
+          branding: {
+            ...config.branding,
+            buttonColors: {
+              ...config.branding.buttonColors,
+              lightButtonColor: '#ffff00',
+              lightTextColor: '#000000',
+              darkButtonColor: '#7c3aed',
+              darkTextHoverColor: '#fef08a',
+            },
+          },
+        },
       })
     )
   );
   mount();
+  const colors = () => document.getElementById('bugpin-portal-colors')?.textContent ?? '';
   await waitFor(() =>
-    expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#ffff00')
+    expect(colors()).toContain(':root:root { --primary: #ffff00; --primary-foreground: #000000;')
   );
-  expect(document.documentElement.style.getPropertyValue('--primary-foreground')).toBe('#000000');
+  expect(colors()).toContain(':root.dark { --primary: #7c3aed;');
+  expect(colors()).toContain('--primary-hover-foreground: #fef08a;');
 });
 
 it('keeps the email field focused when public branding arrives late', async () => {

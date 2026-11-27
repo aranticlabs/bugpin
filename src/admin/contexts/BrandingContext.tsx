@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ThemeColors } from '@shared/types';
+import { applyButtonColors } from '@shared-ui/theme/button-colors';
 import { brandingApi, type BrandingConfig } from '../api/branding';
 
 interface BrandingContextType {
@@ -12,45 +12,6 @@ interface BrandingContextType {
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
 export const ADMIN_THEME_STYLE_ID = 'bugpin-admin-theme';
-
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-
-function declarations(colors: Record<string, string>): string {
-  return Object.entries(colors)
-    .filter(([, value]) => HEX_COLOR.test(value))
-    .map(([name, value]) => `${name}: ${value};`)
-    .join(' ');
-}
-
-/**
- * Builds light and dark overrides for the primary tokens. The doubled selectors outrank the
- * defaults in globals.css regardless of stylesheet order, and the cascade handles theme switches.
- */
-export function buildAdminThemeCss(themeColors: ThemeColors): string {
-  const light = declarations({
-    '--primary': themeColors.lightButtonColor,
-    '--primary-foreground': themeColors.lightTextColor,
-    '--primary-hover': themeColors.lightButtonHoverColor,
-    '--primary-hover-foreground': themeColors.lightTextHoverColor,
-  });
-  const dark = declarations({
-    '--primary': themeColors.darkButtonColor,
-    '--primary-foreground': themeColors.darkTextColor,
-    '--primary-hover': themeColors.darkButtonHoverColor,
-    '--primary-hover-foreground': themeColors.darkTextHoverColor,
-  });
-  return `:root:root { ${light} } :root.dark { ${dark} }`;
-}
-
-function applyAdminThemeColors(themeColors: ThemeColors): void {
-  let style = document.getElementById(ADMIN_THEME_STYLE_ID);
-  if (!style) {
-    style = document.createElement('style');
-    style.id = ADMIN_THEME_STYLE_ID;
-    document.head.append(style);
-  }
-  style.textContent = buildAdminThemeCss(themeColors);
-}
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -79,7 +40,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     }
 
     if (config.adminThemeColors) {
-      applyAdminThemeColors(config.adminThemeColors);
+      applyButtonColors(ADMIN_THEME_STYLE_ID, config.adminThemeColors);
     }
   }, [config]);
 

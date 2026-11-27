@@ -22,7 +22,16 @@ const reporter = {
   emailUpdates: true,
 };
 const branding = {
-  primaryColor: '#0369a1',
+  buttonColors: {
+    lightButtonColor: '#0369a1',
+    lightTextColor: '#ffffff',
+    lightButtonHoverColor: '#075985',
+    lightTextHoverColor: '#ffffff',
+    darkButtonColor: '#0369a1',
+    darkTextColor: '#ffffff',
+    darkButtonHoverColor: '#0284c7',
+    darkTextHoverColor: '#ffffff',
+  },
   logoLightUrl: null,
   logoDarkUrl: null,
   faviconLightVersion: '1',
