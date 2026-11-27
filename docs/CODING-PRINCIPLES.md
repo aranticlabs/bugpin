@@ -214,6 +214,8 @@ Services and repositories are module singletons imported directly (`import { rep
 
 Server imports of local files use the `.js` extension.
 
+The Admin Console (`src/admin/`) and Reporter Portal (`src/portal/`) share React presentation through `@shared-ui/*` in `src/shared-ui/`. Keep API clients, authentication and routing in the frontend that owns them. Pass data and callbacks into shared components so they can render independently of either application, the server and drag-and-drop libraries.
+
 ## Code Style
 
 **File structure**: Start directly with imports (no file-level JSDoc headers)
@@ -251,15 +253,15 @@ Numbers use regular digits. Don't add `tabular-nums`: Geist's fixed-width digits
 
 ## Testing
 
-| Type        | Target       | Approach                                |
-| ----------- | ------------ | --------------------------------------- |
-| Unit        | Services     | Stub collaborators with `spyOn`         |
-| Unit        | Utils        | 100% coverage for Result, ID generation |
-| Integration | Repositories | Real SQLite database                    |
-| Integration | API          | Full request/response with test DB      |
-| Component   | Widget/Admin | Rendered components and hooks           |
+| Type        | Target                                 | Approach                                |
+| ----------- | -------------------------------------- | --------------------------------------- |
+| Unit        | Services                               | Stub collaborators with `spyOn`         |
+| Unit        | Utils                                  | 100% coverage for Result, ID generation |
+| Integration | Repositories                           | Real SQLite database                    |
+| Integration | API                                    | Full request/response with test DB      |
+| Component   | Widget, Admin Console, Reporter Portal | Rendered components and hooks           |
 
-Test locations: `tests/server/` and `tests/shared/` for the server, `src/admin/tests/` and `src/widget/tests/` for the frontends, `ee/tests/` for Enterprise Edition.
+Server tests live in `tests/server/`. Shared code and dependency boundary tests live in `tests/shared/`. Each frontend has its own tests in `src/admin/tests/`, `src/portal/tests/` and `src/widget/tests/`. Enterprise Edition tests live in `ee/tests/`.
 
 ### Mocking with Bun
 

@@ -3,6 +3,12 @@
 # First login defaults: admin@example.com / changeme123.
 # The initial password works once; BugPin asks for a new one after the first login.
 # Update: docker compose pull && docker compose up -d
+# Upgrading from 1.x to 2.0 (one time):
+#   1. Stop the old bugpin container with the 1.x Compose file, or run
+#      docker compose down --remove-orphans in the same Compose project.
+#   2. Back up ./data while the old container is stopped.
+#   3. With this file, run docker compose pull && docker compose up -d to start
+#      bugpin-server and bugpin-admin. The optional bugpin-portal uses the profile below.
 # Optional settings such as the image tag: copy .env.example to .env.
 # Enable the dedicated portal frontend: docker compose --profile separate-portal up -d
 # Set Portal Base URL to its HTTPS origin in the Admin Console.
