@@ -12,7 +12,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 - **Lightweight** - Less than 190KB gzipped
 - **Dark Mode** - Automatic theme detection
 - **Responsive** - Works on all devices
-- **Multilingual** - Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection from `<html lang>` or the visitor's browser
+- **Multilingual** - Translated into 9 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Brazilian Portuguese, Simplified Chinese) with automatic detection from `<html lang>` or the visitor's browser
 - **Framework Agnostic** - Works with React, Vue, Angular, Svelte, .NET, and more
 
 ## Installation
@@ -191,7 +191,7 @@ Diagnostic capture is fail-closed and server-controlled:
 
 ## Language
 
-The widget ships with translations for English, German, French, Dutch, Spanish, Italian, Japanese, and Simplified Chinese.
+The widget ships with translations for English, German, French, Dutch, Spanish, Italian, Japanese, Brazilian Portuguese, and Simplified Chinese.
 
 By default, the active language is resolved in this order:
 

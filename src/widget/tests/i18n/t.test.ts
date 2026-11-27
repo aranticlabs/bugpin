@@ -7,6 +7,7 @@ import fr from '../../i18n/locales/fr';
 import italian from '../../i18n/locales/it';
 import ja from '../../i18n/locales/ja';
 import nl from '../../i18n/locales/nl';
+import ptBR from '../../i18n/locales/pt-BR';
 import zh from '../../i18n/locales/zh';
 
 describe('widget i18n runtime', () => {
@@ -30,7 +31,7 @@ describe('widget i18n runtime', () => {
           key === 'screenshot.helperText'
       );
 
-      for (const catalog of [de, es, fr, italian, ja, nl, zh]) {
+      for (const catalog of [de, es, fr, italian, ja, nl, ptBR, zh]) {
         for (const key of keys) {
           const translated = (catalog as Record<string, string>)[key];
           expect(translated).toBeTruthy();
@@ -53,6 +54,12 @@ describe('widget i18n runtime', () => {
       expect(t('tooltip.launcher')).toBe('Bug gefunden?');
       setLocale('fr');
       expect(t('tooltip.launcher')).toBe('Vous avez trouvé un bug ?');
+    });
+
+    it('returns the Brazilian Portuguese entry for pt-BR', () => {
+      setLocale('pt-BR');
+      expect(t('dialog.title')).toBe('Relatar um problema');
+      expect(t('aria.close')).toBe('Fechar');
     });
 
     it('returns the key itself when no entry exists in either locale', () => {

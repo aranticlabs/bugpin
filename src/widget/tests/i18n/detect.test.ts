@@ -58,7 +58,7 @@ describe('detectLocale', () => {
         detectLocale({
           mode: 'auto',
           projectDefault: 'de',
-          initLanguage: 'pt-BR',
+          initLanguage: 'ko-KR',
           scriptLanguage: 'fr',
         })
       ).toBe('fr');
@@ -90,7 +90,7 @@ describe('detectLocale', () => {
         detectLocale({
           mode: 'auto',
           projectDefault: 'de',
-          navigatorLanguages: ['pt-BR', 'ru-RU', 'ja-JP'],
+          navigatorLanguages: ['ko-KR', 'ru-RU', 'ja-JP'],
         })
       ).toBe('ja');
     });
@@ -100,7 +100,7 @@ describe('detectLocale', () => {
         detectLocale({
           mode: 'auto',
           projectDefault: 'nl',
-          navigatorLanguages: ['pt-BR'],
+          navigatorLanguages: ['ko-KR'],
         })
       ).toBe('nl');
     });
@@ -110,7 +110,7 @@ describe('detectLocale', () => {
         detectLocale({
           mode: 'auto',
           projectDefault: 'xx' as 'en',
-          navigatorLanguages: ['pt-BR'],
+          navigatorLanguages: ['ko-KR'],
         })
       ).toBe('en');
     });
@@ -145,7 +145,7 @@ describe('resolveLiveSwitch', () => {
 
   it('falls through to scriptLanguage when source is null/unsupported', () => {
     expect(resolveLiveSwitch(null, 'de', 'en')).toBe('de');
-    expect(resolveLiveSwitch('pt-BR', 'de', 'en')).toBe('de');
+    expect(resolveLiveSwitch('ko-KR', 'de', 'en')).toBe('de');
   });
 
   it('falls through to projectDefault when source and script are unsupported', () => {

@@ -12,6 +12,21 @@ describe('normalizeLocale', () => {
       expect(normalizeLocale('it')).toBe('it');
       expect(normalizeLocale('ja')).toBe('ja');
       expect(normalizeLocale('zh')).toBe('zh');
+      expect(normalizeLocale('pt-BR')).toBe('pt-BR');
+    });
+  });
+
+  describe('Portuguese variants', () => {
+    it('folds pt, pt-BR and pt-PT to pt-BR', () => {
+      expect(normalizeLocale('pt')).toBe('pt-BR');
+      expect(normalizeLocale('pt-BR')).toBe('pt-BR');
+      expect(normalizeLocale('pt-PT')).toBe('pt-BR');
+    });
+
+    it('folds casing and underscore variants of pt to pt-BR', () => {
+      expect(normalizeLocale('PT-br')).toBe('pt-BR');
+      expect(normalizeLocale('pt_BR')).toBe('pt-BR');
+      expect(normalizeLocale('pt-AO')).toBe('pt-BR');
     });
   });
 
@@ -85,10 +100,6 @@ describe('normalizeLocale', () => {
   });
 
   describe('unsupported primary tags resolve to null', () => {
-    it('returns null for pt-BR', () => {
-      expect(normalizeLocale('pt-BR')).toBeNull();
-    });
-
     it('returns null for ru, ar, ko, pl, cs', () => {
       expect(normalizeLocale('ru')).toBeNull();
       expect(normalizeLocale('ar')).toBeNull();

@@ -35,7 +35,7 @@ Capture screenshots, record the screen, and annotate issues from any page on you
 - Offline-safe: reports are cached locally and synced when the connection returns
 - Annotation tools: pen, shapes, arrows, text, privacy blur
 - Screen recording with a pen, laser pointer, click effects, and optional microphone audio; recordings survive a crash or reload
-- Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection
+- Translated into 9 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Brazilian Portuguese, Simplified Chinese) with automatic detection
 
 # Features
 

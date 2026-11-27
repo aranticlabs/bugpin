@@ -1086,7 +1086,7 @@ describe('widget routes', () => {
             'content-type': 'application/json',
             'x-api-key': 'test_api_key_123',
           },
-          body: JSON.stringify({ ...validSubmitBody, locale: 'pt-BR' }),
+          body: JSON.stringify({ ...validSubmitBody, locale: 'ko-KR' }),
         });
 
         expect(res.status).toBe(201);
