@@ -22,7 +22,7 @@ const board: { props: DraggableProps | null } = { props: null };
 vi.mock('../../../components/report-board/DraggableReportBoard', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('../../../components/report-board/DraggableReportBoard')>();
-  const { ReportBoard } = await import('../../../components/report-board/ReportBoard');
+  const { ReportBoard } = await import('@shared-ui/components/report-board/ReportBoard');
   return {
     ...original,
     DraggableReportBoard: (props: DraggableProps) => {

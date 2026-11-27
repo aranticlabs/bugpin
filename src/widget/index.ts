@@ -42,6 +42,7 @@ async function fetchConfig(
         const cfg = data.config;
         return {
           hidePoweredBy: cfg.hidePoweredBy === true,
+          portalUrl: typeof cfg.portalUrl === 'string' ? cfg.portalUrl : null,
           buttonText: cfg.buttonText,
           buttonShape: cfg.buttonShape,
           buttonIcon: cfg.buttonIcon,
@@ -136,7 +137,7 @@ async function fetchConfig(
     } else if (response.status === 403) {
       // Project is paused - don't initialize widget
       const data = await response.json();
-      if (data.error === 'PROJECT_PAUSED') {
+      if (data.error === 'PROJECT_INACTIVE') {
         console.info('[BugPin] Widget disabled - project is paused');
         return null;
       }
@@ -261,6 +262,9 @@ async function initFromScriptTag(scriptElement: HTMLScriptElement): Promise<void
     ...(dataButtonText && {
       buttonText: { project: { en: dataButtonText }, global: null, builtin: null },
     }),
+    ...(scriptElement.getAttribute('data-capture-shortcut') && {
+      captureShortcut: scriptElement.getAttribute('data-capture-shortcut') as string,
+    }),
     ...(scriptElement.getAttribute('data-theme') && {
       theme: scriptElement.getAttribute('data-theme') as 'light' | 'dark',
     }),
@@ -285,6 +289,7 @@ declare global {
       ) => Promise<void>;
       open: () => void;
       close: () => void;
+      capture: () => void;
       setLanguage: (code: string) => LocaleCode | null;
       getLanguage: () => LocaleCode;
     };
@@ -343,6 +348,14 @@ const BugPin = {
    */
   close: () => {
     document.dispatchEvent(new CustomEvent('bugpin:close'));
+  },
+
+  /**
+   * Screenshot the page as it is right now (open menus, hover states) and open
+   * the bug report dialog with the screenshot attached
+   */
+  capture: () => {
+    document.dispatchEvent(new CustomEvent('bugpin:capture'));
   },
 
   /**

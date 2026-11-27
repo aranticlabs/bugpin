@@ -55,7 +55,7 @@ function usersApp(): Hono {
   return app;
 }
 
-function sendJson(
+async function sendJson(
   app: Hono,
   cookie: string,
   method: string,
@@ -65,7 +65,11 @@ function sendJson(
   return Promise.resolve(
     app.request(`http://localhost${url}`, {
       method,
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: {
+        cookie,
+        origin: new URL((await settingsRepo.getAll()).appUrl || 'http://localhost').origin,
+        'content-type': 'application/json',
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   );
@@ -135,10 +139,7 @@ describe('API access migration', () => {
         ('t3', 'usr_expired', NULL, '2020-01-01T00:00:00.000Z');
     `);
     const sql = fs.readFileSync(
-      path.join(
-        import.meta.dir,
-        '../../src/server/database/migrations/008_add_user_api_access.sql'
-      ),
+      path.join(import.meta.dir, '../../src/server/database/migrations/009_add_account_access.sql'),
       'utf8'
     );
     db.exec(sql);

@@ -59,6 +59,7 @@ export function TemporaryPasswordDialog({
               id="temporary-password"
               type="text"
               autoComplete="off"
+              className="font-mono"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

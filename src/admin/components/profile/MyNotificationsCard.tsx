@@ -26,6 +26,7 @@ type NotificationForm = Pick<
   | 'notifyOnPriorityChange'
   | 'notifyOnAssignment'
   | 'notifyOnDeletion'
+  | 'notifyOnReporterReply'
 >;
 
 const FORM_FIELDS: (keyof NotificationForm)[] = [
@@ -35,6 +36,7 @@ const FORM_FIELDS: (keyof NotificationForm)[] = [
   'notifyOnPriorityChange',
   'notifyOnAssignment',
   'notifyOnDeletion',
+  'notifyOnReporterReply',
 ];
 
 const PREFERENCES_KEY = ['notification-preferences', 'me'] as const;

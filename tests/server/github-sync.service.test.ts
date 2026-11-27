@@ -5,7 +5,9 @@ import { githubSyncService } from '../../src/server/services/integrations/github
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { githubService } from '../../src/server/services/integrations/github.service';
+import { realtimeService } from '../../src/server/services/realtime.service';
 import { settingsService } from '../../src/server/services/settings.service';
 import { logger } from '../../src/server/utils/logger';
 import { Result } from '../../src/server/utils/result';
@@ -58,7 +60,9 @@ const baseIntegration: Integration = {
 const originalReportsRepo = { ...reportsRepo };
 const originalIntegrationsRepo = { ...integrationsRepo };
 const originalFilesRepo = { ...filesRepo };
+const originalReportHistoryRepo = { ...reportHistoryRepo };
 const originalGithubService = { ...githubService };
+const originalRealtimeService = { ...realtimeService };
 const originalSettingsService = { ...settingsService };
 const originalLogger = { ...logger };
 const originalAccess = projectLicenseService.checkAccess;
@@ -71,6 +75,7 @@ let updateStatusPayload: unknown;
 let deletedWebhookId: string | null = null;
 let updatedIntegrationConfig: unknown;
 let createWebhookUrl: string | null = null;
+let createWebhookSecret: string | null = null;
 
 beforeEach(() => {
   projectLicenseService.checkAccess = () => Result.ok(undefined);
@@ -82,8 +87,14 @@ beforeEach(() => {
   deletedWebhookId = null;
   updatedIntegrationConfig = null;
   createWebhookUrl = null;
+  createWebhookSecret = null;
 
   reportsRepo.findById = async () => reportById;
+  reportsRepo.findByIdSync = () => reportById;
+  reportsRepo.transaction = (fn) => fn();
+  reportsRepo.applyUpdate = (_id, payload) => {
+    updateStatusPayload = payload;
+  };
   reportsRepo.updateGitHubSyncStatus = async (_id, payload) => {
     updateSyncPayload = payload;
     return reportById;
@@ -96,6 +107,9 @@ beforeEach(() => {
   };
   reportsRepo.findUnsyncedByProject = async () => [];
 
+  reportHistoryRepo.insert = () => 'hist_1';
+  realtimeService.publish = () => undefined;
+
   integrationsRepo.findById = async () => integrationById;
   integrationsRepo.findByProjectId = async () => [baseIntegration];
   integrationsRepo.updateLastUsed = async (id) => {
@@ -106,7 +120,7 @@ beforeEach(() => {
     return baseIntegration;
   };
 
-  filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
 
   githubService.createIssue = async () => ({
     success: true,
@@ -118,8 +132,9 @@ beforeEach(() => {
     issueNumber: 456,
     issueUrl: 'https://github.com/org/repo/issues/456',
   });
-  githubService.createWebhook = async (_config, url) => {
+  githubService.createWebhook = async (_config, url, secret) => {
     createWebhookUrl = url;
+    createWebhookSecret = secret;
     return { success: true, webhookId: '42' };
   };
   githubService.deleteWebhook = async (_config, webhookId) => {
@@ -139,7 +154,9 @@ afterEach(() => {
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(integrationsRepo, originalIntegrationsRepo);
   Object.assign(filesRepo, originalFilesRepo);
+  Object.assign(reportHistoryRepo, originalReportHistoryRepo);
   Object.assign(githubService, originalGithubService);
+  Object.assign(realtimeService, originalRealtimeService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(logger, originalLogger);
   projectLicenseService.checkAccess = originalAccess;
@@ -321,6 +338,7 @@ describe('githubSyncService', () => {
   it('enables automatic sync', async () => {
     const result = await githubSyncService.enableAutoSync('int_1');
     expect(result.success).toBe(true);
+    expect(createWebhookSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('returns NOT_FOUND when enabling auto sync for missing integration', async () => {
@@ -403,11 +421,8 @@ describe('githubSyncService', () => {
   });
 
   it('updates report status from webhook', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'open',
-      }) as Report;
+    reportById = { ...baseReport, status: 'open', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'closed', {
       number: 123,
@@ -437,11 +452,8 @@ describe('githubSyncService', () => {
   });
 
   it('does not update when status already resolved', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'resolved',
-      }) as Report;
+    reportById = { ...baseReport, status: 'resolved', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'closed', {
       number: 123,
@@ -452,11 +464,8 @@ describe('githubSyncService', () => {
   });
 
   it('reopens report status from webhook', async () => {
-    reportsRepo.findByGitHubIssueNumber = async () =>
-      ({
-        ...baseReport,
-        status: 'resolved',
-      }) as Report;
+    reportById = { ...baseReport, status: 'resolved', githubIssueNumber: 123 } as Report;
+    reportsRepo.findByGitHubIssueNumber = async () => reportById;
 
     const result = await githubSyncService.handleWebhook('int_1', 'reopened', {
       number: 123,

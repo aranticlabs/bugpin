@@ -160,7 +160,7 @@ afterAll(() => {
 beforeEach(async () => {
   const db = getDb();
   db.exec('DELETE FROM report_history');
-  db.exec('DELETE FROM reporter_messages');
+  db.exec('DELETE FROM report_messages');
   db.exec('DELETE FROM reports');
   db.exec('DELETE FROM users');
   db.exec('DELETE FROM projects');
@@ -416,7 +416,7 @@ describe('dashboardService.getPersonal', () => {
 
     const reportId = await createReport({ createdAt: ago(DAY) });
     getDb().run(
-      'INSERT INTO reporter_messages (id, report_id, user_id, message) VALUES (?, ?, ?, ?)',
+      "INSERT INTO report_messages (id, report_id, user_id, body, author_kind, author_name) VALUES (?, ?, ?, ?, 'staff', 'Alex')",
       [randomUUID(), reportId, me.id, 'Thanks, fixed in the next release']
     );
 
@@ -454,7 +454,7 @@ describe('history from before gamification', () => {
     });
     const messaged = await createReport({ createdAt: ago(200 * DAY) });
     getDb().run(
-      'INSERT INTO reporter_messages (id, report_id, user_id, message, sent_at) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO report_messages (id, report_id, user_id, body, created_at, author_kind, author_name) VALUES (?, ?, ?, ?, ?, 'staff', 'Alex')",
       [randomUUID(), messaged, me.id, 'Old message', ago(200 * DAY)]
     );
 
@@ -960,6 +960,41 @@ describe('overview edge cases', () => {
       ['created', 'widget'],
     ]);
   });
+
+  it('uses System for portal creation while keeping deleted staff attribution', async () => {
+    const id = await createReport({ title: 'Portal feedback', createdAt: ago(2 * DAY) });
+    getDb().run("UPDATE reports SET source = 'portal' WHERE id = ?", [id]);
+    addHistory(id, null, 'created', null, null, ago(2 * DAY));
+    addHistory(id, null, 'assignee_changed', null, 'assignee', ago(2 * DAY - 1000));
+    addHistory(id, null, 'assignee_changed', null, 'assignee', ago(DAY + 1000));
+    addHistory(id, null, 'status_changed', 'open', 'resolved', ago(DAY));
+    const result = Result.unwrap(await dashboardService.getOverview({ projectId, range: 7 }, NOW));
+    expect(result.activity.map(({ action, actor }) => ({ action, actor }))).toEqual([
+      { action: 'status_changed', actor: 'deleted_user' },
+      { action: 'assignee_changed', actor: 'deleted_user' },
+      { action: 'assignee_changed', actor: 'system' },
+      { action: 'created', actor: 'system' },
+    ]);
+  });
+
+  it.each(['widget', 'manual', 'portal'] as const)(
+    'uses a neutral actor for ownership without staff on a %s report',
+    async (source) => {
+      const editor = await createUser('Priya', 'editor');
+      const reportId = await createReport({ title: 'Owned report', createdAt: ago(2 * DAY) });
+      getDb().run('UPDATE reports SET source = ? WHERE id = ?', [source, reportId]);
+      addHistory(reportId, null, 'owner_assigned', null, 'reporter', ago(HOUR));
+      addHistory(reportId, editor.id, 'owner_assigned', null, 'reporter', ago(2 * HOUR));
+      const result = await dashboardService.getOverview({ projectId, range: 7 }, NOW);
+      if (!result.success) throw new Error(result.error);
+      expect(
+        result.value.activity.map(({ action, actor, userId }) => ({ action, actor, userId }))
+      ).toEqual([
+        { action: 'owner_assigned', actor: 'system', userId: undefined },
+        { action: 'owner_assigned', actor: 'user', userId: editor.id },
+      ]);
+    }
+  );
 });
 
 describe('time zones', () => {

@@ -12,12 +12,14 @@ import type {
   BrandingSettings,
   AdminButtonColors,
   ReporterNotificationSettings,
+  ReporterPortalProjectSettings,
   LocalizedString,
   ProjectLanguageSettings,
   PrivacySettings,
   DiagnosticSettings,
 } from '@shared/types';
-import { DEFAULT_DIAGNOSTIC_SETTINGS } from '@shared/types';
+import { DEFAULT_DIAGNOSTIC_SETTINGS, DEFAULT_REPORTER_PORTAL_LIMITS } from '@shared/types';
+import { DEFAULT_REPORTER_PORTAL } from '@shared/reporter-portal';
 import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
@@ -121,6 +123,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {
@@ -162,10 +165,22 @@ export const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
   darkTextHoverColor: '#ffffff',
 };
 
+/**
+ * Team sign-in to the Reporter Portal until an admin chooses: on where the portal shares the
+ * Application URL, off on a separate portal address, which may be public while the Admin Console
+ * is not.
+ */
+export function defaultPortalTeamSignIn(portalBaseUrl: string): boolean {
+  return !portalBaseUrl.trim();
+}
+
 // Key mapping from camelCase to snake_case
 const KEY_MAP: Record<string, string> = {
   appName: 'app_name',
   appUrl: 'app_url',
+  portalBaseUrl: 'portal_base_url',
+  portalTeamSignIn: 'portal_team_sign_in',
+  reporterPortalLimits: 'reporter_portal_limits',
   retentionDays: 'retention_days',
   rateLimitPerMinute: 'rate_limit_per_minute',
   sessionMaxAgeDays: 'session_max_age_days',
@@ -187,6 +202,7 @@ const KEY_MAP: Record<string, string> = {
   notifications: 'notifications',
   branding: 'branding',
   reporterNotifications: 'reporter_notifications',
+  reporterPortal: 'reporter_portal',
   adminButton: 'admin_button',
   emailTemplates: 'email_templates',
   language: 'language',
@@ -233,6 +249,15 @@ export const settingsRepo = {
       [JSON.stringify(value), new Date().toISOString(), key, JSON.stringify(expected)]
     );
     return result.changes === 1;
+  },
+
+  /** Whether a setting holds a saved value rather than its default */
+  isStored(key: keyof AppSettings): boolean {
+    const dbKey = KEY_MAP[key];
+    return (
+      dbKey !== undefined &&
+      getDb().query('SELECT 1 FROM settings WHERE key = ?').get(dbKey) !== null
+    );
   },
 
   mutate<T>(key: string, update: (current: T | null) => T): void {
@@ -333,6 +358,14 @@ function readAll(): AppSettings {
     // System settings
     appName: (settings.appName as string) ?? 'BugPin',
     appUrl: (settings.appUrl as string) ?? '',
+    portalBaseUrl: (settings.portalBaseUrl as string) ?? '',
+    portalTeamSignIn:
+      (settings.portalTeamSignIn as boolean | undefined) ??
+      defaultPortalTeamSignIn((settings.portalBaseUrl as string | undefined) ?? ''),
+    reporterPortalLimits: {
+      ...DEFAULT_REPORTER_PORTAL_LIMITS,
+      ...(settings.reporterPortalLimits as Partial<AppSettings['reporterPortalLimits']>),
+    },
     retentionDays: (settings.retentionDays as number) ?? 90,
     rateLimitPerMinute: (settings.rateLimitPerMinute as number) ?? 10,
     sessionMaxAgeDays: (settings.sessionMaxAgeDays as number) ?? 7,
@@ -379,12 +412,17 @@ function readAll(): AppSettings {
     // Notification defaults
     notifications: {
       ...DEFAULT_NOTIFICATIONS,
+      notifyOnReporterReply: (settings.defaultNotifyOnReporterReply as boolean) ?? true,
       ...(settings.notifications as Partial<NotificationDefaultSettings>),
     },
     // Reporter notification settings
     reporterNotifications: {
       ...DEFAULT_REPORTER_NOTIFICATIONS,
       ...(settings.reporterNotifications as Partial<ReporterNotificationSettings>),
+    },
+    reporterPortal: {
+      ...DEFAULT_REPORTER_PORTAL,
+      ...(settings.reporterPortal as Partial<ReporterPortalProjectSettings>),
     },
     // Branding settings
     branding: {

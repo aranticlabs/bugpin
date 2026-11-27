@@ -179,6 +179,10 @@ describe('draft storage', () => {
           timestamp: new Date(),
           annotated: false,
           mimeType: 'video/mp4',
+          source: 'recording',
+          recordingQuality: 'high',
+          width: 1920,
+          height: 1080,
         },
       ]
     );
@@ -187,6 +191,7 @@ describe('draft storage', () => {
     expect(loaded?.media[0]?.blob).toBeInstanceOf(Blob);
     expect(loaded?.media[0]?.blob?.size).toBe(3);
     expect(loaded?.media[0]?.dataUrl).toBeUndefined();
+    expect(loaded?.media[0]).toMatchObject({ recordingQuality: 'high', width: 1920, height: 1080 });
   });
 
   it('clears drafts and media owned by another or unknown reporter', async () => {

@@ -9,6 +9,7 @@ import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
 } from '../../utils/wrap-legacy-localized-string.js';
+import { portalSetting } from '../reporter-portal-sql.js';
 
 // Database Row Type
 
@@ -78,6 +79,18 @@ function mapRowToProject(row: ProjectRow): Project {
 export { CreateProjectData };
 
 export const projectsRepo = {
+  /** Whether a project, including a deactivated one unless `activeOnly` is set, enables the Reporter Portal */
+  hasEnabledReporterPortal({ activeOnly = false }: { activeOnly?: boolean } = {}): boolean {
+    return (
+      getDb()
+        .query(
+          `SELECT 1 FROM projects WHERE deleted_at IS NULL ${activeOnly ? 'AND is_active = 1' : ''}
+      AND ${portalSetting('projects', 'enabled')} = 1 LIMIT 1`
+        )
+        .get() !== null
+    );
+  },
+
   /**
    * Create a new project
    * New projects are inserted at position 0 (top of the list)

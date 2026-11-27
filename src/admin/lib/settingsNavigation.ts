@@ -9,6 +9,7 @@ import {
   KeyRound,
   Languages,
   Mail,
+  MessagesSquare,
   MousePointerClick,
   Paintbrush,
   Palette,
@@ -143,6 +144,12 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         path: '/settings/project-defaults/notifications',
         icon: Bell,
       },
+      {
+        title: 'Reporter Portal',
+        description: 'Default Reporter Portal access and claimable existing reports',
+        path: '/settings/project-defaults/reporter-portal',
+        icon: MessagesSquare,
+      },
     ],
   },
   {
@@ -156,6 +163,12 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
         icon: UsersRound,
       },
       {
+        title: 'Reporters',
+        description: 'Manage reporter accounts and portal access',
+        path: '/settings/reporters',
+        icon: UsersRound,
+      },
+      {
         title: 'Authentication',
         description: 'Sessions, two-factor enforcement and password policy',
         path: '/settings/authentication',
@@ -163,7 +176,7 @@ export const SETTINGS_NAVIGATION: SettingsNavGroup[] = [
       },
       {
         title: 'Network',
-        description: 'HTTPS enforcement and widget rate limiting',
+        description: 'HTTPS enforcement, proxy token, widget rate limiting and portal limits',
         path: '/settings/network',
         icon: Globe,
       },

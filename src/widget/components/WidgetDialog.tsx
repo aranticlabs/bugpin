@@ -1,8 +1,8 @@
 import { FunctionComponent } from 'preact';
-import { useState, useCallback } from 'preact/hooks';
-import { FileText, Image, Video, X } from 'lucide-preact';
+import { useState, useCallback, useLayoutEffect, useRef } from 'preact/hooks';
+import { Check, FileText, Image, Video, X } from 'lucide-preact';
 import { ScreenshotManager, CapturedMedia } from './ScreenshotManager.js';
-import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
+import { Button, buttonVariants, Input, Textarea, Select, Label, Tabs } from './ui';
 import { ScreenCaptureConsentDialog, type ConsentMode } from './ScreenCaptureConsentDialog.js';
 import { ScreenRecordingPanel } from './ScreenRecordingPanel.js';
 import type { LauncherTextBundle } from '@shared/types';
@@ -36,6 +36,9 @@ export interface WidgetDialogContent {
 
 interface WidgetDialogProps {
   hidePoweredBy?: boolean;
+  portalUrl?: string | null;
+  submitted?: boolean;
+  submittedWithEmail?: boolean;
   content?: WidgetDialogContent;
   onClose: () => void;
   onSubmit: (data: FormData, media: CapturedMedia[]) => void;
@@ -84,6 +87,9 @@ const TAB_ICONS = {
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   hidePoweredBy = false,
+  portalUrl,
+  submitted = false,
+  submittedWithEmail = false,
   content,
   onClose,
   onSubmit,
@@ -121,6 +127,10 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onDismissOversizedRecording = () => undefined,
 }) => {
   const locale = useLocale();
+  const dialog = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (submitted) dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [submitted]);
   const contentText = (bundle: LauncherTextBundle | undefined, fallback: string) =>
     (bundle ? resolveLauncherText(bundle.project, bundle.global, locale, null) : null) ?? fallback;
   const showPriority = content?.showPriority ?? true;
@@ -187,21 +197,12 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
 
   const tabs = [
     { id: 'details', label: t('dialog.tabs.details'), icon: TAB_ICONS.details },
-    {
-      id: 'media',
-      label:
-        images.length > 0
-          ? t('dialog.tabs.mediaWithCount', { count: images.length })
-          : t('dialog.tabs.media'),
-      icon: TAB_ICONS.media,
-    },
+    { id: 'media', label: t('dialog.tabs.media'), icon: TAB_ICONS.media, count: images.length },
     {
       id: 'recording',
-      label:
-        videos.length > 0
-          ? t('dialog.tabs.recordingWithCount', { count: videos.length })
-          : t('dialog.tabs.recording'),
+      label: t('dialog.tabs.recording'),
       icon: TAB_ICONS.recording,
+      count: videos.length,
     },
   ];
   const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'details';
@@ -209,20 +210,82 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   return (
     <div class="fixed inset-0 z-overlay bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
       <div
-        class="relative w-full max-w-3xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
+        class={
+          submitted
+            ? 'relative w-full max-w-md max-h-[calc(100vh-40px)] overflow-y-auto bg-background border border-solid border-border rounded-lg shadow-lg p-6 flex flex-col gap-6 animate-[slideUp_0.2s_ease-out]'
+            : 'relative w-full max-w-3xl h-[810px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]'
+        }
+        ref={dialog}
+        onKeyDown={(event) => {
+          if (!submitted) return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+          }
+          if (event.key === 'Tab') {
+            const controls = dialog.current?.querySelectorAll<HTMLElement>('button, a[href]');
+            if (!controls?.length) return;
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && event.target === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && event.target === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="bugpin-title"
+        aria-describedby={
+          submitted && submittedWithEmail ? 'bugpin-success-description' : undefined
+        }
       >
-        {/* Header */}
-        <div class="shrink-0 flex items-center justify-between p-6 border-b border-solid border-border">
-          <h1 id="bugpin-title">{contentText(content?.title, t('dialog.title'))}</h1>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('aria.close')}>
-            <X class="w-5 h-5" />
-          </Button>
-        </div>
+        {!submitted && (
+          <div class="shrink-0 flex items-center justify-between p-6 border-b border-solid border-border">
+            <h1 id="bugpin-title">{contentText(content?.title, t('dialog.title'))}</h1>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('aria.close')}>
+              <X class="w-5 h-5" />
+            </Button>
+          </div>
+        )}
 
-        {showScreenCaptureConsent ? (
+        {submitted ? (
+          <>
+            <div class="flex items-start gap-4" role="status">
+              <div class="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Check class="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div class="flex min-w-0 flex-col gap-2 pt-2">
+                <h1 id="bugpin-title" class="text-lg leading-6">
+                  {t('toast.success.submit')}
+                </h1>
+                {submittedWithEmail && (
+                  <p id="bugpin-success-description" class="text-sm text-muted-foreground">
+                    {t('portal.checkEmail')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div class="flex flex-wrap justify-end gap-3">
+              <Button variant="outline" onClick={onClose}>
+                {t('aria.close')}
+              </Button>
+              {portalUrl && (
+                <a
+                  href={portalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class={buttonVariants({ class: 'no-underline' })}
+                >
+                  {t('portal.viewReports')}
+                </a>
+              )}
+            </div>
+          </>
+        ) : showScreenCaptureConsent ? (
           <ScreenCaptureConsentDialog
             mode={consentMode}
             onConfirm={onConsentConfirm}
@@ -327,12 +390,24 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                         handleInputChange('reporterEmail', (e.target as HTMLInputElement).value)
                       }
                       error={!!errors.reporterEmail}
-                      aria-describedby={errors.reporterEmail ? 'bugpin-email-error' : undefined}
+                      aria-describedby={
+                        errors.reporterEmail
+                          ? 'bugpin-email-error'
+                          : portalUrl
+                            ? 'bugpin-email-hint'
+                            : undefined
+                      }
                     />
-                    {errors.reporterEmail && (
+                    {errors.reporterEmail ? (
                       <span id="bugpin-email-error" class="text-destructive text-xs mt-0.5">
                         {errors.reporterEmail}
                       </span>
+                    ) : (
+                      portalUrl && (
+                        <span id="bugpin-email-hint" class="text-muted-foreground text-xs mt-0.5">
+                          {t('dialog.fields.email.portalHint')}
+                        </span>
+                      )
                     )}
                   </div>
                 </form>
@@ -419,7 +494,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         )}
 
         {/* Branding */}
-        {!hidePoweredBy && (
+        {!hidePoweredBy && !submitted && (
           <div class="shrink-0 py-3 px-6 text-center text-xs text-muted-foreground border-t border-solid border-border bg-background">
             {t('dialog.branding.poweredBy')}{' '}
             <a

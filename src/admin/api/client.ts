@@ -4,10 +4,28 @@ const RETRY_COUNT = 3;
 const RETRY_DELAY_MS = 1000;
 const MAX_RETRY_AFTER_MS = 30000;
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
+// Repeating a write can apply it twice or count against a lockout, so only reads retry
+const RETRYABLE_METHODS = new Set(['get', 'head', 'options']);
 
-// Only methods that are safe to repeat are retried. A failed POST, PATCH, PUT, or DELETE
-// may already have been applied on the server, so replaying it risks duplicate writes.
-const RETRYABLE_METHODS = ['get', 'head', 'options'];
+// The server answers 403 with one of these codes once the signed-in user must finish a
+// setup step, which can start mid-session when an admin changes a policy.
+const SETUP_REQUIRED_ERRORS = new Set(['PASSWORD_CHANGE_REQUIRED', 'TWO_FACTOR_SETUP_REQUIRED']);
+
+const setupRequiredListeners = new Set<() => void>();
+
+export function onSetupRequired(listener: () => void): () => void {
+  setupRequiredListeners.add(listener);
+  return () => {
+    setupRequiredListeners.delete(listener);
+  };
+}
+
+function isSetupRequired(error: AxiosError): boolean {
+  if (error.response?.status !== 403) return false;
+  const data: unknown = error.response.data;
+  if (typeof data !== 'object' || data === null || !('error' in data)) return false;
+  return typeof data.error === 'string' && SETUP_REQUIRED_ERRORS.has(data.error);
+}
 
 interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retryCount?: number;
@@ -17,7 +35,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isRetryableMethod(config: ExtendedAxiosRequestConfig): boolean {
   // Axios defaults a missing method to GET before dispatching.
-  return RETRYABLE_METHODS.includes((config.method ?? 'get').toLowerCase());
+  return RETRYABLE_METHODS.has((config.method ?? 'get').toLowerCase());
 }
 
 function isRetryable(error: AxiosError): boolean {
@@ -93,6 +111,11 @@ api.interceptors.response.use(
       ) {
         window.location.href = '/admin/login';
       }
+      return Promise.reject(error);
+    }
+
+    if (isSetupRequired(error)) {
+      setupRequiredListeners.forEach((listener) => listener());
       return Promise.reject(error);
     }
 

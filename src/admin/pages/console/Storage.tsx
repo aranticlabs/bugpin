@@ -65,7 +65,6 @@ export function Storage() {
   if (!isLicensed) {
     return (
       <UpgradePrompt
-        feature="s3-storage"
         title="S3 Storage"
         description="Store screenshots and attachments in S3-compatible object storage. Supports AWS S3, MinIO, DigitalOcean Spaces, and more."
       />
@@ -136,6 +135,8 @@ const CONFIG_FIELDS: {
   placeholder: string;
   help: string;
   required: boolean;
+  /** Keys whose exact characters matter use the monospace font */
+  mono?: boolean;
 }[] = [
   {
     key: 'bucket',
@@ -160,6 +161,7 @@ const CONFIG_FIELDS: {
     placeholder: 'AKIAIOSFODNN7EXAMPLE',
     help: 'Your AWS access key ID or equivalent',
     required: true,
+    mono: true,
   },
 ];
 
@@ -292,6 +294,7 @@ function StorageSettingsSection() {
                 onChange={(e) => draft.set(field.key, e.target.value)}
                 placeholder={field.placeholder}
                 required={field.required && form.s3Enabled}
+                className={cn(field.mono && 'font-mono')}
               />
               <p className="text-sm text-muted-foreground">{field.help}</p>
             </div>

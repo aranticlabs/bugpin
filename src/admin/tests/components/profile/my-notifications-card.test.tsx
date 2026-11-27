@@ -16,6 +16,7 @@ const preferences = (projectId: string, overrides: Record<string, boolean>) => (
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: true,
+  notifyOnReporterReply: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
   ...overrides,
@@ -28,6 +29,7 @@ const defaults = {
   notifyOnPriorityChange: true,
   notifyOnAssignment: true,
   notifyOnDeletion: false,
+  notifyOnReporterReply: true,
 };
 
 let bulkPatches: Record<string, unknown>[] = [];
@@ -53,6 +55,14 @@ beforeEach(() => {
 });
 
 describe('MyNotificationsCard', () => {
+  it('saves the reporter-reply preference independently', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MyNotificationsCard />);
+    await user.click(await screen.findByRole('switch', { name: 'Reporter replies' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(bulkPatches).toEqual([{ notifyOnReporterReply: false }]));
+  });
+
   it('shows a notification on only when every project has it on', async () => {
     renderWithProviders(<MyNotificationsCard />);
 

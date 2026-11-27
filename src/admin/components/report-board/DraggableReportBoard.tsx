@@ -27,7 +27,7 @@ import {
   type ReportBoardColumnProps,
   type ReportBoardItem,
   type ReportBoardProps,
-} from './ReportBoard';
+} from '@shared-ui/components/report-board/ReportBoard';
 
 const CARD_TYPE = 'report-card';
 // Cards win over the column underneath them, so the column only catches drops on its empty area.

@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { userPreferencesRoutes } from '../../../src/server/routes/api/user-preferences';
 import { authService } from '../../../src/server/services/auth.service';
 import { userPreferencesService } from '../../../src/server/services/user-preferences.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User, UserPreferences } from '../../../src/shared/types';
 
 const viewer: User = {
@@ -33,12 +35,19 @@ function request(method: string, body?: unknown) {
   app.route('/user-preferences', userPreferencesRoutes);
   return app.request('http://localhost/user-preferences/me', {
     method,
-    headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+    headers: {
+      cookie: 'session=sess_1',
+      origin: 'http://localhost',
+      'content-type': 'application/json',
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   updates = [];
   authService.validateSession = async () => Result.ok({ user: viewer, session });
   userPreferencesService.get = async () => Result.ok({ sidebarWidth: 300 });
@@ -49,6 +58,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(userPreferencesService, originalUserPreferencesService);
 });

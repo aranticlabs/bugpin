@@ -42,6 +42,9 @@ const License = lazyWithRetry(() =>
   import('../console/License').then((m) => ({ default: m.License }))
 );
 const Users = lazyWithRetry(() => import('../console/Users').then((m) => ({ default: m.Users })));
+const Reporters = lazyWithRetry(() =>
+  import('../console/Reporters').then((m) => ({ default: m.Reporters }))
+);
 const UserDetail = lazyWithRetry(() =>
   import('./UserDetail').then((m) => ({ default: m.UserDetail }))
 );
@@ -60,6 +63,9 @@ const PasswordPolicy = lazyWithRetry(() =>
 const NetworkSettings = lazyWithRetry(() =>
   import('../console/Security').then((m) => ({ default: m.NetworkSettingsCard }))
 );
+const ProxyToken = lazyWithRetry(() =>
+  import('../console/Security').then((m) => ({ default: m.ProxyTokenCard }))
+);
 const WidgetButton = lazyWithRetry(() =>
   import('../widget/Button').then((m) => ({ default: m.Button }))
 );
@@ -74,6 +80,9 @@ const Capture = lazyWithRetry(() =>
 );
 const NotificationDefaults = lazyWithRetry(() =>
   import('../console/NotificationDefaults').then((m) => ({ default: m.NotificationDefaults }))
+);
+const ReporterPortalDefaults = lazyWithRetry(() =>
+  import('../console/ReporterPortalDefaults').then((m) => ({ default: m.ReporterPortalDefaults }))
 );
 const Branding = lazyWithRetry(() =>
   import('../console/Branding').then((m) => ({ default: m.Branding }))
@@ -220,6 +229,14 @@ export function SettingsRouter() {
         }
       />
       <Route
+        path="reporters"
+        element={
+          <SettingsPage adminOnly wide>
+            <Reporters />
+          </SettingsPage>
+        }
+      />
+      <Route
         path="users/:id"
         element={
           <SettingsPage adminOnly header={false}>
@@ -242,6 +259,7 @@ export function SettingsRouter() {
         element={
           <SettingsPage adminOnly>
             <NetworkSettings />
+            <ProxyToken />
           </SettingsPage>
         }
       />
@@ -282,6 +300,14 @@ export function SettingsRouter() {
         element={
           <SettingsPage adminOnly>
             <NotificationDefaults />
+          </SettingsPage>
+        }
+      />
+      <Route
+        path="project-defaults/reporter-portal"
+        element={
+          <SettingsPage adminOnly>
+            <ReporterPortalDefaults />
           </SettingsPage>
         }
       />

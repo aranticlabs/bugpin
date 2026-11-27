@@ -64,7 +64,6 @@ export function UserApiAccessSection({
   if (!licensed) {
     return (
       <UpgradePrompt
-        feature="api-access"
         title="API Access"
         description="Let individual users create API tokens for scripts and integrations, and revoke them centrally."
       />

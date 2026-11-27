@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePreference } from '../../hooks/useUserPreferences';
+import { Badge } from '../ui/badge';
 import { api } from '../../api/client';
 import { sortableSensors } from '../../lib/sortable-sensors';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
@@ -53,6 +54,7 @@ interface ReportView {
   key: keyof ReportViewCounts;
   title: string;
   icon: LucideIcon;
+  iconClassName: string;
   params: Record<string, string>;
 }
 
@@ -63,15 +65,23 @@ const REPORT_VIEWS: ReportView[] = [
     key: 'assignedToMe',
     title: 'Assigned to me',
     icon: UserCheck,
+    iconClassName: 'text-violet-600 dark:text-violet-400',
     params: { assignedTo: ASSIGNED_TO_ME_FILTER, status: ACTIVE_STATUS_PARAM },
   },
   {
     key: 'unassigned',
     title: 'Unassigned',
     icon: Inbox,
+    iconClassName: 'text-amber-500 dark:text-amber-400',
     params: { assignedTo: UNASSIGNED_FILTER, status: ACTIVE_STATUS_PARAM },
   },
-  { key: 'active', title: 'Open', icon: CircleDot, params: { status: ACTIVE_STATUS_PARAM } },
+  {
+    key: 'active',
+    title: 'Open',
+    icon: CircleDot,
+    iconClassName: 'text-sky-500',
+    params: { status: ACTIVE_STATUS_PARAM },
+  },
 ];
 
 // The server keeps the last 20 opened reports per user.
@@ -137,7 +147,7 @@ function SortablePinnedProject({
           title={labelWithCount(project.name, project.activeReportsCount)}
         >
           <span className="truncate">{project.name}</span>
-          <span className="ml-auto pl-2 text-xs tabular-nums text-muted-foreground">
+          <span className="ml-auto pl-2 text-xs text-muted-foreground">
             {project.activeReportsCount}
           </span>
         </Link>
@@ -154,6 +164,13 @@ export function NavMain() {
   const onReports = location.pathname === '/reports';
   const [pinnedOpen, setPinnedOpen] = usePinnedProjectsOpen();
   const [recentShown, setRecentShown] = useState(RECENT_PAGE_SIZE);
+
+  const { data: activityCount } = useQuery({
+    queryKey: ['reporter-activity-count'],
+    queryFn: async () =>
+      (await api.get<{ count: number }>('/reports/reporter-activity/count')).data.count,
+    enabled: canLoadData,
+  });
 
   const { data: reportStats } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -266,6 +283,15 @@ export function NavMain() {
               <Link to="/reports" onClick={closeSidebarOnMobile}>
                 <ClipboardList />
                 <span>Reports</span>
+                {activityCount !== undefined && activityCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="group-data-[collapsible=icon]:hidden"
+                    aria-label={`${activityCount} reports with new reporter activity`}
+                  >
+                    {activityCount}
+                  </Badge>
+                )}
               </Link>
             </SidebarMenuButton>
             <CountBadge count={reportStats?.total} />
@@ -331,7 +357,7 @@ export function NavMain() {
                 tooltip={labelWithCount(view.title, viewCounts?.[view.key])}
               >
                 <Link to={reportsUrl(view.params)} onClick={closeSidebarOnMobile}>
-                  <view.icon />
+                  <view.icon className={view.iconClassName} />
                   <span>{view.title}</span>
                 </Link>
               </SidebarMenuButton>

@@ -12,9 +12,11 @@ interface RateLimitEntry {
 interface RateLimitOptions {
   /** Gives the limiter its own buckets, so its count is not shared with other limiters */
   name?: string;
-  max?: number;
+  max?: number | (() => Promise<number>);
   window?: number; // in seconds
-  keyGenerator?: (c: Context) => string;
+  keyGenerator?: (c: Context) => string | Promise<string>;
+  onLimit?: (c: Context) => Response;
+  exposeHeaders?: boolean;
 }
 
 // Rate Limit Store
@@ -43,14 +45,14 @@ cleanupInterval.unref?.();
  * @returns Middleware function
  */
 export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
-  const max = options.max ?? 10; // Default: 10 requests
   const windowSeconds = options.window ?? 60; // Default: 60 seconds
   const windowMs = windowSeconds * 1000;
 
   const keyGenerator = options.keyGenerator ?? defaultKeyGenerator;
 
   return async (c, next) => {
-    const baseKey = keyGenerator(c);
+    const max = typeof options.max === 'function' ? await options.max() : (options.max ?? 10);
+    const baseKey = await keyGenerator(c);
     const key = options.name ? `${options.name}|${baseKey}` : baseKey;
     const now = Date.now();
 
@@ -74,13 +76,16 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
     const resetSeconds = Math.ceil((entry.resetAt - now) / 1000);
 
     // Set rate limit headers
-    c.header('X-RateLimit-Limit', max.toString());
-    c.header('X-RateLimit-Remaining', remaining.toString());
-    c.header('X-RateLimit-Reset', resetSeconds.toString());
+    if (options.exposeHeaders !== false) {
+      c.header('X-RateLimit-Limit', max.toString());
+      c.header('X-RateLimit-Remaining', remaining.toString());
+      c.header('X-RateLimit-Reset', resetSeconds.toString());
+    }
 
     // Check if over limit
     if (entry.count > max) {
-      c.header('Retry-After', resetSeconds.toString());
+      if (options.onLimit) return options.onLimit(c);
+      if (options.exposeHeaders !== false) c.header('Retry-After', resetSeconds.toString());
       return c.json(
         {
           success: false,
@@ -94,6 +99,19 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
 
     return next();
   };
+}
+
+/**
+ * Password sign-in to the Admin Console and to the Reporter Portal team view: both check staff
+ * passwords, so they share one budget per client address.
+ */
+export function staffLoginLimit(): MiddlewareHandler {
+  return rateLimiter({ name: 'login', max: 5, window: 60 });
+}
+
+/** The second factor step of both staff sign-ins, sharing one budget per client address */
+export function staffTwoFactorLimit(): MiddlewareHandler {
+  return rateLimiter({ name: 'login-two-factor', max: 10, window: 60 });
 }
 
 /**

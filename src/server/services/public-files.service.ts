@@ -59,19 +59,20 @@ function allowsPublicVideo(integration: Integration, issueRepositories: Set<stri
 
 export const publicFilesService = {
   async get(reportId: string, filename: string): Promise<Result<PublicFile>> {
-    const files = await filesRepo.findByReportId(reportId);
+    const files = await filesRepo.findOriginalByReportId(reportId);
     const file = files.find((candidate) => candidate.filename === filename);
 
-    if (!file) {
+    if (!file || file.messageId) {
       return Result.fail('File not found', 'NOT_FOUND');
     }
 
-    if (file.type === 'video') {
-      const report = await reportsRepo.findById(reportId);
-      if (!report) {
-        return Result.fail('File not found', 'NOT_FOUND');
-      }
+    const report = await reportsRepo.findById(reportId);
+    if (!report) return Result.fail('File not found', 'NOT_FOUND');
+    if (!report.githubIssueUrl && !report.forwardedTo?.length) {
+      return Result.fail('File not found', 'NOT_FOUND');
+    }
 
+    if (file.type === 'video' || file.mimeType.startsWith('video/')) {
       const issueRepositories = getIssueRepositories(report);
       const integrations =
         issueRepositories.size > 0
@@ -82,10 +83,10 @@ export const publicFilesService = {
       );
 
       if (!publicVideoEnabled) {
-        return Result.fail('File type not accessible publicly', 'FORBIDDEN');
+        return Result.fail('File not found', 'NOT_FOUND');
       }
     } else if (file.type !== 'screenshot' && file.type !== 'attachment') {
-      return Result.fail('File type not accessible publicly', 'FORBIDDEN');
+      return Result.fail('File not found', 'NOT_FOUND');
     }
 
     return Result.ok({ file, handle: createStoredFileHandle(file.path) });

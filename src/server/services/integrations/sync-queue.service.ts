@@ -11,6 +11,7 @@ interface SyncTask {
   id: string;
   reportId: string;
   integrationId: string;
+  projectId: string;
   createdAt: number;
   attempts: number;
   nextAttempt: number;
@@ -62,6 +63,7 @@ export const syncQueueService = {
       id: `${reportId}-${now}`,
       reportId,
       integrationId,
+      projectId: integration.projectId,
       createdAt: now,
       attempts: 0,
       nextAttempt: now,
@@ -107,7 +109,15 @@ export const syncQueueService = {
         readyTasks.map(async (task) => {
           task.attempts++;
 
-          const result = await githubSyncService.syncReport(task.reportId, task.integrationId);
+          let result: Awaited<ReturnType<typeof githubSyncService.syncReport>>;
+          try {
+            result = await githubSyncService.syncReport(task.reportId, task.integrationId);
+          } catch (error) {
+            result = Result.fail(
+              error instanceof Error ? error.message : 'GitHub sync failed',
+              'SYNC_FAILED'
+            );
+          }
 
           if (result.success) {
             // Success - remove from queue
@@ -116,7 +126,18 @@ export const syncQueueService = {
           } else {
             // Failed
             if (task.attempts >= QUEUE_CONFIG.maxAttempts) {
-              // Max attempts reached - remove from queue
+              if (checkProjectLicense(task.projectId).success) {
+                try {
+                  await reportsRepo.updateGitHubSyncStatus(task.reportId, {
+                    status: 'error',
+                    error: result.error,
+                  });
+                } catch (error) {
+                  logger.error('Failed to persist final sync error', error, {
+                    reportId: task.reportId,
+                  });
+                }
+              }
               queue = queue.filter((t) => t.id !== task.id);
               logger.error('Sync task failed after max attempts', {
                 reportId: task.reportId,

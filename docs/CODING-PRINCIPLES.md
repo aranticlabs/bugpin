@@ -214,6 +214,8 @@ Services and repositories are module singletons imported directly (`import { rep
 
 Server imports of local files use the `.js` extension.
 
+The Admin Console (`src/admin/`) and Reporter Portal (`src/portal/`) share React presentation through `@shared-ui/*` in `src/shared-ui/`. Keep API clients, authentication and routing in the frontend that owns them. Pass data and callbacks into shared components so they can render independently of either application, the server and drag-and-drop libraries.
+
 ## Code Style
 
 **File structure**: Start directly with imports (no file-level JSDoc headers)
@@ -227,6 +229,20 @@ export function MyComponent() {}
 
 **Comments**: Minimal, no decorative separators (`// ======`). Method JSDoc allowed for complex functions only.
 
+## Typography
+
+The Admin Console and the Reporter Portal use Geist for all text and numbers. Geist Mono (`font-mono`) is only for text where every character must be exact, so 0 and O or 1, l and I can't be confused. `code` and `pre` use Geist Mono automatically.
+
+| Font       | Use for                                                           | Examples                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Geist Mono | Keys, tokens, secrets and codes that people copy, compare or type | API keys and token prefixes, proxy and license keys, S3 Access Key ID, recovery codes (list and sign-in field), authenticator secret, hex colors |
+| Geist Mono | Technical source and captured data                                | Email template source and variables, embed snippets, console logs, network errors, cookie and storage keys, allowed origins, stack traces        |
+| Geist Mono | Words that must be typed exactly to confirm                       | `DELETE`, `license` (label and input)                                                                                                            |
+| Geist      | KPIs, counts, times, dates and sizes                              | Dashboard KPIs, sidebar and tab counts, unread badges, pagination, chart values, clock, file sizes, image and screen sizes                       |
+| Geist      | Codes made of digits only                                         | 6-digit authenticator codes                                                                                                                      |
+
+Numbers use regular digits. Don't add `tabular-nums`: Geist's fixed-width digits look like Geist Mono.
+
 ## Widget Constraints
 
 - Bundle size: ≤190KB gzipped (IIFE; ESM build may be larger)
@@ -237,15 +253,15 @@ export function MyComponent() {}
 
 ## Testing
 
-| Type        | Target       | Approach                                |
-| ----------- | ------------ | --------------------------------------- |
-| Unit        | Services     | Stub collaborators with `spyOn`         |
-| Unit        | Utils        | 100% coverage for Result, ID generation |
-| Integration | Repositories | Real SQLite database                    |
-| Integration | API          | Full request/response with test DB      |
-| Component   | Widget/Admin | Rendered components and hooks           |
+| Type        | Target                                 | Approach                                |
+| ----------- | -------------------------------------- | --------------------------------------- |
+| Unit        | Services                               | Stub collaborators with `spyOn`         |
+| Unit        | Utils                                  | 100% coverage for Result, ID generation |
+| Integration | Repositories                           | Real SQLite database                    |
+| Integration | API                                    | Full request/response with test DB      |
+| Component   | Widget, Admin Console, Reporter Portal | Rendered components and hooks           |
 
-Test locations: `tests/server/` and `tests/shared/` for the server, `src/admin/tests/` and `src/widget/tests/` for the frontends, `ee/tests/` for Enterprise Edition.
+Server tests live in `tests/server/`. Shared code and dependency boundary tests live in `tests/shared/`. Each frontend has its own tests in `src/admin/tests/`, `src/portal/tests/` and `src/widget/tests/`. Enterprise Edition tests live in `ee/tests/`.
 
 ### Mocking with Bun
 
@@ -278,9 +294,9 @@ describe('reportsService.update', () => {
 
 ## Pre-Commit Checklist
 
-1. `make typecheck` and `make typecheck-tests` pass
-2. `make test` passes
-3. `make knip` reports no unused code
+1. `bun run typecheck` and `bun run typecheck:tests` pass
+2. `bun run test` passes
+3. `bun run knip` reports no unused code
 4. Routes are thin (no business logic)
 5. Services return `Result<T>`
 6. No `any` types

@@ -338,6 +338,7 @@ export function ProjectsPage() {
     queryClient.invalidateQueries({ queryKey: ['projects'] });
     queryClient.invalidateQueries({ queryKey: ['project-summaries'] });
     queryClient.invalidateQueries({ queryKey: ['pinned-projects'] });
+    queryClient.invalidateQueries({ queryKey: ['portal-team-sign-in'] });
   };
   const refreshLicense = () => {
     queryClient.invalidateQueries({ queryKey: ['license-status'] });
@@ -532,7 +533,7 @@ export function ProjectsPage() {
               className="h-1.5 w-32"
               aria-label="Licensed projects used"
             />
-            <span className="tabular-nums text-foreground">
+            <span className="text-foreground">
               {usedProjects} of {projectLimit} used
             </span>
             <Link to="/settings/license" className="text-primary underline">
@@ -882,13 +883,13 @@ export function ProjectsPage() {
                             <TableCell>
                               <ProjectStatusBadge project={project} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="text-right">
                               <CountCell
                                 count={project.activeReportsCount ?? 0}
                                 to={projectUrl(project.id, { status: activeStatus })}
                               />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="text-right">
                               <CountCell
                                 count={project.reportsCount ?? 0}
                                 to={projectUrl(project.id)}
@@ -1100,7 +1101,7 @@ export function ProjectsPage() {
                 value={deleteConfirmation}
                 onChange={(e) => setDeleteConfirmation(e.target.value)}
                 placeholder="DELETE"
-                className="mt-2"
+                className="mt-2 font-mono"
                 autoComplete="off"
               />
             </div>

@@ -2,7 +2,7 @@ import type { EmailTemplate } from '@shared/types';
 import { reporterAssignmentHtml } from '../styles.js';
 
 const nl: EmailTemplate = {
-  subject: '[{{project.name}}] Toewijzing van rapport bijgewerkt: {{report.title}}',
+  subject: 'Toewijzing van uw bugrapport bijgewerkt: {{report.title}}',
   html: reporterAssignmentHtml({
     headerTitle: 'Toewijzing bijgewerkt',
     introWithPrevious:

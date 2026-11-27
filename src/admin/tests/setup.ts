@@ -73,6 +73,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  document.getElementById('bugpin-admin-theme')?.remove();
 });
 
 // Close server after all tests

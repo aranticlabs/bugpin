@@ -1,11 +1,10 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
   },
   "tags": ["-lintignore"],
-  "ignoreFiles": ["src/server/database/repositories/api-tokens.repo.ts"],
   "ignoreDependencies": ["@aws-sdk/client-s3"],
   "rules": {
     "exports": "warn",
@@ -17,8 +16,14 @@
       "project": ["**/*.{ts,tsx,js,jsx}", "!ee/**"],
       "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts"]
     },
+    "src/widget": {
+      "entry": ["tests/browser/*.ts", "tests/browser/*.tsx"]
+    },
     "src/server": {
       "entry": ["scripts/*.ts"]
+    },
+    "src/portal": {
+      "entry": ["tests/**/*.test.{ts,tsx}"]
     }
   }
 }

@@ -65,7 +65,7 @@ export function TeamTab() {
               {data.ranking && (
                 <span
                   className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
+                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
                     PODIUM[index] ?? 'bg-muted text-muted-foreground'
                   )}
                 >
@@ -97,7 +97,7 @@ export function TeamTab() {
                 ))}
               </div>
               <div className="w-24 shrink-0 text-right">
-                <p className="text-sm font-medium tabular-nums">
+                <p className="text-sm font-medium">
                   {(data.ranking ? member.periodXp : member.xp).toLocaleString()} XP
                 </p>
                 <p className="text-2xs text-muted-foreground">

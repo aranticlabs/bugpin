@@ -9,9 +9,7 @@ const es: WidgetCatalog = {
   'dialog.title': 'Informar de un error',
   'dialog.tabs.details': 'Detalles',
   'dialog.tabs.media': 'Capturas',
-  'dialog.tabs.mediaWithCount': 'Capturas ({count})',
   'dialog.tabs.recording': 'Grabaciones',
-  'dialog.tabs.recordingWithCount': 'Grabaciones ({count})',
 
   'dialog.fields.title.label': 'Título',
   'dialog.fields.title.placeholder': 'Breve descripción del problema',
@@ -22,6 +20,8 @@ const es: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Tu nombre',
   'dialog.fields.email.label': 'Correo electrónico (opcional)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Con tu correo podrás seguir este informe en el Portal de informantes.',
 
   'dialog.priority.highest': 'Máxima',
   'dialog.priority.high': 'Alta',
@@ -61,13 +61,21 @@ const es: WidgetCatalog = {
   'screenshot.privacyTip':
     'Consejo: usa la herramienta de anotación para ocultar datos sensibles antes de enviar.',
   'screenshot.capturing': 'Capturando...',
-  'screenshot.capture': 'Capturar pantalla',
+  'screenshot.capture': 'Abrir herramienta de captura',
   'screenshot.quality.label': 'Reducir calidad de captura',
   'screenshot.quality.activeIndicator': 'Calidad de captura reducida',
   'screenshot.quality.tooltip':
     'Capturar con densidad de píxeles 1x. Usa esto si tu captura de pantalla es demasiado grande para enviar.',
   'screenshot.dropzone.title': 'Arrastra y suelta archivos aquí',
   'screenshot.dropzone.subtitle': 'o haz clic para examinar',
+  'screenshot.dropzone.subtitlePaste': 'o haz clic para examinar, o pega ({shortcut})',
+  'screenshot.bar.capture': 'Capturar',
+  'screenshot.bar.timerLabel': 'Retraso de captura',
+  'screenshot.bar.timerOff': 'Desactivado',
+  'screenshot.bar.timerShort': '{seconds} s',
+  'screenshot.bar.timerOption': '{seconds} segundos',
+  'screenshot.bar.countdown': 'Capturando en {seconds}',
+  'screenshot.bar.cancel': 'Cancelar',
   'screenshot.addMore': 'Añadir más',
   'screenshot.alt': 'Captura de pantalla',
   'screenshot.badge.annotated': 'Anotado',
@@ -76,6 +84,9 @@ const es: WidgetCatalog = {
   'screenshot.action.download': 'Descargar',
   'screenshot.action.remove': 'Quitar',
   'screenshot.helperText': 'Compatibles: PNG, JPG, GIF, WebP (máx. {imageSize} MB)',
+  'recording.quality.low': 'Baja',
+  'recording.quality.standard': 'Estándar',
+  'recording.quality.high': 'Alta',
   'recording.helperText': 'Compatibles: MP4, WebM, MOV (máx. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Formato de imagen no compatible: {type}',
@@ -150,10 +161,11 @@ const es: WidgetCatalog = {
   'annotation.toolbar.undo': 'Deshacer (Ctrl+Z)',
   'annotation.toolbar.redo': 'Rehacer (Ctrl+Shift+Z)',
   'annotation.toolbar.delete': 'Eliminar selección (Del)',
-  'annotation.toolbar.zoomIn': 'Acercar - Mantén pulsado Espacio para desplazar al ampliar',
-  'annotation.toolbar.zoomOut': 'Alejar - Mantén pulsado Espacio para desplazar al ampliar',
-  'annotation.toolbar.zoomReset':
-    'Restablecer zoom ({percent}%) - Mantén pulsado Espacio para desplazar',
+  'annotation.toolbar.zoomIn': 'Acercar',
+  'annotation.toolbar.zoomOut': 'Alejar',
+  'annotation.toolbar.zoomFit': 'Ajustar a la pantalla',
+  'annotation.toolbar.maximize': 'Maximizar',
+  'annotation.toolbar.restore': 'Tamaño original',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.color.red': 'Rojo',
   'annotation.color.orange': 'Naranja',
@@ -165,6 +177,8 @@ const es: WidgetCatalog = {
   'annotation.defaultText': 'Texto',
   'annotation.buttons.cancel': 'Cancelar',
   'annotation.buttons.done': 'Hecho',
+  'portal.checkEmail': 'Busca un enlace de acceso en tu correo o solicita uno en Mis informes.',
+  'portal.viewReports': 'Ver mis informes',
 };
 
 export default es;

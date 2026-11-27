@@ -201,6 +201,7 @@ export async function fetchWidgetConfig(
   apiKey: string,
   serverUrl: string
 ): Promise<{
+  portalUrl?: string | null;
   projectName: string;
   branding: object;
   features: {

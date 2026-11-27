@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { reportsRoutes } from '../../../src/server/routes/api/reports';
 import { projectsRoutes } from '../../../src/server/routes/api/projects';
 import { authService } from '../../../src/server/services/auth.service';
 import { reportsService } from '../../../src/server/services/reports.service';
 import { workspaceViewsService } from '../../../src/server/services/workspace-views.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { ReportFilter, Session, User } from '../../../src/shared/types';
 
 const viewer: User = {
@@ -38,11 +40,14 @@ function request(path: string, method = 'GET') {
   app.route('/projects', projectsRoutes);
   return app.request(`http://localhost${path}`, {
     method,
-    headers: { cookie: 'session=sess_1' },
+    headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
   });
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   listFilter = undefined;
   calls = [];
   authService.validateSession = async () => Result.ok({ user: viewer, session });
@@ -81,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(reportsService, originalReportsService);
   Object.assign(workspaceViewsService, originalWorkspaceViewsService);

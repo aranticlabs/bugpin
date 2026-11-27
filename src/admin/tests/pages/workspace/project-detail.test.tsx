@@ -74,6 +74,7 @@ describe('ProjectDetail', () => {
       'Language',
       'Capture',
       'Notifications',
+      'Reporter Portal',
       'Integrations',
     ]);
   });
@@ -107,6 +108,17 @@ describe('ProjectDetail', () => {
 
     expect(await screen.findByText('Integrations for project-1')).toBeInTheDocument();
     expect(screen.getByText('Webhooks for project-1')).toBeInTheDocument();
+  });
+
+  it('opens the visible Reporter Portal tab for admins', async () => {
+    renderProject('/projects/project-1?tab=reporter-portal');
+    expect(await screen.findByRole('tab', { name: 'Reporter Portal' })).toHaveAttribute(
+      'data-state',
+      'active'
+    );
+    expect(screen.getByText('Settings section reporter-portal').closest('div')).not.toHaveClass(
+      'hidden'
+    );
   });
 
   it('shows viewers only the reports, even with a settings tab in the URL', async () => {

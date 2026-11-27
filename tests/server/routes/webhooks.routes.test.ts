@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
-// Mock EE module to ensure requireEEFeature returns 402
+// Mock EE module to ensure requireEEFeature returns 402. The real exports stay in place
+// because the mock is process-wide and other test files import the rest of the module.
 const eeUrl = new URL('../../../src/server/utils/ee.js', import.meta.url).href;
+// mock.module replaces the module for every later test file, so keep its other exports.
+const realEE = { ...(await import(eeUrl)) };
 mock.module(eeUrl, () => ({
+  ...realEE,
   isEEAvailable: () => false,
   hasEEFeature: () => false,
   requireEEFeature: () => async (c: { json: (data: unknown, status: number) => Response }) => {
@@ -22,8 +28,13 @@ mock.module(eeUrl, () => ({
   },
 }));
 
-// Import routes after mocking
-const { webhooksRoutes } = await import('../../../src/server/routes/api/webhooks');
+// The routes module builds its EE middleware when it loads, so another test file that
+// imported it first would keep the real one. The query string loads a separate instance
+// that picks up the mock above.
+const webhooksModulePath = '../../../src/server/routes/api/webhooks';
+const { webhooksRoutes }: typeof import('../../../src/server/routes/api/webhooks') = await import(
+  `${webhooksModulePath}?ce-stub`
+);
 
 const baseUser: User = {
   id: 'usr_1',
@@ -45,7 +56,10 @@ const baseSession: Session = {
 
 const originalAuthService = { ...authService };
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   authService.validateSession = async () =>
     Result.ok({
       user: baseUser,
@@ -54,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
 });
 
@@ -98,6 +113,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
         method: 'POST',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -120,6 +136,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
         method: 'PATCH',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -138,7 +155,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/webhooks/whk_1', {
         method: 'DELETE',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);
@@ -152,7 +169,7 @@ describe('webhooks routes (CE stub - returns 402)', () => {
       const app = createApp();
       const res = await app.request('http://localhost/webhooks/whk_1/test', {
         method: 'POST',
-        headers: { cookie: 'session=sess_1' },
+        headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       });
 
       expect(res.status).toBe(402);

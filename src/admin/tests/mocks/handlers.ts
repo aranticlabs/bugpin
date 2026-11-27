@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { UNASSIGNED_FILTER } from '@shared/types';
 import type { DashboardOverview, DashboardPersonal, GamificationSettings } from '@shared/types';
+import { mockStaffConversationPortal } from './reporter-messages';
 
 // Mock data
 export const mockUsers = {
@@ -305,11 +306,17 @@ export const mockStats = {
 
 // Default handlers
 export const handlers = [
+  http.get('/api/reports/reporter-activity/count', () =>
+    HttpResponse.json({ success: true, count: 0 })
+  ),
+  http.post('/api/reports/:id/reporter-activity/seen', () => HttpResponse.json({ success: true })),
+
   http.get('/api/user-preferences/me', () => HttpResponse.json({ success: true, preferences: {} })),
   http.patch('/api/user-preferences/me', async ({ request }) =>
     HttpResponse.json({ success: true, preferences: await request.json() })
   ),
   // Auth endpoints
+  http.get('/api/auth/portal-team-sign-in', () => HttpResponse.json({ success: true, url: null })),
   http.get('/api/auth/me', () => {
     return HttpResponse.json({
       success: true,
@@ -428,6 +435,7 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       messages: [],
+      portal: mockStaffConversationPortal,
     });
   }),
 
@@ -698,6 +706,15 @@ export const handlers = [
   }),
 
   // Settings endpoints
+  http.get('/api/settings/address-check', ({ request }) => {
+    return HttpResponse.json({
+      success: true,
+      appUrl: '',
+      requestOrigin: new URL(request.url).origin,
+      requiredTrustProxy: null,
+    });
+  }),
+
   http.get('/api/settings', () => {
     return HttpResponse.json({
       success: true,
@@ -797,6 +814,7 @@ export const handlers = [
           notifyOnPriorityChange: false,
           notifyOnAssignment: true,
           notifyOnDeletion: true,
+          notifyOnReporterReply: true,
         },
         branding: {
           primaryColor: '#02658D',
@@ -1015,7 +1033,7 @@ export const handlers = [
 ];
 
 // Mock integrations data
-export const mockIntegrations = [
+const mockIntegrations = [
   {
     id: 'integration-1',
     projectId: 'project-1',

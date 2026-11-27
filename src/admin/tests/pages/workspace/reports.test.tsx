@@ -11,6 +11,79 @@ import { Reports } from '../../../pages/workspace/Reports';
 import { api } from '../../../api/client';
 
 describe('Reports Page', () => {
+  it.each(['list', 'board'])(
+    'keeps the new-activity filter in the %s view and renders its indicator',
+    async (view) => {
+      const requests: URLSearchParams[] = [];
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          requests.push(params);
+          const data =
+            !params.has('status') || params.get('status') === 'open'
+              ? [{ ...mockReports[0], hasNewReporterActivity: true }]
+              : [];
+          return HttpResponse.json({
+            success: true,
+            data,
+            total: data.length,
+            page: 1,
+            limit: 20,
+            totalPages: 1,
+          });
+        })
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<Reports />, {
+        initialEntries: [`/reports?reporterActivity=new&view=${view}`],
+      });
+      await waitFor(() =>
+        expect(
+          screen.getAllByRole('img', { name: 'New reporter activity' }).length
+        ).toBeGreaterThan(0)
+      );
+      expect(requests.every((params) => params.get('reporterActivity') === 'new')).toBe(true);
+      await user.click(screen.getByRole('combobox', { name: 'Filter by reporter activity' }));
+      await user.click(await screen.findByRole('option', { name: 'All activity' }));
+      await waitFor(() =>
+        expect(requests.some((params) => !params.has('reporterActivity'))).toBe(true)
+      );
+    }
+  );
+
+  it.each(['list', 'board'])(
+    'keeps the reporter filter in the %s view and lets staff clear it',
+    async (view) => {
+      const requests: URLSearchParams[] = [];
+      server.use(
+        http.get('/api/reports', ({ request }) => {
+          requests.push(new URL(request.url).searchParams);
+          return HttpResponse.json({
+            success: true,
+            data: [],
+            total: 0,
+            page: 1,
+            limit: 20,
+            totalPages: 0,
+          });
+        })
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<Reports />, {
+        initialEntries: [`/reports?reporterId=rptr_jane&view=${view}`],
+      });
+      await waitFor(() => expect(requests.length).toBeGreaterThanOrEqual(view === 'board' ? 4 : 1));
+      expect(requests.every((params) => params.get('reporterId') === 'rptr_jane')).toBe(true);
+      if (view === 'board')
+        expect(new Set(requests.map((params) => params.get('status')))).toEqual(
+          new Set(['open', 'in_progress', 'resolved', 'closed'])
+        );
+      await user.click(screen.getByRole('button', { name: 'Clear reporter filter' }));
+      await waitFor(() => expect(requests.some((params) => !params.has('reporterId'))).toBe(true));
+      expect(screen.queryByText('Filtered by reporter')).not.toBeInTheDocument();
+    }
+  );
+
   it('renders reports page heading', async () => {
     renderWithProviders(<Reports />);
 

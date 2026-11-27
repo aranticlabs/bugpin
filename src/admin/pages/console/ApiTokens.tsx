@@ -164,7 +164,6 @@ export function ApiTokens() {
   if (!enabled)
     return (
       <UpgradePrompt
-        feature="api-access"
         title="API tokens"
         description="Connect scripts and integrations to BugPin with scoped API tokens. Manage access, expiration, and revocation for your account."
       />

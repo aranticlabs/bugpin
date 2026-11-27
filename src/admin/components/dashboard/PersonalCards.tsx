@@ -134,7 +134,7 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
                 <span className="truncate font-medium">
                   Level {game.level} · {levelTitle(game.level)}
                 </span>
-                <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
                   {game.xp.toLocaleString()} XP
                 </span>
               </div>
@@ -162,7 +162,7 @@ export function ImpactStrip({ personal }: { personal: DashboardPersonal }) {
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="font-medium">Achievements</span>
-                <span className="text-xs tabular-nums text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {unlockedCount(game)} of {game.achievements.length}
                 </span>
               </div>
@@ -309,7 +309,7 @@ export function ResolveTimeCard({
             {stats.map((item) => (
               <div key={item.label} className="flex flex-col justify-between gap-0.5">
                 <p className="text-xs text-muted-foreground">{item.label}</p>
-                <p className="text-lg font-semibold tabular-nums">{item.value}</p>
+                <p className="text-lg font-semibold">{item.value}</p>
               </div>
             ))}
           </div>
@@ -339,7 +339,7 @@ export function ResolveTimeCard({
             <div key={row.priority} className="space-y-1">
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <ReportPriorityLabel priority={row.priority} />
-                <span className="tabular-nums">
+                <span>
                   {formatHours(row.mine)}{' '}
                   <span className="text-xs text-muted-foreground">
                     / team {formatHours(row.team)}

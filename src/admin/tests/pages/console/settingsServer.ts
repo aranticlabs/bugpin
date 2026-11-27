@@ -62,6 +62,7 @@ const baseSettings: Settings = {
     notifyOnPriorityChange: true,
     notifyOnAssignment: true,
     notifyOnDeletion: true,
+    notifyOnReporterReply: true,
   },
   reporterNotifications: {
     emailEnabled: true,

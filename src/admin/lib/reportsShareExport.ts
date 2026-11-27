@@ -42,7 +42,7 @@ export function buildReportsCsv(reports: Report[], origin?: string): string {
   return lines.join('\n');
 }
 
-export function downloadReportsAsCsv(reports: Report[]): void {
+function downloadReportsAsCsv(reports: Report[]): void {
   const content = buildReportsCsv(reports);
   downloadTextFile(content, reportsShareFilename('csv'), 'text/csv;charset=utf-8');
 }

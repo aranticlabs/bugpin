@@ -145,7 +145,7 @@ function KpiCard({ definition, kpi }: { definition: KpiDefinition; kpi: Dashboar
         </div>
         <div className="space-y-1">
           <div className="flex items-end justify-between gap-3">
-            <span className="text-3xl font-semibold tabular-nums tracking-tight">
+            <span className="text-3xl font-semibold tracking-tight">
               {definition.format(kpi.value)}
             </span>
             {delta && (
@@ -294,9 +294,7 @@ export function BacklogPriorityCard({
           {REPORT_PRIORITIES.map((priority) => (
             <div key={priority} className="flex items-center gap-2 text-sm">
               <ReportPriorityLabel priority={priority} />
-              <span className="ml-auto tabular-nums text-muted-foreground">
-                {backlog[priority]}
-              </span>
+              <span className="ml-auto text-muted-foreground">{backlog[priority]}</span>
             </div>
           ))}
         </div>
@@ -317,7 +315,7 @@ function priorityName(value: string | undefined): string {
     : (value ?? 'unknown');
 }
 
-const ACTOR_NAMES = { widget: 'Widget', deleted_user: 'Deleted user' } as const;
+const ACTOR_NAMES = { widget: 'Widget', deleted_user: 'Deleted user', system: 'System' } as const;
 
 function actorName(item: DashboardActivityItem): string {
   return item.actor === 'user' ? (item.userName ?? 'Unknown user') : ACTOR_NAMES[item.actor];
@@ -329,6 +327,8 @@ function ActorAvatar({ item }: { item: DashboardActivityItem }) {
       <AvatarFallback className="text-2xs">
         {item.actor === 'widget' ? (
           <Bug className="size-3.5" aria-hidden />
+        ) : item.actor === 'system' ? (
+          <Info className="size-3.5" aria-hidden />
         ) : item.actor === 'deleted_user' || !item.userName ? (
           <UserX className="size-3.5" aria-hidden />
         ) : (
@@ -353,6 +353,16 @@ function describeActivity(item: DashboardActivityItem): string {
       return `set priority to ${priorityName(item.newValue)} on`;
     case 'assignee_changed':
       return item.newValue ? `assigned ${item.newDisplay ?? 'someone'} to` : 'unassigned';
+    case 'owner_assigned':
+      return 'assigned a reporter to';
+    case 'owner_removed':
+      return 'removed the reporter from';
+    case 'claimable_set':
+      return 'allowed a reporter to claim';
+    case 'message_hidden':
+      return 'hid a message on';
+    case 'message_unhidden':
+      return 'unhid a message on';
   }
 }
 

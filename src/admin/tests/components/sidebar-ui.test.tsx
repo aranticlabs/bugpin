@@ -179,6 +179,22 @@ describe('sidebar ui', () => {
     expect(document.querySelector('[data-state="collapsed"]')).not.toBeNull();
   });
 
+  it('restores the collapsed state from the cookie', () => {
+    document.cookie = 'sidebar:state=false; path=/';
+    render(<SidebarDemo />);
+
+    expect(document.querySelector('[data-side]')?.getAttribute('data-state')).toBe('collapsed');
+
+    document.cookie = 'sidebar:state=; path=/; max-age=0';
+  });
+
+  it('falls back to defaultOpen when no cookie is set', () => {
+    document.cookie = 'sidebar:state=; path=/; max-age=0';
+    render(<SidebarDemo />);
+
+    expect(document.querySelector('[data-side]')?.getAttribute('data-state')).toBe('expanded');
+  });
+
   it('renders mobile sidebar when viewport is narrow', async () => {
     const user = userEvent.setup();
     const originalWidth = window.innerWidth;

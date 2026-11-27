@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { usersRoutes } from '../../../src/server/routes/api/users';
 import { passwordResetRoutes } from '../../../src/server/routes/api/password-reset';
 import { authService } from '../../../src/server/services/auth.service';
 import { userAccessService } from '../../../src/server/services/user-access.service';
 import { passwordResetService } from '../../../src/server/services/password-reset.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
 const admin: User = {
@@ -45,6 +47,7 @@ function request(path: string, method: string, body?: unknown) {
     method,
     headers: {
       cookie: 'session=sess_1',
+      origin: 'http://localhost',
       'x-forwarded-for': `10.0.0.${Math.floor(Math.random() * 250) + 1}`,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
@@ -52,7 +55,10 @@ function request(path: string, method: string, body?: unknown) {
   });
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   role = 'admin';
   calls = [];
   authService.validateSession = async () =>
@@ -82,6 +88,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(userAccessService, originalUserAccessService);
   Object.assign(passwordResetService, originalPasswordResetService);

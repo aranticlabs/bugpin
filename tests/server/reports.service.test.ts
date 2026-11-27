@@ -4,6 +4,10 @@ import * as path from 'path';
 import { tmpdir } from 'os';
 import { reportsService } from '../../src/server/services/reports.service';
 import * as videoRemuxService from '../../src/server/services/video-remux.service';
+import { reporterOwnershipRepo } from '../../src/server/database/repositories/reporter-ownership.repo';
+import { getDb } from '../../src/server/database/database';
+import { openPortalDatabase } from './portal/helpers';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
@@ -16,6 +20,7 @@ import { usersService } from '../../src/server/services/users.service';
 import { reportHistoryService } from '../../src/server/services/report-history.service';
 import { Result } from '../../src/server/utils/result';
 import { config } from '../../src/server/config';
+import { resolveLocalFilePath } from '../../src/server/storage/files';
 import { logger } from '../../src/server/utils/logger';
 import type { Report, ReportMetadata, Project, AppSettings } from '../../src/shared/types';
 import { createDefaultHooks } from '../../src/server/types/ee-plugin';
@@ -30,7 +35,7 @@ const validMp4Buffer = Buffer.from([
   0x00,
   0x00,
   0x00,
-  0x18,
+  0x10,
   0x66,
   0x74,
   0x79,
@@ -79,6 +84,8 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
+const originalOwnershipRepo = { ...reporterOwnershipRepo };
+const originalInsertHistory = reportHistoryRepo.insert;
 const originalReportsRepo = { ...reportsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalFilesRepo = { ...filesRepo };
@@ -112,6 +119,7 @@ let fileCreateRecords: CreateFileData[] = [];
 let warningCalls: Array<{ message: string; context?: Record<string, unknown> }> = [];
 
 beforeEach(() => {
+  reporterOwnershipRepo.findByReportId = () => null;
   reportById = baseReport;
   projectByApiKey = baseProject;
   updatedReport = baseReport;
@@ -141,16 +149,20 @@ beforeEach(() => {
   };
   reportsRepo.findById = async () => reportById;
   reportsRepo.find = async () => ({ data: [baseReport], total: 1, nextCursor: null });
-  reportsRepo.update = async (_id, updates) => {
+  reportsRepo.findByIdSync = () => reportById;
+  reportsRepo.transaction = (work) => work();
+  reportsRepo.applyUpdate = (_id, updates) => {
     updatePayload = updates;
-    return updatedReport ? { ...updatedReport, ...updates } : null;
+    reportById = updatedReport ? { ...updatedReport, ...updates } : null;
   };
+  reportHistoryRepo.insert = () => 'history';
   reportsRepo.delete = async () => true;
   reportsRepo.bulkUpdate = async () => 3;
   reportsRepo.getStats = async () =>
     ({ total: 1, byStatus: { open: 1 }, byPriority: { medium: 1 } }) as never;
 
   filesRepo.findByReportId = async () => [];
+  filesRepo.findOriginalByReportId = async () => [];
   filesRepo.create = async (input) => {
     fileCreateTypes.push(input.type);
     fileCreateRecords.push(input);
@@ -227,6 +239,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(reporterOwnershipRepo, originalOwnershipRepo);
+  reportHistoryRepo.insert = originalInsertHistory;
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(filesRepo, originalFilesRepo);
@@ -424,31 +438,59 @@ describe('reportsService.create', () => {
     expect(fileCreateTypes).toEqual(['video']);
   });
 
-  it('stores the original recording and logs a warning when remuxing fails', async () => {
-    const corruptRecording = validMp4Buffer.subarray(0, 8);
-    const result = await reportsService.create({
-      apiKey: 'proj_key',
-      title: 'Short recording',
-      metadata: baseMetadata,
-      files: [
-        {
-          filename: 'recording.mp4',
-          mimeType: 'video/mp4',
-          data: corruptRecording,
-          isRecording: true,
-        },
-      ],
-    });
+  for (const { description, corruptRecording, code } of [
+    {
+      description: 'no remuxable tracks',
+      corruptRecording: validMp4Buffer,
+      code: 'REMUX_TRACKS_DROPPED',
+    },
+    {
+      description: 'corrupt MP4 payload',
+      corruptRecording: Buffer.concat([validMp4Buffer, Buffer.from('000000046d6f6f76', 'hex')]),
+      code: 'REMUX_FAILED',
+    },
+  ]) {
+    it(`stores the original recording and logs a warning for ${description}`, async () => {
+      const result = await reportsService.create({
+        apiKey: 'proj_key',
+        title: 'Short recording',
+        metadata: baseMetadata,
+        files: [
+          {
+            filename: 'recording.mp4',
+            mimeType: 'video/mp4',
+            data: corruptRecording,
+            isRecording: true,
+            recordingQuality: 'high',
+            capturedAt: '2026-11-08T14:00:00.000Z',
+            durationMs: 24000,
+            width: 1920,
+            height: 1080,
+          },
+        ],
+      });
 
-    expect(result.success).toBe(true);
-    expect(fileCreateRecords).toHaveLength(1);
-    expect(fileCreateRecords[0]?.sizeBytes).toBe(corruptRecording.length);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(corruptRecording);
-    expect(warningCalls).toContainEqual({
-      message: 'Recording remux failed, storing original',
-      context: expect.objectContaining({ code: 'REMUX_FAILED' }),
+      expect(result.success).toBe(true);
+      expect(fileCreateRecords).toHaveLength(1);
+      const [storedFile] = fileCreateRecords;
+      if (!storedFile) throw new Error('Expected the original recording to be stored');
+      expect(storedFile).toMatchObject({
+        recordingQuality: 'high',
+        capturedAt: '2026-11-08T14:00:00.000Z',
+        durationMs: 24000,
+        width: 1920,
+        height: 1080,
+      });
+      expect(storedFile.sizeBytes).toBe(corruptRecording.length);
+      expect(await Bun.file(resolveLocalFilePath(storedFile.path)).bytes()).toEqual(
+        corruptRecording
+      );
+      expect(warningCalls).toContainEqual({
+        message: 'Recording remux failed, storing original',
+        context: expect.objectContaining({ code }),
+      });
     });
-  });
+  }
 
   it('stores a remuxed recording with MP4 metadata first', async () => {
     const recording = await Bun.file(
@@ -471,7 +513,9 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(true);
     expect(fileCreateRecords).toHaveLength(1);
-    const saved = Buffer.from(await Bun.file(fileCreateRecords[0]!.path).arrayBuffer());
+    const saved = Buffer.from(
+      await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).arrayBuffer()
+    );
     expect(saved.indexOf('moov')).toBeGreaterThan(0);
     expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
   });
@@ -496,7 +540,7 @@ describe('reportsService.create', () => {
     });
 
     expect(result.success).toBe(true);
-    const saved = await Bun.file(fileCreateRecords[0]!.path).bytes();
+    const saved = await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes();
     expect(Array.from(saved.subarray(0, 4))).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
     expect(saved).not.toEqual(recording);
   });
@@ -514,7 +558,7 @@ describe('reportsService.create', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(video);
+    expect(await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes()).toEqual(video);
   });
 
   it('falls back one failed recording without affecting another recording', async () => {
@@ -544,8 +588,12 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(true);
     expect(fileCreateRecords).toHaveLength(2);
-    expect(await Bun.file(fileCreateRecords[0]!.path).bytes()).toEqual(validMp4Buffer);
-    const saved = Buffer.from(await Bun.file(fileCreateRecords[1]!.path).arrayBuffer());
+    expect(await Bun.file(resolveLocalFilePath(fileCreateRecords[0]!.path)).bytes()).toEqual(
+      validMp4Buffer
+    );
+    const saved = Buffer.from(
+      await Bun.file(resolveLocalFilePath(fileCreateRecords[1]!.path)).arrayBuffer()
+    );
     expect(saved.indexOf('moov')).toBeLessThan(saved.indexOf('mdat'));
     expect(saved).not.toEqual(recording);
   });
@@ -904,8 +952,11 @@ describe('reportsService.addFile', () => {
     expect(result.success).toBe(true);
   });
 
-  it('returns failure when saving file throws', async () => {
-    filesRepo.create = async () => {
+  it('removes the saved file when its database insert fails', async () => {
+    let storedPath = '';
+    filesRepo.create = async (record) => {
+      storedPath = resolveLocalFilePath(record.path);
+      expect(fs.existsSync(storedPath)).toBe(true);
       throw new Error('DB error');
     };
     const result = await reportsService.addFile('rpt_1', {
@@ -915,6 +966,8 @@ describe('reportsService.addFile', () => {
       type: 'screenshot',
     });
     expect(result.success).toBe(false);
+    expect(storedPath).not.toBe('');
+    expect(fs.existsSync(storedPath)).toBe(false);
   });
 
   it('rejects file with invalid MIME type', async () => {
@@ -942,4 +995,47 @@ describe('reportsService.addFile', () => {
       expect(result.code).toBe('INVALID_FILE_CONTENT');
     }
   });
+});
+
+it('accepts 500 characters on update and rejects longer titles', async () => {
+  expect((await reportsService.update(baseReport.id, { title: 'x'.repeat(500) })).success).toBe(
+    true
+  );
+  expect(await reportsService.update(baseReport.id, { title: 'x'.repeat(501) })).toMatchObject({
+    code: 'INVALID_TITLE',
+  });
+});
+
+it('records consecutive status transitions from concurrent staff updates and rolls back failed history writes', async () => {
+  const close = await openPortalDatabase();
+  Object.assign(reportsRepo, originalReportsRepo);
+  reportHistoryRepo.insert = originalInsertHistory;
+  try {
+    getDb()
+      .exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('project', 'Project', 'hash', 'prefix');
+      INSERT INTO reports (id, project_id, title, metadata) VALUES ('report', 'project', 'Report', '{}');`);
+    const results = await Promise.all([
+      reportsService.update('report', { status: 'in_progress' }),
+      reportsService.update('report', { status: 'resolved' }),
+    ]);
+    expect(results.every((result) => result.success)).toBe(true);
+    expect(
+      getDb().query('SELECT old_value, new_value FROM report_history ORDER BY rowid').all()
+    ).toEqual([
+      { old_value: 'open', new_value: 'in_progress' },
+      { old_value: 'in_progress', new_value: 'resolved' },
+    ]);
+    reportHistoryRepo.insert = () => {
+      throw new Error('Write failed');
+    };
+    expect(await reportsService.update('report', { status: 'closed' })).toMatchObject({
+      code: 'UPDATE_FAILED',
+    });
+    expect(await reportsService.bulkUpdate(['report'], { status: 'closed' })).toMatchObject({
+      code: 'UPDATE_FAILED',
+    });
+    expect(reportsRepo.findByIdSync('report')?.status).toBe('resolved');
+  } finally {
+    close();
+  }
 });

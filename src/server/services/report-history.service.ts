@@ -1,4 +1,5 @@
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
+import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { Result } from '../utils/result.js';
 import type { ReportHistoryAction, ReportHistoryEntry } from '@shared/types';
@@ -21,6 +22,18 @@ export async function enrichHistoryEntry(entry: ReportHistoryEntry): Promise<Rep
     return { ...entry, oldDisplay, newDisplay };
   }
 
+  if (entry.action === 'owner_assigned' || entry.action === 'owner_removed') {
+    const ownerDisplay = (id?: string) => {
+      const reporter = id ? reportersRepo.findById(id) : null;
+      if (!reporter) return undefined;
+      return reporter.displayName ? `${reporter.displayName} (${reporter.email})` : reporter.email;
+    };
+    return {
+      ...entry,
+      oldDisplay: ownerDisplay(entry.oldValue),
+      newDisplay: ownerDisplay(entry.newValue),
+    };
+  }
   return entry;
 }
 

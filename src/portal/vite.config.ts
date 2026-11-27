@@ -1,0 +1,68 @@
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'node:path';
+import { defineConfig } from 'vitest/config';
+
+const apiProxyTarget = process.env.BUGPIN_API_PROXY_TARGET ?? 'http://localhost:4300';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      // Production redirects the bare base path, while the Vite dev server answers it with 404.
+      name: 'portal-base-redirect',
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const [pathname, query] = (request.url ?? '').split(/\?(.*)/s);
+          if (pathname !== '/reporter-portal') return next();
+          response.statusCode = 302;
+          response.setHeader('Location', `/reporter-portal/${query ? `?${query}` : ''}`);
+          response.end();
+        });
+      },
+    },
+    {
+      name: 'portal-boundary',
+      generateBundle(_options, bundle) {
+        for (const output of Object.values(bundle)) {
+          if (output.type !== 'chunk') continue;
+          for (const id of Object.keys(output.modules)) {
+            if (/[\\/]src[\\/]admin[\\/]|[\\/]@dnd-kit[\\/]/.test(id)) {
+              this.error(
+                'The reporter portal cannot include Admin Console or drag-and-drop modules'
+              );
+            }
+          }
+        }
+      },
+    },
+  ],
+  base: '/reporter-portal/',
+  resolve: {
+    alias: {
+      '@shared': path.resolve(import.meta.dirname, '../shared'),
+      '@shared-ui': path.resolve(import.meta.dirname, '../shared-ui'),
+    },
+  },
+  build: { outDir: '../../dist/portal', emptyOutDir: true, sourcemap: false },
+  server: {
+    // The default Portal Base URL is http://127.0.0.1:7310, and `localhost` can bind IPv6 only.
+    host: process.env.BUGPIN_DEV_HOST ?? '127.0.0.1',
+    port: 7310,
+    strictPort: true,
+    proxy: {
+      '/api/portal': { target: apiProxyTarget, changeOrigin: false, xfwd: false },
+      '/branding': { target: apiProxyTarget, changeOrigin: false, xfwd: false },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    execArgv:
+      Number.parseInt(process.versions.node, 10) >= 25 ? ['--no-experimental-webstorage'] : [],
+    setupFiles: ['./tests/setup.ts'],
+    include: ['./tests/**/*.test.{ts,tsx}'],
+    restoreMocks: true,
+    css: true,
+  },
+});

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { brandingApi } from '../../api/branding';
 import { renderWithQuery, screen, userEvent, waitFor } from '../utils';
+import { buildButtonColorsCss } from '@shared-ui/theme/button-colors';
 import {
   ADMIN_THEME_STYLE_ID,
   BrandingProvider,
-  buildAdminThemeCss,
   useBranding,
 } from '../../contexts/BrandingContext';
 import { mockBrandingConfig } from '../mocks/handlers';
@@ -30,11 +30,11 @@ function BrandingConsumer() {
   );
 }
 
-describe('buildAdminThemeCss', () => {
+describe('buildButtonColorsCss', () => {
   it('writes light and dark primary tokens as hex', () => {
-    const css = buildAdminThemeCss(mockBrandingConfig.adminThemeColors);
+    const css = buildButtonColorsCss(mockBrandingConfig.adminThemeColors);
     expect(css).toContain(
-      `:root:root { --primary: ${mockBrandingConfig.adminThemeColors.lightButtonColor};`
+      `:root:not(.dark) { --primary: ${mockBrandingConfig.adminThemeColors.lightButtonColor};`
     );
     expect(css).toContain(
       `:root.dark { --primary: ${mockBrandingConfig.adminThemeColors.darkButtonColor};`
@@ -45,12 +45,12 @@ describe('buildAdminThemeCss', () => {
   });
 
   it('drops values that are not six-digit hex colors', () => {
-    const css = buildAdminThemeCss({
+    const css = buildButtonColorsCss({
       ...mockBrandingConfig.adminThemeColors,
       lightButtonColor: 'red; } body { display: none',
     });
     expect(css).not.toContain('display: none');
-    expect(css).not.toMatch(/:root:root \{ --primary:/);
+    expect(css).not.toMatch(/:root:not\(\.dark\) \{ --primary:/);
   });
 });
 
@@ -64,7 +64,7 @@ describe('BrandingProvider', () => {
     );
 
     expect(await screen.findByText(mockBrandingConfig.primaryColor)).toBeInTheDocument();
-    expect(themeCss()).toBe(buildAdminThemeCss(mockBrandingConfig.adminThemeColors));
+    expect(themeCss()).toBe(buildButtonColorsCss(mockBrandingConfig.adminThemeColors));
 
     await user.click(screen.getByRole('button', { name: 'Refetch' }));
   });

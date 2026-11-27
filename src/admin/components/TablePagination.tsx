@@ -10,7 +10,7 @@ export function pageCount(total: number, pageSize: number): number {
   return Math.max(1, Math.ceil(total / pageSize));
 }
 
-export function toTablePageSize(value: string): TablePageSize | undefined {
+function toTablePageSize(value: string): TablePageSize | undefined {
   return TABLE_PAGE_SIZES.find((size) => String(size) === value);
 }
 
@@ -39,7 +39,7 @@ export function TablePagination({
         className
       )}
     >
-      <span className="tabular-nums">
+      <span>
         {total} {total === 1 ? itemLabel.singular : itemLabel.plural}
       </span>
       <div className="flex items-center gap-4">
@@ -64,7 +64,7 @@ export function TablePagination({
             </SelectContent>
           </Select>
         </div>
-        <span className="tabular-nums">
+        <span>
           Page {Math.min(page, pages)} of {pages}
         </span>
         <div className="flex items-center gap-1">

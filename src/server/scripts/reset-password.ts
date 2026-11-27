@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  initDatabase();
+  await initDatabase();
   await initSchema();
   await runMigrations();
 

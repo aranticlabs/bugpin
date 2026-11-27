@@ -436,7 +436,7 @@ describe('board positions', () => {
     const migration = fs.readFileSync(
       path.join(
         import.meta.dir,
-        '../../src/server/database/migrations/014_add_report_board_position.sql'
+        '../../src/server/database/migrations/012_add_report_board_position.sql'
       ),
       'utf8'
     );

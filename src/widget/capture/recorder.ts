@@ -12,6 +12,8 @@ export interface RecordingResult {
   width: number;
   height: number;
   hasAudio: boolean;
+  recordingQuality?: RecordingQuality;
+  capturedAt?: string;
 }
 
 export type AutoStopReason = 'duration' | 'size' | 'ended' | 'error';
@@ -77,6 +79,21 @@ export function isDisplayCaptureAllowed(): boolean {
   } catch {
     return true;
   }
+}
+
+const SCREEN_ASPECT_TOLERANCE = 0.005;
+
+// Firefox reports no displaySurface, so a capture with the screen's aspect ratio counts as the whole
+// screen. Downscaling keeps the ratio, while window frames and the menu bar usually change it.
+export function isWholeScreenCapture(track: MediaStreamTrack | undefined): boolean {
+  if (!track) return false;
+  const { displaySurface, width, height } = track.getSettings();
+  if (displaySurface) return displaySurface === 'monitor';
+  const screenWidth = globalThis.screen?.width;
+  const screenHeight = globalThis.screen?.height;
+  if (!width || !height || !screenWidth || !screenHeight) return false;
+  const ratio = width / height / (screenWidth / screenHeight);
+  return Math.abs(ratio - 1) <= SCREEN_ASPECT_TOLERANCE;
 }
 
 export function isRecordingSupported(): boolean {
@@ -187,6 +204,7 @@ export function startRecording(
   }
 
   const chunks: Blob[] = [];
+  const capturedAt = new Date().toISOString();
   const videoTrack = stream.getVideoTracks()[0];
   let lastWidth = 0;
   let lastHeight = 0;
@@ -264,6 +282,8 @@ export function startRecording(
       width: lastWidth,
       height: lastHeight,
       hasAudio,
+      recordingQuality: options.quality ?? DEFAULT_RECORDING_QUALITY,
+      capturedAt,
     });
   };
 

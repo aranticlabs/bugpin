@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { normalizeMimeType } from '@shared/mime.js';
+import type { MediaMetadata } from '@shared/media-metadata';
 
 const DB_NAME = 'bugpin-recordings';
 const DB_VERSION = 1;
@@ -11,7 +12,10 @@ const STORAGE_USED_KEY = 'bugpin-recording-storage-used';
 const RECOVERY_LIVENESS_MS = 90 * 1000;
 const RECORDING_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface RecordingSessionRecord {
+interface RecordingSessionRecord extends Pick<
+  MediaMetadata,
+  'recordingQuality' | 'width' | 'height'
+> {
   id: string;
   apiKey: string;
   ownerEmail?: string;
@@ -39,14 +43,20 @@ interface RecordingStoreDB extends DBSchema {
   };
 }
 
-export interface BeginRecordingInput {
+export interface BeginRecordingInput extends Pick<
+  MediaMetadata,
+  'recordingQuality' | 'width' | 'height'
+> {
   apiKey: string;
   ownerEmail?: string;
   mimeType: string;
   hasAudio: boolean;
 }
 
-export interface RecoveredRecording {
+export interface RecoveredRecording extends Pick<
+  MediaMetadata,
+  'recordingQuality' | 'width' | 'height'
+> {
   sessionId: string;
   blob: Blob;
   mimeType: string;
@@ -211,6 +221,9 @@ async function begin(input: BeginRecordingInput): Promise<string | null> {
       mimeType: normalizeMimeType(input.mimeType),
       startedAt: new Date().toISOString(),
       hasAudio: input.hasAudio,
+      recordingQuality: input.recordingQuality,
+      width: input.width,
+      height: input.height,
     });
     sessionApiKeys.set(sessionId, input.apiKey);
     heartbeatTimes.set(sessionId, Date.now());
@@ -332,6 +345,9 @@ async function recover(apiKey: string, ownerEmail?: string): Promise<RecoveredRe
         durationMs: Math.max(...chunks.map((chunk) => chunk.durationMs)),
         startedAt: session.startedAt,
         hasAudio: session.hasAudio,
+        recordingQuality: session.recordingQuality,
+        width: session.width,
+        height: session.height,
       };
     }
     return null;

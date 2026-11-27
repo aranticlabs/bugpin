@@ -1,13 +1,18 @@
 import { Hono, Context, Next } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
+import { requestBodyLimit } from './middleware/body-limit.js';
+import { internalRoutes } from './routes/internal.js';
 import { createApiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
+import { proxyTrust } from './middleware/proxy-trust.js';
+import { hostRouting } from './middleware/host-routing.js';
+import { portalCsp } from './middleware/portal-csp.js';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
 import { widgetCors } from './middleware/cors.js';
-import { serveAdmin, serveBranding } from './routes/static.js';
+import { serveAdmin, serveBranding, servePortal } from './routes/static.js';
 
 // Extend Hono context with request ID
 declare module 'hono' {
@@ -21,7 +26,10 @@ export function createApp(): Hono {
 
   // Global Middleware
 
-  // HTTPS enforcement (must be first to redirect before other processing)
+  app.use('*', proxyTrust);
+  app.use('*', hostRouting);
+
+  // Host validation precedes redirects so unknown hosts cannot influence their destination.
   app.use('*', httpsEnforcement);
 
   // Security headers (with exception for widget.js to allow cross-origin loading)
@@ -62,7 +70,11 @@ export function createApp(): Hono {
   // CORS applies to the public widget API only; every other route stays same-origin
   app.use('/api/widget/*', widgetCors);
 
+  app.use('*', requestBodyLimit);
+
   // Routes
+
+  app.route('/internal', internalRoutes);
 
   // Health check
   app.get('/health', (c) => {
@@ -83,6 +95,10 @@ export function createApp(): Hono {
   app.get('/admin/branding/*', serveBranding);
   app.all('/admin', serveAdmin);
   app.all('/admin/*', serveAdmin);
+  app.use('/reporter-portal', portalCsp);
+  app.use('/reporter-portal/*', portalCsp);
+  app.get('/reporter-portal', servePortal);
+  app.get('/reporter-portal/*', servePortal);
 
   // Serve widget script
   app.get('/widget.js', async (c) => {
@@ -109,6 +125,7 @@ export function createApp(): Hono {
 
   // Root redirect
   app.get('/', (c) => {
+    if (c.get('portalHost')) return c.redirect('/reporter-portal/');
     if (config.isProd) {
       return c.redirect('/admin/');
     }

@@ -1,3 +1,4 @@
+import { realtimeService } from './realtime.service.js';
 import {
   InvalidReportCursorError,
   reportsRepo,
@@ -7,7 +8,10 @@ import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import {
   saveFile,
+  deleteFile,
   deleteReportFiles,
+  isReportDeleting,
+  withReportDeletionFence,
   createStoredFileHandle,
   type StoredFileHandle,
   validateFile,
@@ -15,6 +19,7 @@ import {
 } from '../storage/files.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
+import { normalizeEmail } from '../utils/email-normalize.js';
 import { logger } from '../utils/logger.js';
 import { checkProjectLicense } from '../utils/project-license.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
@@ -24,7 +29,10 @@ import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
 import { reportHistoryService } from './report-history.service.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
+import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
+import { reporterOwnershipService } from './reporter-ownership.service.js';
 import { normalizeUrl } from '../utils/validators.js';
+import { effectiveReporterPortal } from '@shared/reporter-portal';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
   Report,
@@ -41,10 +49,11 @@ import type {
   LocaleCode,
   Project,
 } from '@shared/types';
+import type { MediaMetadata } from '@shared/media-metadata';
 
 // Types
 
-export interface MediaFile {
+export interface MediaFile extends MediaMetadata {
   data: Buffer | Uint8Array;
   filename: string;
   mimeType: string;
@@ -308,8 +317,11 @@ async function saveSubmittedFiles(
         path: savedFile.path,
         mimeType: savedFile.mimeType,
         sizeBytes: savedFile.sizeBytes,
-        width: savedFile.width,
-        height: savedFile.height,
+        width: savedFile.width ?? file.width,
+        height: savedFile.height ?? file.height,
+        capturedAt: file.capturedAt,
+        durationMs: fileType === 'video' ? file.durationMs : undefined,
+        recordingQuality: file.isRecording ? file.recordingQuality : undefined,
       });
 
       logger.info('Submitted file saved for report', {
@@ -386,6 +398,10 @@ async function createForProject(
     }
   }
 
+  const portalEnabled = effectiveReporterPortal(
+    project.settings,
+    await settingsCacheService.getAll()
+  ).enabled;
   const reportData: CreateReportData = {
     projectId: project.id,
     source: options.source,
@@ -398,6 +414,10 @@ async function createForProject(
     reporterEmail: normalizeOptionalText(input.reporterEmail),
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
+    claimableEmail:
+      options.source === 'widget' && portalEnabled && input.reporterEmail?.trim()
+        ? normalizeEmail(input.reporterEmail)
+        : undefined,
     submissionId: input.submissionId,
   };
 
@@ -487,6 +507,7 @@ async function createForProject(
       logger.error('Failed to check for auto-sync integration', error, { projectId: project.id });
     });
 
+  realtimeService.publish('report.updated', { reportId: report.id, projectId: report.projectId });
   return Result.ok(report);
 }
 
@@ -496,6 +517,7 @@ type ReportChanges = Record<string, { old: unknown; new: unknown }>;
 
 /** Webhooks, notifications, and GitHub sync for committed report changes; none of them block */
 function announceReportChanges(report: Report, changes: ReportChanges): void {
+  realtimeService.publish('report.updated', { reportId: report.id, projectId: report.projectId });
   // Trigger webhooks via EE hooks if there are changes (async, don't block)
   if (Object.keys(changes).length > 0) {
     getEEHooks()
@@ -665,6 +687,23 @@ function placeOnBoard(id: string, target: ReportBoardMove): void {
 }
 
 export const reportsService = {
+  reporterActivityCount(): Result<number> {
+    return Result.ok(reportsRepo.countReporterActivity());
+  },
+
+  async acknowledgeReporterActivity(id: string, displayedAt: string): Promise<Result<void>> {
+    const report = await reportsRepo.findById(id);
+    if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
+    reportsRepo.acknowledgeReporterActivity(id, displayedAt);
+    realtimeService.publish('reporter_activity.changed', {
+      reportId: id,
+      projectId: report.projectId,
+    });
+    return Result.ok(undefined);
+  },
+
   /** The report an earlier widget submission with this id created, if any */
   findIdByWidgetSubmission(projectId: string, submissionId: string): string | null {
     return reportsRepo.findIdBySubmission(projectId, submissionId);
@@ -770,10 +809,14 @@ export const reportsService = {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
 
-    const files = await filesRepo.findByReportId(id);
+    const files = await filesRepo.findOriginalByReportId(id);
 
     return Result.ok({
-      report: { ...report, licenseLocked: !checkProjectLicense(report.projectId).success },
+      report: {
+        ...report,
+        licenseLocked: !checkProjectLicense(report.projectId).success,
+        owner: Result.unwrap(reporterOwnershipService.describeOwner(report)),
+      },
       files,
     });
   },
@@ -812,109 +855,54 @@ export const reportsService = {
    * Update a report
    */
   async update(id: string, input: UpdateReportInput, userId?: string): Promise<Result<Report>> {
-    const existing = await reportsRepo.findById(id);
+    let result: Result<{ report: Report; changes: ReportChanges }>;
+    try {
+      const assignee = await validateAssignee(input.assignedTo);
+      result = reportsRepo.transaction((): Result<{ report: Report; changes: ReportChanges }> => {
+        const existing = reportsRepo.findByIdSync(id);
+        if (!existing) return Result.fail('Report not found', 'NOT_FOUND');
+        const access = checkProjectLicense(existing.projectId);
+        if (!access.success) return access;
+        if (!assignee.success) return assignee;
 
-    if (!existing) {
-      return Result.fail('Report not found', 'NOT_FOUND');
-    }
+        const updates: Partial<Report> = {};
+        if (input.title !== undefined) {
+          if (input.title.trim().length < 4)
+            return Result.fail('Title must be at least 4 characters', 'INVALID_TITLE');
+          if (input.title.length > 500)
+            return Result.fail('Title must be at most 500 characters', 'INVALID_TITLE');
+          updates.title = input.title.trim();
+        }
+        if (input.description !== undefined) updates.description = input.description.trim();
+        if (input.status !== undefined) Object.assign(updates, statusUpdates(input.status, userId));
+        if (input.priority !== undefined) updates.priority = input.priority;
+        if (input.assignedTo !== undefined) updates.assignedTo = input.assignedTo ?? undefined;
 
-    const access = checkProjectLicense(existing.projectId);
-    if (!access.success) return access;
-
-    // Validate title if provided
-    if (input.title !== undefined) {
-      if (input.title.trim().length < 4) {
-        return Result.fail('Title must be at least 4 characters', 'INVALID_TITLE');
-      }
-      if (input.title.length > 200) {
-        return Result.fail('Title must be at most 200 characters', 'INVALID_TITLE');
-      }
-    }
-
-    // Build update object
-    const updates: Partial<Report> = {};
-
-    if (input.title !== undefined) {
-      updates.title = input.title.trim();
-    }
-
-    if (input.description !== undefined) {
-      updates.description = input.description.trim();
-    }
-
-    if (input.status !== undefined) {
-      Object.assign(updates, statusUpdates(input.status, userId));
-    }
-
-    if (input.priority !== undefined) {
-      updates.priority = input.priority;
-    }
-
-    if (input.assignedTo !== undefined) {
-      const assigneeValidation = await validateAssignee(input.assignedTo);
-      if (!assigneeValidation.success) {
-        return assigneeValidation;
-      }
-
-      updates.assignedTo = input.assignedTo ?? undefined;
-    }
-
-    const report = await reportsRepo.update(id, updates);
-
-    if (!report) {
+        reportsRepo.applyUpdate(id, updates, Boolean(userId));
+        const report = reportsRepo.findByIdSync(id);
+        if (!report) throw new Error('Updated report not found');
+        const changes: ReportChanges = {};
+        for (const [field, action] of [
+          ['status', 'status_changed'],
+          ['priority', 'priority_changed'],
+          ['assignedTo', 'assignee_changed'],
+        ] as const) {
+          const oldValue = existing[field] ?? null;
+          const newValue = report[field] ?? null;
+          if (oldValue === newValue) continue;
+          changes[field] = { old: oldValue, new: newValue };
+          reportHistoryRepo.insert({ reportId: id, userId, action, oldValue, newValue });
+        }
+        return Result.ok({ report, changes });
+      });
+    } catch (error) {
+      logger.error('Failed to update report', error, { reportId: id });
       return Result.fail('Failed to update report', 'UPDATE_FAILED');
     }
-
-    logger.info('Report updated', { reportId: id, updates: Object.keys(updates) });
-
-    // Build changes object for webhooks
-    const changes: ReportChanges = {};
-    if (input.status !== undefined && input.status !== existing.status) {
-      changes.status = { old: existing.status, new: input.status };
-    }
-    if (input.priority !== undefined && input.priority !== existing.priority) {
-      changes.priority = { old: existing.priority, new: input.priority };
-    }
-    const previousAssignee = existing.assignedTo ?? null;
-    const nextAssignee =
-      input.assignedTo !== undefined ? (input.assignedTo ?? null) : previousAssignee;
-    if (input.assignedTo !== undefined && nextAssignee !== previousAssignee) {
-      changes.assignedTo = { old: previousAssignee, new: nextAssignee };
-    }
-
-    if (changes.status) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'status_changed',
-        changes.status.old as string,
-        changes.status.new as string
-      );
-    }
-
-    if (changes.priority) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'priority_changed',
-        changes.priority.old as string,
-        changes.priority.new as string
-      );
-    }
-
-    if (changes.assignedTo) {
-      await reportHistoryService.record(
-        id,
-        userId ?? null,
-        'assignee_changed',
-        (changes.assignedTo.old as string | null) ?? null,
-        (changes.assignedTo.new as string | null) ?? null
-      );
-    }
-
-    announceReportChanges(report, changes);
-
-    return Result.ok(report);
+    if (!result.success) return result;
+    logger.info('Report updated', { reportId: id, updates: Object.keys(input) });
+    announceReportChanges(result.value.report, result.value.changes);
+    return Result.ok(result.value.report);
   },
 
   /**
@@ -973,7 +961,11 @@ export const reportsService = {
         }
         existing.forEach((report, index) => {
           if (report.status !== target.status) {
-            reportsRepo.applyUpdate(report.id, statusUpdates(target.status, userId));
+            reportsRepo.applyUpdate(
+              report.id,
+              statusUpdates(target.status, userId),
+              Boolean(userId)
+            );
             reportHistoryRepo.insert({
               reportId: report.id,
               userId: userId ?? null,
@@ -1003,6 +995,11 @@ export const reportsService = {
       if (before.status !== target.status) {
         logger.info('Report updated', { reportId: report.id, updates: ['status'] });
         announceReportChanges(report, { status: { old: before.status, new: target.status } });
+      } else {
+        realtimeService.publish('report.updated', {
+          reportId: report.id,
+          projectId: report.projectId,
+        });
       }
     }
     return Result.ok(moved);
@@ -1022,20 +1019,23 @@ export const reportsService = {
     if (!access.success) return access;
 
     try {
-      await deleteReportFiles(id);
+      const deleted = await withReportDeletionFence(id, async () => {
+        await deleteReportFiles(id);
+        await filesRepo.deleteByReportId(id);
+        const owner = reporterOwnershipRepo.findByReportId(id);
+        const removed = await reportsRepo.delete(id);
+        if (removed && owner?.reporterId)
+          realtimeService.invalidatePortalAccess({ reporterId: owner.reporterId });
+        return removed;
+      });
+      if (!deleted) return Result.fail('Report not found', 'NOT_FOUND');
     } catch (error) {
-      logger.error('Failed to delete report files', error, { reportId: id });
+      logger.error('Failed to delete report', error, { reportId: id });
       return Result.fail(
         'Stored files could not be deleted; retry deletion',
         'STORAGE_DELETE_FAILED'
       );
     }
-
-    // Delete file records (cascade will handle this, but be explicit)
-    await filesRepo.deleteByReportId(id);
-
-    // Delete report
-    await reportsRepo.delete(id);
 
     // Trigger webhooks via EE hooks after deletion (async, don't block)
     getEEHooks()
@@ -1050,6 +1050,7 @@ export const reportsService = {
     });
 
     logger.info('Report deleted', { reportId: id });
+    realtimeService.publish('report.updated', { reportId: id, projectId: existing.projectId });
     return Result.ok(undefined);
   },
 
@@ -1087,9 +1088,8 @@ export const reportsService = {
 
     for (const id of ids) {
       const result = await this.update(id, updates, userId);
-      if (result.success) {
-        count += 1;
-      }
+      if (result.success) count += 1;
+      else if (result.code === 'UPDATE_FAILED') return result;
     }
 
     logger.info('Bulk update completed', { count, updates: Object.keys(updates) });
@@ -1113,6 +1113,9 @@ export const reportsService = {
     reportId: string,
     file: { data: Buffer | Uint8Array; filename: string; mimeType: string; type: FileType }
   ): Promise<Result<void>> {
+    if (isReportDeleting(reportId)) {
+      return Result.fail('Report not found', 'NOT_FOUND');
+    }
     const report = await reportsRepo.findById(reportId);
 
     if (!report) {
@@ -1139,6 +1142,7 @@ export const reportsService = {
       return Result.fail(validation.error, validation.code);
     }
 
+    let unrecordedPath: string | undefined;
     try {
       const savedFile = await saveFile({
         reportId,
@@ -1148,6 +1152,12 @@ export const reportsService = {
         data: file.data,
       });
 
+      if (isReportDeleting(reportId)) {
+        await deleteFile(savedFile.path);
+        return Result.fail('Report not found', 'NOT_FOUND');
+      }
+
+      unrecordedPath = savedFile.path;
       await filesRepo.create({
         reportId,
         type: file.type,
@@ -1159,26 +1169,31 @@ export const reportsService = {
         height: savedFile.height,
       });
 
+      unrecordedPath = undefined;
       logger.info('File added to report', { reportId, fileId: savedFile.id, type: file.type });
       return Result.ok(undefined);
     } catch (error) {
+      if (unrecordedPath) await deleteFile(unrecordedPath);
       logger.error('Failed to add file to report', error, { reportId });
       return Result.fail('Failed to save file', 'FILE_SAVE_FAILED');
     }
   },
 
   /**
-   * Get all files for a report
+   * Get original files for a report
    */
   async getReportFiles(reportId: string): Promise<Result<FileRecord[]>> {
-    const files = await filesRepo.findByReportId(reportId);
+    const files = await filesRepo.findOriginalByReportId(reportId);
     return Result.ok(files);
   },
 
-  async serveFile(fileId: string): Promise<Result<{ file: FileRecord; handle: StoredFileHandle }>> {
+  async serveFile(
+    reportId: string,
+    fileId: string
+  ): Promise<Result<{ file: FileRecord; handle: StoredFileHandle }>> {
     const file = await filesRepo.findById(fileId);
 
-    if (!file) {
+    if (!file || file.reportId !== reportId) {
       return Result.fail('File not found', 'NOT_FOUND');
     }
 

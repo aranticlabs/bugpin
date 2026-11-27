@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
-import { http, HttpResponse } from 'msw';
-import { Routes, Route } from 'react-router-dom';
-import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { fireEvent } from '@testing-library/react';
+import { http, HttpResponse, delay } from 'msw';
+import { Link, Routes, Route } from 'react-router-dom';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
 import { ReportDetail } from '../../../pages/workspace/ReportDetail';
 import { server } from '../../mocks/server';
-import { mockReports } from '../../mocks/handlers';
+import {
+  mockConversationMessages,
+  mockStaffConversationPortal,
+} from '../../mocks/reporter-messages';
+import { mockReports, mockUsers } from '../../mocks/handlers';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -16,7 +21,303 @@ vi.mock('sonner', () => ({
 
 import { toast } from 'sonner';
 
+afterEach(() => vi.clearAllMocks());
+
+function renderReportDetail() {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+}
+
 describe('ReportDetail', () => {
+  it.each([true, false])(
+    'describes portal visibility using project activity (%s)',
+    async (isActive) => {
+      server.use(
+        http.get('/api/reports/report-1', () =>
+          HttpResponse.json({
+            success: true,
+            report: { ...mockReports[0], reporterId: 'rptr_jane' },
+            files: [],
+          })
+        ),
+        http.get('/api/reports/:id/reporter-messages', () =>
+          HttpResponse.json({
+            success: true,
+            messages: [],
+            portal: {
+              ...mockStaffConversationPortal,
+              portalEnabled: true,
+              projectActive: isActive,
+              visible: isActive,
+            },
+          })
+        )
+      );
+      renderReportDetail();
+      const expected = isActive
+        ? 'Visible to the reporter in the portal'
+        : 'Project inactive. The conversation is not visible in the portal.';
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      if (!isActive)
+        expect(screen.queryByText('Visible to the reporter in the portal')).not.toBeInTheDocument();
+    }
+  );
+
+  it.each(['editor', 'viewer'] as const)(
+    'shows the server portal state to a %s without requesting admin-only settings',
+    async (role) => {
+      const adminRequests: string[] = [];
+      server.use(
+        http.get('/api/auth/me', () =>
+          HttpResponse.json({ success: true, authenticated: true, user: mockUsers[role] })
+        ),
+        http.get('/api/settings', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/projects/:id', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/integrations', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/reports/report-1', () =>
+          HttpResponse.json({
+            success: true,
+            report: { ...mockReports[0], reporterId: 'rptr_jane' },
+            files: [],
+          })
+        ),
+        http.get('/api/reports/:id/reporter-messages', () =>
+          HttpResponse.json({
+            success: true,
+            messages: [],
+            portal: {
+              ...mockStaffConversationPortal,
+              portalEnabled: true,
+              visible: true,
+              messagingEnabled: role === 'editor',
+            },
+          })
+        )
+      );
+      renderReportDetail();
+      expect(await screen.findByText('Visible to the reporter in the portal')).toBeInTheDocument();
+      if (role === 'viewer')
+        expect(screen.getByText(/Messaging is disabled for this project/)).toBeInTheDocument();
+      else expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toBeInTheDocument();
+      expect(adminRequests).toEqual([]);
+    }
+  );
+
+  it('acknowledges reporter activity when the conversation is shown and refreshes its indicator', async () => {
+    let active = true;
+    let acknowledgements = 0;
+    server.use(
+      http.get('/api/reports/report-1', () =>
+        HttpResponse.json({
+          success: true,
+          report: {
+            ...mockReports[0],
+            hasNewReporterActivity: active,
+            lastReporterActivityAt: '2026-11-09T10:00:00.000Z',
+          },
+          files: [],
+        })
+      ),
+      http.post('/api/reports/report-1/reporter-activity/seen', async ({ request }) => {
+        expect(await request.json()).toEqual({
+          lastReporterActivityAt: '2026-11-09T10:00:00.000Z',
+        });
+        acknowledgements++;
+        active = false;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    await waitFor(() => expect(acknowledgements).toBe(1));
+    await waitFor(() =>
+      expect(screen.queryByRole('img', { name: 'New reporter activity' })).not.toBeInTheDocument()
+    );
+    expect(acknowledgements).toBe(1);
+  });
+
+  it('shows the Owner field and refreshes it after removal', async () => {
+    let hasOwner = true;
+    server.use(
+      http.get('/api/reports/report-1', () =>
+        HttpResponse.json({
+          success: true,
+          report: {
+            ...mockReports[0],
+            reporterId: hasOwner ? 'rptr_jane' : undefined,
+            owner: {
+              reporterId: hasOwner ? 'rptr_jane' : null,
+              claimableEmail: null,
+              correspondentEmail: 'contact@example.com',
+              reporter: hasOwner
+                ? {
+                    id: 'rptr_jane',
+                    email: 'jane@example.com',
+                    displayName: 'Jane',
+                    lastLoginAt: null,
+                  }
+                : null,
+            },
+          },
+          files: [],
+        })
+      ),
+      http.delete('/api/reports/report-1/owner', () => {
+        hasOwner = false;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    expect(await screen.findByText('j***@example.com')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Remove owner' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove owner' })
+    );
+    expect(await screen.findByText('No owner')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove owner' })).not.toBeInTheDocument();
+  });
+
+  beforeEach(() => vi.clearAllMocks());
+  it('places the conversation after Description and keeps it enabled when update emails are off', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    const conversation = await screen.findByRole('region', { name: 'Conversation' });
+    const description = screen.getByText('The submit button does not respond to clicks');
+    expect(
+      description.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(conversation.parentElement?.parentElement).toContainElement(description);
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toBeInTheDocument();
+  });
+
+  it('sends a resolution message through the shared conversation and refreshes the thread', async () => {
+    const sent: unknown[] = [];
+    let messages: typeof mockConversationMessages = [];
+    server.use(
+      http.get('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({ success: true, messages })
+      ),
+      http.post('/api/reports/:id/reporter-messages', async ({ request }) => {
+        const body = (await request.json()) as { message: string; ccSender: boolean };
+        sent.push(body);
+        const message = { ...mockConversationMessages[0], message: body.message, files: [] };
+        messages = [message];
+        return HttpResponse.json({ success: true, reporterMessage: message });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/reports/:id" element={<ReportDetail />} />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    await screen.findByRole('region', { name: 'Conversation' });
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    await user.type(
+      screen.getByPlaceholderText('Optional message to send to the reporter...'),
+      'Resolved with a workaround'
+    );
+    await user.click(screen.getAllByRole('checkbox', { name: 'Send me a copy' })[1]);
+    await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+    await waitFor(() =>
+      expect(sent).toEqual([{ message: 'Resolved with a workaround', ccSender: true }])
+    );
+    expect(await screen.findByText('Resolved with a workaround')).toBeInTheDocument();
+  });
+
+  it('isolates resolution failures from the composer and resets them on report navigation', async () => {
+    server.use(
+      http.post('/api/reports/:id/reporter-messages', async () => {
+        await delay(100);
+        return HttpResponse.json({ message: 'Resolution delivery failed' }, { status: 400 });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/reports/:id"
+          element={
+            <>
+              <Link to="/reports/report-3">Next report</Link>
+              <ReportDetail />
+            </>
+          }
+        />
+      </Routes>,
+      { initialEntries: ['/reports/report-1'] }
+    );
+    const conversation = await screen.findByRole('region', { name: 'Conversation' });
+    await user.type(within(conversation).getByRole('textbox'), 'Composer draft');
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    await user.type(
+      screen.getByPlaceholderText('Optional message to send to the reporter...'),
+      'Resolution draft'
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+    expect(within(conversation).getByRole('textbox')).toBeEnabled();
+    expect(within(conversation).getByRole('button', { name: 'Send Message' })).toBeEnabled();
+    expect(await screen.findByText('Resolution delivery failed')).toBeInTheDocument();
+    expect(within(conversation).queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+      'Resolution draft'
+    );
+    expect(within(conversation).getByRole('textbox')).toHaveValue('Composer draft');
+    expect(toast.error).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('link', { name: 'Next report' }));
+    await screen.findByText(mockReports[2].title);
+    expect(screen.queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('Optional message to send to the reporter...')
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toHaveValue('');
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByText('Resolved'));
+    await user.click(
+      await screen.findByRole('button', { name: 'Send a message to the reporter?' })
+    );
+    expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+      ''
+    );
+    expect(screen.queryByText('Resolution delivery failed')).not.toBeInTheDocument();
+  });
+
   it('records the report as recently viewed once it loads', async () => {
     const viewed: string[] = [];
     server.use(
@@ -94,8 +395,26 @@ describe('ReportDetail', () => {
           success: true,
           report,
           files: [
-            { id: 'file-1', mimeType: 'image/png', filename: 'screen.png' },
-            { id: 'file-2', mimeType: 'video/mp4', filename: 'clip.mp4' },
+            {
+              id: 'file-1',
+              mimeType: 'image/png',
+              filename: 'screen.png',
+              width: 800,
+              height: 600,
+              sizeBytes: 1048576,
+              capturedAt: '2026-11-08T14:00:00Z',
+            },
+            {
+              id: 'file-2',
+              mimeType: 'video/mp4',
+              filename: 'clip.mp4',
+              width: 1920,
+              height: 1080,
+              durationMs: 24000,
+              sizeBytes: 2097152,
+              recordingQuality: 'high',
+              capturedAt: '2026-11-08T14:01:00Z',
+            },
           ],
         });
       })
@@ -114,6 +433,25 @@ describe('ReportDetail', () => {
     expect(video).toHaveAttribute('preload', 'metadata');
     expect(video).toHaveClass('max-h-50');
     expect(video).toHaveClass('object-contain');
+    const imageFooter = screen.getByText('800 x 600 · 1.0 MB').parentElement;
+    const videoFooter = screen.getByText('High · 1920 x 1080 · 0:24 · 2.0 MB').parentElement;
+    expect(imageFooter).toHaveClass('text-xs', 'text-muted-foreground', 'border-t', 'flex-wrap');
+    expect(videoFooter?.className).toBe(imageFooter?.className);
+    const imageButton = screen.getByRole('img', { name: 'screen.png' }).closest('button');
+    expect(imageButton).toHaveClass(
+      'relative',
+      'block',
+      'focus-visible:outline-2',
+      'focus-visible:-outline-offset-2',
+      'focus-visible:outline-primary'
+    );
+    Object.defineProperties(video, {
+      videoWidth: { value: 1280, configurable: true },
+      videoHeight: { value: 720, configurable: true },
+      duration: { value: 65, configurable: true },
+    });
+    fireEvent.loadedMetadata(video!);
+    expect(screen.getByText('High · 1280 x 720 · 1:05 · 2.0 MB')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'screen.png' })).toHaveClass('max-h-50');
 
     await user.click(screen.getByRole('img', { name: 'screen.png' }));
@@ -238,4 +576,88 @@ describe('ReportDetail', () => {
     expect(screen.getByText('Manual Report')).toBeInTheDocument();
     expect(screen.queryByText('Environment')).not.toBeInTheDocument();
   });
+});
+
+it('pre-checks resolution access, preserves the draft on cancel, and sends explicit confirmation', async () => {
+  const sent: unknown[] = [];
+  server.use(
+    http.get('/api/reports/:id/reporter-messages', () =>
+      HttpResponse.json({
+        success: true,
+        messages: [],
+        portal: { ...mockStaffConversationPortal, requiresPortalAccessConfirmation: true },
+      })
+    ),
+    http.post('/api/reports/:id/reporter-messages', async ({ request }) => {
+      sent.push(await request.json());
+      return HttpResponse.json({ success: true, reporterMessage: mockConversationMessages[0] });
+    })
+  );
+  const user = userEvent.setup();
+  renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+  await screen.findByRole('region', { name: 'Conversation' });
+  await user.click(screen.getAllByRole('combobox')[0]);
+  await user.click(await screen.findByText('Resolved'));
+  await user.click(await screen.findByRole('button', { name: 'Send a message to the reporter?' }));
+  await user.type(
+    screen.getByPlaceholderText('Optional message to send to the reporter...'),
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  let dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  expect(sent).toEqual([]);
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  await user.click(within(dialog).getByRole('button', { name: 'Grant access and send' }));
+  await waitFor(() =>
+    expect(sent).toEqual([
+      { message: 'Resolution draft', ccSender: false, confirmPortalAccess: true },
+    ])
+  );
+});
+
+it('suppresses the expected resolution confirmation error and resets it on cancel', async () => {
+  let sends = 0;
+  server.use(
+    http.post('/api/reports/:id/reporter-messages', () => {
+      sends++;
+      return HttpResponse.json(
+        { error: 'CONFIRMATION_REQUIRED', message: 'Expected confirmation control flow' },
+        { status: 409 }
+      );
+    })
+  );
+  const user = userEvent.setup();
+  renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+  await screen.findByRole('region', { name: 'Conversation' });
+  await user.click(screen.getAllByRole('combobox')[0]);
+  await user.click(await screen.findByText('Resolved'));
+  await user.click(await screen.findByRole('button', { name: 'Send a message to the reporter?' }));
+  await user.type(
+    screen.getByPlaceholderText('Optional message to send to the reporter...'),
+    'Resolution draft'
+  );
+  await user.click(screen.getAllByRole('button', { name: 'Send Message' })[1]);
+  const dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+  expect(screen.queryByText('Expected confirmation control flow')).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(sends).toBe(1);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Optional message to send to the reporter...')).toHaveValue(
+    'Resolution draft'
+  );
 });

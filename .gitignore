@@ -17,6 +17,8 @@ uploads/
 # Environment variables
 .env
 .env.*
+!.env.example
+!deploy/.env.portal-host.example
 
 # Scripts with credentials
 /scripts/
@@ -38,6 +40,8 @@ Thumbs.db
 
 # AI agent files
 .claude/
+.cursor/
+.codex/
 .codegraph/
 CLAUDE.md
 AGENTS.md
@@ -46,12 +50,10 @@ GEMINI.md
 # Obsidian files
 .obsidian/
 
-# Build automation
-Makefile
-
 # Development docs
 docs-dev/
-src/admin/prototypes/
+/src/admin/prototypes/
+
 # Testing
 coverage/
 
@@ -67,3 +69,7 @@ temp/
 # Vite
 .vite/
 .cache/
+
+# Browser test artifacts
+playwright-report/
+test-results/

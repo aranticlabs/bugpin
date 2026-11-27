@@ -9,9 +9,7 @@ const nl: WidgetCatalog = {
   'dialog.title': 'Een bug melden',
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Schermafbeeldingen',
-  'dialog.tabs.mediaWithCount': 'Schermafbeeldingen ({count})',
   'dialog.tabs.recording': 'Opnames',
-  'dialog.tabs.recordingWithCount': 'Opnames ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Korte beschrijving van het probleem',
@@ -23,6 +21,8 @@ const nl: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Uw naam',
   'dialog.fields.email.label': 'E-mail (optioneel)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Met je e-mailadres kun je deze melding volgen in het Meldersportaal.',
 
   'dialog.priority.highest': 'Hoogste',
   'dialog.priority.high': 'Hoog',
@@ -62,13 +62,21 @@ const nl: WidgetCatalog = {
   'screenshot.privacyTip':
     'Tip: gebruik het annotatiegereedschap om gevoelige gegevens te verbergen voordat u verzendt.',
   'screenshot.capturing': 'Bezig met vastleggen...',
-  'screenshot.capture': 'Schermafbeelding maken',
+  'screenshot.capture': 'Screenshottool openen',
   'screenshot.quality.label': 'Opnamekwaliteit verlagen',
   'screenshot.quality.activeIndicator': 'Opnamekwaliteit verlaagd',
   'screenshot.quality.tooltip':
     'Vastleggen met 1x pixeldichtheid. Gebruik dit als je schermafbeelding te groot is om te versturen.',
   'screenshot.dropzone.title': 'Sleep bestanden hierheen',
   'screenshot.dropzone.subtitle': 'of klik om te bladeren',
+  'screenshot.dropzone.subtitlePaste': 'of klik om te bladeren, of plak ({shortcut})',
+  'screenshot.bar.capture': 'Vastleggen',
+  'screenshot.bar.timerLabel': 'Vertraging',
+  'screenshot.bar.timerOff': 'Uit',
+  'screenshot.bar.timerShort': '{seconds} s',
+  'screenshot.bar.timerOption': '{seconds} seconden',
+  'screenshot.bar.countdown': 'Vastleggen over {seconds}',
+  'screenshot.bar.cancel': 'Annuleren',
   'screenshot.addMore': 'Meer toevoegen',
   'screenshot.alt': 'Schermafbeelding',
   'screenshot.badge.annotated': 'Geannoteerd',
@@ -77,6 +85,9 @@ const nl: WidgetCatalog = {
   'screenshot.action.download': 'Downloaden',
   'screenshot.action.remove': 'Verwijderen',
   'screenshot.helperText': 'Ondersteund: PNG, JPG, GIF, WebP (max {imageSize}MB)',
+  'recording.quality.low': 'Laag',
+  'recording.quality.standard': 'Standaard',
+  'recording.quality.high': 'Hoog',
   'recording.helperText': 'Ondersteund: MP4, WebM, MOV (max {videoSize}MB)',
 
   'screenshot.error.unsupportedImage': 'Niet-ondersteund afbeeldingsformaat: {type}',
@@ -152,10 +163,11 @@ const nl: WidgetCatalog = {
   'annotation.toolbar.undo': 'Ongedaan maken (Ctrl+Z)',
   'annotation.toolbar.redo': 'Opnieuw uitvoeren (Ctrl+Shift+Z)',
   'annotation.toolbar.delete': 'Selectie verwijderen (Del)',
-  'annotation.toolbar.zoomIn': 'Inzoomen - houd Spatie ingedrukt om te verschuiven bij ingezoomd',
-  'annotation.toolbar.zoomOut': 'Uitzoomen - houd Spatie ingedrukt om te verschuiven bij ingezoomd',
-  'annotation.toolbar.zoomReset':
-    'Zoom resetten ({percent}%) - houd Spatie ingedrukt om te verschuiven',
+  'annotation.toolbar.zoomIn': 'Inzoomen',
+  'annotation.toolbar.zoomOut': 'Uitzoomen',
+  'annotation.toolbar.zoomFit': 'Aanpassen aan scherm',
+  'annotation.toolbar.maximize': 'Maximaliseren',
+  'annotation.toolbar.restore': 'Oorspronkelijke grootte',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.color.red': 'Rood',
   'annotation.color.orange': 'Oranje',
@@ -167,6 +179,8 @@ const nl: WidgetCatalog = {
   'annotation.defaultText': 'Tekst',
   'annotation.buttons.cancel': 'Annuleren',
   'annotation.buttons.done': 'Klaar',
+  'portal.checkEmail': 'Zoek een aanmeldlink in je inbox of vraag er een aan via Mijn meldingen.',
+  'portal.viewReports': 'Mijn meldingen bekijken',
 };
 
 export default nl;

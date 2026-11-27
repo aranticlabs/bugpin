@@ -9,9 +9,7 @@ const ja: WidgetCatalog = {
   'dialog.title': 'バグを報告',
   'dialog.tabs.details': '詳細',
   'dialog.tabs.media': 'スクリーンショット',
-  'dialog.tabs.mediaWithCount': 'スクリーンショット（{count}件）',
   'dialog.tabs.recording': '録画',
-  'dialog.tabs.recordingWithCount': '録画 ({count})',
 
   'dialog.fields.title.label': 'タイトル',
   'dialog.fields.title.placeholder': '問題の概要を簡潔に',
@@ -22,6 +20,8 @@ const ja: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'お名前',
   'dialog.fields.email.label': 'メールアドレス（任意）',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'メールアドレスを入力すると、報告者ポータルでこの報告の状況を確認できます。',
 
   'dialog.priority.highest': '最高',
   'dialog.priority.high': '高',
@@ -59,13 +59,21 @@ const ja: WidgetCatalog = {
 
   'screenshot.privacyTip': 'ヒント：送信前に注釈ツールで機密情報を隠してください。',
   'screenshot.capturing': '撮影中...',
-  'screenshot.capture': 'スクリーンショットを撮影',
+  'screenshot.capture': 'スクリーンショットツールを開く',
   'screenshot.quality.label': 'キャプチャ品質を下げる',
   'screenshot.quality.activeIndicator': 'キャプチャ品質を低下中',
   'screenshot.quality.tooltip':
     '1倍のピクセル密度でキャプチャします。スクリーンショットが送信できないほど大きい場合に使用してください。',
   'screenshot.dropzone.title': 'ファイルをここにドラッグ＆ドロップ',
   'screenshot.dropzone.subtitle': 'またはクリックして選択',
+  'screenshot.dropzone.subtitlePaste': 'またはクリックして選択、または貼り付け ({shortcut})',
+  'screenshot.bar.capture': '撮影',
+  'screenshot.bar.timerLabel': '撮影までの待ち時間',
+  'screenshot.bar.timerOff': 'オフ',
+  'screenshot.bar.timerShort': '{seconds} 秒',
+  'screenshot.bar.timerOption': '{seconds} 秒',
+  'screenshot.bar.countdown': '{seconds} 秒後に撮影します',
+  'screenshot.bar.cancel': 'キャンセル',
   'screenshot.addMore': 'さらに追加',
   'screenshot.alt': 'スクリーンショット',
   'screenshot.badge.annotated': '注釈済み',
@@ -74,6 +82,9 @@ const ja: WidgetCatalog = {
   'screenshot.action.download': 'ダウンロード',
   'screenshot.action.remove': '削除',
   'screenshot.helperText': '対応形式：PNG、JPG、GIF、WebP（最大{imageSize}MB）',
+  'recording.quality.low': '低',
+  'recording.quality.standard': '標準',
+  'recording.quality.high': '高',
   'recording.helperText': '対応形式：MP4、WebM、MOV（最大{videoSize}MB）',
 
   'screenshot.error.unsupportedImage': '対応していない画像形式です：{type}',
@@ -148,9 +159,11 @@ const ja: WidgetCatalog = {
   'annotation.toolbar.undo': '元に戻す（Ctrl+Z）',
   'annotation.toolbar.redo': 'やり直し（Ctrl+Shift+Z）',
   'annotation.toolbar.delete': '選択項目を削除（Del）',
-  'annotation.toolbar.zoomIn': '拡大：拡大中はスペースキーを長押しで移動',
-  'annotation.toolbar.zoomOut': '縮小：拡大中はスペースキーを長押しで移動',
-  'annotation.toolbar.zoomReset': 'ズームをリセット（{percent}%）：スペースキーを長押しで移動',
+  'annotation.toolbar.zoomIn': '拡大',
+  'annotation.toolbar.zoomOut': '縮小',
+  'annotation.toolbar.zoomFit': '画面に合わせる',
+  'annotation.toolbar.maximize': '最大化',
+  'annotation.toolbar.restore': '元のサイズに戻す',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.color.red': '赤',
   'annotation.color.orange': 'オレンジ',
@@ -162,6 +175,9 @@ const ja: WidgetCatalog = {
   'annotation.defaultText': 'テキスト',
   'annotation.buttons.cancel': 'キャンセル',
   'annotation.buttons.done': '完了',
+  'portal.checkEmail':
+    '受信トレイでログインリンクを確認するか、「自分の報告」からリクエストしてください。',
+  'portal.viewReports': '自分の報告を見る',
 };
 
 export default ja;

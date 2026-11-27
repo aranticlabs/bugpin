@@ -1,0 +1,5 @@
+# Use with the root docker-compose.yml (docker compose -f docker-compose.yml -f deploy/docker-compose.server-private.yml up -d), binding the server to its private network or VPN interface.
+services:
+  bugpin-server:
+    ports:
+      - '${BUGPIN_SERVER_PRIVATE_IP:-10.0.0.10}:4300:4300'

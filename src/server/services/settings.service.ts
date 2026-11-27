@@ -1,10 +1,14 @@
 import { hasEEFeature } from '../utils/ee.js';
-import { settingsRepo } from '../database/repositories/settings.repo.js';
+import { defaultPortalTeamSignIn, settingsRepo } from '../database/repositories/settings.repo.js';
+import { config } from '../config.js';
+import { projectsRepo } from '../database/repositories/projects.repo.js';
+import { isSecurePortalUrl, securePortalBaseUrl } from '../utils/portal-url.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { cleanupService } from './cleanup.service.js';
 import { emailService } from './email.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
+import { reporterPortalLimitsSchema } from '../utils/reporter-portal-limits.js';
 import {
   isValidUrl,
   isValidHexColor,
@@ -27,6 +31,9 @@ import type {
   TwoFactorPolicy,
 } from '@shared/types';
 import type { PasswordPolicy } from '@shared/password-policy';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
+import { reporterPortalSettingsService } from './reporter-portal-settings.service.js';
+import { realtimeService } from './realtime.service.js';
 
 // Types
 
@@ -37,6 +44,10 @@ export interface UpdateSettingsInput {
   language?: ProjectLanguageSettings;
   appName?: string;
   appUrl?: string;
+  portalBaseUrl?: string;
+  portalTeamSignIn?: boolean;
+  reporterPortal?: Partial<AppSettings['reporterPortal']>;
+  reporterPortalLimits?: Partial<AppSettings['reporterPortalLimits']>;
   retentionDays?: number;
   rateLimitPerMinute?: number;
   sessionMaxAgeDays?: number;
@@ -144,9 +155,28 @@ function redactSecrets(settings: AppSettings): AppSettings {
   };
 }
 
+/** Redacted settings plus read-only state the Admin Console needs to show effective values */
+function toClientSettings(settings: AppSettings): AppSettings {
+  return {
+    ...redactSecrets(settings),
+    portalTeamSignInSaved: settingsRepo.isStored('portalTeamSignIn'),
+  };
+}
+
 // Service
 
 export const settingsService = {
+  /**
+   * Fills an empty Application URL from APP_URL. A URL saved in the Admin Console always wins.
+   */
+  async seedAppUrl(appUrl = config.appUrl): Promise<boolean> {
+    if (!appUrl || (await settingsRepo.getAll()).appUrl) return false;
+    await settingsRepo.updateAll({ appUrl });
+    settingsCacheService.invalidate();
+    logger.info('Application URL set from APP_URL', { appUrl });
+    return true;
+  },
+
   /**
    * Get all application settings, including stored secrets (server-side use only)
    */
@@ -160,13 +190,19 @@ export const settingsService = {
    */
   async getAllRedacted(): Promise<Result<AppSettings>> {
     const settings = await settingsRepo.getAll();
-    return Result.ok(redactSecrets(settings));
+    return Result.ok(toClientSettings(settings));
   },
 
   /**
    * Update application settings
    */
   async update(input: UpdateSettingsInput): Promise<Result<AppSettings>> {
+    if (
+      input.reporterPortalLimits !== undefined &&
+      !reporterPortalLimitsSchema.safeParse(input.reporterPortalLimits).success
+    ) {
+      return Result.fail('Invalid reporter portal limits', 'VALIDATION_ERROR');
+    }
     // Validate appName if provided
     if (input.appName !== undefined) {
       if (input.appName.trim().length < 1) {
@@ -307,7 +343,76 @@ export const settingsService = {
     )
       return Result.fail('S3 storage requires Enterprise license', 'FEATURE_NOT_LICENSED');
 
+    let portalBaseUrl = input.portalBaseUrl?.trim() ?? current.portalBaseUrl;
+    const appUrl = input.appUrl?.trim() ?? current.appUrl;
+    let appHostname: string | undefined;
+    if (portalBaseUrl) {
+      if (!isValidUrl(appUrl))
+        return Result.fail(
+          'A valid Application URL is required while a Portal Base URL is configured',
+          'INVALID_APP_URL'
+        );
+      appHostname = new URL(appUrl).hostname;
+    }
+    if (portalBaseUrl) {
+      try {
+        const portal = new URL(portalBaseUrl);
+        if (portal.pathname !== '/' || portal.search || portal.hash)
+          return Result.fail(
+            'Portal Base URL must be an origin without a path, query, or fragment',
+            'INVALID_PORTAL_BASE_URL'
+          );
+        if (
+          !['http:', 'https:'].includes(portal.protocol) ||
+          portal.username ||
+          portal.password ||
+          portal.hostname === appHostname
+        )
+          return Result.fail(
+            'Portal Base URL must use HTTP or HTTPS on a different host from the Application URL',
+            'INVALID_PORTAL_BASE_URL'
+          );
+        portalBaseUrl = portal.origin;
+      } catch {
+        return Result.fail('Invalid Portal Base URL', 'INVALID_PORTAL_BASE_URL');
+      }
+    }
+    // Portal checks see the values this request saves, not only the stored ones.
+    let reporterPortal = current.reporterPortal;
+    if (input.reporterPortal !== undefined) {
+      reporterPortal = mergeDefined(current.reporterPortal, input.reporterPortal);
+      const valid = await reporterPortalSettingsService.validatePortal(
+        reporterPortal,
+        current.reporterPortal,
+        {
+          appUrl,
+          portalBaseUrl,
+          smtpEnabled: input.smtpEnabled ?? current.smtpEnabled,
+          smtpConfig,
+        }
+      );
+      if (!valid.success) return valid;
+    }
+    const secureAppUrl = isSecurePortalUrl(appUrl);
+    const securePortalUrl = !portalBaseUrl || isSecurePortalUrl(portalBaseUrl);
+    if (
+      (!secureAppUrl || !securePortalUrl) &&
+      (reporterPortal.enabled || projectsRepo.hasEnabledReporterPortal())
+    ) {
+      if (!secureAppUrl)
+        return Result.fail(
+          'A secure Application URL is required while a reporter portal is enabled',
+          'INVALID_APP_URL'
+        );
+      if (!securePortalUrl)
+        return Result.fail(
+          'A secure Portal Base URL is required while a reporter portal is enabled',
+          'INVALID_PORTAL_BASE_URL'
+        );
+    }
+
     const updates: Partial<AppSettings> = {};
+    if (input.reporterPortal !== undefined) updates.reporterPortal = reporterPortal;
 
     // System settings
     if (input.invitationExpirationDays !== undefined)
@@ -315,6 +420,26 @@ export const settingsService = {
     if (input.language !== undefined) updates.language = input.language;
     if (input.appName !== undefined) updates.appName = input.appName.trim();
     if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
+    if (input.portalBaseUrl !== undefined) updates.portalBaseUrl = portalBaseUrl;
+    if (input.portalTeamSignIn !== undefined) updates.portalTeamSignIn = input.portalTeamSignIn;
+    // Turning the setting off, or losing the secure portal address, ends every team session, so
+    // restoring either revives none. Until an admin chooses, the setting follows the portal address.
+    const teamSignInBefore = current.portalTeamSignIn && securePortalBaseUrl(current) !== null;
+    const teamSignInChoice =
+      input.portalTeamSignIn ??
+      (settingsRepo.isStored('portalTeamSignIn')
+        ? current.portalTeamSignIn
+        : defaultPortalTeamSignIn(portalBaseUrl));
+    const teamSignInAfter =
+      teamSignInChoice && securePortalBaseUrl({ appUrl, portalBaseUrl }) !== null;
+    if (teamSignInBefore && !teamSignInAfter)
+      portalOperatorsRepo.revokeAll(new Date().toISOString());
+    if (input.reporterPortalLimits !== undefined) {
+      updates.reporterPortalLimits = mergeDefined(
+        current.reporterPortalLimits,
+        input.reporterPortalLimits
+      );
+    }
     if (input.retentionDays !== undefined) updates.retentionDays = input.retentionDays;
     if (input.rateLimitPerMinute !== undefined)
       updates.rateLimitPerMinute = input.rateLimitPerMinute;
@@ -368,8 +493,16 @@ export const settingsService = {
     // Invalidate settings cache to force reload on next access
     settingsCacheService.invalidate();
 
+    if (
+      reporterPortal.enabled !== current.reporterPortal.enabled ||
+      reporterPortal.allowNewReports !== current.reporterPortal.allowNewReports ||
+      settings.reporterNotifications?.messagingEnabled !==
+        current.reporterNotifications?.messagingEnabled
+    )
+      realtimeService.invalidatePortalAccess({ all: true });
+
     logger.info('Settings updated', { updates: Object.keys(updates) });
-    return Result.ok(redactSecrets(settings));
+    return Result.ok(toClientSettings(settings));
   },
 
   /**

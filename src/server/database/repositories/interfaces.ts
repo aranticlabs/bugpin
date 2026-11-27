@@ -25,7 +25,7 @@ import type {
   ProjectNotificationDefaults,
   ApiToken,
   ApiTokenScope,
-  ReporterMessage,
+  ReportMessage,
   LocaleCode,
 } from '@shared/types';
 
@@ -43,6 +43,7 @@ export interface CreateReportData {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale?: LocaleCode;
+  claimableEmail?: string;
   submissionId?: string;
 }
 
@@ -194,8 +195,13 @@ export interface IRecentReportsRepository {
 
 // File Repository Interface
 
-export interface CreateFileData {
+export interface CreateFileData extends Pick<
+  FileRecord,
+  'capturedAt' | 'durationMs' | 'recordingQuality'
+> {
   reportId: string;
+  messageId?: string;
+  uploadedByReporterId?: string;
   type: FileType;
   filename: string;
   path: string;
@@ -206,9 +212,20 @@ export interface CreateFileData {
 }
 
 export interface IFilesRepository {
+  insert(data: CreateFileData): FileRecord;
   create(data: CreateFileData): Promise<FileRecord>;
   findById(id: string): Promise<FileRecord | null>;
   findByReportId(reportId: string): Promise<FileRecord[]>;
+  findOriginalByReportId(reportId: string): Promise<FileRecord[]>;
+  findByReportMessages(reportId: string, visibleOnly?: boolean): Promise<FileRecord[]>;
+  findByMessageId(messageId: string): Promise<FileRecord[]>;
+  findByReportIdAndType(reportId: string, type: FileType): Promise<FileRecord[]>;
+  getSizeByReporterSince(reporterId: string, since: string): number;
+  getTotalSize(): Promise<number>;
+  getSizeByReportId(reportId: string): Promise<number>;
+  findAll(): Promise<FileRecord[]>;
+  updatePath(id: string, newPath: string): Promise<boolean>;
+  countByStorageType(): Promise<{ local: number; s3: number }>;
   delete(id: string): Promise<boolean>;
   deleteByReportId(reportId: string): Promise<number>;
   // Synchronous so callers can check usage and reserve capacity without yielding in between
@@ -278,6 +295,7 @@ export interface CreateNotificationPreferencesData {
   notifyOnPriorityChange?: boolean;
   notifyOnAssignment?: boolean;
   notifyOnDeletion?: boolean;
+  notifyOnReporterReply?: boolean;
   emailEnabled?: boolean;
 }
 
@@ -318,12 +336,36 @@ export interface IApiTokensRepository {
   deleteExpired(): Promise<number>;
 }
 
-// Reporter Messages Repository Interface
+// Report Messages Repository Interface
 
-export interface IReporterMessagesRepository {
-  create(reportId: string, userId: string, message: string): Promise<ReporterMessage>;
-  findByReportId(reportId: string): Promise<ReporterMessage[]>;
-  findLatestByReportId(reportId: string): Promise<ReporterMessage | null>;
+export type StoredReportMessage = Omit<ReportMessage, 'files'>;
+
+export type MessageAuthor =
+  { kind: 'staff'; userId: string } | { kind: 'reporter'; reporterId: string };
+
+export interface MessageWriteContext {
+  claimableEmail: string | null;
+  projectId: string;
+  status: ReportStatus;
+  reporterId: string | null;
+  reporterEmail: string | null;
+  settings: ProjectSettings;
+  projectIsActive: boolean;
+}
+
+export interface IReportMessagesRepository {
+  insert(reportId: string, author: MessageAuthor, body: string): StoredReportMessage | null;
+  findById(reportId: string, messageId: string): StoredReportMessage | null;
+  findByReportId(reportId: string, visibleOnly?: boolean): Promise<StoredReportMessage[]>;
+  writeContext(reportId: string): MessageWriteContext | null;
+  hasAuthor(author: MessageAuthor): boolean;
+  recordActivity(reportId: string, author: MessageAuthor, now: string): void;
+  setHidden(
+    reportId: string,
+    messageId: string,
+    userId: string,
+    hidden: boolean
+  ): StoredReportMessage | null;
 }
 
 // User Preferences Repository Interface

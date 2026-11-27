@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -9,6 +9,8 @@ import {
   readFile,
   deleteFile,
   deleteReportFiles,
+  isReportDeleting,
+  withReportDeletionFence,
   getFileStats,
   fileExists,
   saveAvatar,
@@ -17,6 +19,8 @@ import {
   validateFile,
   validateFileContent,
   createStoredFileHandle,
+  readStoredFile,
+  resolveLocalFilePath,
 } from '../../src/server/storage/files';
 import { getEEHooks, registerEEHooks } from '../../src/server/utils/ee-hooks';
 import { Result } from '../../src/server/utils/result';
@@ -55,6 +59,15 @@ function createWebpBufferVp8l(width: number, height: number) {
   return buffer;
 }
 
+function createFtypBuffer(brand: string): Buffer {
+  const data = Buffer.alloc(20);
+  data.writeUInt32BE(data.length);
+  data.write('ftyp', 4, 'ascii');
+  data.write(brand, 8, 'ascii');
+  data.write(brand, 16, 'ascii');
+  return data;
+}
+
 beforeAll(() => {
   filesRepo.findByReportId = async () => [];
   tempDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-files-'));
@@ -87,19 +100,63 @@ describe('file storage', () => {
       data: pngBuffer,
     });
 
-    expect(fileExists(saved.path)).toBe(true);
+    expect(saved.path).toBe(`uploads/screenshots/rpt_1/${saved.filename}`);
+    const localPath = resolveLocalFilePath(saved.path);
+    expect(localPath).toBe(path.join(tempDir, 'uploads', 'screenshots', 'rpt_1', saved.filename));
+    expect(fileExists(localPath)).toBe(true);
     expect(saved.width).toBe(1);
     expect(saved.height).toBe(1);
 
-    const data = readFile(saved.path);
+    const data = readFile(localPath);
     expect(data?.length).toBe(pngBuffer.length);
+    expect((await readStoredFile(saved.path))?.length).toBe(pngBuffer.length);
 
-    const stats = getFileStats(saved.path);
+    const stats = getFileStats(localPath);
     expect(stats?.size).toBe(pngBuffer.length);
 
     const deleted = await deleteFile(saved.path);
     expect(deleted).toBe(true);
-    expect(fileExists(saved.path)).toBe(false);
+    expect(fileExists(localPath)).toBe(false);
+  });
+
+  it('reads relative paths from a relocated data directory', async () => {
+    const saved = await saveFile({
+      reportId: 'rpt_moved',
+      type: 'screenshot',
+      filename: 'shot.png',
+      mimeType: 'image/png',
+      data: pngBuffer,
+    });
+    const relocated = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-files-moved-'));
+    try {
+      fs.cpSync(path.join(tempDir, 'uploads'), path.join(relocated, 'uploads'), {
+        recursive: true,
+      });
+      fs.rmSync(path.join(tempDir, 'uploads', 'screenshots', 'rpt_moved'), { recursive: true });
+      config.dataDir = relocated;
+      expect(await createStoredFileHandle(saved.path).exists()).toBe(true);
+      expect((await readStoredFile(saved.path))?.length).toBe(pngBuffer.length);
+      expect(await deleteFile(saved.path)).toBe(true);
+      expect(fs.existsSync(path.join(relocated, saved.path))).toBe(false);
+    } finally {
+      config.dataDir = tempDir;
+      fs.rmSync(relocated, { recursive: true, force: true });
+    }
+  });
+
+  it('still reads records that store an absolute path', async () => {
+    const saved = await saveFile({
+      reportId: 'rpt_absolute',
+      type: 'attachment',
+      filename: 'note.txt',
+      mimeType: 'text/plain',
+      data: Buffer.from('absolute'),
+    });
+    const absolute = path.join(tempDir, saved.path);
+    expect(resolveLocalFilePath(absolute)).toBe(absolute);
+    expect((await readStoredFile(absolute))?.toString()).toBe('absolute');
+    expect(await deleteFile(absolute)).toBe(true);
+    expect(fs.existsSync(absolute)).toBe(false);
   });
 
   it('handles missing files gracefully', async () => {
@@ -117,7 +174,7 @@ describe('file storage', () => {
       data: Buffer.from([0x00, 0x01]),
     });
 
-    expect(saved.path.startsWith(config.screenshotsDir)).toBe(true);
+    expect(saved.path).toBe(`uploads/screenshots/rpt_video/${saved.filename}`);
   });
 
   it('stores attachments with fallback extension', async () => {
@@ -129,7 +186,7 @@ describe('file storage', () => {
       data: Buffer.from([0x00, 0x01]),
     });
 
-    expect(saved.path.startsWith(config.attachmentsDir)).toBe(true);
+    expect(saved.path).toBe(`uploads/attachments/rpt_attach/${saved.filename}`);
     expect(saved.filename.endsWith('.bin')).toBe(true);
   });
 
@@ -285,14 +342,25 @@ describe('validateFile', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts valid WebP screenshot', () => {
-    const result = validateFile({
-      data: createWebpBufferVp8(10, 10),
-      mimeType: 'image/webp',
-      type: 'screenshot',
+  for (const data of [createWebpBufferVp8(10, 10), createWebpBufferVp8l(10, 10)]) {
+    it(`accepts valid ${data.toString('ascii', 12, 16)} WebP signatures`, () => {
+      for (const bytes of [data, new Uint8Array(data)]) {
+        expect(
+          validateFile({ data: bytes, mimeType: 'image/webp', type: 'screenshot' }).success
+        ).toBe(true);
+      }
     });
-    expect(result.success).toBe(true);
-  });
+  }
+
+  for (const header of ['RIFF0000WAVE', 'RIFF0000AVI ', 'RIFF0000', '00000000WEBP']) {
+    it(`rejects ${header} as WebP`, () => {
+      for (const data of [Buffer.from(header), new Uint8Array(Buffer.from(header))]) {
+        expect(
+          validateFileContent({ data, mimeType: 'image/webp', type: 'screenshot' })
+        ).toMatchObject({ success: false, code: 'INVALID_FILE_CONTENT' });
+      }
+    });
+  }
 
   it('accepts valid GIF screenshot', () => {
     const gif = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00]);
@@ -320,8 +388,126 @@ describe('validateFile', () => {
     }
   });
 
+  for (const brand of [
+    'isom',
+    'iso5',
+    'mp41',
+    'mp42',
+    'avc1',
+    'M4V ',
+    'MSNV',
+    'dash',
+    'XAVC',
+    '3gp4',
+    '3gp5',
+    '3gp6',
+    '3gp7',
+    '3gp8',
+    '3gp9',
+    '3g2a',
+    'mp71',
+    'f4v ',
+    'av01',
+    'cmfc',
+    'cmfs',
+  ]) {
+    it(`accepts the MP4 major brand ${brand}`, () => {
+      const header = createFtypBuffer(brand);
+      const padded = Buffer.concat([Buffer.alloc(3), header]);
+      for (const data of [
+        header,
+        new Uint8Array(padded.buffer, padded.byteOffset + 3, header.length),
+      ]) {
+        expect(validateFileContent({ data, mimeType: 'video/mp4', type: 'video' }).success).toBe(
+          true
+        );
+      }
+    });
+  }
+
+  for (const filename of [
+    'chrome-with-audio.mp4',
+    'chrome-without-audio.mp4',
+    'webkit-with-audio.mp4',
+    'chrome-cut-off.mp4',
+  ]) {
+    it(`accepts the recorded video signature in ${filename}`, async () => {
+      const data = await Bun.file(
+        path.join(import.meta.dir, '../fixtures/video-remux', filename)
+      ).bytes();
+      expect(validateFileContent({ data, mimeType: 'video/mp4', type: 'video' }).success).toBe(
+        true
+      );
+    });
+  }
+
+  for (const mimeType of ['video/mp4', 'video/quicktime']) {
+    for (const brand of ['avif', 'avis', 'heic', 'mif1', 'M4A ', 'xxxx']) {
+      it(`rejects the ${brand} container as ${mimeType}`, () => {
+        const header = createFtypBuffer(brand);
+        header.write('isom', 16, 'ascii');
+        for (const data of [header, new Uint8Array(header)]) {
+          expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+            success: false,
+            code: 'INVALID_FILE_CONTENT',
+          });
+        }
+      });
+    }
+
+    it(`rejects the AVIF file-type header as ${mimeType}`, () => {
+      const data = Buffer.from(
+        '00000020667479706176696600000000617669666d6966316d6961664d413141',
+        'hex'
+      );
+      expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+        success: false,
+        code: 'INVALID_FILE_CONTENT',
+      });
+    });
+
+    it(`rejects incomplete or malformed file-type boxes as ${mimeType}`, () => {
+      const valid = createFtypBuffer(mimeType === 'video/mp4' ? 'isom' : 'qt  ');
+      const tooSmall = Buffer.from(valid);
+      tooSmall.writeUInt32BE(12);
+      const misaligned = Buffer.from(valid);
+      misaligned.writeUInt32BE(19);
+      for (const data of [
+        valid.subarray(0, 8),
+        valid.subarray(0, 12),
+        valid.subarray(0, 16),
+        tooSmall,
+        misaligned,
+      ]) {
+        expect(validateFileContent({ data, mimeType, type: 'video' })).toMatchObject({
+          success: false,
+          code: 'INVALID_FILE_CONTENT',
+        });
+      }
+    });
+
+    it(`accepts a bounded extended-size file-type box as ${mimeType}`, () => {
+      const data = Buffer.alloc(28);
+      data.writeUInt32BE(1);
+      data.write('ftyp', 4, 'ascii');
+      data.writeBigUInt64BE(28n, 8);
+      const brand = mimeType === 'video/mp4' ? 'isom' : 'qt  ';
+      data.write(brand, 16, 'ascii');
+      data.write(brand, 24, 'ascii');
+      expect(validateFileContent({ data, mimeType, type: 'video' }).success).toBe(true);
+      const tooLarge = Buffer.from(data);
+      tooLarge.writeBigUInt64BE(0xffffffffffffffffn, 8);
+      for (const invalid of [data.subarray(0, 16), data.subarray(0, 23), tooLarge]) {
+        expect(validateFileContent({ data: invalid, mimeType, type: 'video' })).toMatchObject({
+          success: false,
+          code: 'INVALID_FILE_CONTENT',
+        });
+      }
+    });
+  }
+
   it('accepts MOV and rejects AVI video uploads', () => {
-    const mov = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+    const mov = createFtypBuffer('qt  ');
 
     expect(validateFile({ data: mov, mimeType: 'video/quicktime', type: 'video' }).success).toBe(
       true
@@ -398,4 +584,98 @@ describe('validateFile', () => {
     const result = validateFile({ data: smallPng, mimeType: 'image/png', type: 'screenshot' });
     expect(result.success).toBe(true);
   });
+});
+
+it('checks remote object existence through provider metadata without reading content', async () => {
+  const originalHooks = getEEHooks();
+  const paths: string[] = [];
+  let outcome: Result<boolean> = Result.ok(true);
+  const provider: StorageProvider = {
+    acceptsUploads: () => false,
+    upload: async () => Result.fail('unused'),
+    delete: async () => Result.ok(undefined),
+    exists: async (key) => {
+      paths.push(key);
+      return outcome;
+    },
+    testConnection: async () => Result.ok(undefined),
+    getStatus: async () => Result.ok({ enabled: true, configured: true }),
+    read: async () => {
+      throw new Error('Object content must not be read');
+    },
+    readRange: async () => {
+      throw new Error('Object content must not be read');
+    },
+  };
+  registerEEHooks({ ...originalHooks, getStorageProvider: () => provider });
+  try {
+    const handle = createStoredFileHandle('s3://bucket/file');
+    expect(await handle.exists()).toBe(true);
+    outcome = Result.ok(false);
+    expect(await handle.exists()).toBe(false);
+    outcome = Result.fail('Metadata unavailable');
+    expect(await handle.exists()).toBe(false);
+    expect(paths).toEqual(['s3://bucket/file', 's3://bucket/file', 's3://bucket/file']);
+    registerEEHooks({ ...originalHooks, getStorageProvider: () => null });
+    expect(await handle.exists()).toBe(false);
+  } finally {
+    registerEEHooks(originalHooks);
+  }
+});
+
+it('drains a late file row while a remote object deletion is pending', async () => {
+  const reportId = 'rpt_concurrent';
+  const makeFile = (id: string) => ({
+    id,
+    reportId,
+    path: `s3://uploads/${id}`,
+    filename: id,
+    sizeBytes: 1,
+    type: 'attachment' as const,
+    mimeType: 'text/plain',
+    messageId: null,
+    uploadedByReporterId: null,
+    createdAt: new Date().toISOString(),
+  });
+  const first = makeFile('first.txt');
+  const late = makeFile('late.txt');
+  const files = new Map([[first.id, first]]);
+  const objects = new Set([first.path, late.path]);
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const hooks = getEEHooks();
+  const provider: StorageProvider = {
+    acceptsUploads: () => false,
+    read: async () => Result.fail('unused'),
+    upload: async () => Result.fail('unused'),
+    exists: async (key) => Result.ok(objects.has(key)),
+    testConnection: async () => Result.ok(undefined),
+    getStatus: async () => Result.ok({ enabled: true, configured: true }),
+    delete: async (key) => {
+      if (key === first.path) {
+        started.resolve();
+        await resume.promise;
+      }
+      objects.delete(key);
+      return Result.ok(undefined);
+    },
+  };
+  registerEEHooks({ ...hooks, getStorageProvider: () => provider });
+  const list = spyOn(filesRepo, 'findByReportId').mockImplementation(async () => [
+    ...files.values(),
+  ]);
+  try {
+    const deletion = withReportDeletionFence(reportId, () => deleteReportFiles(reportId));
+    await started.promise;
+    expect(isReportDeleting(reportId)).toBe(true);
+    files.set(late.id, late);
+    resume.resolve();
+    expect(await deletion).toBe(2);
+    expect(isReportDeleting(reportId)).toBe(false);
+    expect(objects.size).toBe(0);
+  } finally {
+    resume.resolve();
+    list.mockRestore();
+    registerEEHooks(hooks);
+  }
 });

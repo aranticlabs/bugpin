@@ -1,5 +1,7 @@
 import type { RecordingQuality } from './recording-quality';
+import type { MediaMetadata } from './media-metadata';
 import type { PasswordPolicy } from './password-policy';
+import type { ReportOwner } from './reporter-types';
 
 // Locale Types
 
@@ -28,7 +30,7 @@ export interface LauncherTextBundle {
 
 export type ReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type ReportPriority = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
-export type ReportSource = 'widget' | 'manual';
+export type ReportSource = 'widget' | 'manual' | 'portal';
 
 /** URL/query value for filtering reports with no assignee */
 export const UNASSIGNED_FILTER = '__unassigned__';
@@ -114,7 +116,61 @@ export interface UserPreferences {
 }
 
 export type ReportHistoryAction =
-  'created' | 'status_changed' | 'priority_changed' | 'assignee_changed';
+  | 'created'
+  | 'status_changed'
+  | 'priority_changed'
+  | 'assignee_changed'
+  | 'owner_assigned'
+  | 'owner_removed'
+  | 'claimable_set'
+  | 'message_hidden'
+  | 'message_unhidden';
+
+export type ReporterAuthTokenSource = 'request' | 'confirmation' | 'invitation';
+export type ReporterSuppressionSource = 'portal' | 'unsubscribe';
+
+export interface Reporter {
+  id: string;
+  email: string;
+  displayName: string;
+  locale: string;
+  suspendedAt: string | null;
+  suspendedByUserId: string | null;
+  sessionsRevokedAt: string | null;
+  sessionsRevokedByUserId: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReporterPortalProjectSettings {
+  enabled: boolean;
+  allowNewReports: boolean;
+}
+
+export interface ReporterPortalLimits {
+  loginRequestsPerEmailPer15Min: number;
+  loginRequestsPerIpPer15Min: number;
+  loginExchangesPerIpPer15Min: number;
+  messagesPerReporterPerMinute: number;
+  messagesPerReporterPerDay: number;
+  submissionsPerReporterPerHour: number;
+  submissionsPerReporterPerDay: number;
+  sseStreamsPerSession: number;
+  uploadMbPerReporterPerDay: number;
+}
+
+export const DEFAULT_REPORTER_PORTAL_LIMITS: ReporterPortalLimits = {
+  loginRequestsPerEmailPer15Min: 5,
+  loginRequestsPerIpPer15Min: 20,
+  loginExchangesPerIpPer15Min: 10,
+  messagesPerReporterPerMinute: 10,
+  messagesPerReporterPerDay: 100,
+  submissionsPerReporterPerHour: 5,
+  submissionsPerReporterPerDay: 20,
+  sseStreamsPerSession: 3,
+  uploadMbPerReporterPerDay: 200,
+};
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
@@ -149,6 +205,7 @@ export interface ManualReportContext {
 }
 
 export interface ReportMetadata {
+  portal?: boolean;
   url?: string;
   title?: string;
   referrer?: string;
@@ -223,6 +280,15 @@ export interface Report {
   reporterEmail?: string;
   reporterName?: string;
   reporterLocale: LocaleCode;
+  reporterId?: string;
+  owner?: ReportOwner;
+  claimableEmail?: string;
+  originalDescription?: string;
+  originalDescriptionBackfilled?: boolean;
+  ownerSeenAt?: string;
+  lastReporterActivityAt?: string;
+  reporterActivitySeenAt?: string;
+  hasNewReporterActivity?: boolean;
   assignedTo?: string;
   assignee?: ReportAssignee;
   customFields?: Record<string, unknown>;
@@ -397,6 +463,8 @@ export interface ProjectLanguageSettings {
 // Project Types
 
 export interface ProjectSettings {
+  // Missing or null: inherit the instance-wide Reporter Portal defaults. null clears an override on PATCH.
+  reporterPortal?: ReporterPortalProjectSettings | null;
   defaultAssigneeUserId?: string | null;
   widgetLauncherButton?: WidgetLauncherButtonSettings;
   widgetDialog?: WidgetDialogSettings;
@@ -454,6 +522,7 @@ export interface CustomField {
 }
 
 export interface Project {
+  reporterPortalPrerequisites?: string[];
   licenseLocked?: boolean;
   id: string;
   name: string;
@@ -554,20 +623,39 @@ export interface Session {
 
 // File Types
 
-export interface FileRecord {
+export interface FileRecord extends MediaMetadata {
   id: string;
   reportId: string;
+  messageId: string | null;
+  uploadedByReporterId: string | null;
   type: FileType;
   filename: string;
   path: string;
   mimeType: string;
   sizeBytes: number;
-  width?: number;
-  height?: number;
   createdAt: string;
 }
 
 // Webhook Types
+
+export interface ReportMessageCreatedEvent {
+  reportId: string;
+  projectId: string;
+  messageId: string;
+  authorKind: MessageAuthorKind;
+  body: string;
+  files: Array<{ id: string; type: FileType; mimeType: string; sizeBytes: number }>;
+  createdAt: string;
+}
+
+export interface ReportOwnerChangedEvent {
+  reportId: string;
+  projectId: string;
+  action: 'owner_assigned' | 'owner_removed' | 'claimable_set';
+  oldReporterId: string | null;
+  newReporterId: string | null;
+  actorUserId: string | null;
+}
 
 export type WebhookEvent =
   | 'report.created'
@@ -576,7 +664,9 @@ export type WebhookEvent =
   | 'report.assigned'
   | 'report.resolved'
   | 'report.closed'
-  | 'report.deleted';
+  | 'report.deleted'
+  | 'report.message_created'
+  | 'report.owner_changed';
 
 export interface Webhook {
   id: string;
@@ -611,6 +701,8 @@ export interface CreateReportRequest {
 }
 
 export interface ReportFilter {
+  reporterActivity?: 'new';
+  reporterId?: string;
   projectId?: string;
   source?: ReportSource;
   status?: ReportStatus[];
@@ -630,7 +722,7 @@ export interface ReportFilter {
 /** The reports a board shows, which limits the cards a drop on a sorted board reorders */
 export type ReportBoardScope = Pick<
   ReportFilter,
-  'projectId' | 'status' | 'priority' | 'assignedTo' | 'search'
+  'projectId' | 'reporterId' | 'reporterActivity' | 'status' | 'priority' | 'assignedTo' | 'search'
 >;
 
 /** Where a report is dropped on the board */
@@ -664,6 +756,7 @@ export interface NotificationDefaultSettings {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
 }
 
 // Reporter notification settings
@@ -752,6 +845,11 @@ export interface AppSettings {
   // System settings
   appName: string;
   appUrl: string;
+  portalBaseUrl: string;
+  portalTeamSignIn: boolean;
+  /** Read-only: whether an admin saved a team sign-in choice; otherwise it follows the Portal Base URL. */
+  portalTeamSignInSaved?: boolean;
+  reporterPortalLimits: ReporterPortalLimits;
   retentionDays: number;
   rateLimitPerMinute: number;
   sessionMaxAgeDays: number;
@@ -802,6 +900,8 @@ export interface AppSettings {
   adminButton: AdminButtonColors;
   // Reporter notification settings
   reporterNotifications: ReporterNotificationSettings;
+  // Reporter Portal defaults for projects without their own setting
+  reporterPortal: ReporterPortalProjectSettings;
   // Email templates (optional - uses defaults if not set)
   emailTemplates?: EmailTemplates;
   // Language settings (instance-wide default)
@@ -870,6 +970,7 @@ export interface NotificationPreferences {
   notifyOnPriorityChange: boolean;
   notifyOnAssignment: boolean;
   notifyOnDeletion: boolean;
+  notifyOnReporterReply: boolean;
   emailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -883,6 +984,7 @@ export interface ProjectNotificationDefaults {
   defaultNotifyOnPriorityChange: boolean;
   defaultNotifyOnAssignment: boolean;
   defaultNotifyOnDeletion: boolean;
+  defaultNotifyOnReporterReply: boolean;
   defaultEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -907,6 +1009,7 @@ export interface ApiToken {
 // Email Template Types
 
 export type ReporterTemplateType =
+  | 'reporterLogin'
   | 'reporterConfirmation'
   | 'reporterStatusChange'
   | 'reporterPriorityChange'
@@ -915,6 +1018,7 @@ export type ReporterTemplateType =
 
 export type TeamTemplateType =
   | 'newReport'
+  | 'reporterActivity'
   | 'statusChange'
   | 'priorityChange'
   | 'assignment'
@@ -945,7 +1049,9 @@ export type CustomEmailTemplates = Partial<{
 }>;
 
 export interface EmailTemplates {
+  reporterLogin: EmailTemplate;
   newReport: EmailTemplate;
+  reporterActivity: EmailTemplate;
   statusChange: EmailTemplate;
   priorityChange: EmailTemplate;
   assignment: EmailTemplate;
@@ -959,10 +1065,31 @@ export interface EmailTemplates {
   reporterAssignment: EmailTemplate;
 }
 
+export type MessageAuthorKind = 'staff' | 'reporter';
+
+export interface ReportMessage {
+  id: string;
+  reportId: string;
+  authorKind: MessageAuthorKind;
+  userId: string | null;
+  reporterId: string | null;
+  authorName: string;
+  body: string;
+  hiddenAt: string | null;
+  hiddenByUserId: string | null;
+  files: FileRecord[];
+  createdAt: string;
+}
+
 export interface ReporterMessage {
   id: string;
   reportId: string;
-  userId: string;
+  userId: string | null;
+  authorKind: MessageAuthorKind;
+  reporterId: string | null;
+  authorName: string;
+  files: FileRecord[];
+  hiddenAt: string | null;
   userName?: string;
   message: string;
   sentAt: string;
@@ -1023,8 +1150,8 @@ export interface DashboardAttentionItem {
   since: string;
 }
 
-/** Who made a change: a current user, the widget, or a user who has since been deleted */
-export type DashboardActivityActor = 'user' | 'widget' | 'deleted_user';
+/** Who is shown as the author of an activity entry */
+export type DashboardActivityActor = 'user' | 'widget' | 'deleted_user' | 'system';
 
 export interface DashboardActivityItem extends ReportHistoryEntry {
   reportTitle: string;

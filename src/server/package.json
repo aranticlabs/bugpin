@@ -13,7 +13,8 @@
     "migrate": "bun run storage/migrations/index.ts",
     "migrate-to-s3": "bun run scripts/migrate-to-s3.ts",
     "reset-password": "bun run scripts/reset-password.ts",
-    "reset-two-factor": "bun run scripts/reset-two-factor.ts"
+    "reset-two-factor": "bun run scripts/reset-two-factor.ts",
+    "reset-portal-origin": "bun run scripts/reset-portal-origin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

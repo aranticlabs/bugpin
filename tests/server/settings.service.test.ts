@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { settingsService } from '../../src/server/services/settings.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { emailService, type SMTPConfig } from '../../src/server/services/email.service';
 import { cleanupService } from '../../src/server/services/cleanup.service';
 import { getEELicenseService } from '../../src/server/utils/ee';
 import { DEFAULT_PASSWORD_POLICY } from '../../src/shared/password-policy';
 import type { AppSettings } from '../../src/shared/types';
+import { DEFAULT_REPORTER_PORTAL_LIMITS } from '../../src/shared/types';
 
 function createBaseSettings(): AppSettings {
   const baseColors = {
@@ -22,6 +24,10 @@ function createBaseSettings(): AppSettings {
   return {
     appName: 'BugPin',
     appUrl: 'https://example.com',
+    portalBaseUrl: '',
+    portalTeamSignIn: false,
+    reporterPortal: { enabled: false, allowNewReports: false },
+    reporterPortalLimits: DEFAULT_REPORTER_PORTAL_LIMITS,
     retentionDays: 90,
     rateLimitPerMinute: 10,
     sessionMaxAgeDays: 7,
@@ -83,6 +89,7 @@ function createBaseSettings(): AppSettings {
       notifyOnPriorityChange: true,
       notifyOnAssignment: true,
       notifyOnDeletion: true,
+      notifyOnReporterReply: true,
     },
     branding: {
       primaryColor: '#02658D',
@@ -107,8 +114,10 @@ function createBaseSettings(): AppSettings {
 }
 
 const originalGetAll = settingsRepo.getAll;
+const originalHasEnabledReporterPortal = projectsRepo.hasEnabledReporterPortal;
 const originalUpdateAll = settingsRepo.updateAll;
 const originalGet = settingsRepo.get;
+const originalIsStored = settingsRepo.isStored;
 const originalSendTestEmail = emailService.sendTestEmail;
 const originalDeleteAllReports = cleanupService.deleteAllReports;
 
@@ -116,6 +125,7 @@ let baseSettings: AppSettings;
 let lastUpdates: Partial<AppSettings> | null;
 
 beforeEach(() => {
+  projectsRepo.hasEnabledReporterPortal = () => false;
   baseSettings = createBaseSettings();
   lastUpdates = null;
 
@@ -127,6 +137,7 @@ beforeEach(() => {
       ...updates,
     };
   };
+  settingsRepo.isStored = () => true;
   settingsRepo.get = async <T>(key: string) => {
     if (key === 'missing') {
       return null;
@@ -136,9 +147,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  projectsRepo.hasEnabledReporterPortal = originalHasEnabledReporterPortal;
   settingsRepo.getAll = originalGetAll;
   settingsRepo.updateAll = originalUpdateAll;
   settingsRepo.get = originalGet;
+  settingsRepo.isStored = originalIsStored;
   emailService.sendTestEmail = originalSendTestEmail;
   cleanupService.deleteAllReports = originalDeleteAllReports;
 });
@@ -382,6 +395,7 @@ describe('settingsService nested merge', () => {
     expect(lastUpdates?.notifications).toEqual({
       ...baseSettings.notifications,
       notifyOnDeletion: false,
+      notifyOnReporterReply: true,
     });
     expect(lastUpdates?.widgetDialog).toEqual({
       ...baseSettings.widgetDialog,

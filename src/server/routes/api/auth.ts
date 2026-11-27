@@ -3,12 +3,13 @@ import { setCookie, deleteCookie } from 'hono/cookie';
 import { authService, type LoginResult } from '../../services/auth.service.js';
 import { authMiddleware, optionalAuth } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
-import { rateLimiter } from '../../middleware/rate-limit.js';
+import { rateLimiter, staffLoginLimit, staffTwoFactorLimit } from '../../middleware/rate-limit.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { config } from '../../config.js';
 import { getClientIp } from '../../utils/client-ip.js';
 import { passwordPolicyService } from '../../services/password-policy.service.js';
 import { passkeyService } from '../../services/passkey.service.js';
+import { portalOperatorAuthService } from '../../services/portal-operator-auth.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { resolveRelyingParty, type RelyingParty } from '../../utils/relying-party.js';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
@@ -34,31 +35,26 @@ async function startSession(c: Context, result: LoginResult) {
   return c.json({ success: true, user: result.user });
 }
 
-auth.post(
-  '/login',
-  rateLimiter({ name: 'login', max: 5, window: 60 }), // 5 attempts per minute
-  validate({ body: schemas.login }),
-  async (c) => {
-    const { email, password } = await c.req.json();
+auth.post('/login', staffLoginLimit(), validate({ body: schemas.login }), async (c) => {
+  const { email, password } = await c.req.json();
 
-    // Get IP and user agent for session
-    const ipAddress = getClientIp(c);
-    const userAgent = c.req.header('user-agent');
+  // Get IP and user agent for session
+  const ipAddress = getClientIp(c);
+  const userAgent = c.req.header('user-agent');
 
-    const result = await authService.login(email, password, ipAddress, userAgent);
+  const result = await authService.login(email, password, ipAddress, userAgent);
 
-    if (!result.success) {
-      return c.json({ success: false, error: result.code, message: result.error }, 401);
-    }
-
-    if ('twoFactorRequired' in result.value) {
-      const { challengeToken, methods } = result.value;
-      return c.json({ success: true, twoFactorRequired: true, challengeToken, methods });
-    }
-
-    return startSession(c, result.value);
+  if (!result.success) {
+    return c.json({ success: false, error: result.code, message: result.error }, 401);
   }
-);
+
+  if ('twoFactorRequired' in result.value) {
+    const { challengeToken, methods } = result.value;
+    return c.json({ success: true, twoFactorRequired: true, challengeToken, methods });
+  }
+
+  return startSession(c, result.value);
+});
 
 function secondFactorFailureStatus(code: string | undefined): 401 | 429 {
   return code === 'TOO_MANY_ATTEMPTS' ? 429 : 401;
@@ -68,7 +64,7 @@ function secondFactorFailureStatus(code: string | undefined): 401 | 429 {
 
 auth.post(
   '/login/two-factor',
-  rateLimiter({ name: 'login-two-factor', max: 10, window: 60 }),
+  staffTwoFactorLimit(),
   validate({ body: schemas.twoFactorLogin }),
   async (c) => {
     const body = await c.req.json();
@@ -208,6 +204,12 @@ auth.get('/me', optionalAuth, async (c) => {
     return c.json({ success: true, authenticated: false });
   }
   return c.json({ success: true, authenticated: true, user });
+});
+
+// Team sign-in to the Reporter Portal
+
+auth.get('/portal-team-sign-in', authMiddleware, async (c) => {
+  return c.json({ success: true, url: await portalOperatorAuthService.signInUrl() });
 });
 
 // Change Password

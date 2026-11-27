@@ -90,6 +90,8 @@ describe('github service', () => {
           type: file.type as FileRecord['type'],
           id: `file_${index}`,
           reportId: baseReport.id,
+          messageId: null,
+          uploadedByReporterId: null,
           path: `https://storage.example.com/${file.filename}`,
           sizeBytes: 3,
           createdAt: baseReport.createdAt,
@@ -221,6 +223,8 @@ describe('github service', () => {
         {
           id: 'video_1',
           reportId: baseReport.id,
+          messageId: null,
+          uploadedByReporterId: null,
           type: 'screenshot',
           filename: 'recording.mp4',
           path: '/recording.mp4',
@@ -231,6 +235,8 @@ describe('github service', () => {
         {
           id: 'video_2',
           reportId: baseReport.id,
+          messageId: null,
+          uploadedByReporterId: null,
           type: 'attachment',
           filename: 'upload.webm',
           path: '/upload.webm',
@@ -275,6 +281,8 @@ describe('github service', () => {
       {
         id: 'video_1',
         reportId: baseReport.id,
+        messageId: null,
+        uploadedByReporterId: null,
         type: 'screenshot',
         filename: 'recording.mp4',
         path: '/recording.mp4',

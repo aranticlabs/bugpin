@@ -1,11 +1,25 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent } from '../../components/ui/card';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Switch } from '../../components/ui/switch';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Copy, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { SettingRow, SettingRows } from '../../components/ui/setting-row';
 import { SettingsCard } from '../../components/ui/settings-card';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../../components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -14,6 +28,8 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import { SettingsNumberInput } from '../../components/SettingsNumberInput';
+import { DEFAULT_REPORTER_PORTAL_LIMITS, type ReporterPortalLimits } from '@shared/types';
+import { Button } from '../../components/ui/button';
 import type { AppSettings, TwoFactorPolicy } from '@shared/types';
 import {
   DEFAULT_PASSWORD_POLICY,
@@ -22,6 +38,7 @@ import {
   type PasswordPolicy,
 } from '@shared/password-policy';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
+import { useProxyToken } from '../../hooks/useProxyToken';
 import {
   useDraft,
   useSettings,
@@ -139,13 +156,31 @@ export function InvitationSettingsCard() {
   );
 }
 
+const PORTAL_LIMIT_FIELDS: [keyof ReporterPortalLimits, string][] = [
+  ['loginRequestsPerEmailPer15Min', 'Login requests per email per 15 minutes'],
+  ['loginRequestsPerIpPer15Min', 'Login requests per IP per 15 minutes'],
+  ['loginExchangesPerIpPer15Min', 'Login exchanges per IP per 15 minutes'],
+  ['messagesPerReporterPerMinute', 'Messages per reporter per minute'],
+  ['messagesPerReporterPerDay', 'Messages per reporter per day'],
+  ['submissionsPerReporterPerHour', 'Submissions per reporter per hour'],
+  ['submissionsPerReporterPerDay', 'Submissions per reporter per day'],
+  ['sseStreamsPerSession', 'Event streams per session'],
+  ['uploadMbPerReporterPerDay', 'Upload MB per reporter per day'],
+];
+
 export function NetworkSettingsCard() {
   const { value, set, guard } = useSettingsSection({
     select: (settings) => ({
       enforceHttps: settings.enforceHttps || false,
       rateLimitPerMinute: settings.rateLimitPerMinute || 60,
+      ...DEFAULT_REPORTER_PORTAL_LIMITS,
+      ...settings.reporterPortalLimits,
     }),
-    toPayload: (changes) => changes,
+    toPayload: ({ enforceHttps, rateLimitPerMinute, ...limits }) => ({
+      ...(enforceHttps !== undefined ? { enforceHttps } : {}),
+      ...(rateLimitPerMinute !== undefined ? { rateLimitPerMinute } : {}),
+      ...(Object.keys(limits).length ? { reporterPortalLimits: limits } : {}),
+    }),
     successMessage: 'Network settings saved',
   });
 
@@ -194,8 +229,161 @@ export function NetworkSettingsCard() {
             />
           </SettingRow>
         </SettingRows>
+        <div className="border-t pt-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-medium">Reporter portal limits</h3>
+              <p className="text-sm text-muted-foreground">
+                Limits help prevent abuse of reporter sign-in, messages, and uploads.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() =>
+                PORTAL_LIMIT_FIELDS.forEach(([key]) =>
+                  set(key, DEFAULT_REPORTER_PORTAL_LIMITS[key])
+                )
+              }
+            >
+              Reset to defaults
+            </Button>
+          </div>
+          <SettingRows>
+            {PORTAL_LIMIT_FIELDS.map(([key, label]) => (
+              <SettingRow
+                key={key}
+                label={label}
+                htmlFor={`portal-limit-${key}`}
+                controlClassName="@sm:w-28"
+              >
+                <SettingsNumberInput
+                  id={`portal-limit-${key}`}
+                  min={1}
+                  max={
+                    key === 'sseStreamsPerSession' ? 10 : DEFAULT_REPORTER_PORTAL_LIMITS[key] * 10
+                  }
+                  value={value[key]}
+                  onChange={(limit) => set(key, limit)}
+                />
+              </SettingRow>
+            ))}
+          </SettingRows>
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+export function ProxyTokenCard() {
+  const { data, isPending, isError, refetch, regenerate } = useProxyToken();
+  const [revealed, setRevealed] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  if (isPending || data?.enabled === false) return null;
+
+  const copyToken = async () => {
+    if (!data?.enabled) return;
+    try {
+      await navigator.clipboard.writeText(data.token);
+      toast.success('Proxy token copied');
+    } catch {
+      toast.error('Could not copy the token. Reveal it and copy it manually.');
+    }
+  };
+
+  return (
+    <SettingsCard
+      title="Proxy token"
+      description="Connects frontend containers, such as a Reporter Portal on a separate host, to the server."
+    >
+      {isError ? (
+        <div className="space-y-3">
+          <Alert variant="destructive">
+            <AlertDescription>Unable to load the proxy token.</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : (
+        data?.enabled && (
+          <div className="space-y-4">
+            {data.warning && (
+              <Alert variant="destructive">
+                <AlertDescription>{data.warning}</AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="proxy-token">Token</Label>
+              <div className="flex min-w-0 items-center gap-2">
+                <Input
+                  id="proxy-token"
+                  type={revealed ? 'text' : 'password'}
+                  value={data.token}
+                  readOnly
+                  autoComplete="off"
+                  className="min-w-0 font-mono"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label={revealed ? 'Hide token' : 'Reveal token'}
+                  disabled={regenerate.isPending}
+                  onClick={() => setRevealed(!revealed)}
+                >
+                  {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Copy token"
+                  disabled={regenerate.isPending}
+                  onClick={() => void copyToken()}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <AlertDialog
+              open={confirmOpen}
+              onOpenChange={(open) => {
+                if (!regenerate.isPending) setConfirmOpen(open);
+              }}
+            >
+              <AlertDialogTrigger asChild>
+                <Button variant="outline-destructive">Regenerate</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Regenerate proxy token?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The old token stops working immediately. Frontend containers on the same host
+                    need a restart. A portal container on a separate host needs the new token.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={regenerate.isPending}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    disabled={regenerate.isPending}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (regenerate.isPending) return;
+                      setRevealed(false);
+                      regenerate.mutate(undefined, { onSuccess: () => setConfirmOpen(false) });
+                    }}
+                  >
+                    {regenerate.isPending ? 'Regenerating...' : 'Regenerate token'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )
+      )}
+    </SettingsCard>
   );
 }
 

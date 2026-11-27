@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { githubWebhookRoutes } from '../../../src/server/routes/api/github-webhook';
+import { openPortalDatabase } from '../portal/helpers';
+import { getDb } from '../../../src/server/database/database';
+import { realtimeService } from '../../../src/server/services/realtime.service';
 import { integrationsRepo } from '../../../src/server/database/repositories/integrations.repo';
 import { githubSyncService } from '../../../src/server/services/integrations/github-sync.service';
 import { Result } from '../../../src/server/utils/result';
@@ -336,7 +339,7 @@ describe('github-webhook routes', () => {
       expect(body.message).toBe('Event ignored');
     });
 
-    it('works without webhook secret configured', async () => {
+    it('rejects requests when no webhook secret is configured', async () => {
       integrationResult = {
         ...baseIntegration,
         config: {
@@ -356,7 +359,29 @@ describe('github-webhook routes', () => {
         body: JSON.stringify({ zen: 'test' }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'Webhook not configured' });
+    });
+
+    it('rejects webhooks for inactive integrations', async () => {
+      integrationResult = { ...baseIntegration, isActive: false };
+      const payload = JSON.stringify({ zen: 'test' });
+      const signature = await computeSignature(payload, 'webhook_secret_123');
+
+      const app = createApp();
+      const res = await app.request('http://localhost/github-webhook/int_1', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-github-event': 'ping',
+          'x-github-delivery': 'delivery_1',
+          'x-hub-signature-256': signature,
+        },
+        body: payload,
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Integration not found' });
     });
   });
 
@@ -385,4 +410,48 @@ describe('github-webhook routes', () => {
       expect(body.error).toBe('Missing signature');
     });
   });
+});
+
+it('commits a single status history entry before announcing a GitHub issue closure', async () => {
+  const close = await openPortalDatabase();
+  githubSyncService.handleWebhook = originalGithubSyncService.handleWebhook;
+  const events: unknown[] = [];
+  const unsubscribe = Result.unwrap(
+    realtimeService.subscribe(
+      'staff',
+      (type, data) => {
+        events.push({ type, data, inTransaction: getDb().inTransaction });
+      },
+      1
+    )
+  );
+  try {
+    getDb()
+      .exec(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix) VALUES ('prj_1', 'Project', 'hash', 'prefix');
+      INSERT INTO reports (id, project_id, title, metadata, github_issue_number) VALUES ('report', 'prj_1', 'Report', '{}', 123);`);
+    const body = JSON.stringify({ action: 'closed', issue: { number: 123, state: 'closed' } });
+    const headers = {
+      'X-Hub-Signature-256': await computeSignature(body, 'webhook_secret_123'),
+      'X-GitHub-Event': 'issues',
+    };
+    for (let i = 0; i < 2; i++)
+      expect(
+        (await createApp().request('/github-webhook/int_1', { method: 'POST', headers, body }))
+          .status
+      ).toBe(200);
+    expect(getDb().query('SELECT status FROM reports').get()).toEqual({ status: 'resolved' });
+    expect(getDb().query('SELECT action, old_value, new_value FROM report_history').all()).toEqual([
+      { action: 'status_changed', old_value: 'open', new_value: 'resolved' },
+    ]);
+    expect(events).toEqual([
+      {
+        type: 'report.updated',
+        data: { reportId: 'report', projectId: 'prj_1' },
+        inTransaction: false,
+      },
+    ]);
+  } finally {
+    unsubscribe();
+    close();
+  }
 });

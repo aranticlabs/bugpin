@@ -28,6 +28,16 @@ function formatHistoryMessage(entry: ReportHistoryEntry): string {
       }
       return `${actor} reassigned from ${from} to ${to}`;
     }
+    case 'owner_assigned':
+      return `${actor} assigned reporter ${entry.newDisplay ?? entry.newValue}`;
+    case 'owner_removed':
+      return `${actor} removed reporter ${entry.oldDisplay ?? entry.oldValue}`;
+    case 'claimable_set':
+      return `${actor} made this report claimable by ${entry.newValue}`;
+    case 'message_hidden':
+      return `${actor} hid a message from the reporter`;
+    case 'message_unhidden':
+      return `${actor} unhid a message for the reporter`;
     default:
       return `${actor} updated this report`;
   }

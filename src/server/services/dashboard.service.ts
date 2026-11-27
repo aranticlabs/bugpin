@@ -238,19 +238,24 @@ function summarizeResolveTime(
   };
 }
 
-/**
- * History keeps no user once that user is deleted, so a missing user means the widget only for
- * widget reports, on the creation entry or the default assignee recorded with it.
- */
+/** Creation and initial assignment use source attribution; ownership can be automatic. */
 function actorOf(row: ActivityRow): DashboardActivityActor {
   if (row.userId) return 'user';
+  const initialAssignment =
+    row.action === 'assignee_changed' &&
+    !row.oldValue &&
+    Date.parse(row.createdAt) - Date.parse(row.reportCreatedAt) <= CREATION_GRACE_MS;
+  if (row.reportSource === 'portal' && (row.action === 'created' || initialAssignment))
+    return 'system';
+  if (
+    row.action === 'owner_assigned' ||
+    row.action === 'owner_removed' ||
+    row.action === 'claimable_set'
+  )
+    return 'system';
   if (row.reportSource !== 'widget') return 'deleted_user';
   if (row.action === 'created') return 'widget';
-  const atCreation =
-    Date.parse(row.createdAt) - Date.parse(row.reportCreatedAt) <= CREATION_GRACE_MS;
-  return row.action === 'assignee_changed' && !row.oldValue && atCreation
-    ? 'widget'
-    : 'deleted_user';
+  return initialAssignment ? 'widget' : 'deleted_user';
 }
 
 async function toActivityItem(row: ActivityRow): Promise<DashboardActivityItem> {

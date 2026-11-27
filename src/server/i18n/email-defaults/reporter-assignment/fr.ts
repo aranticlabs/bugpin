@@ -2,7 +2,7 @@ import type { EmailTemplate } from '@shared/types';
 import { reporterAssignmentHtml } from '../styles.js';
 
 const fr: EmailTemplate = {
-  subject: '[{{project.name}}] Attribution du rapport mise à jour : {{report.title}}',
+  subject: "Mise à jour de l'attribution de ton rapport de bug : {{report.title}}",
   html: reporterAssignmentHtml({
     headerTitle: 'Attribution mise à jour',
     introWithPrevious:

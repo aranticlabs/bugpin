@@ -1,0 +1,155 @@
+#!/bin/sh
+set -e
+
+case "${BUGPIN_PUBLIC_SCHEME:-http}" in
+    http|https) export BUGPIN_PUBLIC_SCHEME="${BUGPIN_PUBLIC_SCHEME:-http}" ;;
+    *) echo >&2 'BUGPIN_PUBLIC_SCHEME must be http or https'; exit 1 ;;
+esac
+
+# Only deployment variables are substituted, preserving Nginx request variables.
+export NGINX_ENVSUBST_FILTER='^BUGPIN_'
+export BUGPIN_SERVER_URL="${BUGPIN_SERVER_URL:-http://bugpin-server:4300}"
+if ! printf '%s' "$BUGPIN_SERVER_URL" | grep -Eq '^https?://([a-zA-Z0-9._-]+|\[[0-9a-fA-F:]+\])(:[0-9]+)?/?$'; then
+    echo >&2 'BUGPIN_SERVER_URL must be an HTTP or HTTPS origin'
+    exit 1
+fi
+BUGPIN_SERVER_URL=${BUGPIN_SERVER_URL%/}
+export BUGPIN_SERVER_URL
+export BUGPIN_SERVER_CA_FILE="${BUGPIN_SERVER_CA_FILE:-/etc/ssl/certs/ca-certificates.crt}"
+if ! printf '%s' "$BUGPIN_SERVER_CA_FILE" | grep -Eq '^/[a-zA-Z0-9_./-]+$' || [ ! -r "$BUGPIN_SERVER_CA_FILE" ]; then
+    echo >&2 'BUGPIN_SERVER_CA_FILE must be a readable absolute CA bundle path containing only letters, digits, _, ., /, or -'
+    exit 1
+fi
+BUGPIN_SERVER_SCHEME=${BUGPIN_SERVER_URL%%://*}
+BUGPIN_SERVER_ADDRESS=${BUGPIN_SERVER_URL#*://}
+BUGPIN_SERVER_HOST=$(printf '%s' "$BUGPIN_SERVER_ADDRESS" | sed -E 's/^\[([^]]+)\](:[0-9]+)?$/\1/; s/^([^:]+):[0-9]+$/\1/')
+case "$BUGPIN_SERVER_ADDRESS" in
+    \[*\])
+        if [ "$BUGPIN_SERVER_SCHEME" = https ]; then
+            BUGPIN_SERVER_ADDRESS="$BUGPIN_SERVER_ADDRESS:443"
+        else
+            BUGPIN_SERVER_ADDRESS="$BUGPIN_SERVER_ADDRESS:80"
+        fi
+        ;;
+    *:*) ;;
+    *)
+        if [ "$BUGPIN_SERVER_SCHEME" = https ]; then
+            BUGPIN_SERVER_ADDRESS="$BUGPIN_SERVER_ADDRESS:443"
+        else
+            BUGPIN_SERVER_ADDRESS="$BUGPIN_SERVER_ADDRESS:80"
+        fi
+        ;;
+esac
+export BUGPIN_SERVER_SCHEME BUGPIN_SERVER_ADDRESS BUGPIN_SERVER_HOST
+export BUGPIN_RESOLVER="${BUGPIN_RESOLVER:-127.0.0.11}"
+if ! printf '%s' "$BUGPIN_RESOLVER" | awk '
+    NR > 1 { exit 1; }
+    /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/ {
+        split($0, parts, ":"); split(parts[1], octets, ".");
+        for (i = 1; i <= 4; i++) if (octets[i] > 255) exit 1;
+        if (parts[2] != "" && (parts[2] < 1 || parts[2] > 65535)) exit 1;
+        valid = 1;
+    }
+    /^\[[0-9a-fA-F:]+\](:[0-9]+)?$/ {
+        address = $0; sub(/^\[/, "", address); sub(/\].*$/, "", address);
+        port = $0; sub(/^.*\]/, "", port); sub(/^:/, "", port);
+        if (address ~ /^:[^:]/ || address ~ /[^:]:$/) exit 1;
+        compressed = index(address, "::") > 0;
+        remainder = address; sub(/::/, ":", remainder);
+        if (index(remainder, "::") > 0) exit 1;
+        count = split(address, groups, ":"); nonempty = 0;
+        for (i = 1; i <= count; i++) {
+            if (length(groups[i]) > 4) exit 1;
+            if (groups[i] != "") nonempty++;
+        }
+        if ((!compressed && nonempty != 8) || (compressed && nonempty >= 8)) exit 1;
+        if (!compressed && (address ~ /^:/ || address ~ /:$/)) exit 1;
+        if (port != "" && (port < 1 || port > 65535)) exit 1;
+        valid = 1;
+    }
+    END { if (!valid) exit 1; }
+'; then
+    echo >&2 'BUGPIN_RESOLVER must be an IPv4 or bracketed IPv6 address with an optional port'
+    exit 1
+fi
+
+mkdir -p /etc/nginx/conf.d/shared
+real_ip_file=/etc/nginx/conf.d/shared/real-ip.conf
+: > "$real_ip_file"
+proxy_entries=$(printf '%s' "${BUGPIN_TRUSTED_PROXIES:-}" | tr ',' '\n')
+while IFS= read -r entry; do
+    entry=$(printf '%s' "$entry" | tr -d '[:space:]')
+    [ -n "$entry" ] || continue
+    case "$entry" in
+        private) entries='127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 ::1/128 fc00::/7' ;;
+        *)
+            if ! printf '%s' "$entry" | grep -Eq '^[0-9a-fA-F.:]+(/[0-9]+)?$'; then
+                echo >&2 'BUGPIN_TRUSTED_PROXIES must contain IP addresses, CIDRs, or private'
+                exit 1
+            fi
+            case "$entry" in
+                */*)
+                    prefix=$(printf '%s' "${entry##*/}" | sed 's/^0*//')
+                    prefix=${prefix:-0}
+                    case "${entry%/*}" in
+                        *:*) minimum=16; maximum=128 ;;
+                        *) minimum=8; maximum=32 ;;
+                    esac
+                    if [ "${#prefix}" -gt 3 ] || [ "$prefix" -lt "$minimum" ] || [ "$prefix" -gt "$maximum" ]; then
+                        echo >&2 'BUGPIN_TRUSTED_PROXIES requires IPv4 prefixes 8-32 and IPv6 prefixes 16-128'
+                        exit 1
+                    fi
+                    ;;
+            esac
+            entries=$entry
+            ;;
+    esac
+    for address in $entries; do
+        printf 'set_real_ip_from %s;\n' "$address" >> "$real_ip_file"
+    done
+done <<EOF_PROXIES
+$proxy_entries
+EOF_PROXIES
+printf 'real_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n' >> "$real_ip_file"
+
+BUGPIN_PROXY_TOKEN=${BUGPIN_PROXY_TOKEN:-}
+if [ -z "$BUGPIN_PROXY_TOKEN" ] && [ -r "${BUGPIN_PROXY_TOKEN_FILE:-/run/bugpin/proxy-token}" ]; then
+    BUGPIN_PROXY_TOKEN=$(cat "${BUGPIN_PROXY_TOKEN_FILE:-/run/bugpin/proxy-token}")
+fi
+case "$BUGPIN_PROXY_TOKEN" in
+    *[!a-zA-Z0-9_-]*) echo >&2 'Invalid proxy token. Copy the current proxy token from the Admin Console into BUGPIN_PROXY_TOKEN.'; exit 1 ;;
+esac
+export BUGPIN_PROXY_TOKEN
+
+proxy_check_deadline=$(( $(date +%s) + 60 ))
+while :; do
+    proxy_check_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+        --connect-timeout 2 --max-time 2 --cacert "$BUGPIN_SERVER_CA_FILE" \
+        --header "X-BugPin-Proxy-Token: $BUGPIN_PROXY_TOKEN" \
+        "$BUGPIN_SERVER_URL/internal/proxy-check") || proxy_check_status=000
+    case "$proxy_check_status" in
+        204) break ;;
+        404)
+            echo >&2 "BugPin server is too old for this frontend image, use the same version for all images (HTTP $proxy_check_status)."
+            exit 1
+            ;;
+        409)
+            echo >&2 'BugPin server is not running with TRUST_PROXY=token (HTTP 409).'
+            exit 1
+            ;;
+        403)
+            echo >&2 'Proxy token missing or rejected. Copy the current proxy token from the Admin Console into BUGPIN_PROXY_TOKEN, then restart the frontend.'
+            exit 1
+            ;;
+        000|5??) ;;
+        *)
+            echo >&2 "BugPin proxy check failed with HTTP $proxy_check_status at BUGPIN_SERVER_URL=$BUGPIN_SERVER_URL."
+            exit 1
+            ;;
+    esac
+    if [ "$(date +%s)" -ge "$proxy_check_deadline" ]; then
+        echo >&2 "Cannot reach a ready BugPin server at BUGPIN_SERVER_URL=$BUGPIN_SERVER_URL after 60 seconds (last HTTP status: $proxy_check_status)."
+        exit 1
+    fi
+    sleep 1
+done

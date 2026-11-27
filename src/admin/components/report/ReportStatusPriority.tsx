@@ -1,8 +1,4 @@
 import {
-  CircleDot,
-  CircleCheck,
-  CircleDotDashed,
-  CircleSlash2,
   Signal,
   SignalHigh,
   SignalLow,
@@ -10,15 +6,10 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
-import type { ReportPriority, ReportStatus } from '@shared/types';
+import type { ReportPriority } from '@shared/types';
 import { cn } from '../../lib/utils';
 
-export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
+export { REPORT_STATUS_LABELS, ReportStatusLabel } from '@shared-ui/lib/status';
 
 export const REPORT_PRIORITY_LABELS: Record<ReportPriority, string> = {
   highest: 'Highest',
@@ -28,14 +19,7 @@ export const REPORT_PRIORITY_LABELS: Record<ReportPriority, string> = {
   lowest: 'Lowest',
 };
 
-// Status uses cool hues and priority warm ones, so the two never share a color.
 // Only the three most urgent priorities are colored; Low and Lowest stay gray.
-const STATUS_ICONS: Record<ReportStatus, { icon: LucideIcon; className: string }> = {
-  open: { icon: CircleDot, className: 'text-sky-500' },
-  in_progress: { icon: CircleDotDashed, className: 'text-indigo-500 dark:text-indigo-400' },
-  resolved: { icon: CircleCheck, className: 'text-emerald-500' },
-  closed: { icon: CircleSlash2, className: 'text-muted-foreground' },
-};
 
 const PRIORITY_ICONS: Record<
   ReportPriority,
@@ -69,33 +53,8 @@ export function reportPriorityBarClass(priority: ReportPriority): string {
   return PRIORITY_ICONS[priority].barClassName;
 }
 
-function isStatus(value: string): value is ReportStatus {
-  return value in STATUS_ICONS;
-}
-
 function isPriority(value: string): value is ReportPriority {
   return value in PRIORITY_ICONS;
-}
-
-export function ReportStatusIcon({
-  status,
-  className,
-}: {
-  status: ReportStatus;
-  className?: string;
-}) {
-  const { icon: Icon, className: color } = STATUS_ICONS[status];
-  return <Icon className={cn('size-4 shrink-0', color, className)} aria-hidden />;
-}
-
-export function ReportStatusLabel({ status, label }: { status: string; label?: string }) {
-  if (!isStatus(status)) return <span className="text-sm">{label ?? status}</span>;
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm">
-      <ReportStatusIcon status={status} />
-      {label ?? REPORT_STATUS_LABELS[status]}
-    </span>
-  );
 }
 
 export function ReportPriorityIcon({ priority }: { priority: string }) {

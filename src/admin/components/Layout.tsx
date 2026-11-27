@@ -13,17 +13,20 @@ import { Footer } from './Footer';
 import { PageBreadcrumb } from './PageBreadcrumb';
 import { findSettingsNavItem } from '../lib/settingsNavigation';
 import { UpdateBanner } from './UpdateBanner';
+import { useStaffEvents } from '../hooks/useStaffEvents';
 import { usePreference } from '../hooks/useUserPreferences';
 import { ThemePreferenceSync } from './ThemePreferenceSync';
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@shared/types';
 import { UnsavedChangesBar, UnsavedChangesBarSpacer } from './UnsavedChangesGuard';
 import { FloatingBarArea } from './FloatingBar';
 import { useUsers } from './users/useUsers';
+import { AddressNotice } from './AddressNotice';
 
 const USERS_SETTINGS_PATH = '/settings/users';
 
 export function Layout() {
   const { user, canLoadData } = useAuth();
+  useStaffEvents(canLoadData);
   const [sidebarWidth, setSidebarWidth] = usePreference('sidebarWidth', SIDEBAR_WIDTH_DEFAULT, {
     cache: true,
   });
@@ -69,6 +72,7 @@ export function Layout() {
       <AppSidebar />
       <SidebarInset className="flex flex-col h-screen max-w-[100vw] min-w-0">
         <UpdateBanner />
+        <AddressNotice />
         <header className="flex h-16 min-w-0 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />

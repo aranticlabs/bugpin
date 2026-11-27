@@ -1,6 +1,13 @@
 import type { Readable } from 'node:stream';
 import type { Hono } from 'hono';
-import type { Report, EmailTemplateType, User, CustomEmailTemplates } from '@shared/types';
+import type {
+  Report,
+  EmailTemplateType,
+  User,
+  CustomEmailTemplates,
+  ReportMessageCreatedEvent,
+  ReportOwnerChangedEvent,
+} from '@shared/types';
 import type { Result } from '../utils/result.js';
 import type { EnterpriseLicenseAcceptance } from '@shared/enterprise-license';
 
@@ -157,6 +164,8 @@ export interface EEHooks {
     changes: Record<string, { old: unknown; new: unknown }>
   ): Promise<void>;
   onReportDeleted(report: Report): Promise<void>;
+  onReportMessageCreated(event: ReportMessageCreatedEvent): Promise<void>;
+  onReportOwnerChanged(event: ReportOwnerChangedEvent): Promise<void>;
 
   // Storage provider hook
   getStorageProvider(): StorageProvider | null;
@@ -242,6 +251,8 @@ export function createDefaultHooks(): EEHooks {
     onReportCreated: async () => {},
     onReportUpdated: async () => {},
     onReportDeleted: async () => {},
+    onReportMessageCreated: async () => {},
+    onReportOwnerChanged: async () => {},
 
     // Storage provider - not available
     getStorageProvider: () => null,

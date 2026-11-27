@@ -1,8 +1,7 @@
 import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
-import { getEEProjectLicenseService } from '../../src/server/utils/ee';
-const projectLicenseService = getEEProjectLicenseService()!;
+import * as projectLicense from '../../src/server/utils/project-license';
 import type { Report, Integration } from '../../src/shared/types';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn, type Mock } from 'bun:test';
 import { syncQueueService } from '../../src/server/services/integrations/sync-queue.service';
 import { githubSyncService } from '../../src/server/services/integrations/github-sync.service';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
@@ -13,9 +12,10 @@ const originalGithubSyncService = { ...githubSyncService };
 const originalReportsRepo = { ...reportsRepo };
 const originalLogger = { ...logger };
 const originalIntegrationsRepo = { ...integrationsRepo };
-const originalCheckAccess = projectLicenseService.checkAccess;
+let checkAccess: Mock<typeof projectLicense.checkProjectLicense>;
 
 let markPendingIds: string[] = [];
+let finalSyncError: string | null = null;
 let syncResult = Result.ok({
   reportId: 'rpt_1',
   success: true,
@@ -24,10 +24,11 @@ let syncResult = Result.ok({
 });
 
 beforeEach(() => {
+  checkAccess = spyOn(projectLicense, 'checkProjectLicense').mockReturnValue(Result.ok(undefined));
   reportsRepo.findById = async (id) => ({ id, projectId: 'prj_1' }) as Report;
   integrationsRepo.findById = async (id) => ({ id, projectId: 'prj_1' }) as Integration;
-  projectLicenseService.checkAccess = () => Result.ok(undefined);
   markPendingIds = [];
+  finalSyncError = null;
   syncResult = Result.ok({
     reportId: 'rpt_1',
     success: true,
@@ -37,6 +38,10 @@ beforeEach(() => {
 
   reportsRepo.markPendingSyncBatch = (ids) => {
     markPendingIds.push(...ids);
+  };
+  reportsRepo.updateGitHubSyncStatus = async (_id, update) => {
+    finalSyncError = update.error ?? null;
+    return null;
   };
 
   githubSyncService.syncReport = async () => syncResult;
@@ -54,7 +59,7 @@ afterEach(() => {
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(logger, originalLogger);
   Object.assign(integrationsRepo, originalIntegrationsRepo);
-  projectLicenseService.checkAccess = originalCheckAccess;
+  checkAccess.mockRestore();
   syncQueueService.clear();
 });
 
@@ -126,7 +131,45 @@ describe('syncQueueService', () => {
 
     const status = syncQueueService.getStatus();
     expect(status.queueLength).toBe(0);
+    expect(finalSyncError).toBe('Sync failed');
 
+    Date.now = originalNow;
+  });
+
+  it('does not record the final error for a project without license access', async () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    syncResult = Result.fail('Sync failed', 'SYNC_FAILED');
+
+    await syncQueueService.enqueue('rpt_1', 'int_1');
+    checkAccess.mockReturnValue(Result.fail('This project is read-only', 'PROJECT_NOT_LICENSED'));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await syncQueueService.processQueue();
+      now += 60000;
+    }
+
+    expect(syncQueueService.getStatus().queueLength).toBe(0);
+    expect(finalSyncError).toBeNull();
+    Date.now = originalNow;
+  });
+
+  it('bounds thrown sync failures and records the final error', async () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    githubSyncService.syncReport = async () => {
+      throw new Error('Database unavailable');
+    };
+
+    await syncQueueService.enqueue('rpt_1', 'int_1');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await syncQueueService.processQueue();
+      now += 60000;
+    }
+
+    expect(syncQueueService.getStatus().queueLength).toBe(0);
+    expect(finalSyncError).toBe('Database unavailable');
     Date.now = originalNow;
   });
 
@@ -158,12 +201,12 @@ describe('syncQueueService', () => {
 });
 
 it('does not queue or mutate a locked report or one belonging to another integration', async () => {
-  projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+  checkAccess.mockReturnValue(Result.fail('Locked', 'PROJECT_NOT_LICENSED'));
   const locked = await syncQueueService.enqueue('rpt_1', 'int_1');
   expect(locked.success).toBe(false);
   expect(markPendingIds).toEqual([]);
   expect(syncQueueService.getStatus().queueLength).toBe(0);
-  projectLicenseService.checkAccess = () => Result.ok(undefined);
+  checkAccess.mockReturnValue(Result.ok(undefined));
   integrationsRepo.findById = async (id) => ({ id, projectId: 'prj_other' }) as Integration;
   const mismatched = await syncQueueService.enqueue('rpt_1', 'int_1');
   expect(mismatched.success).toBe(false);

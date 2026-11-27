@@ -4,6 +4,7 @@ import {
   estimateRecordingSizeMb,
   RECORDING_QUALITIES,
   RECORDING_QUALITY_PRESETS,
+  RECORDING_QUALITY_LABELS,
   type RecordingQuality,
 } from '@shared/recording-quality';
 import { cn } from '../lib/utils';
@@ -14,16 +15,10 @@ import { SettingsNumberInput } from './SettingsNumberInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { ScreenshotSettings, GlobalScreenshotSettings } from '@shared/types';
 
-const QUALITY_NAMES: Record<RecordingQuality, string> = {
-  low: 'Low',
-  standard: 'Standard',
-  high: 'High',
-};
-
 function qualityLabel(quality: RecordingQuality): string {
   const { height, frameRate } = RECORDING_QUALITY_PRESETS[quality];
   const sizePerMinute = Math.round(estimateRecordingSizeMb(quality, 60));
-  return `${QUALITY_NAMES[quality]} (${height}p, ${frameRate} fps, about ${sizePerMinute} MB per minute)`;
+  return `${RECORDING_QUALITY_LABELS[quality]} (${height}p, ${frameRate} fps, about ${sizePerMinute} MB per minute)`;
 }
 
 interface RecordingSettingsFormProps {

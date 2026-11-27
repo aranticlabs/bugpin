@@ -18,6 +18,7 @@ type TestContext = {
     raw: { headers: Headers };
     url: string;
     path: string;
+    method: string;
   };
   set: (key: string, value: unknown) => void;
   get: (key: string) => unknown;
@@ -69,6 +70,7 @@ function createContext({
       raw: { headers },
       url: `https://example.com${path}`,
       path,
+      method: 'GET',
     },
     set: (key: string, value: unknown) => {
       vars.set(key, value);

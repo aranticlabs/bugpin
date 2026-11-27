@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { gamificationRoutes } from '../../../src/server/routes/api/gamification';
 import {
   gamificationService,
@@ -7,6 +8,7 @@ import {
 } from '../../../src/server/services/gamification.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
+import type { AppSettings } from '../../../src/shared/types';
 import type {
   GamificationSelf,
   GamificationSettings,
@@ -58,12 +60,15 @@ function request(method: string, path: string, body?: unknown, cookie = 'session
   app.route('/gamification', gamificationRoutes);
   return app.request(`http://localhost/gamification${path}`, {
     method,
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { cookie, origin: 'http://localhost', 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   lastUpdate = undefined;
   lastOptOut = undefined;
   asRole('admin');
@@ -80,6 +85,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(gamificationService, originalGamificationService);
 });

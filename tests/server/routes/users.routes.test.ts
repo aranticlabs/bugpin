@@ -3,11 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { usersRoutes } from '../../../src/server/routes/api/users';
 import { usersService } from '../../../src/server/services/users.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { Result } from '../../../src/server/utils/result';
 import { config } from '../../../src/server/config';
+import type { AppSettings } from '../../../src/shared/types';
 import type { Session, User } from '../../../src/shared/types';
 
 const baseUser: User = {
@@ -43,7 +45,10 @@ let deleteResult: Result<void> = Result.ok(undefined);
 let updateProfileResult: Result<User> = Result.ok(baseUser);
 let lastUpdateBody: unknown;
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   userRole = 'admin';
   userResult = baseUser;
   listResult = [baseUser];
@@ -85,6 +90,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(usersService, originalUsersService);
 });
@@ -174,6 +180,7 @@ describe('users routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ email: 'new@example.com', password: 'password123', name: 'New' }),
@@ -188,6 +195,7 @@ describe('users routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ email: 'user@example.com', password: 'password123', name: 'User' }),
@@ -201,6 +209,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New' }),
@@ -214,6 +223,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ defaultProjectIds: ['prj_1', 'prj_2'] }),
@@ -229,6 +239,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -249,6 +260,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New' }),
@@ -263,6 +275,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'New' }),
@@ -274,7 +287,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/usr_2', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
   });
@@ -283,7 +296,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/usr_1', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(400);
   });
@@ -293,7 +306,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/usr_missing', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(404);
   });
@@ -305,6 +318,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ email: 'user@example.com' }),
@@ -319,6 +333,7 @@ describe('users routes', () => {
         method: 'PATCH',
         headers: {
           cookie: 'session=sess_1',
+          origin: 'http://localhost',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ email: 'new@example.com' }),
@@ -341,6 +356,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: 'Updated' }),
@@ -355,6 +371,7 @@ describe('users routes', () => {
       method: 'PATCH',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ name: '' }),
@@ -366,7 +383,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
   });
@@ -376,7 +393,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'DELETE',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(400);
   });
@@ -385,7 +402,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: new FormData(),
     });
     expect(res.status).toBe(400);
@@ -397,7 +414,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
     expect(res.status).toBe(400);
@@ -412,7 +429,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
     expect(res.status).toBe(400);
@@ -424,7 +441,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
     expect(res.status).toBe(200);
@@ -437,7 +454,7 @@ describe('users routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/users/me/avatar', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
       body: formData,
     });
     expect(res.status).toBe(400);

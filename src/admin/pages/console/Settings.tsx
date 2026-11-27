@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,15 +13,26 @@ import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import { submitForm } from '../../lib/submitForm';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
 
-const settingsSchema = z.object({
-  appName: z
-    .string()
-    .trim()
-    .min(1, 'Application name is required')
-    .max(100, 'Application name must be 100 characters or less'),
-  appUrl: z.string().url('Please enter a valid URL').or(z.literal('')),
-  updateCheckEnabled: z.boolean(),
-});
+const settingsSchema = z
+  .object({
+    appName: z
+      .string()
+      .trim()
+      .min(1, 'Application name is required')
+      .max(100, 'Application name must be 100 characters or less'),
+    appUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
+    portalBaseUrl: z.string().trim().url('Please enter a valid URL').or(z.literal('')),
+    portalTeamSignIn: z.boolean(),
+    updateCheckEnabled: z.boolean(),
+  })
+  .superRefine((values, context) => {
+    if (values.portalBaseUrl && !/^https?:\/\//i.test(values.appUrl))
+      context.addIssue({
+        code: 'custom',
+        path: ['appUrl'],
+        message: 'A valid Application URL is required while a Portal Base URL is configured',
+      });
+  });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
 
@@ -65,6 +76,8 @@ export function Settings() {
       settings && {
         appName: settings.appName || '',
         appUrl: settings.appUrl || '',
+        portalBaseUrl: settings.portalBaseUrl || '',
+        portalTeamSignIn: settings.portalTeamSignIn ?? true,
         updateCheckEnabled: settings.updateCheckEnabled ?? true,
       },
     [settings]
@@ -73,6 +86,8 @@ export function Settings() {
     register,
     handleSubmit,
     reset,
+    resetField,
+    watch,
     control,
     formState: { errors, isDirty, dirtyFields },
   } = useForm<SettingsFormData>({
@@ -80,12 +95,24 @@ export function Settings() {
     defaultValues: {
       appName: '',
       appUrl: '',
+      portalBaseUrl: '',
+      portalTeamSignIn: true,
       updateCheckEnabled: true,
     },
     // Reloaded settings replace only the fields the user has not edited.
     values: saved,
     resetOptions: { keepDirtyValues: true },
   });
+
+  // Without a saved choice the server derives team sign-in from the Portal Base URL, so the switch
+  // previews what saving the typed address will do. Flipping it saves a real choice.
+  const portalBaseUrl = watch('portalBaseUrl');
+  const teamSignInFollowsDefault = settings !== undefined && !settings.portalTeamSignInSaved;
+  const teamSignInEdited = Boolean(dirtyFields.portalTeamSignIn);
+  useEffect(() => {
+    if (!teamSignInFollowsDefault || teamSignInEdited) return;
+    resetField('portalTeamSignIn', { defaultValue: !portalBaseUrl.trim() });
+  }, [teamSignInFollowsDefault, teamSignInEdited, portalBaseUrl, resetField]);
 
   const mutation = useUpdateSettings({ successMessage: 'Settings saved successfully' });
 
@@ -142,6 +169,40 @@ export function Settings() {
             {errors.appUrl && <p className="text-xs text-destructive">{errors.appUrl.message}</p>}
           </SettingRow>
           <SettingRow
+            label="Portal Base URL"
+            htmlFor="portal-base-url"
+            description="Optional separate origin for the Reporter Portal. Requires an Application URL on a different host. Leave blank to use the Application URL."
+            controlClassName="@sm:w-80"
+          >
+            <Input
+              id="portal-base-url"
+              type="url"
+              placeholder="https://portal.example.com"
+              {...register('portalBaseUrl')}
+              aria-invalid={!!errors.portalBaseUrl}
+            />
+            {errors.portalBaseUrl && (
+              <p className="text-xs text-destructive">{errors.portalBaseUrl.message}</p>
+            )}
+          </SettingRow>
+          <SettingRow
+            label="Team Sign-in to the Reporter Portal"
+            htmlFor="portal-team-sign-in"
+            description="Lets every BugPin user sign in to the Reporter Portal with their account for a read-only view of the reports from reporters. The first sign-in confirms the user's email address."
+          >
+            <Controller
+              control={control}
+              name="portalTeamSignIn"
+              render={({ field }) => (
+                <Switch
+                  id="portal-team-sign-in"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
+            />
+          </SettingRow>
+          <SettingRow
             label="Check for Updates"
             htmlFor="update-check"
             description="Checks once a day for new releases and shows administrators a banner when an update is available."
@@ -188,7 +249,10 @@ export function DataRetention() {
   if (isLoading) return <LoadingCard />;
 
   return (
-    <SettingsCard title="Data Retention" description="How long reports and their files are kept.">
+    <SettingsCard
+      title="Data Retention"
+      description="How long reports and their files are kept. Conversations and their files are deleted with their report."
+    >
       <UnsavedChangesGuard
         isDirty={isDirty}
         onSave={() => submitForm(handleSubmit, saveRetention).catch(() => false)}

@@ -35,6 +35,14 @@ src/
 │   ├── hooks/
 │   ├── lib/
 │   └── api/
+├── portal/                 # React Reporter Portal
+│   ├── src/                # Pages, portal API client, auth, branding and locales
+│   └── tests/              # Reporter Portal component and integration tests
+├── shared-ui/              # React presentation shared by the Admin Console and Reporter Portal
+│   ├── components/         # UI primitives, report board and media viewers
+│   ├── lib/                # Presentation helpers
+│   ├── styles/             # Base styles and design tokens
+│   └── theme/              # Theme provider and button colors
 ├── widget/                 # Preact embeddable widget
 │   ├── components/
 │   ├── capture/            # Screenshot and screen recording
@@ -51,13 +59,14 @@ ee/                         # Enterprise Edition (git submodule)
 
 ## Tech Stack
 
-| Component     | Technology                                |
-| ------------- | ----------------------------------------- |
-| Server        | Bun runtime, Hono framework, Zod          |
-| Database      | SQLite (single file)                      |
-| Admin Console | React 19, Vite, TanStack Query, shadcn/ui |
-| Widget        | Preact, Shadow DOM, idb                   |
-| Auth          | Session-based, bcrypt, passkeys, TOTP 2FA |
+| Component       | Technology                                |
+| --------------- | ----------------------------------------- |
+| Server          | Bun runtime, Hono framework, Zod          |
+| Database        | SQLite (single file)                      |
+| Admin Console   | React 19, Vite, TanStack Query, shadcn/ui |
+| Reporter Portal | React 19, Vite, TanStack Query, shared UI |
+| Widget          | Preact, Shadow DOM, idb                   |
+| Auth            | Session-based, bcrypt, passkeys, TOTP 2FA |
 
 ## Data Flow
 
@@ -100,6 +109,14 @@ Client Request
 | `lib/`        | Framework-free helpers (formatting, exports, API errors). |
 | `api/`        | API client functions.                                     |
 
+### Reporter Portal (`src/portal/`)
+
+The Reporter Portal has its own Vite entry point and API client for `/api/portal`. Its pages, sign-in flows and branding live in `src/portal/src/`. Component and integration tests live in `src/portal/tests/`.
+
+### Shared presentation (`src/shared-ui/`)
+
+The Admin Console and Reporter Portal import UI primitives, the report board, media viewers, styles and theme helpers through `@shared-ui/*`. App-specific data fetching, permissions and drag-and-drop behavior belong to the consuming frontend.
+
 ### Widget (`src/widget/`)
 
 | Directory     | Purpose                                      |
@@ -113,7 +130,7 @@ Client Request
 
 ## Widget Constraints
 
-- Bundle size: ≤190KB gzipped (IIFE bundle, the one customers embed), enforced by `make check-widget-size`
+- Bundle size: ≤190KB gzipped (IIFE bundle, the one customers embed), enforced by `bun run check:widget-size`
 - No external runtime dependencies
 - Shadow DOM for CSS isolation
 - Offline-first with IndexedDB queue

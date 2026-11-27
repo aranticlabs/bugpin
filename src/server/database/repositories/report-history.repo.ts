@@ -26,6 +26,14 @@ function mapRowToEntry(row: ReportHistoryRow): ReportHistoryEntry {
   };
 }
 
+export interface StatusChangeRow {
+  id: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
 export interface CreateReportHistoryData {
   reportId: string;
   userId?: string | null;
@@ -86,6 +94,20 @@ export const reportHistoryRepo = {
       .all(reportId) as ReportHistoryRow[];
 
     return rows.map(mapRowToEntry);
+  },
+
+  /** Status changes of a report, oldest first, with the name of the staff member who made each */
+  statusChanges(reportId: string): StatusChangeRow[] {
+    return getDb()
+      .query<StatusChangeRow, [string]>(
+        `SELECT rh.id, rh.old_value AS oldValue, rh.new_value AS newValue,
+         u.name AS actorName, rh.created_at AS createdAt
+         FROM report_history rh
+         LEFT JOIN users u ON u.id = rh.user_id
+         WHERE rh.report_id = ? AND rh.action = 'status_changed'
+         ORDER BY julianday(rh.created_at), rh.id`
+      )
+      .all(reportId);
   },
 
   async findUserNameById(userId: string): Promise<string | undefined> {

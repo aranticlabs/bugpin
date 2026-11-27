@@ -37,6 +37,123 @@ afterEach(() => {
 });
 
 describe('Settings sections', () => {
+  it.each([
+    { appUrl: '', portalBaseUrl: '' },
+    { appUrl: 'https://bugpin.example.com', portalBaseUrl: 'https://feedback.example.com' },
+  ])(
+    'requires the Application URL while a separate portal origin is present: %j',
+    async (initial) => {
+      const settingsServer = mockSettingsServer(initial);
+      const user = userEvent.setup();
+      renderWithProviders(<Settings />);
+      const appUrl = await screen.findByLabelText('Application URL');
+      if (initial.appUrl) await user.clear(appUrl);
+      else
+        await user.type(screen.getByLabelText('Portal Base URL'), 'https://feedback.example.com');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      expect(
+        await screen.findByText(
+          'A valid Application URL is required while a Portal Base URL is configured'
+        )
+      ).toBeInTheDocument();
+      expect(settingsServer.puts).toHaveLength(0);
+      await user.type(appUrl, 'https://staff.example.com');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
+    }
+  );
+
+  it('saves and clears the separate portal URL without changing other settings and shows retention scope', async () => {
+    const settingsServer = mockSettingsServer();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <Settings />
+        <DataRetention />
+      </>
+    );
+    const portal = await screen.findByLabelText('Portal Base URL');
+    await user.type(portal, 'https://feedback.example.com');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ portalBaseUrl: 'https://feedback.example.com' }])
+    );
+    await user.clear(portal);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(settingsServer.puts[1]).toEqual({ portalBaseUrl: '' }));
+    expect(
+      screen.getByText(/Conversations and their files are deleted with their report/)
+    ).toBeInTheDocument();
+  });
+
+  it('previews team sign-in turning off for a separate portal URL until an admin chooses', async () => {
+    const settingsServer = mockSettingsServer({
+      portalTeamSignIn: true,
+      portalTeamSignInSaved: false,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Settings />);
+    const toggle = await screen.findByRole('switch', {
+      name: 'Team Sign-in to the Reporter Portal',
+    });
+    expect(toggle).toBeChecked();
+    const portal = screen.getByLabelText('Portal Base URL');
+    await user.type(portal, 'https://portal.example.com');
+    expect(toggle).not.toBeChecked();
+    await user.clear(portal);
+    expect(toggle).toBeChecked();
+    await user.type(portal, 'https://portal.example.com');
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([
+        { portalBaseUrl: 'https://portal.example.com', portalTeamSignIn: true },
+      ])
+    );
+  });
+
+  it('keeps a saved team sign-in choice while a portal URL is typed', async () => {
+    const settingsServer = mockSettingsServer({
+      portalTeamSignIn: true,
+      portalTeamSignInSaved: true,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Settings />);
+    const toggle = await screen.findByRole('switch', {
+      name: 'Team Sign-in to the Reporter Portal',
+    });
+    await user.type(screen.getByLabelText('Portal Base URL'), 'https://portal.example.com');
+    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ portalBaseUrl: 'https://portal.example.com' }])
+    );
+  });
+
+  it('saves only edited portal limits on Network and resets them without changing network settings', async () => {
+    const settingsServer = mockSettingsServer({
+      reporterPortalLimits: { messagesPerReporterPerMinute: 20, sseStreamsPerSession: 5 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<NetworkSettingsCard />);
+    const streams = await screen.findByLabelText('Event streams per session');
+    fireEvent.change(streams, { target: { value: '11' } });
+    expect(streams).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.change(streams, { target: { value: '6' } });
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ reporterPortalLimits: { sseStreamsPerSession: 6 } }])
+    );
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts[1]).toEqual({
+        reporterPortalLimits: { messagesPerReporterPerMinute: 10, sseStreamsPerSession: 3 },
+      })
+    );
+  });
+
   it('submits general settings updates', async () => {
     const user = userEvent.setup();
     const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } } as unknown);

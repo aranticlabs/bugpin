@@ -6,6 +6,7 @@ import type {
   ProjectSettings,
   ProjectSettingsUpdate,
   ReporterNotificationSettings,
+  ReporterPortalProjectSettings,
   ScreenshotSettings,
   ThemeColors,
   WidgetDialogContentSettings,
@@ -15,6 +16,8 @@ import { DEFAULT_LANGUAGE_SETTINGS } from '../../LanguageSettingsForm';
 import { resolveDiagnosticSettings } from '../../DiagnosticsSettingsForm';
 
 export interface ProjectSettingsForm {
+  useCustomReporterPortal: boolean;
+  reporterPortal: ReporterPortalProjectSettings;
   useCustomWidgetDialog: boolean;
   widgetDialogSettings: Partial<ThemeColors>;
   useCustomDialogContent: boolean;
@@ -42,6 +45,15 @@ export const hasDefinedValue = (settings: object) =>
   Object.values(settings).some((value) => value !== undefined);
 
 const hasKeys = (settings: object) => Object.keys(settings).length > 0;
+
+function normalizeReporterPortal(
+  settings: ProjectSettings['reporterPortal']
+): ReporterPortalProjectSettings {
+  return {
+    enabled: settings?.enabled ?? false,
+    allowNewReports: settings?.allowNewReports ?? false,
+  };
+}
 
 export function projectSettingsToForm(
   settings: ProjectSettings | undefined,
@@ -72,6 +84,8 @@ export function projectSettingsToForm(
   };
 
   return {
+    useCustomReporterPortal: !!settings?.reporterPortal,
+    reporterPortal: normalizeReporterPortal(settings?.reporterPortal),
     useCustomWidgetDialog: hasKeys(widgetDialog),
     widgetDialogSettings: widgetDialog,
     useCustomDialogContent: hasDefinedValue(widgetDialogContent),
@@ -93,6 +107,7 @@ export function projectSettingsToForm(
           notifyOnPriorityChange: notificationDefaults.defaultNotifyOnPriorityChange,
           notifyOnAssignment: notificationDefaults.defaultNotifyOnAssignment,
           notifyOnDeletion: notificationDefaults.defaultNotifyOnDeletion,
+          notifyOnReporterReply: notificationDefaults.defaultNotifyOnReporterReply,
         }
       : {},
     reporterSettings: settings?.reporterNotifications ?? {},
@@ -147,7 +162,8 @@ export function buildProjectSettingsUpdate(
   form: ProjectSettingsForm,
   defaultDiagnostics: DiagnosticSettings | undefined
 ): ProjectSettingsUpdate {
-  const update: ProjectSettingsUpdate = { ...saved };
+  const { reporterPortal: savedPortal, ...otherSettings } = saved ?? {};
+  const update: ProjectSettingsUpdate = { ...otherSettings };
 
   const setOverride = <K extends OverrideKey>(key: K, value: ProjectSettings[K] | undefined) => {
     update[key] = value === undefined ? null : value;
@@ -200,6 +216,12 @@ export function buildProjectSettingsUpdate(
   );
 
   update.defaultAssigneeUserId = form.defaultAssigneeUserId;
+  // Sent only when it changed, so unrelated saves never re-check the portal prerequisites.
+  const reporterPortal = form.useCustomReporterPortal
+    ? normalizeReporterPortal(form.reporterPortal)
+    : null;
+  if (!sameValue(savedPortal ? normalizeReporterPortal(savedPortal) : null, reporterPortal))
+    update.reporterPortal = reporterPortal;
   update.language = form.useCustomLanguage ? form.languageSettings : null;
 
   return update;
@@ -216,5 +238,6 @@ export function formToNotificationDefaults(
     defaultNotifyOnPriorityChange: notificationSettings.notifyOnPriorityChange,
     defaultNotifyOnAssignment: notificationSettings.notifyOnAssignment,
     defaultNotifyOnDeletion: notificationSettings.notifyOnDeletion,
+    defaultNotifyOnReporterReply: notificationSettings.notifyOnReporterReply,
   };
 }

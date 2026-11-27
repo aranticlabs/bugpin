@@ -29,6 +29,7 @@ Thumbs.db
 
 # Environment files (use Docker env vars instead)
 .env
+**/.env
 .env.local
 .env.*.local
 
@@ -38,6 +39,8 @@ docs/
 !README.md
 
 # Tests
+playwright-report/
+test-results/
 tests/
 **/*.test.ts
 **/*.spec.ts

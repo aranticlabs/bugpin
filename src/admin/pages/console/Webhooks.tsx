@@ -211,7 +211,6 @@ export function Webhooks({ projectId }: { projectId?: string } = {}) {
   if (!data?.features.webhooks)
     return (
       <UpgradePrompt
-        feature="webhooks"
         title="Webhooks"
         description="Send report events to your services automatically. Configure endpoints, choose event subscriptions, and monitor delivery status."
       />

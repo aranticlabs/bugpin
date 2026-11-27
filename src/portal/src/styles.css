@@ -1,0 +1,31 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '../../shared-ui/styles/tokens.css';
+@import '../../shared-ui/styles/base.css';
+@source '../../shared-ui';
+
+@layer base {
+  body {
+    @apply m-0;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:focus-ring;
+  }
+  /* Spinners keep turning because they carry state */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.animate-spin),
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

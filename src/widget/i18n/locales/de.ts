@@ -9,9 +9,7 @@ const de: WidgetCatalog = {
   'dialog.title': 'Bug melden',
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
-  'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
   'dialog.tabs.recording': 'Aufnahmen',
-  'dialog.tabs.recordingWithCount': 'Aufnahmen ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Kurze Beschreibung des Problems',
@@ -22,6 +20,8 @@ const de: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Dein Name',
   'dialog.fields.email.label': 'E-Mail (optional)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Mit deiner E-Mail kannst du diese Meldung im Reporter-Portal verfolgen.',
 
   'dialog.priority.highest': 'Sehr hoch',
   'dialog.priority.high': 'Hoch',
@@ -61,13 +61,21 @@ const de: WidgetCatalog = {
   'screenshot.privacyTip':
     'Tipp: Nutze das Anmerkungswerkzeug, um sensible Daten vor dem Senden zu verbergen.',
   'screenshot.capturing': 'Aufnahme läuft...',
-  'screenshot.capture': 'Screenshot aufnehmen',
+  'screenshot.capture': 'Screenshot-Tool öffnen',
   'screenshot.quality.label': 'Aufnahmequalität reduzieren',
   'screenshot.quality.activeIndicator': 'Aufnahmequalität reduziert',
   'screenshot.quality.tooltip':
     'Mit einfacher Pixeldichte (1x) aufnehmen. Verwende dies, wenn dein Screenshot zu groß zum Senden ist.',
   'screenshot.dropzone.title': 'Dateien hier ablegen',
   'screenshot.dropzone.subtitle': 'oder klicken zum Durchsuchen',
+  'screenshot.dropzone.subtitlePaste': 'oder klicken zum Durchsuchen oder einfügen ({shortcut})',
+  'screenshot.bar.capture': 'Aufnehmen',
+  'screenshot.bar.timerLabel': 'Verzögerung',
+  'screenshot.bar.timerOff': 'Aus',
+  'screenshot.bar.timerShort': '{seconds} s',
+  'screenshot.bar.timerOption': '{seconds} Sekunden',
+  'screenshot.bar.countdown': 'Aufnahme in {seconds}',
+  'screenshot.bar.cancel': 'Abbrechen',
   'screenshot.addMore': 'Weitere hinzufügen',
   'screenshot.alt': 'Screenshot',
   'screenshot.badge.annotated': 'Kommentiert',
@@ -76,6 +84,9 @@ const de: WidgetCatalog = {
   'screenshot.action.download': 'Herunterladen',
   'screenshot.action.remove': 'Entfernen',
   'screenshot.helperText': 'Unterstützt: PNG, JPG, GIF, WebP (max. {imageSize} MB)',
+  'recording.quality.low': 'Niedrig',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Hoch',
   'recording.helperText': 'Unterstützt: MP4, WebM, MOV (max. {videoSize} MB)',
 
   'screenshot.error.unsupportedImage': 'Nicht unterstütztes Bildformat: {type}',
@@ -151,10 +162,11 @@ const de: WidgetCatalog = {
   'annotation.toolbar.undo': 'Rückgängig (Ctrl+Z)',
   'annotation.toolbar.redo': 'Wiederholen (Ctrl+Shift+Z)',
   'annotation.toolbar.delete': 'Auswahl löschen (Del)',
-  'annotation.toolbar.zoomIn': 'Vergrößern - Space gedrückt halten zum Verschieben',
-  'annotation.toolbar.zoomOut': 'Verkleinern - Space gedrückt halten zum Verschieben',
-  'annotation.toolbar.zoomReset':
-    'Zoom zurücksetzen ({percent}%) - Space gedrückt halten zum Verschieben',
+  'annotation.toolbar.zoomIn': 'Vergrößern',
+  'annotation.toolbar.zoomOut': 'Verkleinern',
+  'annotation.toolbar.zoomFit': 'An Bildschirm anpassen',
+  'annotation.toolbar.maximize': 'Maximieren',
+  'annotation.toolbar.restore': 'Ursprüngliche Größe',
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.color.red': 'Rot',
   'annotation.color.orange': 'Orange',
@@ -166,6 +178,9 @@ const de: WidgetCatalog = {
   'annotation.defaultText': 'Text',
   'annotation.buttons.cancel': 'Abbrechen',
   'annotation.buttons.done': 'Fertig',
+  'portal.checkEmail':
+    'Sieh in deinem Posteingang nach einem Anmeldelink oder fordere unter Meine Meldungen einen an.',
+  'portal.viewReports': 'Meine Meldungen ansehen',
 };
 
 export default de;

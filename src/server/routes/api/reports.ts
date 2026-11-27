@@ -10,6 +10,7 @@ import {
   ASSIGNED_TO_ME_FILTER,
   type ReportBoardMove,
   type ReportPriority,
+  type ReportSource,
   type ReportSortKey,
   type ReportStatus,
 } from '@shared/types';
@@ -28,7 +29,9 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
 
   const filter = {
     projectId: query.projectId,
-    source: query.source as 'widget' | 'manual' | undefined,
+    reporterId: query.reporterId,
+    reporterActivity: query.reporterActivity as 'new' | undefined,
+    source: query.source as ReportSource | undefined,
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],
     assignedTo: query.assignedTo === ASSIGNED_TO_ME_FILTER ? c.get('user').id : query.assignedTo,
@@ -51,6 +54,32 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     ...result.value,
   });
 });
+
+reports.get('/reporter-activity/count', (c) => {
+  const result = reportsService.reporterActivityCount();
+  if (!result.success)
+    return c.json({ success: false, error: result.code, message: result.error }, 500);
+  return c.json({ success: true, count: result.value });
+});
+
+reports.post(
+  '/:id/reporter-activity/seen',
+  authorize(['admin', 'editor']),
+  validate({ params: schemas.id, body: schemas.reporterActivitySeen }),
+  async (c) => {
+    const { lastReporterActivityAt } = await c.req.json<{ lastReporterActivityAt: string }>();
+    const result = await reportsService.acknowledgeReporterActivity(
+      c.req.param('id'),
+      lastReporterActivityAt
+    );
+    if (!result.success)
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'NOT_FOUND' ? 404 : 403
+      );
+    return c.json({ success: true });
+  }
+);
 
 // Create Manual Report (Admin and Editor)
 
@@ -249,7 +278,7 @@ reports.patch(
     const result = await reportsService.update(id, body, user.id);
 
     if (!result.success) {
-      const status = result.code === 'NOT_FOUND' ? 404 : 400;
+      const status = updateErrorStatus(result.code);
       return c.json({ success: false, error: result.code, message: result.error }, status);
     }
 
@@ -289,7 +318,7 @@ function boardMoveFor(
   };
 }
 
-function boardMoveErrorStatus(code: string | undefined): 404 | 500 | 400 {
+function updateErrorStatus(code: string | undefined): 404 | 500 | 400 {
   return code === 'NOT_FOUND' ? 404 : code === 'UPDATE_FAILED' ? 500 : 400;
 }
 
@@ -311,7 +340,7 @@ reports.post(
     if (!result.success) {
       return c.json(
         { success: false, error: result.code, message: result.error },
-        boardMoveErrorStatus(result.code)
+        updateErrorStatus(result.code)
       );
     }
 
@@ -337,7 +366,7 @@ reports.patch(
     if (!result.success) {
       return c.json(
         { success: false, error: result.code, message: result.error },
-        boardMoveErrorStatus(result.code)
+        updateErrorStatus(result.code)
       );
     }
 
@@ -376,7 +405,10 @@ reports.post(
     const result = await reportsService.bulkUpdate(ids, updates, user.id);
 
     if (!result.success) {
-      return c.json({ success: false, error: result.code, message: result.error }, 400);
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'UPDATE_FAILED' ? 500 : 400
+      );
     }
 
     return c.json({
@@ -441,7 +473,7 @@ reports.get('/:id/files', validate({ params: schemas.id }), async (c) => {
 reports.get('/:reportId/files/:fileId', async (c) => {
   const fileId = c.req.param('fileId');
 
-  const result = await reportsService.serveFile(fileId);
+  const result = await reportsService.serveFile(c.req.param('reportId'), fileId);
 
   if (!result.success) {
     return c.json({ success: false, error: result.code, message: result.error }, 404);
@@ -453,7 +485,8 @@ reports.get('/:reportId/files/:fileId', async (c) => {
     rangeHeader: c.req.header('range'),
     size: file.sizeBytes,
     mimeType: file.mimeType,
-    cacheControl: 'private, max-age=86400',
+    cacheControl: 'private, no-store',
+    filename: file.filename,
     headOnly: c.req.method === 'HEAD',
   });
 

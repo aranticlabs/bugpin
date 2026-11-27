@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { dataUrlToBlob, getExtensionFromDataUrl } from '../../capture/screenshot';
+import { dataUrlToBlob, getExtensionFromDataUrl } from '../../lib/data-url';
 
 describe('screenshot helpers', () => {
   it('converts data URL to Blob with mime type', async () => {

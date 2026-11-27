@@ -1,19 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 import { notificationsService } from '../../src/server/services/notifications.service';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
+import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
+import { reportMessagesRepo } from '../../src/server/database/repositories/report-messages.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
-import { reporterMessagesRepo } from '../../src/server/database/repositories/reporter-messages.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { emailService } from '../../src/server/services/email.service';
+import { reportersRepo } from '../../src/server/database/repositories/reporters.repo';
+import { reporterSuppressionsRepo } from '../../src/server/database/repositories/reporter-suppressions.repo';
 import { logger } from '../../src/server/utils/logger';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
-import type { Project, Report, User, ReporterMessage } from '../../src/shared/types';
+import type { Project, Report, User } from '../../src/shared/types';
 
 const originalProjectsRepo = { ...projectsRepo };
 const originalUsersRepo = { ...usersRepo };
-const originalReporterMessagesRepo = { ...reporterMessagesRepo };
 const originalSettingsRepo = { ...settingsRepo };
 const originalEmailService = { ...emailService };
+const originalReporterLookup = reportersRepo.findByEmail;
+const originalSuppressionHas = reporterSuppressionsRepo.has;
 const originalLogger = { ...logger };
 
 const baseProject: Project = {
@@ -39,10 +43,10 @@ const baseUser: User = {
 };
 
 const baseReport: Report = {
+  reporterLocale: 'en',
+  source: 'widget',
   id: 'rpt_1',
   projectId: 'prj_1',
-  source: 'widget',
-  reporterLocale: 'en',
   title: 'Bug report',
   status: 'open',
   priority: 'high',
@@ -58,16 +62,8 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
-const baseMessage: ReporterMessage = {
-  id: 'msg_1',
-  reportId: 'rpt_1',
-  userId: 'usr_1',
-  userName: 'Admin User',
-  message: 'We are looking into this.',
-  sentAt: new Date().toISOString(),
-  createdAt: new Date().toISOString(),
-};
-
+const originalFindReport = reportsRepo.findById;
+let currentReport: Report | null = baseReport;
 let projectById: Project | null = baseProject;
 
 const sendReporterConfirmationEmail = mock(async () => ({ success: true }));
@@ -80,12 +76,15 @@ const sendReporterPriorityChangeEmail = mock(async () => ({ success: true }));
 const sendReporterAssignmentEmail = mock(async () => ({ success: true }));
 
 beforeEach(() => {
+  reportersRepo.findByEmail = () => null;
+  reporterSuppressionsRepo.has = () => false;
+  currentReport = baseReport;
+  reportsRepo.findById = async () => currentReport;
   projectById = baseProject;
   settingsCacheService.invalidate();
 
   projectsRepo.findById = async () => projectById;
   usersRepo.findById = async () => baseUser;
-  reporterMessagesRepo.findLatestByReportId = async () => null;
 
   settingsRepo.getAll = async () =>
     ({
@@ -114,9 +113,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reportsRepo.findById = originalFindReport;
+  reportersRepo.findByEmail = originalReporterLookup;
+  reporterSuppressionsRepo.has = originalSuppressionHas;
   Object.assign(projectsRepo, originalProjectsRepo);
   Object.assign(usersRepo, originalUsersRepo);
-  Object.assign(reporterMessagesRepo, originalReporterMessagesRepo);
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(emailService, originalEmailService);
   Object.assign(logger, originalLogger);
@@ -179,8 +180,7 @@ describe('notificationsService.notifyReporterStatusChange', () => {
     );
   });
 
-  it('does not include stale reporter messages', async () => {
-    reporterMessagesRepo.findLatestByReportId = async () => baseMessage;
+  it('does not include unrelated messages in status emails', async () => {
     await notificationsService.notifyReporterStatusChange(baseReport, 'open', 'resolved');
     const callArgs = sendReporterStatusChangeEmail.mock.calls[0][1];
     expect(callArgs.reporterMessage).toBeUndefined();
@@ -234,6 +234,7 @@ describe('notificationsService.notifyReporterMessage', () => {
 
   it('skips when report has no reporterEmail', async () => {
     const reportWithoutEmail = { ...baseReport, reporterEmail: undefined };
+    currentReport = reportWithoutEmail;
     await notificationsService.notifyReporterMessage(reportWithoutEmail, 'Hello', 'usr_1');
     expect(sendReporterMessageEmail).not.toHaveBeenCalled();
   });
@@ -246,6 +247,7 @@ describe('notificationsService.notifyReporterMessage', () => {
 
   it('skips when reporterEmail is malformed', async () => {
     const badReport = { ...baseReport, reporterEmail: 'not-an-email' };
+    currentReport = badReport;
     await notificationsService.notifyReporterMessage(badReport, 'Hello', 'usr_1');
     expect(sendReporterMessageEmail).not.toHaveBeenCalled();
   });
@@ -335,4 +337,62 @@ describe('notificationsService.notifyReporterAssignment', () => {
     await notificationsService.notifyReporterAssignment(baseReport, undefined, 'usr_1');
     expect(sendReporterAssignmentEmail).not.toHaveBeenCalled();
   });
+});
+
+it('resolves the recipient again after sending the staff copy', async () => {
+  emailService.sendReporterMessageCcEmail = async () => {
+    currentReport = { ...baseReport, claimableEmail: 'new@example.com' };
+    return { success: true };
+  };
+  await notificationsService.notifyReporterMessage(baseReport, 'Reply', baseUser.id, true);
+  expect(sendReporterMessageEmail).toHaveBeenCalledWith(
+    'new@example.com',
+    expect.objectContaining({ report: currentReport })
+  );
+});
+
+it('skips reporter delivery when the message was hidden or deleted during CC', async () => {
+  let hidden = false;
+  const message = {
+    id: 'msg',
+    reportId: baseReport.id,
+    body: 'Reply',
+    userId: baseUser.id,
+    reporterId: null,
+    authorKind: 'staff' as const,
+    authorName: baseUser.name,
+    hiddenAt: null,
+    hiddenByUserId: null,
+    createdAt: baseReport.createdAt,
+  };
+  const read = spyOn(reportMessagesRepo, 'findById').mockImplementation(() =>
+    hidden ? { ...message, hiddenAt: baseReport.createdAt } : null
+  );
+  emailService.sendReporterMessageCcEmail = async () => {
+    hidden = true;
+    return { success: true };
+  };
+  try {
+    await notificationsService.notifyReporterMessage(
+      baseReport,
+      'Reply',
+      baseUser.id,
+      true,
+      [],
+      'msg'
+    );
+    hidden = false;
+    await notificationsService.notifyReporterMessage(
+      baseReport,
+      'Reply',
+      baseUser.id,
+      false,
+      [],
+      'msg'
+    );
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(sendReporterMessageEmail).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
 });

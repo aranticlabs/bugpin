@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
+import { reporterPortalSettingsService } from '../../../src/server/services/reporter-portal-settings.service';
 import { settingsService } from '../../../src/server/services/settings.service';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { emailService } from '../../../src/server/services/email.service';
 import { authService } from '../../../src/server/services/auth.service';
 import { cleanupService } from '../../../src/server/services/cleanup.service';
@@ -38,6 +40,9 @@ let storedSettings: AppSettings;
 function settingsWithSecrets(): AppSettings {
   return {
     appName: 'BugPin',
+    appUrl: 'http://localhost',
+    portalBaseUrl: '',
+    reporterPortal: { enabled: false, allowNewReports: false },
     smtpEnabled: true,
     smtpConfig: {
       host: 'smtp.example.com',
@@ -59,12 +64,15 @@ function asRole(role: User['role']) {
 function jsonRequest(method: string, body: unknown, cookie = 'session=sess_1'): RequestInit {
   return {
     method,
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { cookie, origin: 'http://localhost', 'content-type': 'application/json' },
     body: JSON.stringify(body),
   };
 }
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ ...storedSettings, appUrl: 'http://localhost' });
   authService.validateSession = async () =>
     Result.ok({
       user: baseUser,
@@ -77,11 +85,13 @@ beforeEach(() => {
   cleanupService.deleteAllReports = async () => ({ deleted: 0, errors: 0 });
   storedSettings = settingsWithSecrets();
   settingsRepo.getAll = async () => storedSettings;
+  settingsRepo.isStored = () => true;
 
   emailService.sendTestEmail = async () => ({ success: true });
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(emailService, originalEmailService);
@@ -104,6 +114,41 @@ describe('settings routes', () => {
     expect(res.status).toBe(200);
   });
 
+  it('reports the Application URL and the request origin as BugPin derives it', async () => {
+    settingsCacheService.getAll = async () => ({
+      ...storedSettings,
+      appUrl: 'https://bugs.example.com',
+    });
+    const app = createApp();
+    const res = await app.request(
+      'http://localhost/settings/address-check',
+      {
+        headers: {
+          cookie: 'session=sess_1',
+          host: 'bugs.example.com',
+          'x-forwarded-proto': 'https',
+        },
+      },
+      { requestIP: () => ({ address: '203.0.113.7' }) }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      appUrl: 'https://bugs.example.com',
+      requestOrigin: 'http://bugs.example.com',
+      requiredTrustProxy: 'true',
+    });
+  });
+
+  it('refuses the address check to non-admins', async () => {
+    asRole('editor');
+    const app = createApp();
+    const res = await app.request('http://localhost/settings/address-check', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(403);
+  });
+
   it('returns 500 when settings fetch fails', async () => {
     settingsService.getAllRedacted = async () => Result.fail('Nope', 'FETCH_FAILED');
     const app = createApp();
@@ -119,6 +164,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -130,7 +176,11 @@ describe('settings routes', () => {
     const app = createApp();
     const accepted = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({
         privacy: {
           euPrivacyMode: true,
@@ -141,7 +191,11 @@ describe('settings routes', () => {
 
     const rejected = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ privacy: { euPrivacyMode: 'yes' } }),
     });
     expect(rejected.status).toBe(400);
@@ -151,14 +205,22 @@ describe('settings routes', () => {
     const app = createApp();
     const accepted = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ diagnostics: { networkCapture: false, storageKeysCapture: true } }),
     });
     expect(accepted.status).toBe(200);
 
     const rejected = await app.request('http://localhost/settings', {
       method: 'PUT',
-      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ diagnostics: { screenCapture: true } }),
     });
     expect(rejected.status).toBe(400);
@@ -171,6 +233,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -185,6 +248,7 @@ describe('settings routes', () => {
       method: 'PUT',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ appName: 'BugPin' }),
@@ -198,6 +262,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({}),
@@ -212,6 +277,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -233,6 +299,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -257,6 +324,7 @@ describe('settings routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -503,11 +571,42 @@ describe('settings routes permissions', () => {
         const init = request.init();
         const res = await createApp().request(`http://localhost${request.path}`, {
           ...init,
-          headers: { ...Object.fromEntries(new Headers(init.headers)), cookie: 'session=sess_1' },
+          headers: {
+            ...Object.fromEntries(new Headers(init.headers)),
+            cookie: 'session=sess_1',
+            origin: 'http://localhost',
+          },
         });
         expect(res.status).toBe(403);
         expect(deleted).toBe(false);
       });
     }
+  }
+});
+
+it('returns Reporter Portal prerequisites and maps overview failures', async () => {
+  const overview = spyOn(reporterPortalSettingsService, 'overview').mockResolvedValue(
+    Result.ok({ prerequisites: ['smtp'], claimableReports: 2 })
+  );
+  try {
+    const request = () =>
+      createApp().request('http://localhost/settings/reporter-portal', {
+        headers: { cookie: 'session=sess_1' },
+      });
+    expect(await (await request()).json()).toEqual({
+      success: true,
+      prerequisites: ['smtp'],
+      claimableReports: 2,
+    });
+    overview.mockResolvedValue(Result.fail('Unavailable', 'SETTINGS_READ_FAILED'));
+    const failure = await request();
+    expect(failure.status).toBe(500);
+    expect(await failure.json()).toEqual({
+      success: false,
+      error: 'SETTINGS_READ_FAILED',
+      message: 'Unavailable',
+    });
+  } finally {
+    overview.mockRestore();
   }
 });

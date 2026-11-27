@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { authRoutes } from '../../../src/server/routes/api/auth';
 import { authService } from '../../../src/server/services/auth.service';
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
@@ -27,7 +28,10 @@ const baseSession: Session = {
 const originalAuthService = { ...authService };
 const originalSettingsRepo = { ...settingsRepo };
 
+const originalSettingsCacheGetAll = settingsCacheService.getAll;
+
 beforeEach(() => {
+  settingsCacheService.getAll = async () => ({ appUrl: 'http://localhost' }) as AppSettings;
   authService.login = async () => Result.ok({ user: baseUser, session: baseSession });
   authService.logout = async () => Result.ok(undefined);
   authService.changePassword = async () => Result.ok(undefined);
@@ -48,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settingsCacheService.getAll = originalSettingsCacheGetAll;
   Object.assign(authService, originalAuthService);
   Object.assign(settingsRepo, originalSettingsRepo);
 });
@@ -95,7 +100,7 @@ describe('auth routes', () => {
     const app = createApp();
     const res = await app.request('http://localhost/auth/logout', {
       method: 'POST',
-      headers: { cookie: 'session=sess_1' },
+      headers: { cookie: 'session=sess_1', origin: 'http://localhost' },
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('set-cookie') || '').toContain('session=');
@@ -107,6 +112,7 @@ describe('auth routes', () => {
       method: 'POST',
       headers: {
         cookie: 'session=sess_1',
+        origin: 'http://localhost',
         'content-type': 'application/json',
       },
       body: JSON.stringify({ currentPassword: 'old', newPassword: 'newpassword' }),

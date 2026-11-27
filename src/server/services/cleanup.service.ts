@@ -1,10 +1,21 @@
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
-import { deleteReportFiles } from '../storage/files.js';
+import { deleteReportFiles, withReportDeletionFence } from '../storage/files.js';
 import { logger } from '../utils/logger.js';
+import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
+import { realtimeService } from './realtime.service.js';
+import { reportersService } from './reporters.service.js';
 
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+let initialCleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+async function runScheduledCleanup(): Promise<void> {
+  await cleanupOldReports();
+  const result = await reportersService.cleanup();
+  if (!result.success) throw new Error(result.error);
+  logger.info('Reporter cleanup completed', result.value);
+}
 
 /**
  * Delete reports older than the configured retention period
@@ -42,25 +53,31 @@ async function deleteReportsByIds(
 ): Promise<{ deleted: number; errors: number }> {
   let deleted = 0;
   let errors = 0;
+  const owners = new Set<string>();
 
   for (const reportId of reportIds) {
     try {
-      await deleteReportFiles(reportId);
-      await filesRepo.deleteByReportId(reportId);
+      await withReportDeletionFence(reportId, async () => {
+        await deleteReportFiles(reportId);
+        await filesRepo.deleteByReportId(reportId);
 
-      if (await reportsRepo.delete(reportId)) {
-        deleted++;
-        logger.debug('Deleted report', { reportId });
-      } else {
-        errors++;
-        logger.warn('Failed to delete report', { reportId });
-      }
+        const owner = reporterOwnershipRepo.findByReportId(reportId);
+        if (await reportsRepo.delete(reportId)) {
+          if (owner?.reporterId) owners.add(owner.reporterId);
+          deleted++;
+          logger.debug('Deleted report', { reportId });
+        } else {
+          errors++;
+          logger.warn('Failed to delete report', { reportId });
+        }
+      });
     } catch (error) {
       errors++;
       logger.error('Error deleting report', error, { reportId });
     }
   }
 
+  for (const reporterId of owners) realtimeService.invalidatePortalAccess({ reporterId });
   return { deleted, errors };
 }
 
@@ -89,8 +106,9 @@ function startCleanupScheduler(): void {
   }
 
   // Run cleanup on startup (with a small delay to let the server initialize)
-  setTimeout(() => {
-    cleanupOldReports().catch((error) => {
+  initialCleanupTimeout = setTimeout(() => {
+    initialCleanupTimeout = null;
+    runScheduledCleanup().catch((error) => {
       logger.error('Scheduled cleanup failed', error);
     });
   }, 5000);
@@ -98,7 +116,7 @@ function startCleanupScheduler(): void {
   // Run cleanup every 24 hours
   const oneDayMs = 24 * 60 * 60 * 1000;
   cleanupInterval = setInterval(() => {
-    cleanupOldReports().catch((error) => {
+    runScheduledCleanup().catch((error) => {
       logger.error('Scheduled cleanup failed', error);
     });
   }, oneDayMs);
@@ -110,6 +128,10 @@ function startCleanupScheduler(): void {
  * Stop the cleanup scheduler
  */
 function stopCleanupScheduler(): void {
+  if (initialCleanupTimeout) {
+    clearTimeout(initialCleanupTimeout);
+    initialCleanupTimeout = null;
+  }
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
     cleanupInterval = null;

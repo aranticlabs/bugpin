@@ -84,7 +84,11 @@ async function run() {
       assert.equal(html.includes('/branding/light/logo.svg'), enabled);
       const htmlColor = '<p style="color:__BRAND_COLOR__">Preview</p>';
       for (const prefix of ['/api/templates', '/api/settings/email-templates']) {
-        const headers = { cookie: 'session=session', 'Content-Type': 'application/json' };
+        const headers = {
+          cookie: 'session=session',
+          Origin: new URL(stored.appUrl).origin,
+          'Content-Type': 'application/json',
+        };
         const payload = { type: 'newReport', subject: 'Preview', html: htmlColor };
         const preview = await app.request(prefix + '/preview', {
           method: 'POST',

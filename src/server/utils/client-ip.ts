@@ -1,8 +1,11 @@
 import { isIP } from 'node:net';
 import type { Context } from 'hono';
 import { config } from '../config.js';
+import { proxyTokenService } from '../services/proxy-token.service.js';
+import { Result } from './result.js';
 
-export type TrustProxyMode = 'auto' | 'always' | 'never';
+export type TrustProxyMode = 'auto' | 'always' | 'never' | 'token';
+const HOST_PATTERN = /^[a-z0-9.:[\]-]+$/i;
 
 interface RequestIpServer {
   requestIP(request: Request): { address: string } | null;
@@ -17,7 +20,7 @@ function isRequestIpServer(value: unknown): value is RequestIpServer {
 }
 
 // Bun passes its server as the second `fetch` argument, which Hono exposes as `c.env`.
-function getSocketAddress(c: Context): string | undefined {
+export function getSocketAddress(c: Context): string | undefined {
   const env: unknown = c.env;
   if (!isRequestIpServer(env)) return undefined;
   try {
@@ -33,6 +36,12 @@ function normalizeAddress(address: string): string {
   // IPv4-mapped IPv6 (`::ffff:10.0.0.1`) as reported for dual-stack sockets
   const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(trimmed);
   return mapped ? mapped[1] : trimmed;
+}
+
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const ip = normalizeAddress(address);
+  return ip === '::1' || (isIP(ip) === 4 && ip.startsWith('127.'));
 }
 
 /**
@@ -59,10 +68,54 @@ export function isPrivateAddress(address: string): boolean {
   return false;
 }
 
-function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boolean {
+function requestIsTrustedProxy(c: Context, mode: TrustProxyMode): boolean {
+  if (mode === 'token')
+    return Result.unwrapOr(proxyTokenService.verify(c.req.header('x-bugpin-proxy-token')), false);
+  const peer = getSocketAddress(c);
   if (mode === 'never') return false;
   if (mode === 'always') return true;
   return peer !== undefined && isPrivateAddress(peer);
+}
+
+export function getEffectiveOrigin(c: Context): string | null {
+  try {
+    const url = new URL(c.req.url);
+    let host = c.req.header('host') ?? url.host;
+    let protocol = url.protocol;
+    if (requestIsTrustedProxy(c, config.trustProxy)) {
+      // Only an authenticated proxy may rename the host: an unauthenticated peer could
+      // otherwise reach the staff or portal routes of another address.
+      if (config.trustProxy === 'token') host = c.req.header('x-forwarded-host') ?? host;
+      const forwardedProtocol = c.req.header('x-forwarded-proto');
+      if (
+        forwardedProtocol !== undefined &&
+        forwardedProtocol !== 'http' &&
+        forwardedProtocol !== 'https'
+      )
+        return null;
+      if (forwardedProtocol) protocol = `${forwardedProtocol}:`;
+    }
+    if (!HOST_PATTERN.test(host)) return null;
+    return new URL(`${protocol}//${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The TRUST_PROXY value that would make BugPin honor this request's forwarded headers, or
+ * null when it already honors them or the request carries none. Ignored forwarded headers
+ * are the usual sign of a reverse proxy in front of an instance that does not trust it: a
+ * proxy on a private network only needs `auto`, one with a public address needs `true`.
+ */
+export function requiredTrustProxy(c: Context): 'auto' | 'true' | null {
+  const peer = getSocketAddress(c);
+  if (config.trustProxy === 'token' || requestIsTrustedProxy(c, config.trustProxy)) return null;
+  const hasForwardedHeaders = ['x-forwarded-for', 'x-forwarded-proto'].some(
+    (header) => c.req.header(header) !== undefined
+  );
+  if (!hasForwardedHeaders) return null;
+  return peer !== undefined && isPrivateAddress(peer) ? 'auto' : 'true';
 }
 
 /**
@@ -70,7 +123,8 @@ function peerIsTrustedProxy(peer: string | undefined, mode: TrustProxyMode): boo
  *
  * Forwarded headers are only honored when the connecting peer is a trusted proxy
  * (TRUST_PROXY: `auto` trusts loopback and private-network peers, `true` trusts any
- * peer, `false` trusts none). X-Forwarded-For is read from the right, skipping
+ * peer, `false` trusts none, `token` requires the current proxy token).
+ * X-Forwarded-For is read from the right, skipping
  * private hops, because entries to the left of the proxy's own entry are supplied by
  * the client and can be forged.
  */
@@ -79,7 +133,7 @@ export function getClientIp(
   mode: TrustProxyMode = config.trustProxy
 ): string | undefined {
   const peer = getSocketAddress(c);
-  if (!peerIsTrustedProxy(peer, mode)) return peer;
+  if (!requestIsTrustedProxy(c, mode)) return peer;
 
   const forwarded = (c.req.header('x-forwarded-for') ?? '')
     .split(',')

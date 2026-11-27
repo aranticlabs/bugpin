@@ -10,6 +10,7 @@ import { passwordPolicyService } from './password-policy.service.js';
 import { twoFactorRepo } from '../database/repositories/two-factor.repo.js';
 import { apiTokensRepo } from '../database/repositories/api-tokens.repo.js';
 import { gamificationService } from './gamification.service.js';
+import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 
 // Types
 
@@ -319,6 +320,9 @@ export const usersService = {
       return Result.fail('Failed to update user', 'UPDATE_FAILED');
     }
 
+    if (input.isActive === false)
+      portalOperatorsRepo.revokeAllForUser(id, new Date().toISOString());
+
     if (selectedProjectIds && projectsForDefaults) {
       for (const project of projectsForDefaults) {
         const isSelected = selectedProjectIds.has(project.id);
@@ -393,6 +397,7 @@ export const usersService = {
     await usersRepo.updatePassword(id, passwordHash);
 
     await sessionsRepo.deleteByUserId(id);
+    portalOperatorsRepo.revokeAllForUser(id, new Date().toISOString());
     const revokedTokens = await apiTokensRepo.revokeAllForUser(id);
 
     logger.info('User password reset', { userId: id, revokedTokens });
@@ -509,6 +514,8 @@ export const usersService = {
     if (!user) {
       return Result.fail('Failed to update profile', 'UPDATE_FAILED');
     }
+
+    if (updates.email) portalOperatorsRepo.revokeAllForUser(userId, new Date().toISOString());
 
     logger.info('Profile updated', { userId, updates: Object.keys(updates) });
     return Result.ok(user);

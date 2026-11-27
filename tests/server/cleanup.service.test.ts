@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { cleanupService } from '../../src/server/services/cleanup.service';
+import { reporterOwnershipRepo } from '../../src/server/database/repositories/reporter-ownership.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
 import type { AppSettings } from '../../src/shared/types';
 
+const originalOwnershipRepo = { ...reporterOwnershipRepo };
 const originalReportsRepo = { ...reportsRepo };
 const originalFilesRepo = { ...filesRepo };
 const originalSettingsRepo = { ...settingsRepo };
@@ -15,6 +17,7 @@ let deletedReportIds: string[] = [];
 let deletedFileReportIds: string[] = [];
 
 beforeEach(() => {
+  reporterOwnershipRepo.findByReportId = () => null;
   deletedReportIds = [];
   deletedFileReportIds = [];
 
@@ -42,6 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.assign(reporterOwnershipRepo, originalOwnershipRepo);
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(filesRepo, originalFilesRepo);
   Object.assign(settingsRepo, originalSettingsRepo);

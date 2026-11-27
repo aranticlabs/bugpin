@@ -4,6 +4,7 @@ import { authService } from '../services/auth.service.js';
 import { twoFactorService } from '../services/two-factor.service.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import { apiAccessDeniedBody, hasApiAccess } from './api-access.js';
+import { staffOriginCheck } from './origin-check.js';
 import type { ApiTokenValidationResult } from '../types/ee-plugin.js';
 import type { User, Session } from '@shared/types';
 
@@ -54,7 +55,7 @@ const twoFactorSetupRequiredBody = {
  * Validates API credentials or a session cookie and sets the user in context
  */
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
-  if (c.get('user')) return next();
+  if (c.get('user')) return c.get('apiToken') ? next() : staffOriginCheck(c, next);
   const authorization = c.req.header('Authorization');
   if (authorization) {
     const service = getEEHooks().getApiTokenService();
@@ -77,7 +78,10 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
         403
       );
     }
-    if (/^\/api\/(auth|tokens)(\/|$)/.test(c.req.path)) {
+    if (
+      /^\/api\/(auth|tokens)(\/|$)/.test(c.req.path) ||
+      /^\/api\/settings\/proxy-token(\/|$)/.test(c.req.path)
+    ) {
       return c.json(
         { success: false, error: 'FORBIDDEN', message: 'Use a session to manage credentials' },
         403
@@ -110,7 +114,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
   c.set('user', result.value.user);
   c.set('session', result.value.session);
 
-  return next();
+  return staffOriginCheck(c, next);
 };
 
 /**
@@ -159,6 +163,7 @@ export const optionalAuth: MiddlewareHandler = async (c, next) => {
     if (result.success) {
       c.set('user', result.value.user);
       c.set('session', result.value.session);
+      return staffOriginCheck(c, next);
     }
   }
 

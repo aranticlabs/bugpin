@@ -1,0 +1,35 @@
+// Staff-facing strings stay in English, the only language of the Admin Console.
+export const team = {
+  teamSignInLink: 'Team member? Sign in with your BugPin account',
+  teamLoginTitle: 'Team sign-in',
+  password: 'Password',
+  signIn: 'Sign in',
+  backToEmailSignIn: 'Back to email sign-in',
+  twoFactorTitle: 'Two-factor authentication',
+  authenticatorCode: 'Authenticator code',
+  recoveryCode: 'Recovery code',
+  useRecoveryCode: 'Use a recovery code instead',
+  useAuthenticatorCode: 'Use an authenticator code instead',
+  verify: 'Verify',
+  teamVerificationSent:
+    'To finish signing in, open the confirmation link we sent to {email}. It expires in 15 minutes.',
+  invalidCredentials: 'The email or password is incorrect.',
+  teamSetupRequired: 'Finish setting up your account in the Admin Console, then sign in here.',
+  invalidCode: 'The code is not valid.',
+  challengeExpired: 'The sign-in attempt expired. Sign in again.',
+  emailDeliveryFailed: 'We could not send the confirmation email. Try again later.',
+  teamSignInUnavailable: 'Team sign-in is not available.',
+  teamConfirmTitle: 'Confirm team sign-in for {email}?',
+  teamLinkExpired: 'This confirmation link expired. Sign in again to get a new one.',
+  signInAgain: 'Sign in again',
+  teamViewTitle: 'Team view',
+  teamViewText: 'You see reports as their reporters do. Read-only.',
+  teamReports: 'All reports',
+  teamReportTitle: 'Report',
+  teamConversationHint: 'Messages between the reporter and the team.',
+  reporterSentReport: 'The reporter sent this report',
+  teamReadOnlyTitle: 'Read-only team view',
+  teamReadOnlyReply: 'Reply to the reporter in the Admin Console.',
+};
+
+export type TeamMessageKey = keyof typeof team;

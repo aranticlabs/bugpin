@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Spinner } from '../components/ui/spinner';
 import { Separator } from '../components/ui/separator';
+import { cn } from '../lib/utils';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
@@ -289,6 +290,7 @@ function TwoFactorForm({
             inputMode={method === 'recovery' ? 'text' : 'numeric'}
             placeholder={method === 'recovery' ? 'xxxxx-xxxxx' : '123456'}
             maxLength={method === 'recovery' ? 20 : 6}
+            className={cn(method === 'recovery' && 'font-mono')}
             autoFocus
           />
         </div>

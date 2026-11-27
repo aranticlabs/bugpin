@@ -105,11 +105,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Typecheck
-        run: bun run typecheck
+        run: bun run typecheck && bun run typecheck:tests
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       # Pull requests from forks get no secrets; EE checks are skipped there
@@ -150,6 +150,15 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Test widget release recovery
+        run: bash tests/release/widget.sh
+
+      - name: Install Chromium system dependencies
+        run: bun run --cwd src/widget playwright-core install-deps chromium
+
+      - name: Test annotation touch cleanup in Chromium
+        run: make test-widget-touch
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -174,3 +183,23 @@ jobs:
 
       - name: Check widget bundle size
         run: bun run src/widget/scripts/check-bundle-size.ts
+
+  nginx:
+    name: Test live nginx frontends
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+
+      - name: Install nginx
+        run: sudo apt-get update && sudo apt-get install -y nginx
+
+      - name: Test live nginx frontends
+        run: bun test tests/fixtures/nginx-live.test.ts

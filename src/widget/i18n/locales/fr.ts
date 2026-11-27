@@ -9,9 +9,7 @@ const fr: WidgetCatalog = {
   'dialog.title': 'Signaler un bug',
   'dialog.tabs.details': 'Détails',
   'dialog.tabs.media': "Captures d'écran",
-  'dialog.tabs.mediaWithCount': "Captures d'écran ({count})",
   'dialog.tabs.recording': 'Enregistrements',
-  'dialog.tabs.recordingWithCount': 'Enregistrements ({count})',
 
   'dialog.fields.title.label': 'Titre',
   'dialog.fields.title.placeholder': 'Brève description du problème',
@@ -22,6 +20,8 @@ const fr: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Votre nom',
   'dialog.fields.email.label': 'E-mail (facultatif)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Avec votre e-mail, vous pouvez suivre ce signalement dans le Portail des signalements.',
 
   'dialog.priority.highest': 'Très haute',
   'dialog.priority.high': 'Haute',
@@ -61,13 +61,21 @@ const fr: WidgetCatalog = {
   'screenshot.privacyTip':
     "Conseil : utilisez l'outil d'annotation pour masquer les données sensibles avant d'envoyer.",
   'screenshot.capturing': 'Capture en cours...',
-  'screenshot.capture': "Capturer l'écran",
+  'screenshot.capture': 'Ouvrir l’outil de capture',
   'screenshot.quality.label': 'Réduire la qualité de capture',
   'screenshot.quality.activeIndicator': 'Qualité de capture réduite',
   'screenshot.quality.tooltip':
     "Capturer à une densité de pixels de 1x. Utilisez cette option si votre capture d'écran est trop volumineuse pour être envoyée.",
   'screenshot.dropzone.title': 'Faites glisser vos fichiers ici',
   'screenshot.dropzone.subtitle': 'ou cliquez pour parcourir',
+  'screenshot.dropzone.subtitlePaste': 'ou cliquez pour parcourir, ou collez ({shortcut})',
+  'screenshot.bar.capture': 'Capturer',
+  'screenshot.bar.timerLabel': 'Délai de capture',
+  'screenshot.bar.timerOff': 'Désactivé',
+  'screenshot.bar.timerShort': '{seconds} s',
+  'screenshot.bar.timerOption': '{seconds} secondes',
+  'screenshot.bar.countdown': 'Capture dans {seconds}',
+  'screenshot.bar.cancel': 'Annuler',
   'screenshot.addMore': "Ajouter d'autres",
   'screenshot.alt': "Capture d'écran",
   'screenshot.badge.annotated': 'Annoté',
@@ -76,6 +84,9 @@ const fr: WidgetCatalog = {
   'screenshot.action.download': 'Télécharger',
   'screenshot.action.remove': 'Supprimer',
   'screenshot.helperText': 'Formats acceptés : PNG, JPG, GIF, WebP (max. {imageSize} Mo)',
+  'recording.quality.low': 'Faible',
+  'recording.quality.standard': 'Standard',
+  'recording.quality.high': 'Élevée',
   'recording.helperText': 'Formats acceptés : MP4, WebM, MOV (max. {videoSize} Mo)',
 
   'screenshot.error.unsupportedImage': "Format d'image non pris en charge : {type}",
@@ -151,10 +162,11 @@ const fr: WidgetCatalog = {
   'annotation.toolbar.undo': 'Annuler (Ctrl+Z)',
   'annotation.toolbar.redo': 'Rétablir (Ctrl+Shift+Z)',
   'annotation.toolbar.delete': 'Supprimer la sélection (Del)',
-  'annotation.toolbar.zoomIn': 'Zoom avant - Maintenir Space pour déplacer',
-  'annotation.toolbar.zoomOut': 'Zoom arrière - Maintenir Space pour déplacer',
-  'annotation.toolbar.zoomReset':
-    'Réinitialiser le zoom ({percent}%) - Maintenir Space pour déplacer',
+  'annotation.toolbar.zoomIn': 'Zoom avant',
+  'annotation.toolbar.zoomOut': 'Zoom arrière',
+  'annotation.toolbar.zoomFit': "Ajuster à l'écran",
+  'annotation.toolbar.maximize': 'Agrandir',
+  'annotation.toolbar.restore': "Taille d'origine",
   'annotation.toolbar.strokeWidth': '{width}px',
   'annotation.color.red': 'Rouge',
   'annotation.color.orange': 'Orange',
@@ -166,6 +178,9 @@ const fr: WidgetCatalog = {
   'annotation.defaultText': 'Texte',
   'annotation.buttons.cancel': 'Annuler',
   'annotation.buttons.done': 'Terminer',
+  'portal.checkEmail':
+    'Consultez votre boîte de réception pour un lien de connexion ou demandez-en un dans Mes signalements.',
+  'portal.viewReports': 'Voir mes signalements',
 };
 
 export default fr;

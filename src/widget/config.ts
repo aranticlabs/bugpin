@@ -10,6 +10,7 @@ export interface WidgetLanguageConfig {
 
 export interface WidgetConfig {
   hidePoweredBy?: boolean;
+  portalUrl?: string | null;
   apiKey: string;
   serverUrl: string;
   reporterName?: string;
@@ -94,6 +95,8 @@ export interface WidgetConfig {
   maxVideoUploadSize: number;
   maxRecordingDurationSeconds: number;
   recordingQuality: RecordingQuality;
+  /** Keyboard shortcut that runs BugPin.capture(), e.g. "Alt+Shift+S". Off when unset. */
+  captureShortcut?: string;
 }
 
 export const defaultConfig: WidgetConfig = {

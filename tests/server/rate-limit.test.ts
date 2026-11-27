@@ -103,6 +103,7 @@ describe('rateLimiter', () => {
     const response = await limiter(third as unknown as never, next);
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(429);
+    expect(third._headers.get('Retry-After')).toMatch(/^\d+$/);
     const payload = await (response as Response).json();
     expect(payload).toMatchObject({
       success: false,
@@ -128,6 +129,30 @@ describe('rateLimiter', () => {
 
     const blocked = await login(createContext() as unknown as never, next);
     expect((blocked as Response).status).toBe(429);
+  });
+
+  it('can suppress response headers while still counting and blocking over-limit requests', async () => {
+    const limiter = rateLimiter({
+      max: 1,
+      window: 60,
+      exposeHeaders: false,
+      keyGenerator: () => 'private-key',
+    });
+    let allowed = 0;
+    const first = createContext();
+    await limiter(first as unknown as never, async () => {
+      allowed++;
+    });
+    expect(first._headers.size).toBe(0);
+    const second = createContext();
+    const response = await limiter(second as unknown as never, async () => {
+      allowed++;
+    });
+    expect((response as Response).status).toBe(429);
+    expect(await (response as Response).json()).toMatchObject({ error: 'RATE_LIMIT_EXCEEDED' });
+    expect(second._headers.size).toBe(0);
+    expect(allowed).toBe(1);
+    expect(await getRateLimitInfo('private-key', 1)).toMatchObject({ count: 2, remaining: 0 });
   });
 });
 
