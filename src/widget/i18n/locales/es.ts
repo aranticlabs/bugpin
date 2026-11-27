@@ -9,9 +9,7 @@ const es: WidgetCatalog = {
   'dialog.title': 'Informar de un error',
   'dialog.tabs.details': 'Detalles',
   'dialog.tabs.media': 'Capturas',
-  'dialog.tabs.mediaWithCount': 'Capturas ({count})',
   'dialog.tabs.recording': 'Grabaciones',
-  'dialog.tabs.recordingWithCount': 'Grabaciones ({count})',
 
   'dialog.fields.title.label': 'Título',
   'dialog.fields.title.placeholder': 'Breve descripción del problema',
@@ -22,6 +20,8 @@ const es: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Tu nombre',
   'dialog.fields.email.label': 'Correo electrónico (opcional)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Con tu correo podrás seguir este informe en el Portal de informantes.',
 
   'dialog.priority.highest': 'Máxima',
   'dialog.priority.high': 'Alta',
@@ -179,7 +179,6 @@ const es: WidgetCatalog = {
   'annotation.buttons.done': 'Hecho',
   'portal.checkEmail': 'Busca un enlace de acceso en tu correo o solicita uno en Mis informes.',
   'portal.viewReports': 'Ver mis informes',
-  'portal.myReports': 'Mis informes',
 };
 
 export default es;

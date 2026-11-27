@@ -28,6 +28,7 @@ const MAX_CANVAS_DIMENSION = 16384;
 const MAX_TOTAL_PIXELS = 40_000_000;
 // HTMLMediaElement.HAVE_CURRENT_DATA
 const HAVE_CURRENT_DATA = 2;
+const METADATA_TIMEOUT_MS = 10_000;
 
 // Data attribute used to exclude elements from capture
 const EXCLUDE_ATTRIBUTE = 'data-bugpin-exclude';
@@ -401,9 +402,14 @@ export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> 
     video.srcObject = stream;
     video.autoplay = true;
 
-    await new Promise<void>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await new Promise<void>((resolve, reject) => {
+      const fail = () => reject(new Error('Screen sharing could not start'));
       video.onloadedmetadata = () => resolve();
-    });
+      video.onerror = fail;
+      for (const track of stream.getTracks()) track.onended = fail;
+      timer = setTimeout(fail, METADATA_TIMEOUT_MS);
+    }).finally(() => clearTimeout(timer));
     // A detached video only keeps decoding new frames while it is playing.
     await Promise.resolve(video.play?.()).catch(() => undefined);
 

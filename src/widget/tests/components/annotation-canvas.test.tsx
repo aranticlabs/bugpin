@@ -363,6 +363,7 @@ describe('AnnotationCanvas', () => {
     };
 
     let restoreSize: (() => void) | null = null;
+    let pendingCleanup: (() => void) | null = null;
     let viewSize = { width: 832, height: 632 };
     let resizeCallback: (() => void) | null = null;
     const originalResizeObserver = (globalThis as Record<string, unknown>).ResizeObserver;
@@ -396,6 +397,9 @@ describe('AnnotationCanvas', () => {
     });
 
     afterEach(() => {
+      // Runs even when a test fails before its own cleanup, so no canvas leaks into later tests.
+      pendingCleanup?.();
+      pendingCleanup = null;
       restoreSize?.();
       restoreSize = null;
       resizeCallback = null;
@@ -434,11 +438,30 @@ describe('AnnotationCanvas', () => {
       await waitFor(() => Boolean(canvas.events?.has('mouse:down')), 'Canvas handlers not ready');
       const fitButton = () =>
         container.querySelector('button[aria-label="Fit to screen"]') as HTMLButtonElement;
+      let cleaned = false;
       const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         render(null, container);
         container.remove();
       };
+      pendingCleanup = cleanup;
       return { container, canvas, canvasEl, fitButton, cleanup };
+    }
+
+    /** Waits until the tool is active and its Fabric `mouse:down` handler is registered. */
+    async function selectTool(container: HTMLElement, canvas: MockCanvas, label: string) {
+      const handlers = () => [...((canvas.events?.get('mouse:down') ?? []) as Set<unknown>)];
+      const previous = handlers();
+      const button = () =>
+        container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement | null;
+      button()!.click();
+      await waitFor(
+        () =>
+          (button()?.className.includes('text-primary') ?? false) &&
+          handlers().some((handler) => !previous.includes(handler)),
+        `${label} tool not ready`
+      );
     }
 
     function touchDispatcher(target: HTMLElement) {
@@ -548,14 +571,7 @@ describe('AnnotationCanvas', () => {
     it('cancels the shape in progress and zooms when a second finger pinches', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
 
-      (container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement).click();
-      await waitFor(
-        () =>
-          (
-            container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement | null
-          )?.className.includes('text-primary') ?? false,
-        'Rectangle tool not active'
-      );
+      await selectTool(container, canvas, 'Rectangle');
       canvas.trigger('mouse:down', { e: {}, scenePoint: { x: 10, y: 10 } });
       expect(canvas.getObjects()).toHaveLength(1);
 
@@ -610,14 +626,7 @@ describe('AnnotationCanvas', () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
 
-      (container.querySelector('button[aria-label="Text"]') as HTMLButtonElement).click();
-      await waitFor(
-        () =>
-          (
-            container.querySelector('button[aria-label="Text"]') as HTMLButtonElement | null
-          )?.className.includes('text-primary') ?? false,
-        'Text tool not active'
-      );
+      await selectTool(container, canvas, 'Text');
 
       const touch = touchDispatcher(canvasEl);
       touch('touchstart', [[300, 300]]);
@@ -648,21 +657,10 @@ describe('AnnotationCanvas', () => {
       cleanup();
     });
 
-    async function activateTextTool(container: HTMLElement) {
-      (container.querySelector('button[aria-label="Text"]') as HTMLButtonElement).click();
-      await waitFor(
-        () =>
-          (
-            container.querySelector('button[aria-label="Text"]') as HTMLButtonElement | null
-          )?.className.includes('text-primary') ?? false,
-        'Text tool not active'
-      );
-    }
-
     it('keeps a finished annotation when a later pinch starts', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
-      await activateTextTool(container);
+      await selectTool(container, canvas, 'Text');
 
       const touch = touchDispatcher(canvasEl);
       touch('touchstart', [[300, 300]]);
@@ -682,7 +680,7 @@ describe('AnnotationCanvas', () => {
 
     it('preserves restored annotations when undo completes before a touch becomes a pinch', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
-      await activateTextTool(container);
+      await selectTool(container, canvas, 'Text');
 
       const originalAnnotation = { id: 'original' };
       canvas.add(originalAnnotation);
@@ -735,14 +733,7 @@ describe('AnnotationCanvas', () => {
 
     it('clears a detached in-progress shape when undo resolves mid-drag', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
-      (container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement).click();
-      await waitFor(
-        () =>
-          (
-            container.querySelector('button[aria-label="Rectangle"]') as HTMLButtonElement | null
-          )?.className.includes('text-primary') ?? false,
-        'Rectangle tool not active'
-      );
+      await selectTool(container, canvas, 'Rectangle');
 
       const originalAnnotation = { id: 'original' };
       canvas.add(originalAnnotation);
@@ -801,7 +792,7 @@ describe('AnnotationCanvas', () => {
     it('ignores a second finger resting outside the canvas or on the zoom controls', async () => {
       const { container, canvas, canvasEl, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
-      await activateTextTool(container);
+      await selectTool(container, canvas, 'Text');
       const outside = document.createElement('div');
       document.body.appendChild(outside);
       const zoomButton = container.querySelector(
@@ -842,7 +833,7 @@ describe('AnnotationCanvas', () => {
     it('does not start text in the margin around the screenshot', async () => {
       const { container, canvas, cleanup } = await renderCanvas();
       const objectsBefore = canvas.getObjects().length;
-      await activateTextTool(container);
+      await selectTool(container, canvas, 'Text');
 
       canvas.trigger('mouse:down', { e: {}, scenePoint: { x: -5, y: 10 } });
       expect(canvas.getObjects()).toHaveLength(objectsBefore);
@@ -872,6 +863,29 @@ describe('AnnotationCanvas', () => {
 
       expect(space.defaultPrevented).toBe(false);
       expect(canvas.defaultCursor).toBe('default');
+      cleanup();
+    });
+
+    it('redoes with Ctrl+Shift+Z, which reports an uppercase key', async () => {
+      const { container, canvas, cleanup } = await renderCanvas();
+      const button = (label: string) =>
+        container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+
+      canvas.trigger('path:created');
+      await waitFor(() => !button('Undo (Ctrl+Z)').disabled, 'Undo button not enabled');
+      button('Undo (Ctrl+Z)').click();
+      await waitFor(() => !button('Redo (Ctrl+Shift+Z)').disabled, 'Redo button not enabled');
+
+      const redo = new window.KeyboardEvent('keydown', {
+        key: 'Z',
+        ctrlKey: true,
+        shiftKey: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(redo);
+      expect(redo.defaultPrevented).toBe(true);
+      await waitFor(() => button('Redo (Ctrl+Shift+Z)').disabled, 'Ctrl+Shift+Z did not redo');
+      expect(button('Undo (Ctrl+Z)').disabled).toBe(false);
       cleanup();
     });
 

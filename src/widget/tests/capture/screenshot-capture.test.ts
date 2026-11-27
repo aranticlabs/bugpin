@@ -218,8 +218,8 @@ describe('captureScreenshot', () => {
         getDisplayMedia: async () => stream,
       },
     } as Navigator;
-    globalThis.setTimeout = ((handler: () => void) => {
-      handler();
+    globalThis.setTimeout = ((handler: () => void, ms = 0) => {
+      if (ms <= 100) handler();
       return 0 as unknown as number;
     }) as typeof setTimeout;
 
@@ -270,8 +270,8 @@ describe('captureScreenshot', () => {
     globalThis.navigator = {
       mediaDevices: { getDisplayMedia: async () => stream },
     } as unknown as Navigator;
-    globalThis.setTimeout = ((handler: () => void) => {
-      handler();
+    globalThis.setTimeout = ((handler: () => void, ms = 0) => {
+      if (ms <= 100) handler();
       return 0 as unknown as number;
     }) as typeof setTimeout;
 
@@ -307,8 +307,8 @@ describe('captureScreenshot', () => {
     globalThis.navigator = {
       mediaDevices: { getDisplayMedia: async () => stream },
     } as unknown as Navigator;
-    globalThis.setTimeout = ((handler: () => void) => {
-      handler();
+    globalThis.setTimeout = ((handler: () => void, ms = 0) => {
+      if (ms <= 100) handler();
       return 0 as unknown as number;
     }) as typeof setTimeout;
 
@@ -324,6 +324,37 @@ describe('captureScreenshot', () => {
     expect(result).toBe('data:image/png;base64,stub');
     expect(toCanvasSpy).toHaveBeenCalled();
   });
+
+  for (const failure of ['error', 'ended', 'timeout'] as const) {
+    it(`stops sharing and rejects when the shared video ${failure === 'timeout' ? 'never loads' : `fires ${failure}`}`, async () => {
+      const stop = mock();
+      const track: { stop: () => void; onended?: () => void } = { stop };
+      const stream = { getTracks: () => [track] };
+      const video: { onerror?: () => void } = {};
+      let expire: (() => void) | undefined;
+      globalThis.document = {
+        createElement: () => video,
+      } as unknown as Document;
+      globalThis.navigator = {
+        mediaDevices: { getDisplayMedia: async () => stream },
+      } as unknown as Navigator;
+      globalThis.setTimeout = ((handler: () => void) => {
+        expire = handler;
+        return 0 as unknown as number;
+      }) as typeof setTimeout;
+
+      const { openScreenCaptureSession } = await import('../../capture/screenshot');
+      const opening = openScreenCaptureSession();
+      await Promise.resolve();
+      await Promise.resolve();
+      if (failure === 'error') video.onerror?.();
+      else if (failure === 'ended') track.onended?.();
+      else expire?.();
+
+      await expect(opening).rejects.toThrow('Screen sharing could not start');
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+  }
 
   it('captures visible viewport and restores visibility', async () => {
     const { html, widget } = setupDom();

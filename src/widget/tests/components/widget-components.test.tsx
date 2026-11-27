@@ -282,24 +282,31 @@ describe('widget components', () => {
     const enabled = renderToString(
       <WidgetDialog {...dialog.props} portalUrl={portalUrl} hidePoweredBy />
     );
-    expect(enabled).toContain('My reports');
-    expect(enabled).toContain(portalUrl);
+    expect(enabled).toContain('Add your email to track this report in the Reporter Portal.');
+    expect(enabled).toContain('aria-describedby="bugpin-email-hint"');
+    expect(html).not.toContain('bugpin-email-hint');
+    expect(enabled).not.toContain(portalUrl);
     expect(enabled).not.toContain('Powered by');
-    expect(html).not.toContain('My reports');
     const success = renderToString(
       <WidgetDialog {...dialog.props} portalUrl={portalUrl} submitted submittedWithEmail />
     );
     expect(success).toContain('View my reports');
+    expect(success.split(portalUrl)).toHaveLength(2);
     expect(success).toContain('Check your inbox');
     expect(success).not.toContain('Submit Report');
+    expect(success).toContain('Bug report submitted successfully!');
+    expect(success).toContain('max-w-md');
+    expect(success).not.toContain('h-[810px]');
+    expect(success).not.toContain('Powered by');
+    expect(success).not.toContain('aria-label="Close"');
     const anonymous = renderToString(
       <WidgetDialog {...dialog.props} portalUrl={portalUrl} submitted />
     );
     expect(anonymous).not.toContain('Check your inbox');
     expect(html).toContain('Report a Bug');
     expect(html).toContain('Submit Report');
-    expect(html).toContain('h-[770px]');
-    expect(html).not.toContain('min-h-[770px]');
+    expect(html).toContain('h-[810px]');
+    expect(html).not.toContain('min-h-[810px]');
     expect(html).toContain('max-h-[calc(100vh-40px)]');
   });
 
@@ -390,7 +397,7 @@ describe('widget components', () => {
         onDismissOversizedCapture={() => undefined}
       />
     );
-    expect(html).toContain('Screenshots (1)');
+    expect(html).toMatch(/Screenshots<span[^>]*>1<\/span>/);
     expect(html).toContain('Open Screenshot Tool');
   });
 

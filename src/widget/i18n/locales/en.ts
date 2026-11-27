@@ -7,9 +7,7 @@ const en = {
   'dialog.title': 'Report a Bug',
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
-  'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
   'dialog.tabs.recording': 'Recordings',
-  'dialog.tabs.recordingWithCount': 'Recordings ({count})',
 
   'dialog.fields.title.label': 'Title',
   'dialog.fields.title.placeholder': 'Brief description of the issue',
@@ -20,6 +18,7 @@ const en = {
   'dialog.fields.name.placeholder': 'Your name',
   'dialog.fields.email.label': 'Email (optional)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint': 'Add your email to track this report in the Reporter Portal.',
 
   'dialog.priority.highest': 'Highest',
   'dialog.priority.high': 'High',
@@ -176,7 +175,6 @@ const en = {
   'annotation.buttons.done': 'Done',
   'portal.checkEmail': 'Check your inbox for a sign-in link, or request one in My reports.',
   'portal.viewReports': 'View my reports',
-  'portal.myReports': 'My reports',
 } as const satisfies Record<string, string>;
 
 export default en;

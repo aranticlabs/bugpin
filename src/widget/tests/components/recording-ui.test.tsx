@@ -1250,8 +1250,8 @@ describe('WidgetDialog recording tab', () => {
 
     expect(tabLabels()).toEqual([
       t('dialog.tabs.details'),
-      t('dialog.tabs.mediaWithCount', { count: 1 }),
-      t('dialog.tabs.recordingWithCount', { count: 2 }),
+      `${t('dialog.tabs.media')}1`,
+      `${t('dialog.tabs.recording')}2`,
     ]);
   });
 
@@ -1288,7 +1288,7 @@ describe('WidgetDialog recording tab', () => {
       />
     );
 
-    expect(tabLabels()[2]).toBe(t('dialog.tabs.recordingWithCount', { count: 1 }));
+    expect(tabLabels()[2]).toBe(`${t('dialog.tabs.recording')}1`);
     expect(container.querySelectorAll('video')).toHaveLength(1);
   });
 

@@ -9,9 +9,7 @@ const fr: WidgetCatalog = {
   'dialog.title': 'Signaler un bug',
   'dialog.tabs.details': 'Détails',
   'dialog.tabs.media': "Captures d'écran",
-  'dialog.tabs.mediaWithCount': "Captures d'écran ({count})",
   'dialog.tabs.recording': 'Enregistrements',
-  'dialog.tabs.recordingWithCount': 'Enregistrements ({count})',
 
   'dialog.fields.title.label': 'Titre',
   'dialog.fields.title.placeholder': 'Brève description du problème',
@@ -22,6 +20,8 @@ const fr: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Votre nom',
   'dialog.fields.email.label': 'E-mail (facultatif)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Avec votre e-mail, vous pouvez suivre ce signalement dans le Portail des signalements.',
 
   'dialog.priority.highest': 'Très haute',
   'dialog.priority.high': 'Haute',
@@ -181,7 +181,6 @@ const fr: WidgetCatalog = {
   'portal.checkEmail':
     'Consultez votre boîte de réception pour un lien de connexion ou demandez-en un dans Mes signalements.',
   'portal.viewReports': 'Voir mes signalements',
-  'portal.myReports': 'Mes signalements',
 };
 
 export default fr;

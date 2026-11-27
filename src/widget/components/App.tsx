@@ -611,13 +611,14 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   // Captures the page as it is right now (no bar, no countdown) and opens the dialog with
   // the result, so host code or a shortcut can grab open menus and hover states. Always a
   // DOM capture, even in Screen Capture API mode (see runCapture).
-  const handleExternalCapture = useCallback(async () => {
+  const handleExternalCapture = useCallback((): boolean => {
     const current = stepRef.current;
-    if (!config.enableScreenshot || isCapturingRef.current || isSubmitting) return;
-    if (current !== 'closed' && current !== 'form') return;
+    if (!config.enableScreenshot || isCapturingRef.current || isSubmitting) return false;
+    if (current !== 'closed' && current !== 'form') return false;
 
     setStep('closed');
-    await runCapture(null);
+    void runCapture(null);
+    return true;
   }, [config.enableScreenshot, isSubmitting, runCapture]);
 
   useEffect(() => {
@@ -870,7 +871,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           <div
             class={cn(
               'relative w-full h-full min-h-0 bg-background sm:border sm:border-solid sm:border-border sm:rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]',
-              !isAnnotationMaximized && 'sm:max-w-4xl sm:h-[770px] sm:max-h-full'
+              !isAnnotationMaximized && 'sm:max-w-4xl sm:h-[810px] sm:max-h-full'
             )}
           >
             <AnnotationCanvasComponent

@@ -1116,12 +1116,30 @@ describe('Screenshot bar and capture API', () => {
     await settle();
     expect(captureScreenshot).not.toHaveBeenCalled();
 
-    press(document.body, { code: 'KeyS', altKey: true, shiftKey: true });
+    expect(
+      press(document.body, { code: 'KeyS', altKey: true, shiftKey: true, cancelable: true })
+    ).toBe(false);
     await settle();
     expect(captureScreenshot).toHaveBeenCalledTimes(1);
     expect((lastDialogProps?.media as unknown[]).length).toBe(1);
 
     input.remove();
+    cleanup(container);
+  });
+
+  it('leaves the shortcut to the host page when capture cannot run', async () => {
+    const container = await renderApp({ captureShortcut: 'Alt+Shift+S', enableScreenshot: false });
+    const event = new window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'KeyS',
+      altKey: true,
+      shiftKey: true,
+    });
+    document.body.dispatchEvent(event);
+    await settle();
+    expect(event.defaultPrevented).toBe(false);
+    expect(captureScreenshot).not.toHaveBeenCalled();
     cleanup(container);
   });
 

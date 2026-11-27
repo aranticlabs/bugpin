@@ -1381,7 +1381,7 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
       if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteSelected();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
           redo();

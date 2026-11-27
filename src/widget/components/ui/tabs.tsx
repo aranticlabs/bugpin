@@ -5,6 +5,7 @@ export interface Tab {
   id: string;
   label: string;
   icon?: JSX.Element;
+  count?: number;
 }
 
 interface TabsProps {
@@ -45,6 +46,11 @@ export const Tabs: FunctionComponent<TabsProps> = ({ tabs, activeTab, onTabChang
               </span>
             )}
             {tab.label}
+            {tab.count !== undefined && tab.count > 0 && (
+              <span class="inline-flex items-center h-5 px-1.5 rounded-full bg-muted text-foreground text-2xs font-semibold tabular-nums">
+                {tab.count}
+              </span>
+            )}
           </button>
         );
       })}

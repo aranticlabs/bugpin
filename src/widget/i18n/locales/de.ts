@@ -9,9 +9,7 @@ const de: WidgetCatalog = {
   'dialog.title': 'Bug melden',
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Screenshots',
-  'dialog.tabs.mediaWithCount': 'Screenshots ({count})',
   'dialog.tabs.recording': 'Aufnahmen',
-  'dialog.tabs.recordingWithCount': 'Aufnahmen ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Kurze Beschreibung des Problems',
@@ -22,6 +20,8 @@ const de: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Dein Name',
   'dialog.fields.email.label': 'E-Mail (optional)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Mit deiner E-Mail kannst du diese Meldung im Reporter-Portal verfolgen.',
 
   'dialog.priority.highest': 'Sehr hoch',
   'dialog.priority.high': 'Hoch',
@@ -181,7 +181,6 @@ const de: WidgetCatalog = {
   'portal.checkEmail':
     'Sieh in deinem Posteingang nach einem Anmeldelink oder fordere unter Meine Meldungen einen an.',
   'portal.viewReports': 'Meine Meldungen ansehen',
-  'portal.myReports': 'Meine Meldungen',
 };
 
 export default de;

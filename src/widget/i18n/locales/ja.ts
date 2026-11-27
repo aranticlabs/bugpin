@@ -9,9 +9,7 @@ const ja: WidgetCatalog = {
   'dialog.title': 'バグを報告',
   'dialog.tabs.details': '詳細',
   'dialog.tabs.media': 'スクリーンショット',
-  'dialog.tabs.mediaWithCount': 'スクリーンショット（{count}件）',
   'dialog.tabs.recording': '録画',
-  'dialog.tabs.recordingWithCount': '録画 ({count})',
 
   'dialog.fields.title.label': 'タイトル',
   'dialog.fields.title.placeholder': '問題の概要を簡潔に',
@@ -22,6 +20,8 @@ const ja: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'お名前',
   'dialog.fields.email.label': 'メールアドレス（任意）',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'メールアドレスを入力すると、報告者ポータルでこの報告の状況を確認できます。',
 
   'dialog.priority.highest': '最高',
   'dialog.priority.high': '高',
@@ -178,7 +178,6 @@ const ja: WidgetCatalog = {
   'portal.checkEmail':
     '受信トレイでログインリンクを確認するか、「自分の報告」からリクエストしてください。',
   'portal.viewReports': '自分の報告を見る',
-  'portal.myReports': '自分の報告',
 };
 
 export default ja;

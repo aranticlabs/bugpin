@@ -9,9 +9,7 @@ const zh: WidgetCatalog = {
   'dialog.title': '缺陷报告',
   'dialog.tabs.details': '详情',
   'dialog.tabs.media': '截图',
-  'dialog.tabs.mediaWithCount': '截图（{count}）',
   'dialog.tabs.recording': '录屏',
-  'dialog.tabs.recordingWithCount': '录屏 ({count})',
 
   'dialog.fields.title.label': '标题',
   'dialog.fields.title.placeholder': '简要描述问题',
@@ -22,6 +20,7 @@ const zh: WidgetCatalog = {
   'dialog.fields.name.placeholder': '您的姓名',
   'dialog.fields.email.label': '邮箱（可选）',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint': '填写邮箱后，可在报告者门户中跟踪此报告。',
 
   'dialog.priority.highest': '最高',
   'dialog.priority.high': '高',
@@ -168,7 +167,6 @@ const zh: WidgetCatalog = {
   'annotation.buttons.done': '完成',
   'portal.checkEmail': '请在收件箱查找登录链接，或在“我的报告”中申请。',
   'portal.viewReports': '查看我的报告',
-  'portal.myReports': '我的报告',
 };
 
 export default zh;

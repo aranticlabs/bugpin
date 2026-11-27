@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from 'preact/hooks';
 import { isEditableTarget, matchesShortcut, parseShortcut } from '../lib/keyboard.js';
 
-export function useCaptureShortcut(shortcut: string | undefined, onTrigger: () => void): void {
+/** `onTrigger` returns whether a capture started; otherwise the key stays with the host page. */
+export function useCaptureShortcut(shortcut: string | undefined, onTrigger: () => boolean): void {
   const parsed = useMemo(() => {
     if (!shortcut) return null;
     const result = parseShortcut(shortcut);
@@ -17,8 +18,7 @@ export function useCaptureShortcut(shortcut: string | undefined, onTrigger: () =
     // Capture phase so host handlers that stop propagation cannot swallow the shortcut.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || isEditableTarget(event) || !matchesShortcut(event, parsed)) return;
-      event.preventDefault();
-      onTriggerRef.current();
+      if (onTriggerRef.current()) event.preventDefault();
     };
 
     window.addEventListener('keydown', handleKeyDown, true);

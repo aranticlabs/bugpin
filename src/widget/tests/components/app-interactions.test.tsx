@@ -314,7 +314,7 @@ describe('App interactions', () => {
     expect(annotationModal?.classList.contains('h-full')).toBe(true);
     expect(annotationModal?.classList.contains('min-h-0')).toBe(true);
     expect(annotationModal?.classList.contains('sm:max-w-4xl')).toBe(true);
-    expect(annotationModal?.classList.contains('sm:h-[770px]')).toBe(true);
+    expect(annotationModal?.classList.contains('sm:h-[810px]')).toBe(true);
     expect(annotationModal?.parentElement?.classList.contains('sm:p-5')).toBe(true);
 
     const maximizeButton = container.querySelector(
@@ -330,7 +330,7 @@ describe('App interactions', () => {
     );
     expect(restoreButton).toBeTruthy();
     expect(annotationModal?.className).not.toContain('max-w-');
-    expect(annotationModal?.className).not.toContain('h-[770px]');
+    expect(annotationModal?.className).not.toContain('h-[810px]');
 
     const annotationOverlay = annotationModal?.parentElement;
     const launcherLayer = container.querySelector('button[aria-label="Report issue"]')

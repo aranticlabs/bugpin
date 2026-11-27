@@ -9,9 +9,7 @@ const nl: WidgetCatalog = {
   'dialog.title': 'Een bug melden',
   'dialog.tabs.details': 'Details',
   'dialog.tabs.media': 'Schermafbeeldingen',
-  'dialog.tabs.mediaWithCount': 'Schermafbeeldingen ({count})',
   'dialog.tabs.recording': 'Opnames',
-  'dialog.tabs.recordingWithCount': 'Opnames ({count})',
 
   'dialog.fields.title.label': 'Titel',
   'dialog.fields.title.placeholder': 'Korte beschrijving van het probleem',
@@ -23,6 +21,8 @@ const nl: WidgetCatalog = {
   'dialog.fields.name.placeholder': 'Uw naam',
   'dialog.fields.email.label': 'E-mail (optioneel)',
   'dialog.fields.email.placeholder': 'you@example.com',
+  'dialog.fields.email.portalHint':
+    'Met je e-mailadres kun je deze melding volgen in het Meldersportaal.',
 
   'dialog.priority.highest': 'Hoogste',
   'dialog.priority.high': 'Hoog',
@@ -181,7 +181,6 @@ const nl: WidgetCatalog = {
   'annotation.buttons.done': 'Klaar',
   'portal.checkEmail': 'Zoek een aanmeldlink in je inbox of vraag er een aan via Mijn meldingen.',
   'portal.viewReports': 'Mijn meldingen bekijken',
-  'portal.myReports': 'Mijn meldingen',
 };
 
 export default nl;
