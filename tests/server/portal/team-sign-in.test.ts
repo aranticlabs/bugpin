@@ -5,6 +5,7 @@ import { authRoutes } from '../../../src/server/routes/api/auth';
 import { getDb } from '../../../src/server/database/database';
 import { config } from '../../../src/server/config';
 import { usersRepo } from '../../../src/server/database/repositories/users.repo';
+import { sessionsRepo } from '../../../src/server/database/repositories/sessions.repo';
 import { projectsRepo } from '../../../src/server/database/repositories/projects.repo';
 import { reportsRepo } from '../../../src/server/database/repositories/reports.repo';
 import { filesRepo } from '../../../src/server/database/repositories/files.repo';
@@ -40,6 +41,7 @@ const password = 'correct-horse-battery-1';
 const past = '2026-01-01T00:00:00.000Z';
 const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
+let portalInUse: ReturnType<typeof spyOn>;
 let close: () => void;
 let app: ReturnType<typeof createPortalTestApp>;
 let sent: Parameters<typeof emailService.sendEmail>[0][];
@@ -74,6 +76,8 @@ beforeEach(async () => {
   loginChallengeService.clear();
   app = createPortalTestApp();
   app.route('/api/auth', authRoutes);
+  // Signing in needs the Reporter Portal in use; the availability tests cover that rule.
+  portalInUse = spyOn(projectsRepo, 'hasEnabledReporterPortal').mockReturnValue(true);
   sent = [];
   spyOn(emailService, 'sendEmail').mockImplementation(async (options) => {
     sent.push(options);
@@ -231,6 +235,63 @@ describe('availability', () => {
     );
   });
 
+  it('is on by default', async () => {
+    getDb().run("DELETE FROM settings WHERE key = 'portal_team_sign_in'");
+    settingsCacheService.invalidate();
+    expect((await settingsRepo.getAll()).portalTeamSignIn).toBe(true);
+    expect(await portalOperatorAuthService.enabled()).toBe(true);
+  });
+
+  it('opens sign-in only while the Reporter Portal is in use, without ending sessions', async () => {
+    portalInUse.mockRestore();
+    const open = async () => {
+      const response = await portalRequest('/config');
+      const { config } = (await response.json()) as { config: { teamSignIn: boolean } };
+      expect((await portalOperatorAuthService.signInUrl()) !== null).toBe(config.teamSignIn);
+      return config.teamSignIn;
+    };
+    expect(await open()).toBe(false);
+    expect(await portalOperatorAuthService.enabled()).toBe(true);
+    const response = await portalPost(app, '/auth/team/login', {
+      email: 'someone@example.test',
+      password,
+    });
+    expect(response.status).toBe(404);
+    await settingsRepo.updateAll({ reporterPortal: { enabled: true, allowNewReports: true } });
+    settingsCacheService.invalidate();
+    expect(await open()).toBe(true);
+    await settingsRepo.updateAll({ reporterPortal: { enabled: false, allowNewReports: false } });
+    settingsCacheService.invalidate();
+    expect(await open()).toBe(false);
+    await projectsRepo.create({
+      name: 'Portal project',
+      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
+    });
+    expect(await open()).toBe(true);
+  });
+
+  it('gives every signed-in user the team sign-in address while it is available', async () => {
+    const viewer = await createStaff({ role: 'viewer' });
+    const session = await sessionsRepo.create({
+      userId: viewer.id,
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    const signInUrl = async (cookie?: string) => {
+      const response = await app.request(`${portalOrigin}/api/auth/portal-team-sign-in`, {
+        headers: cookie ? { Cookie: cookie } : {},
+      });
+      return { status: response.status, body: (await response.json()) as { url?: string | null } };
+    };
+    expect((await signInUrl()).status).toBe(401);
+    const available = await signInUrl(`session=${session.id}`);
+    expect(available.status).toBe(200);
+    expect(available.body.url).toBe(`${portalOrigin}/reporter-portal/team-login`);
+
+    await settingsRepo.updateAll({ portalTeamSignIn: false });
+    settingsCacheService.invalidate();
+    expect((await signInUrl(`session=${session.id}`)).body.url).toBeNull();
+  });
+
   it('rejects unknown fields and malformed bodies on the credential routes', async () => {
     clearAllRateLimits();
     const extra = await portalPost(app, '/auth/team/login', {
@@ -259,6 +320,26 @@ describe('availability', () => {
       );
     }
     expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+  });
+
+  it('shares one password attempt budget with the Admin Console sign-in', async () => {
+    clearAllRateLimits();
+    const adminLogin = () =>
+      app.request(`${portalOrigin}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Origin: portalOrigin },
+        body: JSON.stringify({ email: 'nobody@example.test', password }),
+      });
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 3; attempt++) statuses.push((await adminLogin()).status);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      statuses.push(
+        (await portalPost(app, '/auth/team/login', { email: 'nobody@example.test', password }))
+          .status
+      );
+    }
+    expect(statuses.slice(-1)).toEqual([429]);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(1);
   });
 });
 
@@ -866,6 +947,8 @@ describe('operator session', () => {
     });
 
     it('stays ended after the portal URL becomes insecure and is fixed again', async () => {
+      // An enabled Reporter Portal would refuse an insecure Application URL.
+      portalInUse.mockReturnValue(false);
       expect((await settingsService.update({ appUrl: 'http://bugpin.example.com' })).success).toBe(
         true
       );

@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { ChevronsUpDown, Settings, User, Bell, SunMoon, LogOut } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronsUpDown, Settings, User, Bell, SunMoon, LogOut, ExternalLink } from 'lucide-react';
+import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -24,10 +26,16 @@ const THEME_OPTIONS = [
 ] as const;
 
 export function NavUser() {
-  const { user, logout } = useAuth();
+  const { user, logout, canLoadData } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { isMobile, setOpenMobile } = useSidebar();
+  const { data: portalUrl, refetch: refetchPortalUrl } = useQuery({
+    queryKey: ['portal-team-sign-in'],
+    queryFn: async () =>
+      (await api.get<{ url: string | null }>('/auth/portal-team-sign-in')).data.url,
+    enabled: canLoadData,
+  });
 
   const openPage = (path: string) => {
     navigate(path);
@@ -46,7 +54,8 @@ export function NavUser() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        {/* Settings and projects decide whether team sign-in is open, so check on every open. */}
+        <DropdownMenu onOpenChange={(open) => open && canLoadData && void refetchPortalUrl()}>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
@@ -93,6 +102,14 @@ export function NavUser() {
               <Bell className="mr-2 h-4 w-4" />
               <span>Notifications</span>
             </DropdownMenuItem>
+            {portalUrl && (
+              <DropdownMenuItem asChild className="cursor-pointer">
+                <a href={portalUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  <span>Reporter Portal</span>
+                </a>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="cursor-pointer">
                 <SunMoon className="mr-2 h-4 w-4" />

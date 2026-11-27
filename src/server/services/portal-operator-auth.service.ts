@@ -1,5 +1,6 @@
 import { portalOperatorsRepo } from '../database/repositories/portal-operators.repo.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
+import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { authService, type SecondFactorInput } from './auth.service.js';
 import { twoFactorService } from './two-factor.service.js';
 import { loginChallengeService } from './login-challenge.service.js';
@@ -58,9 +59,23 @@ function sessionStillValid(user: User, createdAt: string): boolean {
 }
 
 export const portalOperatorAuthService = {
+  /** Whether team sessions stay valid: the setting is on and the portal has a secure address */
   async enabled(): Promise<boolean> {
     const settings = await settingsCacheService.getAll();
     return settings.portalTeamSignIn && securePortalBaseUrl(settings) !== null;
+  },
+
+  /**
+   * The team sign-in page while new sign-ins are open, or null. Signing in also needs the
+   * Reporter Portal in use, as the instance default or in a project, so an instance without it
+   * offers no second staff password form.
+   */
+  async signInUrl(): Promise<string | null> {
+    const settings = await settingsCacheService.getAll();
+    const baseUrl = securePortalBaseUrl(settings);
+    if (!settings.portalTeamSignIn || !baseUrl) return null;
+    if (!settings.reporterPortal.enabled && !projectsRepo.hasEnabledReporterPortal()) return null;
+    return new URL('/reporter-portal/team-login', baseUrl).href;
   },
 
   async login(

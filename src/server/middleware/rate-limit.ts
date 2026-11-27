@@ -102,6 +102,19 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
 }
 
 /**
+ * Password sign-in to the Admin Console and to the Reporter Portal team view: both check staff
+ * passwords, so they share one budget per client address.
+ */
+export function staffLoginLimit(): MiddlewareHandler {
+  return rateLimiter({ name: 'login', max: 5, window: 60 });
+}
+
+/** The second factor step of both staff sign-ins, sharing one budget per client address */
+export function staffTwoFactorLimit(): MiddlewareHandler {
+  return rateLimiter({ name: 'login-two-factor', max: 10, window: 60 });
+}
+
+/**
  * Default key generator - uses the client address (see getClientIp for proxy handling)
  */
 function defaultKeyGenerator(c: Context): string {

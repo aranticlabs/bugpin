@@ -315,6 +315,7 @@ export const handlers = [
     HttpResponse.json({ success: true, preferences: await request.json() })
   ),
   // Auth endpoints
+  http.get('/api/auth/portal-team-sign-in', () => HttpResponse.json({ success: true, url: null })),
   http.get('/api/auth/me', () => {
     return HttpResponse.json({
       success: true,

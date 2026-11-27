@@ -28,7 +28,7 @@ export const portalConfigService = {
       },
       hideFooterBranding: Boolean(whiteLabel?.enabled && whiteLabel.hideFooterBranding),
       locales: SUPPORTED_LOCALES,
-      teamSignIn: await portalOperatorAuthService.enabled(),
+      teamSignIn: (await portalOperatorAuthService.signInUrl()) !== null,
     });
   },
 };

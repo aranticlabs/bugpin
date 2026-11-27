@@ -414,8 +414,8 @@ export const settingsService = {
     if (input.appUrl !== undefined) updates.appUrl = input.appUrl.trim();
     if (input.portalBaseUrl !== undefined) updates.portalBaseUrl = portalBaseUrl;
     if (input.portalTeamSignIn !== undefined) updates.portalTeamSignIn = input.portalTeamSignIn;
-    // Team sign-in that becomes unavailable ends every team session, so making it available
-    // again revives none.
+    // Turning the setting off, or losing the secure portal address, ends every team session, so
+    // restoring either revives none.
     const teamSignInBefore = current.portalTeamSignIn && securePortalBaseUrl(current) !== null;
     const teamSignInAfter =
       (input.portalTeamSignIn ?? current.portalTeamSignIn) &&

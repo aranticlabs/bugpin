@@ -105,6 +105,9 @@ beforeEach(async () => {
   );
   getDb().run(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings)
     VALUES ('matrix-project', 'Matrix project', 'matrix-key', 'matrix', '{"reporterPortal":{"enabled":true}}')`);
+  // Keeps the Reporter Portal in use, so team sign-in stays available when the matrix project is off.
+  getDb().run(`INSERT INTO projects (id, name, api_key_hash, api_key_prefix, settings)
+    VALUES ('portal-project', 'Portal project', 'portal-key', 'portal', '{"reporterPortal":{"enabled":true}}')`);
   getDb().run(`INSERT INTO reports (id, project_id, title, metadata)
     VALUES ('matrix-report', 'matrix-project', 'Owned report', '{}')`);
   const path = join(config.dataDir, 'matrix.png');

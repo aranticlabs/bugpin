@@ -77,7 +77,7 @@ export function Settings() {
         appName: settings.appName || '',
         appUrl: settings.appUrl || '',
         portalBaseUrl: settings.portalBaseUrl || '',
-        portalTeamSignIn: settings.portalTeamSignIn ?? false,
+        portalTeamSignIn: settings.portalTeamSignIn ?? true,
         updateCheckEnabled: settings.updateCheckEnabled ?? true,
       },
     [settings]
@@ -94,7 +94,7 @@ export function Settings() {
       appName: '',
       appUrl: '',
       portalBaseUrl: '',
-      portalTeamSignIn: false,
+      portalTeamSignIn: true,
       updateCheckEnabled: true,
     },
     // Reloaded settings replace only the fields the user has not edited.

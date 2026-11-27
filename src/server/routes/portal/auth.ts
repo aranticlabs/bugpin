@@ -7,7 +7,7 @@ import {
   type PortalOperatorSessionGrant,
 } from '../../services/portal-operator-auth.service.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
-import { rateLimiter } from '../../middleware/rate-limit.js';
+import { rateLimiter, staffLoginLimit, staffTwoFactorLimit } from '../../middleware/rate-limit.js';
 import {
   portalCookieOptions,
   portalReaderAuthMiddleware,
@@ -167,7 +167,7 @@ portalAuthRoutes.post('/logout', portalReaderAuthMiddleware, async (c) => {
 const teamRoutes = new Hono();
 
 teamRoutes.use('*', async (c, next) => {
-  if (!(await portalOperatorAuthService.enabled()))
+  if ((await portalOperatorAuthService.signInUrl()) === null)
     return c.json({ success: false, error: 'NOT_FOUND', message: 'Not found' }, 404);
   return next();
 });
@@ -190,25 +190,20 @@ function teamFailure(c: Context, result: { code?: string; error: string }) {
   );
 }
 
-teamRoutes.post(
-  '/login',
-  rateLimiter({ name: 'portal-team-login', max: 5, window: 60 }),
-  validate({ body: teamLoginSchema }),
-  async (c) => {
-    const { email, password } = validatedBody(c, teamLoginSchema);
-    const result = await portalOperatorAuthService.login(email, password, {
-      ipAddress: getClientIp(c),
-      userAgent: c.req.header('user-agent'),
-    });
-    if (!result.success) return teamFailure(c, result);
-    if (result.value.session) await startOperatorSession(c, result.value.session);
-    return c.json({ success: true, ...result.value.result });
-  }
-);
+teamRoutes.post('/login', staffLoginLimit(), validate({ body: teamLoginSchema }), async (c) => {
+  const { email, password } = validatedBody(c, teamLoginSchema);
+  const result = await portalOperatorAuthService.login(email, password, {
+    ipAddress: getClientIp(c),
+    userAgent: c.req.header('user-agent'),
+  });
+  if (!result.success) return teamFailure(c, result);
+  if (result.value.session) await startOperatorSession(c, result.value.session);
+  return c.json({ success: true, ...result.value.result });
+});
 
 teamRoutes.post(
   '/two-factor',
-  rateLimiter({ name: 'portal-team-two-factor', max: 10, window: 60 }),
+  staffTwoFactorLimit(),
   validate({ body: teamTwoFactorSchema }),
   async (c) => {
     const body = validatedBody(c, teamTwoFactorSchema);

@@ -341,7 +341,7 @@ function readAll(): AppSettings {
     appName: (settings.appName as string) ?? 'BugPin',
     appUrl: (settings.appUrl as string) ?? '',
     portalBaseUrl: (settings.portalBaseUrl as string) ?? '',
-    portalTeamSignIn: (settings.portalTeamSignIn as boolean) ?? false,
+    portalTeamSignIn: (settings.portalTeamSignIn as boolean) ?? true,
     reporterPortalLimits: {
       ...DEFAULT_REPORTER_PORTAL_LIMITS,
       ...(settings.reporterPortalLimits as Partial<AppSettings['reporterPortalLimits']>),

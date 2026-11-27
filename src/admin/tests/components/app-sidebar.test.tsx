@@ -292,4 +292,58 @@ describe('AppSidebar', () => {
     expect(await screen.findByRole('link', { name: 'Projects' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /pinned projects/i })).not.toBeInTheDocument();
   });
+
+  it('links to the Reporter Portal team sign-in from the user menu while it is available', async () => {
+    server.use(
+      http.get('/api/auth/portal-team-sign-in', () =>
+        HttpResponse.json({
+          success: true,
+          url: 'https://portal.example.com/reporter-portal/team-login',
+        })
+      )
+    );
+    renderSidebar();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Admin User/ }));
+    const item = await screen.findByRole('menuitem', { name: 'Reporter Portal' });
+    expect(item).toHaveAttribute('href', 'https://portal.example.com/reporter-portal/team-login');
+    expect(item).toHaveAttribute('target', '_blank');
+    expect(item).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('hides the Reporter Portal item while team sign-in is unavailable', async () => {
+    let checks = 0;
+    server.use(
+      http.get('/api/auth/portal-team-sign-in', () => {
+        checks++;
+        return HttpResponse.json({ success: true, url: null });
+      })
+    );
+    renderSidebar();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Admin User/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
+    await waitFor(() => expect(checks).toBeGreaterThan(0));
+    expect(screen.queryByRole('menuitem', { name: 'Reporter Portal' })).not.toBeInTheDocument();
+  });
+
+  it('checks team sign-in again each time the user menu opens', async () => {
+    let url: string | null = null;
+    server.use(
+      http.get('/api/auth/portal-team-sign-in', () => HttpResponse.json({ success: true, url }))
+    );
+    renderSidebar();
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: /Admin User/ });
+    await user.click(trigger);
+    expect(await screen.findByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Reporter Portal' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    url = 'https://portal.example.com/reporter-portal/team-login';
+    await user.click(trigger);
+    expect(await screen.findByRole('menuitem', { name: 'Reporter Portal' })).toHaveAttribute(
+      'href',
+      url
+    );
+  });
 });
