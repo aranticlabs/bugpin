@@ -260,7 +260,11 @@ export const portalReportsService = {
     return Result.ok({ columns, unreadCount });
   },
 
-  async detail(reportId: string, scope: PortalScope): Promise<Result<PortalReportDetail>> {
+  async detail(
+    reportId: string,
+    scope: PortalScope,
+    markSeen = true
+  ): Promise<Result<PortalReportDetail>> {
     const settings = await settingsCacheService.getAll();
     return portalReportsRepo.transaction(() => {
       const row = portalReportsRepo.detail(reportId, scope);
@@ -301,7 +305,7 @@ export const portalReportsService = {
             : row.messagingEnabled === 1),
         canSubmitNewReport: !readOnly && row.allowNewReports === 1,
       };
-      if (!readOnly) portalReportsRepo.markSeen(reportId, new Date().toISOString());
+      if (!readOnly && markSeen) portalReportsRepo.markSeen(reportId, new Date().toISOString());
       return Result.ok(report);
     });
   },

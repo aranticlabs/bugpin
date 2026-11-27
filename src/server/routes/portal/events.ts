@@ -73,7 +73,10 @@ portalEventsRoutes.get('/events', reporterAuthMiddleware, async (c) => {
         queue.length = 0;
         closing = true;
       }
-      if (!event) return;
+      if (!event) {
+        if (closing && !draining) end();
+        return;
+      }
       if (queue.length >= 32) {
         end();
         return;

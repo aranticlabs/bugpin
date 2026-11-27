@@ -5,11 +5,28 @@ import { portalFetch, PortalApiError } from '../api/client';
 import { isPrivatePortalQuery } from '../api/private-query';
 import type { PortalMe } from '@shared/portal-types';
 
+function isNonRevokingAccessChange(event: Event): boolean {
+  const data = 'data' in event ? event.data : undefined;
+  if (typeof data !== 'string' || !data) return false;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'revoked' in parsed &&
+      parsed.revoked === false
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function usePortalEvents() {
   const { reporter, reconcileSession } = useAuth();
   const client = useQueryClient();
   const [offline, setOffline] = useState(false);
   useEffect(() => {
+    setOffline(false);
     if (!reporter) return;
     const abort = new AbortController();
     let events: EventSource | null = null;
@@ -18,7 +35,7 @@ export function usePortalEvents() {
     let checking = false;
     let disconnected = false;
     const invalidate = () => {
-      void client.invalidateQueries({ queryKey: ['portal'] });
+      void client.invalidateQueries({ predicate: isPrivatePortalQuery });
     };
     const accessChanged = () => {
       void client.resetQueries({
@@ -75,15 +92,17 @@ export function usePortalEvents() {
       source.addEventListener('message.created', () => {
         if (source === events) invalidate();
       });
-      source.addEventListener('access.changed', () => {
-        if (source === events) accessChanged();
+      source.addEventListener('access.changed', (event) => {
+        if (source !== events) return;
+        if (isNonRevokingAccessChange(event)) invalidate();
+        else accessChanged();
       });
       source.onopen = () => {
         if (abort.signal.aborted || source !== events) return;
         setOffline(false);
         retryDelay = 1000;
         if (disconnected) {
-          accessChanged();
+          disconnected = false;
           invalidate();
         }
       };

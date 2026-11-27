@@ -26,6 +26,7 @@ import { useProjects } from '../hooks/useProjects';
 import { useI18n } from '../i18n/I18nProvider';
 import { errorKey } from '../i18n/error-key';
 import { portalFetch, PortalApiError } from '../api/client';
+import { isPrivatePortalQuery } from '../api/private-query';
 import { FilePicker } from '../components/FilePicker';
 import { QueryState } from '../components/QueryState';
 
@@ -65,7 +66,7 @@ export function NewReport() {
       });
     },
     onSuccess: async ({ report }) => {
-      await client.invalidateQueries({ queryKey: ['portal'] });
+      await client.invalidateQueries({ predicate: isPrivatePortalQuery });
       if (mounted.current) navigate(`/reports/${encodeURIComponent(report.id)}`);
     },
     onError: () => {

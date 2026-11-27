@@ -17,6 +17,7 @@ import {
   initSchema,
   runMigrations,
 } from '../../src/server/database/database';
+import { portalReportsRepo } from '../../src/server/database/repositories/portal-reports.repo';
 import { portalSubmissionsService } from '../../src/server/services/portal-submissions.service';
 import { reportMessagesRepo } from '../../src/server/database/repositories/report-messages.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
@@ -950,5 +951,25 @@ it('rejects submission uploads before quota checks when no project allows new re
     expect(usage).not.toHaveBeenCalled();
   } finally {
     usage.mockRestore();
+  }
+});
+
+it('records a portal submission as seen in its creation transaction', async () => {
+  projectSettings({ reporterPortal: { enabled: true, allowNewReports: true } });
+  const seen = spyOn(portalReportsRepo, 'markSeen').mockImplementation(() => {
+    throw new Error('Unexpected write');
+  });
+  try {
+    const result = await portalSubmissionsService.create('reporter', {
+      projectId: 'project',
+      title: 'New report',
+    });
+    if (!result.success) throw new Error(result.error);
+    expect(
+      getDb().query('SELECT owner_seen_at FROM reports WHERE id = ?').get(result.value.id)
+    ).toEqual({ owner_seen_at: result.value.createdAt });
+    expect(seen).not.toHaveBeenCalled();
+  } finally {
+    seen.mockRestore();
   }
 });

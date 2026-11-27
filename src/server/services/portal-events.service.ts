@@ -24,12 +24,8 @@ export const portalEventsService = {
     const session = reporterAuthService.validateSession(secret, false);
     if (!session.success) return session;
     const reporterId = session.value.reporter.id;
-    const projects = new Set<string>();
     function scope() {
-      const rows = portalReportsRepo.visibleScope(reporterId);
-      projects.clear();
-      for (const row of rows) projects.add(row.projectId);
-      return new Set(rows.map((row) => row.id));
+      return new Set(portalReportsRepo.visibleScope(reporterId).map((row) => row.id));
     }
     let visible = scope();
     function revalidate(event?: PortalEvent): Result<PortalEventCheck> {
@@ -38,15 +34,21 @@ export const portalEventsService = {
         if (!checked.success) return checked;
         const current = scope();
         const lost = [...visible].some((id) => !current.has(id));
+        const gained = [...current].some((id) => !visible.has(id));
         visible = current;
-        if (lost) return Result.ok({ event: { type: 'access.changed', data: {} }, close: true });
-        return Result.ok({
-          event:
-            event && event.type !== 'access.changed' && visible.has(event.data.reportId)
-              ? event
-              : null,
-          close: false,
-        });
+        if (lost)
+          return Result.ok({
+            event: { type: 'access.changed', data: { revoked: true } },
+            close: true,
+          });
+        if (event && event.type !== 'access.changed' && visible.has(event.data.reportId))
+          return Result.ok({ event, close: false });
+        if (gained || event?.type === 'access.changed')
+          return Result.ok({
+            event: { type: 'access.changed', data: { revoked: false } },
+            close: false,
+          });
+        return Result.ok({ event: null, close: false });
       } catch {
         return Result.fail('Unable to check portal access', 'ACCESS_CHECK_FAILED');
       }
@@ -55,8 +57,7 @@ export const portalEventsService = {
       session.value.sessionId,
       reporterId,
       (event) => listener(revalidate(event)),
-      settings.reporterPortalLimits.sseStreamsPerSession,
-      projects
+      settings.reporterPortalLimits.sseStreamsPerSession
     );
     if (!subscribed.success) return subscribed;
     return Result.ok({ revalidate: () => revalidate(), unsubscribe: subscribed.value });

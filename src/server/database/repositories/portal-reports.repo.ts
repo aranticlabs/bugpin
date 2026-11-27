@@ -195,8 +195,8 @@ export const portalReportsRepo = {
     getDb().run(
       `INSERT INTO reports (id, project_id, source, title, description, original_description,
       reporter_id, reporter_email, reporter_name, reporter_locale, assigned_to,
-      metadata, created_at, updated_at, last_reporter_activity_at, board_position)
-      VALUES (?, ?, 'portal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      metadata, created_at, updated_at, last_reporter_activity_at, owner_seen_at, board_position)
+      VALUES (?, ?, 'portal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         (SELECT COALESCE(MIN(board_position), 0) - 1 FROM reports WHERE status = 'open'))`,
       [
         input.id,
@@ -210,6 +210,7 @@ export const portalReportsRepo = {
         input.locale,
         input.assignedTo,
         JSON.stringify({ timestamp: input.now, portal: true }),
+        input.now,
         input.now,
         input.now,
         input.now,

@@ -227,7 +227,7 @@ export const portalSubmissionsService = {
           integration ? syncQueueService.enqueue(id, integration.id) : undefined
         )
         .catch(() => logger.warn('Failed to queue report sync', { reportId: id }));
-      return await portalReportsService.detail(id, { kind: 'reporter', reporterId });
+      return await portalReportsService.detail(id, { kind: 'reporter', reporterId }, false);
     } catch (error) {
       logger.error('Failed to save portal report', error, { reportId: id });
       return Result.fail('Failed to save report', 'SUBMISSION_WRITE_FAILED');

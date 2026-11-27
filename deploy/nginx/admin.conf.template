@@ -21,6 +21,11 @@ server {
     }
     location = / { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
     location = /health { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
+    location = /api/events {
+        include /etc/nginx/conf.d/shared/proxy-defaults.conf;
+        proxy_buffering off;
+        proxy_cache off;
+    }
     location /api/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
     location /branding/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }
     location /admin/branding/ { include /etc/nginx/conf.d/shared/proxy-defaults.conf; }

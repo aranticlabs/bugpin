@@ -263,7 +263,7 @@ function ReportsBoard({
         return {
           status: column,
           items: included ? unique(query.data?.pages.flatMap((page) => page.reports) ?? []) : [],
-          total: included ? (query.data?.pages[0].total ?? 0) : 0,
+          total: included ? (query.data?.pages[0]?.total ?? 0) : 0,
           loading: included && query.isPending,
           loadingMore: query.isFetchingNextPage,
           hasMore: included && query.hasNextPage,
@@ -315,7 +315,11 @@ export function MyReports() {
   const projects = useProjects();
   const unread = useUnreadCount();
   const [search, setSearch] = useSearchParams();
-  const projectId = search.get('projectId') || undefined;
+  const rawProjectId = search.get('projectId') || undefined;
+  const staleProjectId = Boolean(
+    rawProjectId && projects.data && !projects.data.some((project) => project.id === rawProjectId)
+  );
+  const projectId = staleProjectId ? undefined : rawProjectId;
   const status = REPORT_STATUSES.find((value) => value === search.get('status'));
   const sort = PORTAL_REPORT_SORTS.find((value) => value === search.get('sort')) ?? 'updated';
   const q = search.get('q')?.trim() || undefined;
@@ -323,6 +327,10 @@ export function MyReports() {
   const [term, setTerm] = useState(q ?? '');
   const list = useReportList({ projectId, status, q, sort }, !board);
   const counts = useStatusCounts({ projectId, q });
+
+  useEffect(() => {
+    if (staleProjectId) filter('projectId', undefined, true);
+  }, [staleProjectId]);
 
   useEffect(() => {
     document.title = `${unread ? `(${unread}) ` : ''}${t(heading)} | ${branding?.appName ?? 'BugPin'}`;

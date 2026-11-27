@@ -248,7 +248,7 @@ for (const change of [
   'inactive',
   'deleted-project',
 ] as const) {
-  it(`sends an empty access.changed and closes on ${change}`, async () => {
+  it(`sends access.changed with revoked=true and closes on ${change}`, async () => {
     const reader = await open();
     if (change === 'reassignment')
       Result.unwrap(
@@ -265,7 +265,7 @@ for (const change of [
     if (change === 'inactive')
       Result.unwrap(await projectsService.update(projectId, { isActive: false }));
     if (change === 'deleted-project') Result.unwrap(await projectsService.delete(projectId));
-    expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+    expect(decode(await reader.read())).toBe('event: access.changed\ndata: {"revoked":true}\n\n');
     expect((await reader.read()).done).toBe(true);
   });
 }
@@ -276,7 +276,7 @@ it('rechecks scope on heartbeat and never emits a stale report hint after owners
   reporterOwnershipRepo.setOwner(reportId, other.id, null);
   publish();
   await pulse();
-  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {"revoked":true}\n\n');
   expect((await reader.read()).done).toBe(true);
 });
 
@@ -413,11 +413,13 @@ for (const target of ['session', 'reporter', 'project'] as const) {
         })
       );
     if (target === 'project')
-      expect(decode(await affected.read())).toBe('event: access.changed\ndata: {}\n\n');
+      expect(decode(await affected.read())).toBe(
+        'event: access.changed\ndata: {"revoked":true}\n\n'
+      );
     expect((await affected.read()).done).toBe(true);
-    expect(validate).toHaveBeenCalledTimes(1);
-    expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
-    expect(scope).toHaveBeenCalledTimes(target === 'project' ? 1 : 0);
+    expect(validate).toHaveBeenCalledTimes(target === 'project' ? 2 : 1);
+    expect(validate).toHaveBeenCalledWith(owner.secret, false);
+    expect(scope).toHaveBeenCalledTimes(target === 'project' ? 2 : 0);
   });
 }
 
@@ -436,7 +438,7 @@ it('deduplicates ownership invalidation per previous reporter and leaves unrelat
       actorUserId: 'staff',
     }))
   );
-  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {"revoked":true}\n\n');
   expect((await reader.read()).done).toBe(true);
   expect(validate).toHaveBeenCalledTimes(1);
   expect(validate).toHaveBeenLastCalledWith(owner.secret, false);
@@ -451,7 +453,7 @@ it('delivers access.changed after a stalled ordinary write before closing the st
   Result.unwrap(reporterOwnershipService.set(reportId, { reporterId: other.id }, 'staff'));
   expect(decode(await reader.read())).toContain('event: report.updated');
   expect(decode(await reader.read())).toContain('event: message.created');
-  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+  expect(decode(await reader.read())).toBe('event: access.changed\ndata: {"revoked":true}\n\n');
   expect((await reader.read()).done).toBe(true);
 });
 
@@ -475,7 +477,7 @@ for (const mode of ['single', 'retention', 'all'] as const) {
     }
     if (mode === 'all')
       expect(await cleanupService.deleteAllReports()).toEqual({ deleted: 2, errors: 0 });
-    expect(decode(await reader.read())).toBe('event: access.changed\ndata: {}\n\n');
+    expect(decode(await reader.read())).toBe('event: access.changed\ndata: {"revoked":true}\n\n');
     expect((await reader.read()).done).toBe(true);
     expect(validate).toHaveBeenCalledTimes(1);
     expect(validate).toHaveBeenCalledWith(owner.secret, false);

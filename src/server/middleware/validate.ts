@@ -464,7 +464,7 @@ export const schemas = {
     reporterActivity: z.literal('new').optional(),
     projectId: z.string().optional(),
     reporterId: z.string().min(1).max(64).optional(),
-    source: z.enum(['widget', 'manual']).optional(),
+    source: z.enum(['widget', 'manual', 'portal']).optional(),
     status: z.string().optional(), // comma-separated list
     priority: z.string().optional(), // comma-separated list
     assignedTo: z.string().optional(),

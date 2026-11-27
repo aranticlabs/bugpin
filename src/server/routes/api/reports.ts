@@ -10,6 +10,7 @@ import {
   ASSIGNED_TO_ME_FILTER,
   type ReportBoardMove,
   type ReportPriority,
+  type ReportSource,
   type ReportSortKey,
   type ReportStatus,
 } from '@shared/types';
@@ -30,7 +31,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
     projectId: query.projectId,
     reporterId: query.reporterId,
     reporterActivity: query.reporterActivity as 'new' | undefined,
-    source: query.source as 'widget' | 'manual' | undefined,
+    source: query.source as ReportSource | undefined,
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],
     assignedTo: query.assignedTo === ASSIGNED_TO_ME_FILTER ? c.get('user').id : query.assignedTo,

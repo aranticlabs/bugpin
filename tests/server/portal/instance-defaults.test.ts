@@ -418,7 +418,6 @@ describe('review regressions', () => {
     expect((await settingsService.update({ reporterPortal: { enabled: false } })).success).toBe(
       true
     );
-    expect(invalidate).toHaveBeenCalledWith({ projectId: inheriting.id });
-    expect(invalidate).not.toHaveBeenCalledWith({ projectId: overriding.id });
+    expect(invalidate).toHaveBeenCalledWith({ all: true });
   });
 });

@@ -1226,6 +1226,116 @@ it('offers the theme switch in the header before sign-in', async () => {
   expect(localStorage.getItem('bugpin-portal-theme')).toBe('light');
 });
 
+it('invalidates private queries on SSE reconnect without resetting drafts or refetching public config', async () => {
+  let configReads = 0;
+  let reportReads = 0;
+  server.use(
+    http.get('/api/portal/config', () => {
+      configReads++;
+      return HttpResponse.json({
+        success: true,
+        config: {
+          appName: 'BugPin',
+          hideFooterBranding: false,
+          branding: {
+            buttonColors: {
+              lightButtonColor: '#02658D',
+              lightTextColor: '#ffffff',
+              lightButtonHoverColor: '#024F6F',
+              lightTextHoverColor: '#ffffff',
+              darkButtonColor: '#02658D',
+              darkTextColor: '#ffffff',
+              darkButtonHoverColor: '#036F9B',
+              darkTextHoverColor: '#ffffff',
+            },
+            logoLightUrl: null,
+            logoDarkUrl: null,
+            faviconLightVersion: '1',
+            faviconDarkVersion: '1',
+          },
+        },
+      });
+    }),
+    http.get('/api/portal/reports/report', () => {
+      reportReads++;
+      return HttpResponse.json({ success: true, report: detail });
+    })
+  );
+  const client = mount('/reports/report');
+  const resetSpy = vi.spyOn(client, 'resetQueries');
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('Message'), 'Unsent reply draft');
+  await user.upload(
+    screen.getByLabelText('Files'),
+    new File(['png'], 'keep.png', { type: 'image/png' })
+  );
+  const events = TestEventSource.instances[0];
+  await act(async () => {
+    await events.onerror?.();
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
+  const readsBeforeOpen = reportReads;
+  act(() => events.onopen?.());
+  await waitFor(() => expect(reportReads).toBeGreaterThan(readsBeforeOpen));
+  expect(resetSpy).not.toHaveBeenCalled();
+  expect(configReads).toBe(1);
+  expect(screen.getByLabelText('Message')).toHaveValue('Unsent reply draft');
+  expect(screen.getByText('keep.png')).toBeVisible();
+});
+
+it('handles access.changed with revoked=false via invalidation and revoked=true via resetQueries', async () => {
+  let revoked = false;
+  let reportReads = 0;
+  server.use(
+    http.get('/api/portal/reports/report', () => {
+      reportReads++;
+      if (revoked)
+        return HttpResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404 });
+      return HttpResponse.json({ success: true, report: detail });
+    })
+  );
+  const client = mount('/reports/report');
+  const resetSpy = vi.spyOn(client, 'resetQueries');
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('Message'), 'Keep draft on grant');
+  const events = TestEventSource.instances[0];
+  const readsBefore = reportReads;
+  act(() => {
+    events.dispatchEvent(
+      new MessageEvent('access.changed', { data: JSON.stringify({ revoked: false }) })
+    );
+  });
+  await waitFor(() => expect(reportReads).toBeGreaterThan(readsBefore));
+  expect(resetSpy).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Message')).toHaveValue('Keep draft on grant');
+
+  revoked = true;
+  act(() => {
+    events.dispatchEvent(
+      new MessageEvent('access.changed', { data: JSON.stringify({ revoked: true }) })
+    );
+  });
+  expect(resetSpy).toHaveBeenCalledTimes(1);
+  expect(client.getQueryData(['portal', 'report', 'report'])).toBeUndefined();
+  expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeVisible();
+});
+
+it('clears the offline banner after signing out and signing back in', async () => {
+  server.use(http.post('/api/portal/auth/logout', () => HttpResponse.json({ success: true })));
+  mount('/reports');
+  await screen.findByRole('button', { name: 'Jane' });
+  const events = TestEventSource.instances[0];
+  await act(async () => {
+    await events.onerror?.();
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Jane' }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+  await screen.findByLabelText('Email address');
+  expect(screen.queryByText('Connection lost. Reconnecting…')).not.toBeInTheDocument();
+});
+
 it('maps non-JSON 413 responses to PAYLOAD_TOO_LARGE and other non-JSON errors to REQUEST_FAILED', async () => {
   server.use(
     http.post(
@@ -1250,6 +1360,29 @@ it('maps non-JSON 413 responses to PAYLOAD_TOO_LARGE and other non-JSON errors t
     status: 502,
     code: 'REQUEST_FAILED',
   } satisfies Partial<PortalApiError>);
+});
+
+it('ignores and removes a stale projectId query parameter once accessible projects load', async () => {
+  const seenProjectIds: (string | null)[] = [];
+  server.use(
+    http.get('/api/portal/reports', ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(0);
+      const pid = query.get('projectId');
+      seenProjectIds.push(pid);
+      return HttpResponse.json({
+        success: true,
+        reports: pid ? [] : [summary],
+        nextCursor: null,
+        total: pid ? 0 : 1,
+        unreadCount: 0,
+        statusCounts,
+      });
+    })
+  );
+  mount('/reports?projectId=removed-project');
+  expect(await screen.findByRole('link', { name: /Checkout button/ })).toBeVisible();
+  expect(seenProjectIds[seenProjectIds.length - 1]).toBeNull();
 });
 
 it('keeps a 413 upload quota error in the composer across a background report refresh', async () => {

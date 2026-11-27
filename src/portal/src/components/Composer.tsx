@@ -6,6 +6,7 @@ import { Button } from '@shared-ui/components/ui/button';
 import { Textarea } from '@shared-ui/components/ui/textarea';
 import { FilePicker } from './FilePicker';
 import { portalFetch, PortalApiError } from '../api/client';
+import { isPrivatePortalQuery } from '../api/private-query';
 import { useI18n } from '../i18n/I18nProvider';
 import { errorKey } from '../i18n/error-key';
 
@@ -36,12 +37,12 @@ export function Composer({
     onSuccess: async () => {
       setBody('');
       setFiles([]);
-      await client.invalidateQueries({ queryKey: ['portal'] });
+      await client.invalidateQueries({ predicate: isPrivatePortalQuery });
     },
     onError: (error) => {
       failedRevision.current = refreshedAt;
       if (error instanceof PortalApiError && [403, 404, 409].includes(error.status)) {
-        void client.invalidateQueries({ queryKey: ['portal'] });
+        void client.invalidateQueries({ predicate: isPrivatePortalQuery });
       }
     },
   });

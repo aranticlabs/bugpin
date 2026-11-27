@@ -164,6 +164,14 @@ describe('reports routes', () => {
     });
   });
 
+  it('passes the portal source filter to the service', async () => {
+    const response = await createApp().request('http://localhost/reports?source=portal', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(response.status).toBe(200);
+    expect(listFilter).toMatchObject({ source: 'portal' });
+  });
+
   it('passes a list cursor through and returns 400 for one the service rejects', async () => {
     const res = await createApp().request('http://localhost/reports?sortBy=position&after=abc', {
       headers: { cookie: 'session=sess_1' },

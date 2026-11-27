@@ -493,15 +493,13 @@ export const settingsService = {
     // Invalidate settings cache to force reload on next access
     settingsCacheService.invalidate();
 
-    // Open portal streams of projects that follow the defaults recheck their access.
     if (
       reporterPortal.enabled !== current.reporterPortal.enabled ||
-      reporterPortal.allowNewReports !== current.reporterPortal.allowNewReports
-    ) {
-      for (const project of await projectsRepo.findAll())
-        if (!project.settings.reporterPortal)
-          realtimeService.invalidatePortalAccess({ projectId: project.id });
-    }
+      reporterPortal.allowNewReports !== current.reporterPortal.allowNewReports ||
+      settings.reporterNotifications?.messagingEnabled !==
+        current.reporterNotifications?.messagingEnabled
+    )
+      realtimeService.invalidatePortalAccess({ all: true });
 
     logger.info('Settings updated', { updates: Object.keys(updates) });
     return Result.ok(toClientSettings(settings));
