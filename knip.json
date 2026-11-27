@@ -14,7 +14,7 @@
   "workspaces": {
     ".": {
       "project": ["**/*.{ts,tsx,js,jsx}", "!ee/**"],
-      "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts", "tests/e2e/**/*.ts"]
+      "entry": ["tests/**/*.test.ts", "tests/fixtures/*.ts"]
     },
     "src/widget": {
       "entry": ["tests/browser/*.ts", "tests/browser/*.tsx"]

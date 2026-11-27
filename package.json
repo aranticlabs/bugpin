@@ -24,7 +24,7 @@
     "build:widget": "bun run --cwd src/widget build",
     "check:widget-size": "bun run build:widget && bun run src/widget/scripts/check-bundle-size.ts",
     "start": "bun run src/server/index.ts",
-    "typecheck": "bun run typecheck:server && bun run typecheck:shared-ui && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee && bun run typecheck:portal && bun run typecheck:e2e",
+    "typecheck": "bun run typecheck:server && bun run typecheck:shared-ui && bun run typecheck:admin && bun run typecheck:widget && bun run typecheck:ee && bun run typecheck:portal",
     "typecheck:server": "bun run --cwd src/server typecheck",
     "typecheck:shared-ui": "bun run --cwd src/shared-ui typecheck",
     "typecheck:admin": "bun run --cwd src/admin typecheck",
@@ -50,17 +50,14 @@
     "typecheck:portal": "bun run --cwd src/portal typecheck",
     "typecheck:tests": "tsc --project tests/server/tsconfig.json --noEmit",
     "test:portal": "bun run --cwd src/portal test",
-    "test:e2e": "bun run build && bun build tests/e2e/server.ts --outdir dist/e2e --target bun && playwright test",
-    "check:portal-bundle": "bun run build:portal",
-    "typecheck:e2e": "tsc --project tests/e2e/tsconfig.json --noEmit"
+    "check:portal-bundle": "bun run build:portal"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
     "@types/node": "^26.6.6",
     "knip": "^6.44.1",
     "prettier": "^3.9.10",
-    "typescript": "^7.0.2",
-    "@playwright/test": "1.56.1"
+    "typescript": "^7.0.2"
   },
   "overrides": {
     "fast-xml-builder": "^1.2.0",

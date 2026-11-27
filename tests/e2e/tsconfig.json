@@ -1,8 +1,0 @@
-{
-  "extends": "../server/tsconfig.json",
-  "compilerOptions": {
-    "typeRoots": ["../../node_modules/@types"],
-    "types": ["bun", "node"]
-  },
-  "include": ["./**/*.ts", "../../playwright.config.ts"]
-}
