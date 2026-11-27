@@ -10,9 +10,11 @@ BUGPIN_TAG ?= latest
 
 .PHONY: help \
         dev dev-server dev-admin dev-portal dev-widget build-dev \
+        build build-server build-admin build-widget check-widget-size \
         build-local local deploy-local logs-local down-local \
         build-prod prod deploy-prod logs-prod down-prod \
-        typecheck test test-widget-touch knip format \
+        typecheck typecheck-server typecheck-admin typecheck-widget typecheck-tests \
+        test test-server test-admin test-widget test-portal test-widget-touch knip format \
         seed-all seed-projects seed-user seed-reports \
         seed-clean-all seed-clean-projects seed-clean-user seed-clean-reports \
         clean clean-db clean-uploads clean-data clean-deps clean-all clean-purge \
@@ -53,8 +55,14 @@ dev-portal:
 dev-widget:
 	@bun run dev:widget
 
-build-dev:
+build build-dev:
 	@bun run build
+
+build-server build-admin build-widget:
+	@bun run $(subst -,:,$@)
+
+check-widget-size:
+	@bun run check:widget-size
 
 # ==============================================================================
 # Local containers (docker-compose.local.yml, with HMR)
@@ -115,8 +123,14 @@ typecheck:
 	@bun run typecheck
 	@bun run typecheck:tests
 
+typecheck-server typecheck-admin typecheck-widget typecheck-tests:
+	@bun run $(subst -,:,$@)
+
 test:
 	@bun run test
+
+test-server test-admin test-widget test-portal:
+	@bun run $(subst -,:,$@)
 
 test-widget-touch:
 	@bun run --cwd src/widget test:touch
