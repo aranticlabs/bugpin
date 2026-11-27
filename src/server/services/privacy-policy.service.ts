@@ -4,7 +4,7 @@ import type {
   ReportMetadata,
   UserActivityCapturePolicy,
 } from '@shared/types';
-import { redactSensitiveText, stripUrlQueryAndFragment } from '@shared/privacy';
+import { redactSensitiveText, redactSensitiveUrl, stripUrlQueryAndFragment } from '@shared/privacy';
 import { logger } from '../utils/logger.js';
 
 export interface DiagnosticCapturePolicy {
@@ -17,7 +17,7 @@ export interface DiagnosticCapturePolicy {
 function sanitizeUrl(value: string | undefined, minimizeUrls: boolean): string | undefined {
   if (!value) return undefined;
   const sanitized = minimizeUrls ? stripUrlQueryAndFragment(value) : value;
-  return redactSensitiveText(sanitized);
+  return redactSensitiveUrl(sanitized);
 }
 
 function sanitizeMetadata(metadata: ReportMetadata, minimizeUrls: boolean): ReportMetadata {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { redactSensitiveText, stripUrlQueryAndFragment } from '../../src/shared/privacy';
+import {
+  redactSensitiveText,
+  redactSensitiveUrl,
+  stripUrlQueryAndFragment,
+} from '../../src/shared/privacy';
 
 describe('redactSensitiveText', () => {
   it('redacts email addresses', () => {
@@ -33,6 +37,12 @@ describe('redactSensitiveText', () => {
     expect(redactSensitiveText('call 555-123-4567')).toBe('call [bugpin:redacted-phone]');
   });
 
+  it('redacts a dotted phone number even where it resembles an IPv4 address', () => {
+    expect(redactSensitiveText('Customer phone: +49 170.123.45.67')).toBe(
+      'Customer phone: [bugpin:redacted-phone]'
+    );
+  });
+
   it('does not mistake plain digit runs for phone numbers', () => {
     expect(redactSensitiveText('order 123456789 shipped')).toBe('order 123456789 shipped');
     expect(redactSensitiveText('code 0042')).toBe('code 0042');
@@ -41,30 +51,6 @@ describe('redactSensitiveText', () => {
   it('does not mistake dates or IP addresses for phone numbers', () => {
     expect(redactSensitiveText('created 2024-01-01 12:00:00 UTC')).not.toContain('[bugpin:');
     expect(redactSensitiveText('connect 127.0.0.1:8080 failed')).not.toContain('[bugpin:');
-  });
-
-  it('keeps IPv4 hosts whose octets resemble a formatted phone number', () => {
-    expect(redactSensitiveText('http://192.168.0.10:3000/groups')).toBe(
-      'http://192.168.0.10:3000/groups'
-    );
-    expect(redactSensitiveText('GET http://192.168.100.200/api failed')).toBe(
-      'GET http://192.168.100.200/api failed'
-    );
-    expect(redactSensitiveText('proxy 10.200.300.4 timed out')).toBe(
-      'proxy [bugpin:redacted-phone] timed out'
-    );
-  });
-
-  it('still redacts a phone number that sits next to an IPv4 host', () => {
-    expect(redactSensitiveText('host 192.168.0.10, call 555-123-4567')).toBe(
-      'host 192.168.0.10, call [bugpin:redacted-phone]'
-    );
-    expect(redactSensitiveText('call 555.123.4567 from 192.168.0.10')).toBe(
-      'call [bugpin:redacted-phone] from 192.168.0.10'
-    );
-    expect(redactSensitiveText('192.168.0.10 555-123-4567')).toBe(
-      '192.168.0.10 [bugpin:redacted-phone]'
-    );
   });
 
   it('redacts labeled and bearer tokens', () => {
@@ -84,6 +70,32 @@ describe('redactSensitiveText', () => {
   it('keeps normal diagnostic text untouched', () => {
     const message = 'TypeError: cannot read properties of undefined (reading "map")';
     expect(redactSensitiveText(message)).toBe(message);
+  });
+});
+
+describe('redactSensitiveUrl', () => {
+  it('keeps a private IPv4 host whose octets resemble a phone number', () => {
+    expect(redactSensitiveUrl('http://192.168.100.200:3000/groups')).toBe(
+      'http://192.168.100.200:3000/groups'
+    );
+  });
+
+  it('still redacts the path, query and fragment', () => {
+    expect(redactSensitiveUrl('http://192.168.100.200/users/person@example.com')).toBe(
+      'http://192.168.100.200/users/[bugpin:redacted-email]'
+    );
+    expect(redactSensitiveUrl('https://example.com/support?phone=+49 170.123.45.67')).toBe(
+      'https://example.com/support?phone=[bugpin:redacted-phone]'
+    );
+  });
+
+  it('redacts relative URLs and URLs with user info as plain text', () => {
+    expect(redactSensitiveUrl('/api/callback/555-123-4567')).toBe(
+      '/api/callback/[bugpin:redacted-phone]'
+    );
+    expect(redactSensitiveUrl('https://person@example.com/inbox')).toBe(
+      'https://[bugpin:redacted-email]/inbox'
+    );
   });
 });
 
