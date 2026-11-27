@@ -32,7 +32,10 @@ const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 function login(email: string) {
   const token = Result.unwrap(reporterAuthService.mintLoginToken(email, 'request'));
   const session = Result.unwrap(reporterAuthService.exchange(token.secret));
-  return { id: session.reporter.id, cookie: `bugpin_reporter_session=${session.sessionSecret}` };
+  return {
+    id: session.reporter.id,
+    cookie: `__Host-bugpin_reporter_session=${session.sessionSecret}`,
+  };
 }
 
 beforeEach(async () => {

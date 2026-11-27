@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, MailCheck } from 'lucide-react';
 import { Button } from '@shared-ui/components/ui/button';
@@ -8,6 +8,8 @@ import { portalFetch } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { useBranding } from '../branding/BrandingProvider';
 import { useI18n } from '../i18n/I18nProvider';
+import type { Catalog } from '../i18n/catalog';
+import { errorKey } from '../i18n/error-key';
 import { AuthCard } from '../components/AuthCard';
 
 export function LoginRequest() {
@@ -17,20 +19,24 @@ export function LoginRequest() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<keyof Catalog | null>(null);
+  const inFlight = useRef(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
-    setFailed(false);
+    setError(null);
     try {
       await portalFetch('/auth/request', {
         method: 'POST',
         body: JSON.stringify({ email, locale }),
       });
       setSent(true);
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      setError(errorKey(err));
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }
@@ -71,13 +77,14 @@ export function LoginRequest() {
               autoComplete="email"
               required
               maxLength={254}
+              disabled={pending}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
           </div>
-          {failed && (
+          {error && (
             <p role="alert" className="text-destructive">
-              {t('requestFailed')}
+              {t(error)}
             </p>
           )}
           <Button className="w-full whitespace-normal" disabled={pending}>

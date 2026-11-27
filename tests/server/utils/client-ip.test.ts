@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach, spyOn } from 'bun:test';
 import { config } from '../../../src/server/config';
 import {
   getClientIp,
@@ -8,6 +8,8 @@ import {
   rateLimitAddress,
   type TrustProxyMode,
 } from '../../../src/server/utils/client-ip';
+import { proxyTokenService } from '../../../src/server/services/proxy-token.service';
+import { Result } from '../../../src/server/utils/result';
 
 function createContext({
   peer,
@@ -150,14 +152,61 @@ describe('request origin', () => {
     expect(requiredTrustProxy(c)).toBe(null);
   });
 
-  it('honors forwarded host and protocol from a trusted proxy', () => {
+  it('honors the forwarded protocol but keeps Host from a trusted proxy', () => {
     setTrustProxy('auto');
     const c = createContext({
       peer: '172.18.0.2',
-      headers: { ...proxied, 'x-forwarded-proto': 'https' },
+      headers: { host: 'bugs.example.com', 'x-forwarded-proto': 'https' },
     });
     expect(getEffectiveOrigin(c)).toBe('https://bugs.example.com');
     expect(requiredTrustProxy(c)).toBe(null);
+  });
+
+  it.each(['auto', 'always'] as const)(
+    'ignores X-Forwarded-Host without a proxy token in %s mode',
+    (mode) => {
+      setTrustProxy(mode);
+      const c = createContext({
+        peer: '127.0.0.1',
+        headers: { ...proxied, 'x-forwarded-proto': 'https' },
+      });
+      expect(getEffectiveOrigin(c)).toBe('https://bugpin:7300');
+    }
+  );
+
+  it('honors X-Forwarded-Host only with a valid proxy token in token mode', () => {
+    setTrustProxy('token');
+    const verify = spyOn(proxyTokenService, 'verify').mockImplementation((token) =>
+      Result.ok(token === 'proxy-secret')
+    );
+    try {
+      const headers = { ...proxied, 'x-forwarded-proto': 'https' };
+      expect(
+        getEffectiveOrigin(
+          createContext({
+            peer: '172.18.0.2',
+            headers: { ...headers, 'x-bugpin-proxy-token': 'proxy-secret' },
+          })
+        )
+      ).toBe('https://bugs.example.com');
+      expect(
+        getEffectiveOrigin(
+          createContext({
+            peer: '172.18.0.2',
+            headers: { ...headers, 'x-bugpin-proxy-token': 'forged' },
+          })
+        )
+      ).toBe('http://bugpin:7300');
+    } finally {
+      verify.mockRestore();
+    }
+  });
+
+  it('does not ask for a trust mode for X-Forwarded-Host alone', () => {
+    setTrustProxy('never');
+    const c = createContext({ peer: '10.0.0.5', headers: proxied });
+    expect(getEffectiveOrigin(c)).toBe('http://bugpin:7300');
+    expect(requiredTrustProxy(c)).toBeNull();
   });
 
   it('ignores forwarded host and protocol when no proxy is trusted', () => {
@@ -184,7 +233,7 @@ describe('request origin', () => {
     setTrustProxy('always');
     const c = createContext({
       peer: '203.0.113.7',
-      headers: { ...proxied, 'x-forwarded-proto': 'https' },
+      headers: { host: 'bugs.example.com', 'x-forwarded-proto': 'https' },
     });
     expect(getEffectiveOrigin(c)).toBe('https://bugs.example.com');
     expect(requiredTrustProxy(c)).toBe(null);

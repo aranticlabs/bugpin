@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@shared-ui/components/ui/button';
 import { Input } from '@shared-ui/components/ui/input';
@@ -16,7 +16,7 @@ type Step =
   | { kind: 'twoFactor'; challengeToken: string; totp: boolean }
   | { kind: 'verificationSent'; maskedEmail: string };
 
-const errorMessages: Record<string, MessageKey> = {
+export const teamErrorMessages: Record<string, MessageKey> = {
   INVALID_CREDENTIALS: 'invalidCredentials',
   PASSWORD_CHANGE_REQUIRED: 'teamSetupRequired',
   TWO_FACTOR_SETUP_REQUIRED: 'teamSetupRequired',
@@ -40,6 +40,7 @@ export function TeamLogin() {
   const [useRecovery, setUseRecovery] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<MessageKey | null>(null);
+  const inFlight = useRef(false);
 
   async function handle(result: PortalTeamLoginResult) {
     if (result.status === 'signedIn') {
@@ -60,16 +61,19 @@ export function TeamLogin() {
 
   async function submit(event: FormEvent, request: () => Promise<PortalTeamLoginResult>) {
     event.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
     setError(null);
     try {
       await handle(await request());
     } catch (failure) {
       const code = failure instanceof PortalApiError ? failure.code : '';
-      setError(errorMessages[code] ?? 'requestFailed');
+      setError(teamErrorMessages[code] ?? 'requestFailed');
       if (code === 'CHALLENGE_EXPIRED' || code === 'TOO_MANY_ATTEMPTS')
         setStep({ kind: 'credentials' });
     } finally {
+      inFlight.current = false;
       setPending(false);
       setPassword('');
     }
@@ -125,6 +129,7 @@ export function TeamLogin() {
               inputMode={useRecovery ? 'text' : 'numeric'}
               required
               maxLength={useRecovery ? 20 : 10}
+              disabled={pending}
               value={code}
               onChange={(event) => setCode(event.target.value)}
               className={cn('h-11', useRecovery && 'font-mono')}
@@ -138,6 +143,7 @@ export function TeamLogin() {
             <Button
               type="button"
               variant="link"
+              disabled={pending}
               className="h-auto whitespace-normal px-0 underline dark:text-foreground"
               onClick={() => {
                 setUseRecovery(!useRecovery);
@@ -174,6 +180,7 @@ export function TeamLogin() {
             autoComplete="username"
             required
             maxLength={254}
+            disabled={pending}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="h-11"
@@ -187,6 +194,7 @@ export function TeamLogin() {
             autoComplete="current-password"
             required
             maxLength={1024}
+            disabled={pending}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="h-11"

@@ -78,7 +78,10 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
         403
       );
     }
-    if (/^\/api\/(auth|tokens)(\/|$)/.test(c.req.path)) {
+    if (
+      /^\/api\/(auth|tokens)(\/|$)/.test(c.req.path) ||
+      /^\/api\/settings\/proxy-token(\/|$)/.test(c.req.path)
+    ) {
       return c.json(
         { success: false, error: 'FORBIDDEN', message: 'Use a session to manage credentials' },
         403

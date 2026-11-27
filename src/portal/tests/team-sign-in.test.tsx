@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -441,3 +441,89 @@ it('still keeps German for a signed-in reporter, so the forced English is specif
     screen.queryByText('You see reports as their reporters do. Read-only.')
   ).not.toBeInTheDocument();
 });
+
+it('reconciles a superseded team verification exchange without navigating away or clearing the fresh token', async () => {
+  const tokenA = 'A'.repeat(43);
+  const tokenB = 'B'.repeat(43);
+  const otherOperator = { id: 'user-2', email: 'other@example.com', name: 'Other Staff' };
+  let finishExchange!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finishExchange = resolve;
+  });
+  let current: typeof operator | null = null;
+  let meRequests = 0;
+  const exchanged: string[] = [];
+  teamViewHandlers();
+  server.use(
+    http.get('/api/portal/me', () => {
+      meRequests++;
+      return current
+        ? HttpResponse.json({ success: true, operator: current })
+        : HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 });
+    }),
+    http.post('/api/portal/auth/team/verify/preview', async ({ request }) => {
+      const { token } = (await request.json()) as { token: string };
+      return HttpResponse.json({
+        success: true,
+        state: 'valid',
+        maskedEmail: token === tokenB ? 'o***@example.com' : 's***@example.com',
+      });
+    }),
+    http.post('/api/portal/auth/team/verify/exchange', async ({ request }) => {
+      const { token } = (await request.json()) as { token: string };
+      exchanged.push(token);
+      current = token === tokenA ? operator : otherOperator;
+      if (token === tokenA) await pending;
+      return HttpResponse.json({ success: true, operator: current });
+    })
+  );
+  const client = mount('/team-login/verify', { kind: 'team', token: tokenA });
+  await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(exchanged).toEqual([tokenA]));
+  act(() => {
+    window.history.replaceState(null, '', `/reporter-portal/team-login/verify#${tokenB}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  });
+  try {
+    await screen.findByRole('heading', { name: 'Confirm team sign-in for o***@example.com?' });
+    client.setQueryData(['portal', 'private-old-team'], { title: 'Old private data' });
+    await act(async () => {
+      finishExchange();
+      await pending;
+    });
+    await screen.findByText('You are signed in as s***@example.com. Continue to switch accounts.');
+    expect(meRequests).toBe(2);
+    expect(client.getQueryData(['portal', 'private-old-team'])).toBeUndefined();
+    expect(
+      screen.getByRole('heading', { name: 'Confirm team sign-in for o***@example.com?' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'All reports' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
+    expect(exchanged).toEqual([tokenA, tokenB]);
+  } finally {
+    finishExchange();
+  }
+});
+
+it.each([
+  ['PASSWORD_CHANGE_REQUIRED', 403, 'Finish setting up your account in the Admin Console'],
+  ['TWO_FACTOR_SETUP_REQUIRED', 403, 'Finish setting up your account in the Admin Console'],
+  ['RATE_LIMITED', 429, 'Too many requests'],
+  ['NOT_FOUND', 404, 'Team sign-in is not available'],
+])(
+  'maps %s during team verification exchange to its specific message',
+  async (code, status, message) => {
+    server.use(
+      http.post('/api/portal/auth/team/verify/preview', () =>
+        HttpResponse.json({ success: true, state: 'valid', maskedEmail: 's***@example.com' })
+      ),
+      http.post('/api/portal/auth/team/verify/exchange', () =>
+        HttpResponse.json({ success: false, error: code }, { status })
+      )
+    );
+    mount('/team-login/verify', { kind: 'team', token: secret });
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(new RegExp(message, 'i'));
+  }
+);

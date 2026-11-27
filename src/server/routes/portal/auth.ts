@@ -10,9 +10,9 @@ import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { rateLimiter, staffLoginLimit, staffTwoFactorLimit } from '../../middleware/rate-limit.js';
 import {
   portalCookieOptions,
+  portalOperatorCookieName,
   portalReaderAuthMiddleware,
-  PORTAL_OPERATOR_COOKIE,
-  REPORTER_SESSION_COOKIE,
+  reporterCookieName,
 } from '../../middleware/reporter-auth.js';
 import { validate, validatedBody } from '../../middleware/validate.js';
 import { getClientIp, rateLimitAddress } from '../../utils/client-ip.js';
@@ -128,32 +128,35 @@ portalAuthRoutes.post(
   loginIpLimit('exchange'),
   validate({ body: tokenSchema }),
   async (c) => {
+    const cookieName = await reporterCookieName(c);
     const result = reporterAuthService.exchange(
       validatedBody(c, tokenSchema).token,
-      getCookie(c, REPORTER_SESSION_COOKIE)
+      getCookie(c, cookieName)
     );
     if (!result.success)
       return c.json({ success: false, error: result.code, message: result.error }, 400);
     const { sessionSecret, expiresAt, ...response } = result.value;
     await endOperatorSession(c);
-    setCookie(c, REPORTER_SESSION_COOKIE, sessionSecret, await portalCookieOptions(c, expiresAt));
+    setCookie(c, cookieName, sessionSecret, await portalCookieOptions(c, expiresAt));
     return c.json({ success: true, ...response });
   }
 );
 
 async function endReporterSession(c: Context): Promise<void> {
-  const secret = getCookie(c, REPORTER_SESSION_COOKIE);
+  const name = await reporterCookieName(c);
+  const secret = getCookie(c, name);
   if (!secret) return;
   const session = reporterAuthService.validateSession(secret, false);
   if (session.success) reporterAuthService.logout(session.value.sessionId);
-  deleteCookie(c, REPORTER_SESSION_COOKIE, await portalCookieOptions(c));
+  deleteCookie(c, name, await portalCookieOptions(c));
 }
 
 async function endOperatorSession(c: Context): Promise<void> {
-  const secret = getCookie(c, PORTAL_OPERATOR_COOKIE);
+  const name = await portalOperatorCookieName(c);
+  const secret = getCookie(c, name);
   if (!secret) return;
   portalOperatorAuthService.logoutBySecret(secret);
-  deleteCookie(c, PORTAL_OPERATOR_COOKIE, await portalCookieOptions(c));
+  deleteCookie(c, name, await portalCookieOptions(c));
 }
 
 portalAuthRoutes.post('/logout', portalReaderAuthMiddleware, async (c) => {
@@ -176,7 +179,7 @@ async function startOperatorSession(c: Context, session: PortalOperatorSessionGr
   await endReporterSession(c);
   setCookie(
     c,
-    PORTAL_OPERATOR_COOKIE,
+    await portalOperatorCookieName(c),
     session.secret,
     await portalCookieOptions(c, session.expiresAt)
   );

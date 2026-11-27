@@ -10,7 +10,8 @@ const catalog = {
   sendLink: 'Anmeldelink senden',
   linkSent:
     'Falls diese Adresse das Portal nutzen kann, haben wir einen Link gesendet. Er ist 15 Minuten gültig.',
-  signInAs: 'Als {email} anmelden?',
+  confirmSignIn: 'Anmeldung bestätigen',
+  signingInAs: 'Du meldest dich als {email} an',
   switchAccount: 'Du bist als {email} angemeldet. Fahre fort, um das Konto zu wechseln.',
   linkExpired: 'Dieser Link ist abgelaufen. Neuen Link an {email} senden?',
   linkInvalid: 'Dieser Link ist ungültig.',

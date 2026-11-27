@@ -440,6 +440,7 @@ it('allows exactly one concurrent exchange, sends an allowlisted DTO, and sets a
   ]);
   expect(body).not.toHaveProperty('sessionSecret');
   const cookie = success.headers.get('set-cookie')!;
+  expect(cookie).toStartWith('__Host-bugpin_reporter_session=');
   for (const flag of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/'])
     expect(cookie).toContain(flag);
   expect(cookie).not.toContain('Domain=');
@@ -448,6 +449,32 @@ it('allows exactly one concurrent exchange, sends an allowlisted DTO, and sets a
     .get()!;
   expect(stored.token_hash).toBe(hashToken(cookie.split(';')[0].split('=')[1]));
   expect(count('reporter_sessions')).toBe(1);
+});
+
+it('uses only the __Host- session cookie on HTTPS and rejects a planted unprefixed cookie', async () => {
+  const response = await portalPost(app, '/auth/exchange', { token: mint().secret });
+  expect(response.status).toBe(200);
+  const cookies = response.headers.getSetCookie();
+  expect(cookies.some((line) => line.startsWith('__Host-bugpin_reporter_session='))).toBe(true);
+  expect(cookies.some((line) => line.startsWith('bugpin_reporter_session='))).toBe(false);
+  const secret = cookies
+    .find((line) => line.startsWith('__Host-bugpin_reporter_session='))!
+    .split(';')[0]
+    .split('=')[1];
+  const me = (cookie: string) =>
+    app.request(`${portalOrigin}/api/portal/me`, { headers: { Cookie: cookie } });
+  expect((await me(`bugpin_reporter_session=${secret}`)).status).toBe(401);
+  expect((await me(`__Host-bugpin_reporter_session=${secret}`)).status).toBe(200);
+
+  const planted = Result.unwrap(reporterAuthService.exchange(mint('planted@example.com').secret));
+  const replaced = await portalPost(
+    app,
+    '/auth/exchange',
+    { token: mint('victim@example.com').secret },
+    `bugpin_reporter_session=${planted.sessionSecret}`
+  );
+  expect(replaced.status).toBe(200);
+  expect(reporterAuthService.validateSession(planted.sessionSecret).success).toBe(true);
 });
 
 it('rolls token consumption, reporter creation, attachment, and history back when session insertion fails', () => {
@@ -486,7 +513,7 @@ it('revokes the previous browser session on exchange and logout invalidates the 
     app,
     '/auth/exchange',
     { token: mint('other@example.com').secret },
-    `bugpin_reporter_session=${first.sessionSecret}`
+    `__Host-bugpin_reporter_session=${first.sessionSecret}`
   );
   expect(reporterAuthService.validateSession(first.sessionSecret).success).toBe(false);
   const cookie = response.headers.get('set-cookie')!.split(';')[0];

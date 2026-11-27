@@ -10,7 +10,8 @@ const catalog = {
   sendLink: 'Envoyer un lien de connexion',
   linkSent:
     'Si cette adresse peut utiliser le portail, nous avons envoyé un lien. Il expire dans 15 minutes.',
-  signInAs: 'Se connecter en tant que {email} ?',
+  confirmSignIn: 'Confirmer la connexion',
+  signingInAs: 'Vous vous connectez en tant que {email}',
   switchAccount: 'Vous êtes connecté en tant que {email}. Continuez pour changer de compte.',
   linkExpired: 'Ce lien a expiré. Envoyer un nouveau lien à {email} ?',
   linkInvalid: 'Ce lien n’est pas valide.',

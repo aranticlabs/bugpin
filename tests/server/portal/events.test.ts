@@ -32,7 +32,7 @@ function login(email: string, previousSecret?: string) {
     id: session.reporter.id,
     secret: session.sessionSecret,
     sessionId: Result.unwrap(reporterAuthService.validateSession(session.sessionSecret)).sessionId,
-    cookie: `bugpin_reporter_session=${session.sessionSecret}`,
+    cookie: `__Host-bugpin_reporter_session=${session.sessionSecret}`,
   };
 }
 beforeEach(async () => {

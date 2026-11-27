@@ -268,7 +268,7 @@ it('authorizes activity reads and acknowledgements and accepts the filter only w
     });
     expect(seen.status).toBe(role === 'viewer' ? 403 : 200);
   }
-  for (const cookie of ['', 'bugpin_reporter_session=reporter']) {
+  for (const cookie of ['', '__Host-bugpin_reporter_session=reporter']) {
     expect(
       (
         await app.request(`${portalOrigin}/api/reports/reporter-activity/count`, {

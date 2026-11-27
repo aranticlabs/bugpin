@@ -66,7 +66,7 @@ function captureHeartbeat() {
 it('accepts only staff session cookies, including when Bearer and cookie are supplied together', async () => {
   const credentials: Record<string, string>[] = [
     {},
-    { Cookie: 'bugpin_reporter_session=other' },
+    { Cookie: '__Host-bugpin_reporter_session=other' },
     { Authorization: 'Bearer token' },
     { Authorization: 'Bearer token', Cookie: `session=${sessionId}` },
   ];

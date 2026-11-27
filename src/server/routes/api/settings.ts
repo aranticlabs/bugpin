@@ -52,7 +52,7 @@ settings.get('/address-check', authorize(['admin']), async (c) => {
   });
 });
 
-settings.get('/proxy-token', authorize(['admin']), staffOriginCheck, (c) => {
+settings.get('/proxy-token', authorize(['admin']), (c) => {
   if (config.trustProxy !== 'token') return c.json({ success: true, enabled: false });
   const result = proxyTokenService.getStatus();
   if (!result.success)

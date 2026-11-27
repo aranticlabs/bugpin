@@ -83,7 +83,9 @@ export function getEffectiveOrigin(c: Context): string | null {
     let host = c.req.header('host') ?? url.host;
     let protocol = url.protocol;
     if (requestIsTrustedProxy(c, config.trustProxy)) {
-      host = c.req.header('x-forwarded-host') ?? host;
+      // Only an authenticated proxy may rename the host: an unauthenticated peer could
+      // otherwise reach the staff or portal routes of another address.
+      if (config.trustProxy === 'token') host = c.req.header('x-forwarded-host') ?? host;
       const forwardedProtocol = c.req.header('x-forwarded-proto');
       if (
         forwardedProtocol !== undefined &&
@@ -109,7 +111,7 @@ export function getEffectiveOrigin(c: Context): string | null {
 export function requiredTrustProxy(c: Context): 'auto' | 'true' | null {
   const peer = getSocketAddress(c);
   if (config.trustProxy === 'token' || requestIsTrustedProxy(c, config.trustProxy)) return null;
-  const hasForwardedHeaders = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'].some(
+  const hasForwardedHeaders = ['x-forwarded-for', 'x-forwarded-proto'].some(
     (header) => c.req.header(header) !== undefined
   );
   if (!hasForwardedHeaders) return null;

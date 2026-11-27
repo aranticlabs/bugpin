@@ -19,7 +19,7 @@ beforeEach(async () => {
   app = createPortalTestApp();
   const token = Result.unwrap(reporterAuthService.mintLoginToken('profile@example.com', 'request'));
   const session = Result.unwrap(reporterAuthService.exchange(token.secret));
-  cookie = `bugpin_reporter_session=${session.sessionSecret}`;
+  cookie = `__Host-bugpin_reporter_session=${session.sessionSecret}`;
   reporterId = session.reporter.id;
 });
 afterEach(() => {
@@ -144,7 +144,7 @@ it('requires portal Origin, Fetch Metadata, the portal header, a reporter sessio
   ];
   for (const headers of rejectedHeaders)
     expect((await patch({ displayName: 'Rejected' }, headers)).status).toBe(403);
-  for (const value of ['', 'session=staff', 'bugpin_reporter_session=invalid']) {
+  for (const value of ['', 'session=staff', '__Host-bugpin_reporter_session=invalid']) {
     expect((await patch({ displayName: 'Rejected' }, { Cookie: value })).status).toBe(401);
   }
   expect((await patch({ displayName: 'a'.repeat(5000) })).status).toBe(413);

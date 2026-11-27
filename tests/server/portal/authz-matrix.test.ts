@@ -141,7 +141,7 @@ async function operatorCookie(caller: Caller): Promise<string> {
       new Date().toISOString(),
       hashToken(grant.secret),
     ]);
-  return `bugpin_portal_operator_session=${grant.secret}`;
+  return `__Host-bugpin_portal_operator_session=${grant.secret}`;
 }
 
 async function credential(caller: Caller): Promise<string> {
@@ -175,7 +175,7 @@ async function credential(caller: Caller): Promise<string> {
       'matrix-project',
     ]);
   }
-  return `bugpin_reporter_session=${session.sessionSecret}`;
+  return `__Host-bugpin_reporter_session=${session.sessionSecret}`;
 }
 
 it('has a matrix entry for every registered portal endpoint', () => {
@@ -383,30 +383,35 @@ it('uses the configured portal origin independently of the staff origin', async 
   expect(response.status).toBe(200);
 });
 
-it('honors forwarded origin headers only from a trusted proxy during bootstrap', async () => {
+it('honors the forwarded protocol only from a trusted proxy during bootstrap', async () => {
   await settingsRepo.updateAll({ appUrl: '' });
   settingsCacheService.invalidate();
+  const url = 'http://bugpin.example.test/api/portal/auth/preview';
   const forwarded = {
+    Host: 'bugpin.example.test',
     Origin: portalOrigin,
     'X-BugPin-Portal': '1',
     'content-type': 'application/json',
-    'X-Forwarded-Host': 'bugpin.example.test',
     'X-Forwarded-Proto': 'https',
   };
   const init = { method: 'POST', headers: forwarded, body: JSON.stringify({ token: 'invalid' }) };
   const peer = { requestIP: () => ({ address: '127.0.0.1' }) };
-  expect((await app.request('http://localhost/api/portal/auth/preview', init, peer)).status).toBe(
-    403
-  );
+  expect((await app.request(url, init, peer)).status).toBe(403);
   config.trustProxy = 'auto';
-  expect((await app.request('http://localhost/api/portal/auth/preview', init, peer)).status).toBe(
-    200
-  );
+  expect((await app.request(url, init, peer)).status).toBe(200);
+  expect(
+    (await app.request(url, init, { requestIP: () => ({ address: '203.0.113.1' }) })).status
+  ).toBe(403);
   expect(
     (
-      await app.request('http://localhost/api/portal/auth/preview', init, {
-        requestIP: () => ({ address: '203.0.113.1' }),
-      })
+      await app.request(
+        'http://localhost/api/portal/auth/preview',
+        {
+          ...init,
+          headers: { ...forwarded, Host: 'localhost', 'X-Forwarded-Host': 'bugpin.example.test' },
+        },
+        peer
+      )
     ).status
   ).toBe(403);
   for (const host of [
@@ -417,11 +422,8 @@ it('honors forwarded origin headers only from a trusted proxy during bootstrap',
     'bugpin.example.test,other.test',
   ]) {
     const response = await app.request(
-      'http://localhost/api/portal/auth/preview',
-      {
-        ...init,
-        headers: { ...forwarded, 'X-Forwarded-Host': host },
-      },
+      url,
+      { ...init, headers: { ...forwarded, Host: host } },
       peer
     );
     expect(response.status).toBe(403);

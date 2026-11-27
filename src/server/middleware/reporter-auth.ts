@@ -6,13 +6,16 @@ import { portalOrigin } from './origin-check.js';
 import type { PortalScope } from '../database/repositories/portal-reports.repo.js';
 import type { PortalMe, PortalOperator } from '@shared/portal-types';
 
-export const REPORTER_SESSION_COOKIE = 'bugpin_reporter_session';
-export const PORTAL_OPERATOR_COOKIE = 'bugpin_portal_operator_session';
+const REPORTER_SESSION_COOKIE = 'bugpin_reporter_session';
+const PORTAL_OPERATOR_COOKIE = 'bugpin_portal_operator_session';
+const HOST_REPORTER_SESSION_COOKIE = `__Host-${REPORTER_SESSION_COOKIE}`;
+const HOST_PORTAL_OPERATOR_COOKIE = `__Host-${PORTAL_OPERATOR_COOKIE}`;
 
 declare module 'hono' {
   interface ContextVariableMap {
     reporter: PortalMe;
     reporterSessionId: string;
+    reporterSessionSecret: string;
     portalOperator: PortalOperator;
     portalOperatorSessionId: string;
     portalScope: PortalScope;
@@ -22,34 +25,45 @@ declare module 'hono' {
 const unauthorized = (c: Context) =>
   c.json({ success: false, error: 'UNAUTHORIZED', message: 'Authentication required' }, 401);
 
+async function portalIsHttps(c: Context): Promise<boolean> {
+  return (await portalOrigin(c))?.startsWith('https:') ?? false;
+}
+
 export async function portalCookieOptions(c: Context, expires?: string) {
   return {
     httpOnly: true,
     sameSite: 'Lax' as const,
-    secure: (await portalOrigin(c))?.startsWith('https:') ?? false,
+    secure: await portalIsHttps(c),
     path: '/',
     ...(expires ? { expires: new Date(expires) } : {}),
   };
 }
 
+// On HTTPS only the `__Host-` name is read or written, so a sibling subdomain that plants
+// the plain name cannot fix a session on the portal.
+export async function reporterCookieName(c: Context): Promise<string> {
+  return (await portalIsHttps(c)) ? HOST_REPORTER_SESSION_COOKIE : REPORTER_SESSION_COOKIE;
+}
+
+export async function portalOperatorCookieName(c: Context): Promise<string> {
+  return (await portalIsHttps(c)) ? HOST_PORTAL_OPERATOR_COOKIE : PORTAL_OPERATOR_COOKIE;
+}
+
 async function authenticateReporter(c: Context): Promise<boolean> {
-  const secret = getCookie(c, REPORTER_SESSION_COOKIE);
+  const name = await reporterCookieName(c);
+  const secret = getCookie(c, name);
   const result = secret ? reporterAuthService.validateSession(secret) : null;
   if (!secret || !result?.success) return false;
   c.set('reporter', result.value.reporter);
   c.set('reporterSessionId', result.value.sessionId);
+  c.set('reporterSessionSecret', secret);
   c.set('portalScope', { kind: 'reporter', reporterId: result.value.reporter.id });
-  setCookie(
-    c,
-    REPORTER_SESSION_COOKIE,
-    secret,
-    await portalCookieOptions(c, result.value.expiresAt)
-  );
+  setCookie(c, name, secret, await portalCookieOptions(c, result.value.expiresAt));
   return true;
 }
 
 async function authenticateOperator(c: Context): Promise<boolean> {
-  const secret = getCookie(c, PORTAL_OPERATOR_COOKIE);
+  const secret = getCookie(c, await portalOperatorCookieName(c));
   if (!secret) return false;
   const result = await portalOperatorAuthService.validateSession(secret);
   if (!result.success) return false;

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@shared-ui/components/ui/button';
+import { maskEmail } from '@shared/mask-email';
 import type { PortalMe } from '@shared/portal-types';
 import { PortalApiError, portalFetch } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
+import type { Catalog } from '../i18n/catalog';
 import { AuthCard } from '../components/AuthCard';
 
 type Preview =
@@ -12,21 +14,30 @@ type Preview =
   | { state: 'expired'; maskedEmail: string }
   | { state: 'invalid' };
 
+function failureKey(error: unknown): keyof Catalog {
+  return error instanceof PortalApiError && error.code === 'RATE_LIMITED'
+    ? 'rateLimited'
+    : 'requestFailed';
+}
+
 export function LoginContinue({ token, clearToken }: { token: string; clearToken: () => void }) {
-  const { reporter, signIn, reconcileSession } = useAuth();
+  const auth = useAuth();
+  const { signIn, reconcileSession } = auth;
   const { locale, t } = useI18n();
   const navigate = useNavigate();
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<keyof Catalog | null>(null);
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const generation = useRef(0);
+  const inFlight = useRef(false);
   useEffect(() => {
     generation.current++;
+    inFlight.current = false;
     const abort = new AbortController();
     setPreview(null);
     setSent(false);
-    setFailed(false);
+    setError(null);
     void portalFetch<Preview>('/auth/preview', {
       method: 'POST',
       body: JSON.stringify({ token }),
@@ -35,8 +46,8 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
       .then((result) => {
         if (!abort.signal.aborted) setPreview(result);
       })
-      .catch(() => {
-        if (!abort.signal.aborted) setFailed(true);
+      .catch((failure: unknown) => {
+        if (!abort.signal.aborted) setError(failureKey(failure));
       });
     return () => {
       generation.current++;
@@ -45,17 +56,19 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
   }, [token]);
 
   async function proceed() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const requestGeneration = generation.current;
     const isCurrent = () => requestGeneration === generation.current;
     setPending(true);
-    setFailed(false);
+    setError(null);
     try {
       if (preview?.state === 'expired') {
         await portalFetch('/auth/resend', {
           method: 'POST',
           body: JSON.stringify({ token, locale }),
         });
-        setSent(true);
+        if (isCurrent()) setSent(true);
       } else {
         const result = await portalFetch<{ reporter: PortalMe; targetReportId?: string }>(
           '/auth/exchange',
@@ -78,37 +91,41 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
         );
         clearToken();
       }
-    } catch (error) {
+    } catch (failure) {
       if (!isCurrent()) {
         if (preview?.state === 'valid') await reconcileSession();
         return;
       }
-      if (error instanceof PortalApiError && error.code === 'INVALID_TOKEN')
+      if (failure instanceof PortalApiError && failure.code === 'INVALID_TOKEN')
         setPreview({ state: 'invalid' });
-      else setFailed(true);
+      else setError(failureKey(failure));
     } finally {
-      if (isCurrent()) setPending(false);
+      if (isCurrent()) {
+        inFlight.current = false;
+        setPending(false);
+      }
     }
   }
 
   const masked = preview && preview.state !== 'invalid' ? preview.maskedEmail : '';
-  const current = reporter?.email.replace(/^(.).*(@.*)$/, '$1***$2') ?? '';
+  const activeEmail = auth.reporter?.email ?? auth.operator?.email;
   return (
     <AuthCard
-      title={preview?.state === 'valid' ? t('signInAs', { email: masked }) : t('loginTitle')}
+      title={preview?.state === 'valid' ? t('confirmSignIn') : t('loginTitle')}
+      description={preview?.state === 'valid' ? t('signingInAs', { email: masked }) : undefined}
     >
-      {!preview && !failed && <p role="status">{t('loading')}</p>}
-      {failed && (
+      {!preview && !error && <p role="status">{t('loading')}</p>}
+      {error && (
         <p role="alert" className="text-destructive">
-          {t('requestFailed')}
+          {t(error)}
         </p>
       )}
       {sent ? (
         <p role="status">{t('linkSent')}</p>
       ) : (
         <>
-          {preview?.state === 'valid' && reporter && (
-            <p>{t('switchAccount', { email: current })}</p>
+          {preview?.state === 'valid' && activeEmail && (
+            <p>{t('switchAccount', { email: maskEmail(activeEmail) })}</p>
           )}
           {preview?.state === 'expired' && <p>{t('linkExpired', { email: masked })}</p>}
           {preview?.state === 'invalid' && <p role="alert">{t('linkInvalid')}</p>}
@@ -126,7 +143,7 @@ export function LoginContinue({ token, clearToken }: { token: string; clearToken
       <Button
         asChild
         variant="link"
-        className="h-auto whitespace-normal px-0 underline dark:text-foreground"
+        className="mx-auto flex h-auto w-fit whitespace-normal px-0 underline dark:text-foreground"
       >
         <Link to="/" onClick={clearToken}>
           {t('requestNewLink')}

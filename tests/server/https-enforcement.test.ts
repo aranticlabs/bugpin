@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn, type Mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -7,6 +7,8 @@ import { config } from '../../src/server/config';
 import { httpsEnforcement } from '../../src/server/middleware/https-enforcement';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { logger } from '../../src/server/utils/logger';
+import { proxyTokenService } from '../../src/server/services/proxy-token.service';
+import { Result } from '../../src/server/utils/result';
 import type { AppSettings } from '../../src/shared/types';
 
 const originalConfig = { ...config };
@@ -17,6 +19,16 @@ let enforceHttps = true;
 let appUrl = 'https://bugpin.example.com';
 let portalBaseUrl = '';
 let warnings: string[] = [];
+let verifyToken: Mock<typeof proxyTokenService.verify> | undefined;
+
+const PROXY_TOKEN = 'proxy-secret';
+
+function trustProxyToken() {
+  config.trustProxy = 'token';
+  verifyToken = spyOn(proxyTokenService, 'verify').mockImplementation((token) =>
+    Result.ok(token === PROXY_TOKEN)
+  );
+}
 
 function createApp() {
   const app = new Hono();
@@ -50,6 +62,8 @@ afterEach(() => {
   Object.assign(config, originalConfig);
   settingsCacheService.getAll = originalGetAll;
   logger.warn = originalWarn;
+  verifyToken?.mockRestore();
+  verifyToken = undefined;
 });
 
 describe('httpsEnforcement', () => {
@@ -122,7 +136,7 @@ describe('httpsEnforcement', () => {
       const response = await createApp().request(
         'http://internal.example/health?next=1',
         {
-          headers: { 'X-Forwarded-Host': 'public.example', 'X-Forwarded-Proto': 'http' },
+          headers: { Host: 'public.example', 'X-Forwarded-Proto': 'http' },
         },
         { requestIP: () => ({ address: '127.0.0.1' }) }
       );
@@ -132,9 +146,10 @@ describe('httpsEnforcement', () => {
   );
 
   it.each(['internal.example:7300', 'bugpin_app:7300'])(
-    'uses the trusted public host instead of internal Host %s when no URL is configured',
+    'uses the token proxy public host instead of internal Host %s when no URL is configured',
     async (host) => {
       appUrl = '';
+      trustProxyToken();
       const response = await createApp().request(
         `http://${host}/health?next=1`,
         {
@@ -142,12 +157,34 @@ describe('httpsEnforcement', () => {
             Host: host,
             'X-Forwarded-Host': 'public.example:8080',
             'X-Forwarded-Proto': 'http',
+            'X-BugPin-Proxy-Token': PROXY_TOKEN,
+          },
+        },
+        { requestIP: () => ({ address: '172.18.0.2' }) }
+      );
+      expect(response.status).toBe(301);
+      expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
+    }
+  );
+
+  it.each(['auto', 'always'] as const)(
+    'keeps the Host header and ignores X-Forwarded-Host in %s mode',
+    async (mode) => {
+      appUrl = '';
+      config.trustProxy = mode;
+      const response = await createApp().request(
+        'http://internal.example:7300/health?next=1',
+        {
+          headers: {
+            Host: 'internal.example:7300',
+            'X-Forwarded-Host': 'public.example:8080',
+            'X-Forwarded-Proto': 'http',
           },
         },
         { requestIP: () => ({ address: '127.0.0.1' }) }
       );
       expect(response.status).toBe(301);
-      expect(response.headers.get('Location')).toBe('https://public.example:8080/health?next=1');
+      expect(response.headers.get('Location')).toBe('https://internal.example:7300/health?next=1');
     }
   );
 
@@ -214,7 +251,7 @@ describe('httpsEnforcement', () => {
         appUrl = canonical;
         const response = await createApp().request(
           'http://bugpin.example.com/health',
-          { headers: { 'X-Forwarded-Proto': proto, 'X-Forwarded-Host': host } },
+          { headers: { 'X-Forwarded-Proto': proto, Host: host } },
           { requestIP: () => ({ address: '127.0.0.1' }) }
         );
         expect(response.status).toBe(400);
@@ -315,7 +352,9 @@ describe('DISABLE_HTTPS_ENFORCEMENT', () => {
   });
 });
 
-describe('HTTPS enforcement behind a trusted proxy with an internal Host', () => {
+describe('HTTPS enforcement behind a token proxy with an internal Host', () => {
+  beforeEach(() => trustProxyToken());
+
   it.each(['', 'https://portal.example.com'])(
     'accepts forwarded HTTPS when portalBaseUrl=%s',
     async (portal) => {
@@ -327,6 +366,7 @@ describe('HTTPS enforcement behind a trusted proxy with an internal Host', () =>
             Host: 'bugpin_app:7300',
             'X-Forwarded-Host': portal ? 'portal.example.com' : 'bugpin.example.com',
             'X-Forwarded-Proto': 'https',
+            'X-BugPin-Proxy-Token': PROXY_TOKEN,
           },
         },
         { requestIP: () => ({ address: '172.18.0.2' }) }
@@ -345,6 +385,7 @@ describe('HTTPS enforcement behind a trusted proxy with an internal Host', () =>
           Host: 'bugpin_app:7300',
           'X-Forwarded-Host': 'bugpin.example.com',
           'X-Forwarded-Proto': 'http',
+          'X-BugPin-Proxy-Token': PROXY_TOKEN,
         },
       },
       { requestIP: () => ({ address: '172.18.0.2' }) }

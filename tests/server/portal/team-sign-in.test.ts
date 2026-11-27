@@ -35,8 +35,8 @@ import type {
 } from '../../../src/shared/portal-types';
 import { createPortalTestApp, openPortalDatabase, portalOrigin, portalPost } from './helpers';
 
-const OPERATOR_COOKIE = 'bugpin_portal_operator_session';
-const REPORTER_COOKIE = 'bugpin_reporter_session';
+const OPERATOR_COOKIE = '__Host-bugpin_portal_operator_session';
+const REPORTER_COOKIE = '__Host-bugpin_reporter_session';
 const password = 'correct-horse-battery-1';
 const past = '2026-01-01T00:00:00.000Z';
 const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);

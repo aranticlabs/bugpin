@@ -39,7 +39,7 @@ beforeEach(async () => {
   const token = Result.unwrap(reporterAuthService.mintLoginToken('owner@example.com', 'request'));
   const session = Result.unwrap(reporterAuthService.exchange(token.secret));
   reporterId = session.reporter.id;
-  cookie = `bugpin_reporter_session=${session.sessionSecret}`;
+  cookie = `__Host-bugpin_reporter_session=${session.sessionSecret}`;
   getDb().run("UPDATE reporters SET display_name = 'Owner display', locale = 'de' WHERE id = ?", [
     reporterId,
   ]);

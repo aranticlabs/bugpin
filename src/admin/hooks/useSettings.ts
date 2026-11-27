@@ -54,6 +54,7 @@ export function useUpdateSettings({
       queryClient.setQueryData(settingsKeys.all, settings);
       queryClient.invalidateQueries({ queryKey: ['password-policy'] });
       queryClient.invalidateQueries({ queryKey: ['portal-team-sign-in'] });
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'address-check'] });
       if (successMessage) toast.success(successMessage);
     },
     onError: (error) => {

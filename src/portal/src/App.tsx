@@ -40,6 +40,11 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
     return () => window.removeEventListener('hashchange', capture);
   }, []);
   useEffect(() => {
+    if (!loginToken) return;
+    const expectedPath = loginToken.kind === 'reporter' ? '/login' : '/team-login/verify';
+    if (location.pathname.replace(/\/$/, '') !== expectedPath) setLoginToken(null);
+  }, [loginToken, location.pathname]);
+  useEffect(() => {
     document.getElementById('main-content')?.focus();
   }, [location.pathname, auth.reporter?.id, auth.operator?.id]);
   useEffect(() => {

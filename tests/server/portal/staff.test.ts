@@ -840,7 +840,7 @@ it('enforces roles and rejects reporter-only or missing credentials for every ad
         (row.path.endsWith('/lookup') ? `?email=${encodeURIComponent(target.reporter.email)}` : '');
       const cookie =
         role === 'reporter'
-          ? `bugpin_reporter_session=${guest.sessionSecret}`
+          ? `__Host-bugpin_reporter_session=${guest.sessionSecret}`
           : role === 'anonymous'
             ? ''
             : cookies[role];
@@ -870,16 +870,32 @@ it('uses strict effective-origin equality for staff bootstrap and ignores untrus
   await settingsRepo.updateAll({ appUrl: '' });
   settingsCacheService.invalidate();
   const first = await report();
-  const url = `http://localhost:4300/api/reports/${first.id}/owner`;
+  const url = `http://localhost:7300/api/reports/${first.id}/owner`;
   const headers = {
     Cookie: cookies.admin,
-    Origin: 'http://localhost:7300',
-    'X-Forwarded-Host': 'localhost:7300',
-    'X-Forwarded-Proto': 'http',
+    Host: 'localhost:7300',
+    Origin: 'https://localhost:7300',
+    'X-Forwarded-Proto': 'https',
   };
   const peer = { requestIP: () => ({ address: '127.0.0.1' }) };
   expect((await app.request(url, { method: 'DELETE', headers }, peer)).status).toBe(403);
   config.trustProxy = 'auto';
+  expect(
+    (
+      await app.request(
+        `http://localhost:4300/api/reports/${first.id}/owner`,
+        {
+          method: 'DELETE',
+          headers: {
+            ...headers,
+            Host: 'localhost:4300',
+            'X-Forwarded-Host': 'localhost:7300',
+          },
+        },
+        peer
+      )
+    ).status
+  ).toBe(403);
   expect((await app.request(url, { method: 'DELETE', headers }, peer)).status).toBe(200);
   expect(
     (

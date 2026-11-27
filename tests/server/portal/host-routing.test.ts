@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'bun:test';
+import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Hono } from '../../../src/server/node_modules/hono';
@@ -11,6 +11,8 @@ import { closeDatabase, initDatabase } from '../../../src/server/database/databa
 import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { settingsService } from '../../../src/server/services/settings.service';
+import { proxyTokenService } from '../../../src/server/services/proxy-token.service';
+import { Result } from '../../../src/server/utils/result';
 import { openPortalDatabase } from './helpers';
 
 let close: () => void;
@@ -110,9 +112,9 @@ it('rejects unknown and malformed hosts before redirects while keeping loopback 
     ).toBe(200);
 });
 
-it('trusts forwarded host and protocol only under the existing proxy policy', async () => {
+it('routes on Host and trusts the forwarded protocol only under the proxy policy', async () => {
   config.trustProxy = 'auto';
-  const headers = { 'X-Forwarded-Host': 'portal.example.test', 'X-Forwarded-Proto': 'https' };
+  const headers = { Host: 'portal.example.test', 'X-Forwarded-Proto': 'https' };
   const proxy = { requestIP: () => ({ address: '127.0.0.1' }) };
   const publicPeer = { requestIP: () => ({ address: '203.0.113.1' }) };
   expect((await app.request('http://internal.example/admin', { headers }, proxy)).status).toBe(404);
@@ -120,13 +122,34 @@ it('trusts forwarded host and protocol only under the existing proxy policy', as
     (await app.request('http://internal.example/reporter-portal/', { headers }, proxy)).status
   ).toBe(200);
   expect(
-    (await app.request('http://internal.example/reporter-portal/', { headers }, publicPeer)).status
+    (
+      await app.request(
+        'http://internal.example/reporter-portal/',
+        { headers: { Host: 'internal.example', 'X-Forwarded-Host': 'portal.example.test' } },
+        proxy
+      )
+    ).status
+  ).toBe(421);
+  expect(
+    (
+      await app.request(
+        'http://internal.example/reporter-portal/',
+        {
+          headers: {
+            Host: 'internal.example',
+            'X-Forwarded-Host': 'portal.example.test',
+            'X-Forwarded-Proto': 'https',
+          },
+        },
+        publicPeer
+      )
+    ).status
   ).toBe(421);
   expect(
     (
       await app.request(
         'http://internal.example/reporters',
-        { headers: { ...headers, 'X-Forwarded-Host': 'portal.example.test,evil.example' } },
+        { headers: { ...headers, Host: 'portal.example.test,evil.example' } },
         proxy
       )
     ).status
@@ -134,7 +157,53 @@ it('trusts forwarded host and protocol only under the existing proxy policy', as
   config.trustProxy = 'never';
   expect(
     (await app.request('http://internal.example/reporter-portal/', { headers }, proxy)).status
-  ).toBe(421);
+  ).toBe(200);
+});
+
+it.each(['auto', 'always'] as const)(
+  'ignores a spoofed X-Forwarded-Host on the portal host in %s mode',
+  async (mode) => {
+    config.trustProxy = mode;
+    const response = await app.request(
+      'http://portal.example.test/api/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          Host: 'portal.example.test',
+          'X-Forwarded-Host': 'staff.example.test',
+          'X-Forwarded-Proto': 'https',
+        },
+      },
+      { requestIP: () => ({ address: '127.0.0.1' }) }
+    );
+    expect(response.status).toBe(404);
+  }
+);
+
+it('honors X-Forwarded-Host only from a proxy holding the current token', async () => {
+  config.trustProxy = 'token';
+  const verify = spyOn(proxyTokenService, 'verify').mockImplementation((token) =>
+    Result.ok(token === 'proxy-secret')
+  );
+  try {
+    const request = (token: string) =>
+      app.request(
+        'http://internal.example/reporter-portal/',
+        {
+          headers: {
+            Host: 'internal.example',
+            'X-Forwarded-Host': 'portal.example.test',
+            'X-Forwarded-Proto': 'https',
+            'X-BugPin-Proxy-Token': token,
+          },
+        },
+        { requestIP: () => ({ address: '172.18.0.2' }) }
+      );
+    expect((await request('proxy-secret')).status).toBe(200);
+    expect((await request('forged')).status).toBe(421);
+  } finally {
+    verify.mockRestore();
+  }
 });
 
 it('redirects only a recognized effective host and emits HSTS for portal HTTPS', async () => {
@@ -144,13 +213,13 @@ it('redirects only a recognized effective host and emits HSTS for portal HTTPS',
   const peer = { requestIP: () => ({ address: '127.0.0.1' }) };
   const response = await app.request(
     'http://internal.example/admin',
-    { headers: { 'X-Forwarded-Host': 'portal.example.test', 'X-Forwarded-Proto': 'http' } },
+    { headers: { Host: 'portal.example.test', 'X-Forwarded-Proto': 'http' } },
     peer
   );
   expect(response.status).toBe(404);
   const redirect = await app.request(
     'http://internal.example/reporter-portal/login?x=1',
-    { headers: { 'X-Forwarded-Host': 'portal.example.test', 'X-Forwarded-Proto': 'http' } },
+    { headers: { Host: 'portal.example.test', 'X-Forwarded-Proto': 'http' } },
     peer
   );
   expect(redirect.headers.get('Location')).toBe(

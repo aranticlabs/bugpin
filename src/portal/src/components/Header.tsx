@@ -108,8 +108,10 @@ export function Header() {
               </Link>
             </Button>
           )}
-          {!auth.signedIn && !location.pathname.startsWith('/team-login') && <LanguageSelect />}
-          {!auth.signedIn && <ThemeMenu />}
+          {!auth.loading && !auth.signedIn && !location.pathname.startsWith('/team-login') && (
+            <LanguageSelect />
+          )}
+          {!auth.loading && !auth.signedIn && <ThemeMenu />}
           {auth.signedIn && <ProfileMenu />}
         </div>
       </div>

@@ -138,7 +138,8 @@ it('removes the fragment before the first request and exchanges only after Conti
   );
   expect(token?.kind).toBe('reporter');
   mount('/login', token?.token);
-  await screen.findByRole('heading', { name: 'Sign in as j***@example.com?' });
+  await screen.findByRole('heading', { name: 'Confirm sign-in' });
+  expect(screen.getByText('You’re signing in as j***@example.com')).toBeVisible();
   expect(exchanges).toBe(0);
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByRole('heading', { name: 'Report owned' });
@@ -349,7 +350,7 @@ it('reconciles a superseded exchange without navigating away from or consuming t
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
   try {
-    await screen.findByRole('heading', { name: 'Sign in as b***@example.com?' });
+    await screen.findByText('You’re signing in as b***@example.com');
     client.setQueryData(['portal', 'private-old-account'], { title: 'Private old report' });
     await act(async () => {
       finishExchange();
@@ -360,9 +361,7 @@ it('reconciles a superseded exchange without navigating away from or consuming t
     expect(client.getQueryData(['portal', 'private-old-account'])).toBeUndefined();
     expect(previewed).toEqual([tokenA, tokenB]);
     expect(exchanged).toEqual([tokenA]);
-    expect(
-      screen.getByRole('heading', { name: 'Sign in as b***@example.com?' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('You’re signing in as b***@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My reports' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('heading', { name: 'Report new-report' });

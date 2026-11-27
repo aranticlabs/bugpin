@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { getBunServer } from 'hono/bun';
 import type { Server } from 'bun';
 import type { PortalEvent } from '@shared/portal-types';
-import { reporterAuthMiddleware, REPORTER_SESSION_COOKIE } from '../../middleware/reporter-auth.js';
+import { reporterAuthMiddleware } from '../../middleware/reporter-auth.js';
 import {
   portalEventsService,
   type PortalEventCheck,
@@ -14,7 +13,7 @@ import { errorStatus } from '../../utils/http-status.js';
 
 export const portalEventsRoutes = new Hono();
 portalEventsRoutes.get('/events', reporterAuthMiddleware, async (c) => {
-  const secret = getCookie(c, REPORTER_SESSION_COOKIE)!;
+  const secret = c.get('reporterSessionSecret');
   let receive: (result: Result<PortalEventCheck>) => void = () => {};
   const subscribed = await portalEventsService.open(secret, (result) => receive(result));
   if (!subscribed.success)
