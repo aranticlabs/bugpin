@@ -1,12 +1,18 @@
 import type { Context } from 'hono';
 import { config } from '../config.js';
 
+function stripWeakPrefix(entityTag: string): string {
+  return entityTag.startsWith('W/') ? entityTag.slice(2) : entityTag;
+}
+
+// If-None-Match uses the weak comparison (RFC 9110, section 13.1.2): "abc" and W/"abc" match.
 function matchesEntityTag(ifNoneMatch: string | undefined, entityTag: string): boolean {
   if (!ifNoneMatch) return false;
+  const opaqueTag = stripWeakPrefix(entityTag);
   return ifNoneMatch
     .split(',')
     .map((candidate) => candidate.trim())
-    .some((candidate) => candidate === '*' || candidate === entityTag);
+    .some((candidate) => candidate === '*' || stripWeakPrefix(candidate) === opaqueTag);
 }
 
 /**

@@ -44,7 +44,14 @@ describe('GET /widget.js', () => {
     writeWidget('console.log("widget v1");');
     const entityTag = (await app.request('/widget.js')).headers.get('ETag') as string;
 
-    for (const ifNoneMatch of [entityTag, `"other", ${entityTag}`, '*']) {
+    const strongForm = entityTag.replace(/^W\//, '');
+    for (const ifNoneMatch of [
+      entityTag,
+      strongForm,
+      `"other", ${entityTag}`,
+      `"other", ${strongForm}`,
+      '*',
+    ]) {
       const response = await app.request('/widget.js', {
         headers: { 'If-None-Match': ifNoneMatch },
       });
@@ -62,8 +69,8 @@ describe('GET /widget.js', () => {
     const oldEntityTag = (await app.request('/widget.js')).headers.get('ETag') as string;
 
     writeWidget('console.log("widget v2, upgraded");');
-    const sameSizeLater = new Date(Date.now() + 5000);
-    utimesSync(join(tempDir, 'widget.js'), sameSizeLater, sameSizeLater);
+    const later = new Date(Date.now() + 5000);
+    utimesSync(join(tempDir, 'widget.js'), later, later);
 
     const response = await app.request('/widget.js', {
       headers: { 'If-None-Match': oldEntityTag },
@@ -71,6 +78,23 @@ describe('GET /widget.js', () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('console.log("widget v2, upgraded");');
+    expect(response.headers.get('ETag')).not.toBe(oldEntityTag);
+  });
+
+  it('sends the new bundle when the file changed but kept the same size', async () => {
+    writeWidget('console.log("widget v1");');
+    const oldEntityTag = (await app.request('/widget.js')).headers.get('ETag') as string;
+
+    writeWidget('console.log("widget v2");');
+    const later = new Date(Date.now() + 5000);
+    utimesSync(join(tempDir, 'widget.js'), later, later);
+
+    const response = await app.request('/widget.js', {
+      headers: { 'If-None-Match': oldEntityTag },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('console.log("widget v2");');
     expect(response.headers.get('ETag')).not.toBe(oldEntityTag);
   });
 
