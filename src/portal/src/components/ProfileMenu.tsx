@@ -63,7 +63,7 @@ export function ProfileMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-10 max-w-full gap-2 px-2" disabled={busy}>
-            <PersonAvatar name={accountName} className="h-7 w-7 text-[11px]" />
+            <PersonAvatar name={accountName} className="h-7 w-7 [&>span]:text-[11px]" />
             <span className="sr-only sm:not-sr-only sm:max-w-40 sm:truncate">{accountName}</span>
             <ChevronDown className="text-muted-foreground" />
           </Button>
@@ -147,7 +147,7 @@ export function ProfileMenu() {
           if (!update.isPending) setOpen(value);
         }}
       >
-        <DialogContent>
+        <DialogContent closeLabel={t('close')}>
           <DialogHeader>
             <DialogTitle>{t('displayName')}</DialogTitle>
             <DialogDescription>{t('displayNameHint')}</DialogDescription>

@@ -66,12 +66,18 @@ export const reporterPortalSettingsService = {
       : Result.ok(undefined);
   },
 
-  async overview(): Promise<{ prerequisites: string[]; claimableReports: number }> {
-    const prerequisites = await this.checkPrerequisites();
-    return {
-      prerequisites: prerequisites.success ? [] : (prerequisites.details ?? []),
-      claimableReports: reporterOwnershipService.countClaimable(),
-    };
+  async overview(): Promise<Result<{ prerequisites: string[]; claimableReports: number }>> {
+    try {
+      const prerequisites = await this.checkPrerequisites();
+      if (!prerequisites.success && prerequisites.code !== 'PORTAL_PREREQUISITES_MISSING')
+        return prerequisites;
+      return Result.ok({
+        prerequisites: prerequisites.success ? [] : (prerequisites.details ?? []),
+        claimableReports: reporterOwnershipService.countClaimable(),
+      });
+    } catch {
+      return Result.fail('Unable to load Reporter Portal settings', 'SETTINGS_READ_FAILED');
+    }
   },
 
   makeExistingReportsClaimable(userId: string): Result<number> {

@@ -31,7 +31,13 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     if (!data) return;
     if (data.branding.buttonColors) applyButtonColors(COLORS_STYLE_ID, data.branding.buttonColors);
     for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')) {
-      const url = new URL(link.href);
+      if (!link.href) continue;
+      let url: URL;
+      try {
+        url = new URL(link.href);
+      } catch {
+        continue;
+      }
       if (url.origin !== location.origin || !url.pathname.startsWith('/branding/')) continue;
       url.searchParams.set(
         'v',

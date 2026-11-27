@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -648,6 +648,40 @@ it('requires an eligible selection instead of silently switching an ineligible p
   mount('/new?projectId=not-owned');
   expect(await screen.findByLabelText('Title')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+});
+
+it('adds dropped files to a new report and rejects unsupported or oversized ones', async () => {
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  mount('/new');
+  const dropzone = await screen.findByRole('button', { name: 'Files' });
+  await waitFor(() => expect(dropzone).toBeEnabled());
+  expect(screen.getByText('Drag and drop files here')).toBeVisible();
+  const drop = (files: File[]) =>
+    fireEvent.drop(dropzone.parentElement!, { dataTransfer: { files, types: ['Files'] } });
+
+  drop([new File(['png'], 'capture.png', { type: 'image/png' })]);
+  expect(await screen.findByText('capture.png')).toBeVisible();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+  const addMore = screen.getByRole('button', { name: 'Files' });
+  fireEvent.drop(addMore.closest('ul')!.parentElement!, {
+    dataTransfer: { files: [new File(['txt'], 'notes.txt', { type: 'text/plain' })] },
+  });
+  expect(await screen.findByRole('alert')).toHaveTextContent('up to 5');
+  expect(screen.queryByText('notes.txt')).not.toBeInTheDocument();
+
+  fireEvent.drop(addMore.closest('ul')!.parentElement!, {
+    dataTransfer: {
+      files: [new File([new Uint8Array(1024 * 1024 + 1)], 'large.png', { type: 'image/png' })],
+    },
+  });
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.queryByText('large.png')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Remove capture.png' }));
+  expect(screen.queryByText('capture.png')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('saves a display name and email preference through the profile menu', async () => {
@@ -1360,6 +1394,24 @@ it('maps non-JSON 413 responses to PAYLOAD_TOO_LARGE and other non-JSON errors t
     status: 502,
     code: 'REQUEST_FAILED',
   } satisfies Partial<PortalApiError>);
+});
+
+it('accepts parameterized MIME types in FilePicker and suppresses zero-MB hints without a project', async () => {
+  mount('/reports/report');
+  const user = userEvent.setup({ applyAccept: false });
+  const input = await screen.findByLabelText('Files');
+  const recording = new File(['webm'], 'clip.webm', { type: 'video/webm;codecs=vp9' });
+  await user.upload(input, recording);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByText('clip.webm')).toBeVisible();
+
+  await user.upload(input, new File(['bad'], 'notes.txt', { type: 'text/plain;charset=utf-8' }));
+  expect(await screen.findByRole('alert')).toBeVisible();
+
+  cleanup();
+  mount('/new?projectId=not-owned');
+  expect(await screen.findByLabelText('Title')).toBeDisabled();
+  expect(screen.queryByText(/Images: 0 MB/)).not.toBeInTheDocument();
 });
 
 it('ignores and removes a stale projectId query parameter once accessible projects load', async () => {

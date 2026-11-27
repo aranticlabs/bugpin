@@ -3,14 +3,11 @@ import { fileURLToPath } from 'node:url';
 
 it('bundles shared presentation for browsers without staff or drag-and-drop modules', async () => {
   const directory = fileURLToPath(new URL('../../src/shared-ui/', import.meta.url));
-  const primitives = [...new Bun.Glob('components/ui/*.tsx').scanSync(directory)];
+  const modules = [...new Bun.Glob('**/*.{ts,tsx}').scanSync(directory)].filter(
+    (file) => !/(?:^|\/)(?:tests|__tests__|dist|node_modules)\/|\.(?:test|spec)\.tsx?$/.test(file)
+  );
   const result = await Bun.build({
-    entrypoints: [
-      ...primitives,
-      'components/report-board/ReportBoard.tsx',
-      'components/report-board/ReportViewSwitcher.tsx',
-      'lib/status.tsx',
-    ].map((file) => `${directory}${file}`),
+    entrypoints: modules.map((file) => `${directory}${file}`),
     tsconfig: `${directory}tsconfig.json`,
     target: 'browser',
     metafile: true,

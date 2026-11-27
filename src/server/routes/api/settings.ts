@@ -70,9 +70,15 @@ settings.post('/proxy-token/regenerate', authorize(['admin']), staffOriginCheck,
 
 // Reporter Portal defaults: prerequisites and existing reports that could become claimable
 
-settings.get('/reporter-portal', authorize(['admin']), async (c) =>
-  c.json({ success: true, ...(await reporterPortalSettingsService.overview()) })
-);
+settings.get('/reporter-portal', authorize(['admin']), async (c) => {
+  const result = await reporterPortalSettingsService.overview();
+  if (!result.success)
+    return c.json(
+      { success: false, error: result.code, message: result.error },
+      errorStatus(result.code)
+    );
+  return c.json({ success: true, ...result.value });
+});
 
 settings.post('/reporter-portal/claim-existing', authorize(['admin']), (c) => {
   const result = reporterPortalSettingsService.makeExistingReportsClaimable(c.get('user').id);

@@ -17,6 +17,11 @@ export interface ReporterSummary {
 
 export interface StaffConversationPortal {
   visible: boolean;
+  portalEnabled: boolean;
+  projectActive: boolean;
+  messagingEnabled: boolean;
+  maxImageMb: number;
+  maxVideoMb: number;
   ownerEmail: string | null;
   correspondentEmail: string | null;
   ownerLastLoginAt: string | null;

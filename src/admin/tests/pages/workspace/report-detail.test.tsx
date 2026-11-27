@@ -5,8 +5,11 @@ import { Link, Routes, Route } from 'react-router-dom';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '../../utils';
 import { ReportDetail } from '../../../pages/workspace/ReportDetail';
 import { server } from '../../mocks/server';
-import { mockConversationMessages } from '../../mocks/reporter-messages';
-import { mockReports } from '../../mocks/handlers';
+import {
+  mockConversationMessages,
+  mockStaffConversationPortal,
+} from '../../mocks/reporter-messages';
+import { mockReports, mockUsers } from '../../mocks/handlers';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -20,6 +23,15 @@ import { toast } from 'sonner';
 
 afterEach(() => vi.clearAllMocks());
 
+function renderReportDetail() {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/reports/:id" element={<ReportDetail />} />
+    </Routes>,
+    { initialEntries: ['/reports/report-1'] }
+  );
+}
+
 describe('ReportDetail', () => {
   it.each([true, false])(
     'describes portal visibility using project activity (%s)',
@@ -32,19 +44,20 @@ describe('ReportDetail', () => {
             files: [],
           })
         ),
-        http.get('/api/projects/:id', () =>
+        http.get('/api/reports/:id/reporter-messages', () =>
           HttpResponse.json({
             success: true,
-            project: { id: 'project-1', isActive, settings: { reporterPortal: { enabled: true } } },
+            messages: [],
+            portal: {
+              ...mockStaffConversationPortal,
+              portalEnabled: true,
+              projectActive: isActive,
+              visible: isActive,
+            },
           })
         )
       );
-      renderWithProviders(
-        <Routes>
-          <Route path="/reports/:id" element={<ReportDetail />} />
-        </Routes>,
-        { initialEntries: ['/reports/report-1'] }
-      );
+      renderReportDetail();
       const expected = isActive
         ? 'Visible to the reporter in the portal'
         : 'Project inactive. The conversation is not visible in the portal.';
@@ -54,7 +67,56 @@ describe('ReportDetail', () => {
     }
   );
 
-  it('acknowledges reporter activity only after the staff action and refreshes its indicator', async () => {
+  it.each(['editor', 'viewer'] as const)(
+    'shows the server portal state to a %s without requesting admin-only settings',
+    async (role) => {
+      const adminRequests: string[] = [];
+      server.use(
+        http.get('/api/auth/me', () =>
+          HttpResponse.json({ success: true, authenticated: true, user: mockUsers[role] })
+        ),
+        http.get('/api/settings', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/projects/:id', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/integrations', ({ request }) => {
+          adminRequests.push(new URL(request.url).pathname);
+          return HttpResponse.json({ success: false }, { status: 403 });
+        }),
+        http.get('/api/reports/report-1', () =>
+          HttpResponse.json({
+            success: true,
+            report: { ...mockReports[0], reporterId: 'rptr_jane' },
+            files: [],
+          })
+        ),
+        http.get('/api/reports/:id/reporter-messages', () =>
+          HttpResponse.json({
+            success: true,
+            messages: [],
+            portal: {
+              ...mockStaffConversationPortal,
+              portalEnabled: true,
+              visible: true,
+              messagingEnabled: role === 'editor',
+            },
+          })
+        )
+      );
+      renderReportDetail();
+      expect(await screen.findByText('Visible to the reporter in the portal')).toBeInTheDocument();
+      if (role === 'viewer')
+        expect(screen.getByText(/Messaging is disabled for this project/)).toBeInTheDocument();
+      else expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toBeInTheDocument();
+      expect(adminRequests).toEqual([]);
+    }
+  );
+
+  it('acknowledges reporter activity when the conversation is shown and refreshes its indicator', async () => {
     let active = true;
     let acknowledgements = 0;
     server.use(
@@ -78,18 +140,15 @@ describe('ReportDetail', () => {
         return HttpResponse.json({ success: true });
       })
     );
-    const user = userEvent.setup();
     renderWithProviders(
       <Routes>
         <Route path="/reports/:id" element={<ReportDetail />} />
       </Routes>,
       { initialEntries: ['/reports/report-1'] }
     );
-    expect(await screen.findByText('New reporter activity')).toBeInTheDocument();
-    expect(acknowledgements).toBe(0);
-    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
+    await waitFor(() => expect(acknowledgements).toBe(1));
     await waitFor(() =>
-      expect(screen.queryByText('New reporter activity')).not.toBeInTheDocument()
+      expect(screen.queryByRole('img', { name: 'New reporter activity' })).not.toBeInTheDocument()
     );
     expect(acknowledgements).toBe(1);
   });
@@ -526,7 +585,7 @@ it('pre-checks resolution access, preserves the draft on cancel, and sends expli
       HttpResponse.json({
         success: true,
         messages: [],
-        portal: { requiresPortalAccessConfirmation: true },
+        portal: { ...mockStaffConversationPortal, requiresPortalAccessConfirmation: true },
       })
     ),
     http.post('/api/reports/:id/reporter-messages', async ({ request }) => {

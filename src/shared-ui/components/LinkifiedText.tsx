@@ -1,5 +1,14 @@
 import { Fragment } from 'react';
 
+function isValidHttpUrl(href: string): boolean {
+  try {
+    const url = new URL(href);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function LinkifiedText({ text, linkClassName }: { text: string; linkClassName: string }) {
   return (
     <>
@@ -11,6 +20,7 @@ export function LinkifiedText({ text, linkClassName }: { text: string; linkClass
           href = href.slice(0, -1).replace(/[.,!?;:]+$/, '');
           excessClosing--;
         }
+        if (!isValidHttpUrl(href)) return part;
         return (
           <Fragment key={index}>
             <a

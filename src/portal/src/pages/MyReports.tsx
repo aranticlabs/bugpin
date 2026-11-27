@@ -33,7 +33,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useBranding } from '../branding/BrandingProvider';
 import { QueryState } from '../components/QueryState';
 import { PersonAvatar } from '../components/PersonAvatar';
-import { relativeTime } from '../lib/time';
+import { absoluteTime, relativeTime } from '../lib/time';
 
 const sortLabels: Record<PortalReportSort, MessageKey> = {
   updated: 'sortUpdated',
@@ -112,10 +112,7 @@ function ReportRow({ report }: { report: PortalReportSummary }) {
           )}
         </div>
         <div className="hidden shrink-0 flex-col items-end gap-2 text-xs text-muted-foreground sm:flex">
-          <time
-            dateTime={report.updatedAt}
-            title={new Date(report.updatedAt).toLocaleString(locale)}
-          >
+          <time dateTime={report.updatedAt} title={absoluteTime(report.updatedAt, locale)}>
             {relativeTime(report.updatedAt, locale)}
           </time>
           {report.replyCount > 0 && (
@@ -154,7 +151,7 @@ function BoardCard({ report }: { report: PortalReportSummary }) {
             <span className="sr-only">{t('replies', { count: report.replyCount })}</span>
           </span>
         )}
-        <time dateTime={report.updatedAt} title={new Date(report.updatedAt).toLocaleString(locale)}>
+        <time dateTime={report.updatedAt} title={absoluteTime(report.updatedAt, locale)}>
           {relativeTime(report.updatedAt, locale)}
         </time>
       </span>

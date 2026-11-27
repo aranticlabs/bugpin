@@ -24,7 +24,7 @@ const LIGHTBOX_CONTENT_CLASS =
 function CloseButton({ label }: { label: string }) {
   return (
     <DialogClose
-      className="absolute right-2 top-2 rounded-sm text-white transition-colors hover:text-white/70 focus-visible:focus-ring"
+      className="absolute right-2 top-2 rounded-md bg-black/60 p-1.5 text-white backdrop-blur-xs transition-colors hover:bg-black/80 hover:text-white/70 focus-visible:focus-ring"
       aria-label={label}
     >
       <X className="size-8" aria-hidden />
@@ -54,7 +54,7 @@ export function ImageLightbox({
               className="max-h-full max-w-full object-contain"
             />
             <CloseButton label={labels.close} />
-            <div className="absolute bottom-2 right-2 flex items-center gap-4">
+            <div className="absolute bottom-2 right-2 flex items-center gap-4 rounded-md bg-black/60 px-3 py-2 backdrop-blur-xs transition-colors hover:bg-black/80">
               <a href={image.url} download={image.filename} className={LIGHTBOX_LINK_CLASS}>
                 <Download className="size-5" aria-hidden />
                 {labels.download}

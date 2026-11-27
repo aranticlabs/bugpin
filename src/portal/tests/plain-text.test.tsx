@@ -26,3 +26,10 @@ it('renders markup as text and excludes quotes from links', () => {
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer nofollow');
 });
+
+it('leaves invalid URL candidates without a hostname as plain text', () => {
+  const text = 'Broken links: https:// and http://[invalid';
+  const { container } = render(<PlainText text={text} />);
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  expect(container.textContent).toBe(text);
+});

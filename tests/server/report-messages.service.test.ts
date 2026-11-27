@@ -17,6 +17,8 @@ import {
   initSchema,
   runMigrations,
 } from '../../src/server/database/database';
+import { reportHistoryService } from '../../src/server/services/report-history.service';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { portalReportsRepo } from '../../src/server/database/repositories/portal-reports.repo';
 import { portalSubmissionsService } from '../../src/server/services/portal-submissions.service';
 import { reportMessagesRepo } from '../../src/server/database/repositories/report-messages.repo';
@@ -910,6 +912,24 @@ it('accepts text-only replies when earlier uploads exceed the daily quota', asyn
   }
 });
 
+it('returns effective messaging and upload settings with the staff conversation', async () => {
+  projectSettings({
+    reporterPortal: { enabled: true },
+    notifyReporter: false,
+    screenshot: { maxImageUploadSizeMb: 3, maxVideoUploadSizeMb: 4 },
+  });
+  expect(await reportMessagesService.portalContext('report')).toMatchObject({
+    success: true,
+    value: {
+      portalEnabled: true,
+      projectActive: true,
+      messagingEnabled: false,
+      maxImageMb: 3,
+      maxVideoMb: 4,
+    },
+  });
+});
+
 it('rejects both authors during deletion and discards a file staged before deletion began', async () => {
   const staged = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
@@ -973,4 +993,24 @@ it('records a portal submission as seen in its creation transaction', async () =
   } finally {
     seen.mockRestore();
   }
+});
+
+it('displays the reporter name and email in ownership history, falling back to the email alone', async () => {
+  getDb().run("UPDATE reporters SET display_name = '' WHERE id = 'other'");
+  reportHistoryRepo.insert({
+    reportId: 'report',
+    action: 'owner_assigned',
+    oldValue: 'other',
+    newValue: 'reporter',
+  });
+  reportHistoryRepo.insert({ reportId: 'report', action: 'owner_removed', oldValue: 'reporter' });
+  const history = await reportHistoryService.listByReport('report');
+  if (!history.success) throw new Error(history.error);
+  expect(history.value.find((entry) => entry.action === 'owner_assigned')).toMatchObject({
+    oldDisplay: 'other@example.com',
+    newDisplay: 'Reporter (reporter@example.com)',
+  });
+  expect(history.value.find((entry) => entry.action === 'owner_removed')?.oldDisplay).toBe(
+    'Reporter (reporter@example.com)'
+  );
 });

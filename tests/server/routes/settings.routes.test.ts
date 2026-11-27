@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { Hono } from '../../../src/server/node_modules/hono';
 import { settingsRoutes } from '../../../src/server/routes/api/settings';
+import { reporterPortalSettingsService } from '../../../src/server/services/reporter-portal-settings.service';
 import { settingsService } from '../../../src/server/services/settings.service';
 import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
 import { emailService } from '../../../src/server/services/email.service';
@@ -580,5 +581,32 @@ describe('settings routes permissions', () => {
         expect(deleted).toBe(false);
       });
     }
+  }
+});
+
+it('returns Reporter Portal prerequisites and maps overview failures', async () => {
+  const overview = spyOn(reporterPortalSettingsService, 'overview').mockResolvedValue(
+    Result.ok({ prerequisites: ['smtp'], claimableReports: 2 })
+  );
+  try {
+    const request = () =>
+      createApp().request('http://localhost/settings/reporter-portal', {
+        headers: { cookie: 'session=sess_1' },
+      });
+    expect(await (await request()).json()).toEqual({
+      success: true,
+      prerequisites: ['smtp'],
+      claimableReports: 2,
+    });
+    overview.mockResolvedValue(Result.fail('Unavailable', 'SETTINGS_READ_FAILED'));
+    const failure = await request();
+    expect(failure.status).toBe(500);
+    expect(await failure.json()).toEqual({
+      success: false,
+      error: 'SETTINGS_READ_FAILED',
+      message: 'Unavailable',
+    });
+  } finally {
+    overview.mockRestore();
   }
 });

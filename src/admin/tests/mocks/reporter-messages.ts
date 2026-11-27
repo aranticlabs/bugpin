@@ -1,3 +1,4 @@
+import type { StaffConversationPortal } from '@shared/reporter-types';
 import type { ReporterMessage } from '@shared/types';
 
 export const mockConversationMessages: ReporterMessage[] = [
@@ -55,3 +56,17 @@ export const mockConversationMessages: ReporterMessage[] = [
     ],
   },
 ];
+
+export const mockStaffConversationPortal: StaffConversationPortal = {
+  visible: false,
+  portalEnabled: false,
+  projectActive: true,
+  messagingEnabled: true,
+  maxImageMb: 10,
+  maxVideoMb: 50,
+  ownerEmail: null,
+  correspondentEmail: 'reporter@example.com',
+  ownerLastLoginAt: null,
+  emailSuppressed: false,
+  requiresPortalAccessConfirmation: false,
+};

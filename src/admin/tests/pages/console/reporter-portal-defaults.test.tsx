@@ -188,4 +188,33 @@ describe('ReporterPortalDefaults', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
+
+  it('shows a retry when the portal requirements fail to load', async () => {
+    mockSettingsServer();
+    let requests = 0;
+    server.use(
+      http.get('/api/settings/reporter-portal', () => {
+        requests++;
+        return requests === 1
+          ? HttpResponse.json({ success: false, message: 'Unavailable' }, { status: 400 })
+          : HttpResponse.json({ success: true, prerequisites: [], claimableReports: 0 });
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ReporterPortalDefaults />);
+
+    expect(
+      await screen.findByText('Unable to load the Reporter Portal requirements.')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(enableLabel)).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Unable to load the Reporter Portal requirements.')
+      ).not.toBeInTheDocument()
+    );
+    expect(screen.getByLabelText(enableLabel)).toBeEnabled();
+    expect(requests).toBe(2);
+  });
 });

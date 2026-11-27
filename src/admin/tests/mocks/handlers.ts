@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { UNASSIGNED_FILTER } from '@shared/types';
 import type { DashboardOverview, DashboardPersonal, GamificationSettings } from '@shared/types';
+import { mockStaffConversationPortal } from './reporter-messages';
 
 // Mock data
 export const mockUsers = {
@@ -434,6 +435,7 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       messages: [],
+      portal: mockStaffConversationPortal,
     });
   }),
 

@@ -13,9 +13,13 @@ function extension(mimeType: string): string {
 }
 
 function size(bytes: number, locale: string): string {
-  const format = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
-  if (bytes < 1024 * 1024) return `${format.format(Math.max(bytes, 1) / 1024)} KB`;
-  return `${format.format(bytes / 1024 / 1024)} MB`;
+  const megabytes = bytes >= 1024 * 1024;
+  return new Intl.NumberFormat(locale, {
+    style: 'unit',
+    unit: megabytes ? 'megabyte' : 'kilobyte',
+    unitDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(megabytes ? bytes / 1024 / 1024 : Math.max(bytes, 1) / 1024);
 }
 
 type Kind = 'screenshot' | 'video' | 'attachment';

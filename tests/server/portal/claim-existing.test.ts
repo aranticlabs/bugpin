@@ -327,7 +327,7 @@ it('overview counts the same reports that claiming would change', async () => {
   await report(project.id, 'jane@example.com');
   await report(project.id, 'broken');
 
-  const overview = await reporterPortalSettingsService.overview();
+  const overview = Result.unwrap(await reporterPortalSettingsService.overview());
 
   expect(overview.claimableReports).toBe(1);
 });

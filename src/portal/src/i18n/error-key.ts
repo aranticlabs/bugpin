@@ -5,6 +5,9 @@ export function errorKey(error: unknown): keyof Catalog {
   const messages: Record<string, keyof Catalog> = {
     REPORT_CLOSED: 'reportClosed',
     MESSAGING_DISABLED: 'messagingOff',
+    SUBMISSION_DISABLED: 'noSubmissionProjects',
+    PROJECT_NOT_LICENSED: 'projectUnavailable',
+    READ_ONLY: 'readOnly',
     INVALID_FILE: 'invalidFiles',
     UPLOAD_QUOTA_EXCEEDED: 'uploadQuota',
     VIDEO_QUOTA_EXCEEDED: 'uploadQuota',

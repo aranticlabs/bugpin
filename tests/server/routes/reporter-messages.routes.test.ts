@@ -57,6 +57,11 @@ beforeEach(() => {
   reportMessagesService.portalContext = async () =>
     Result.ok({
       visible: false,
+      portalEnabled: false,
+      projectActive: true,
+      messagingEnabled: true,
+      maxImageMb: 10,
+      maxVideoMb: 50,
       ownerEmail: null,
       correspondentEmail: 'reporter@example.com',
       ownerLastLoginAt: null,

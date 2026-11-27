@@ -35,7 +35,7 @@ import type {
   CreateFileData,
 } from '../database/repositories/interfaces.js';
 import type { MediaFile } from './reports.service.js';
-import type { ReportOwner } from '@shared/reporter-types';
+import type { ReportOwner, StaffConversationPortal } from '@shared/reporter-types';
 import { normalizeEmail } from '../utils/email-normalize.js';
 import { isValidEmail } from '../utils/validators.js';
 import { effectiveReporterPortal } from '@shared/reporter-portal';
@@ -72,6 +72,18 @@ async function loadMessages(reportId: string, visibleOnly = false): Promise<Repo
   return messages.map((message) => ({ ...message, files: byMessage.get(message.id) ?? [] }));
 }
 
+function messagingEnabled(
+  project: MessageWriteContext['settings'] | undefined,
+  settings: AppSettings
+): boolean {
+  return (
+    project?.notifyReporter !== false &&
+    (project?.reporterNotifications?.messagingEnabled ??
+      settings.reporterNotifications?.messagingEnabled ??
+      true)
+  );
+}
+
 function checkAccess(
   reportId: string,
   author: MessageAuthor,
@@ -95,12 +107,7 @@ function checkAccess(
   const access = checkProjectLicense(context.projectId);
   if (!access.success) return access;
   if (writing) {
-    const enabled =
-      context.settings.notifyReporter !== false &&
-      (context.settings.reporterNotifications?.messagingEnabled ??
-        settings.reporterNotifications?.messagingEnabled ??
-        true);
-    if (!enabled)
+    if (!messagingEnabled(context.settings, settings))
       return Result.fail('Messaging is disabled for this project', 'MESSAGING_DISABLED');
     if (author.kind === 'reporter' && context.status === 'closed')
       return Result.fail('This report is closed', 'REPORT_CLOSED');
@@ -451,17 +458,26 @@ export const reportMessagesService = {
     return saved;
   },
 
-  async portalContext(reportId: string) {
+  async portalContext(reportId: string): Promise<Result<StaffConversationPortal>> {
     const report = await reportsRepo.findById(reportId);
     if (!report) return Result.fail('Report not found', 'NOT_FOUND');
     const project = await projectsRepo.findById(report.projectId);
-    const portalEnabled =
-      !!project &&
-      effectiveReporterPortal(project.settings, await settingsCacheService.getAll()).enabled;
+    const settings = await settingsCacheService.getAll();
+    const portalEnabled = !!project && effectiveReporterPortal(project.settings, settings).enabled;
+    const projectActive = Boolean(project?.isActive);
     const owner = report.reporterId ? reportersRepo.findById(report.reporterId) : null;
     const email = reporterCorrespondenceService.recipient(report);
     return Result.ok({
-      visible: Boolean(project?.isActive && portalEnabled && report.reporterId),
+      visible: Boolean(projectActive && portalEnabled && report.reporterId),
+      portalEnabled,
+      projectActive,
+      messagingEnabled: messagingEnabled(project?.settings, settings),
+      maxImageMb:
+        project?.settings.screenshot?.maxImageUploadSizeMb ??
+        settings.screenshot.maxImageUploadSizeMb,
+      maxVideoMb:
+        project?.settings.screenshot?.maxVideoUploadSizeMb ??
+        settings.screenshot.maxVideoUploadSizeMb,
       ownerEmail: owner?.email ?? null,
       correspondentEmail: email,
       ownerLastLoginAt: owner?.lastLoginAt ?? null,

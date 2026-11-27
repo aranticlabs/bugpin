@@ -70,6 +70,8 @@ export function useUserPreferences() {
   return {
     preferences: query.data,
     isLoaded: query.isSuccess,
+    /** True once stored values can no longer replace the fallbacks: loaded, failed or not loadable. */
+    isSettled: canSave ? !query.isPending : !auth?.isLoading,
     updatePreferences,
   };
 }

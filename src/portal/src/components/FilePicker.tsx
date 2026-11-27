@@ -1,9 +1,11 @@
-import { useId, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { Paperclip, X } from 'lucide-react';
 import { Input } from '@shared-ui/components/ui/input';
 import { Label } from '@shared-ui/components/ui/label';
 import { Badge } from '@shared-ui/components/ui/badge';
 import { Button } from '@shared-ui/components/ui/button';
+import { FileDropzone } from '@shared-ui/components/FileDropzone';
+import { normalizeMimeType } from '@shared/mime';
 import type { PortalProject } from '@shared/portal-types';
 import { useI18n } from '../i18n/I18nProvider';
 
@@ -36,25 +38,38 @@ export function FilePicker({
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(false);
-  const hint = t('fileHint', {
-    images: project?.maxImageMb ?? 0,
-    videos: project?.maxVideoMb ?? 0,
-  });
+  useEffect(() => {
+    setError(false);
+  }, [project?.id]);
+  useEffect(() => {
+    if (files.length === 0) setError(false);
+  }, [files.length]);
+  const hint = project
+    ? t('fileHint', {
+        images: project.maxImageMb,
+        videos: project.maxVideoMb,
+      })
+    : undefined;
   function select(event: ChangeEvent<HTMLInputElement>) {
     const next = [...files, ...Array.from(event.target.files ?? [])];
     event.target.value = '';
+    apply(next);
+  }
+  function apply(next: File[]) {
     const invalid =
       next.length > 5 ||
-      next.some(
-        (file) =>
-          !types.includes(file.type) ||
+      next.some((file) => {
+        const mimeType = normalizeMimeType(file.type);
+        return (
+          !types.includes(mimeType) ||
           file.size >
             1024 *
               1024 *
-              (file.type.startsWith('image/')
+              (mimeType.startsWith('image/')
                 ? (project?.maxImageMb ?? 0)
                 : (project?.maxVideoMb ?? 0))
-      );
+        );
+      });
     setError(invalid);
     if (!invalid) onChange(next);
   }
@@ -70,7 +85,7 @@ export function FilePicker({
       multiple
       accept={types.join(',')}
       disabled={disabled || !project}
-      aria-describedby={`${id}-hint`}
+      aria-describedby={hint ? `${id}-hint` : undefined}
       onChange={select}
       tabIndex={compact ? -1 : undefined}
       aria-hidden={compact || undefined}
@@ -88,14 +103,14 @@ export function FilePicker({
         <div className="sr-only">
           <Label htmlFor={`${id}-files`}>{t('files')}</Label>
           {fileInput}
-          <p id={`${id}-hint`}>{hint}</p>
+          {hint && <p id={`${id}-hint`}>{hint}</p>}
         </div>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           title={hint}
-          aria-describedby={`${id}-hint`}
+          aria-describedby={hint ? `${id}-hint` : undefined}
           disabled={disabled || !project}
           onClick={() => input.current?.click()}
         >
@@ -125,27 +140,24 @@ export function FilePicker({
   return (
     <div className="space-y-2">
       <Label htmlFor={`${id}-files`}>{t('files')}</Label>
-      {fileInput}
-      <p id={`${id}-hint`} className="text-sm text-muted-foreground">
-        {hint}
-      </p>
+      <FileDropzone
+        id={`${id}-files`}
+        files={files}
+        onChange={apply}
+        onReject={() => setError(true)}
+        accept={types.join(',')}
+        helperText={hint}
+        disabled={disabled || !project}
+        labels={{
+          title: t('dropFiles'),
+          subtitle: t('dropFilesBrowse'),
+          addMore: t('addMoreFiles'),
+          selectedFiles: t('selectedFiles'),
+          remove: (name) => t('removeFile', { name }),
+          rejected: () => t('invalidFiles'),
+        }}
+      />
       {errorMessage}
-      <ul className="space-y-1">
-        {files.map((file, index) => (
-          <li key={index} className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 flex-1 break-all text-sm">{file.name}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled}
-              aria-label={t('removeFile', { name: file.name })}
-              onClick={() => remove(index)}
-            >
-              ×
-            </Button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

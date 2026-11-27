@@ -54,6 +54,7 @@ export function useReporterMessages(reportId: string) {
     sendMessageAsync: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
     sendError: sendMutation.error,
+    resetSendError: sendMutation.reset,
     setHidden: moderation.mutateAsync,
     isModerating: moderation.isPending,
     moderationError: moderation.error,

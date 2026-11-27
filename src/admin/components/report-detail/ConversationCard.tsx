@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ChevronDown, Download, MessageSquare, Paperclip, Send } from 'lucide-react';
 import { LinkifiedText } from '@shared-ui/components/LinkifiedText';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -12,7 +12,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/colla
 import { Spinner } from '../ui/spinner';
 import { FileDropzone } from '../FileDropzone';
 import { ImageLightbox } from '../report/ImageLightbox';
-import { usePreference } from '../../hooks/useUserPreferences';
+import { ReporterActivityIndicator } from '../report/ReporterActivityIndicator';
+import { usePreference, useUserPreferences } from '../../hooks/useUserPreferences';
 import { PortalAccessConfirmation } from './PortalAccessConfirmation';
 import { isApiError, getApiErrorMessage } from '../../api/client';
 import { formatDateTime } from '../../lib/format';
@@ -20,6 +21,51 @@ import type { useReporterMessages } from '../../hooks/useReporterMessages';
 
 const ACCEPTED_MEDIA =
   'image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/webm,video/quicktime';
+
+type ConversationMessages = ReturnType<typeof useReporterMessages>['messages'];
+type AttachmentFile = Pick<ConversationMessages[number]['files'][number], 'type' | 'mimeType'>;
+type AttachmentName = { label: string; filename: string };
+
+const ATTACHMENT_KINDS = {
+  screenshot: 'Screenshot',
+  video: 'Video',
+  attachment: 'Attachment',
+} as const;
+
+function attachmentKind(file: AttachmentFile): keyof typeof ATTACHMENT_KINDS {
+  if (file.mimeType.startsWith('video/')) return 'video';
+  return file.type === 'screenshot' ? 'screenshot' : 'attachment';
+}
+
+function attachmentNames(
+  messages: ConversationMessages,
+  originals: readonly AttachmentFile[]
+): Map<string, AttachmentName> {
+  const counts = { screenshot: 0, video: 0, attachment: 0 };
+  const names = new Map<string, AttachmentName>();
+  for (const file of originals) counts[attachmentKind(file)]++;
+  // Assign visible attachments first so their numbers match the reporter's view.
+  const ordered = [
+    ...messages.filter((entry) => !entry.hiddenAt),
+    ...messages.filter((entry) => entry.hiddenAt),
+  ];
+  for (const entry of ordered) {
+    for (const file of entry.files) {
+      const kind = attachmentKind(file);
+      const number = ++counts[kind];
+      const extension = file.filename.includes('.') ? file.filename.split('.').pop() : undefined;
+      names.set(file.id, {
+        label: `${ATTACHMENT_KINDS[kind]} ${number}`,
+        filename: `${kind}-${number}${extension ? `.${extension}` : ''}`,
+      });
+    }
+  }
+  return names;
+}
+
+function isConfirmationRequired(error: unknown): boolean {
+  return isApiError(error) && error.response?.data?.error === 'CONFIRMATION_REQUIRED';
+}
 
 function MessageText({ text }: { text: string }) {
   return (
@@ -32,29 +78,29 @@ function MessageText({ text }: { text: string }) {
 export function ConversationCard({
   reportId,
   conversation,
+  originalFiles,
   canEdit,
   messagingEnabled,
   hasRecipient,
   portalEnabled,
   projectActive,
   hasOwner,
-  hasNewReporterActivity,
+  newReporterActivityAt,
   onMarkSeen,
-  isMarkingSeen = false,
   maxImageMb = 10,
   maxVideoMb = 50,
 }: {
   reportId: string;
   conversation: ReturnType<typeof useReporterMessages>;
+  originalFiles?: readonly AttachmentFile[];
   canEdit: boolean;
   messagingEnabled: boolean;
   hasRecipient: boolean;
   portalEnabled?: boolean;
   projectActive?: boolean;
   hasOwner: boolean;
-  hasNewReporterActivity?: boolean;
-  onMarkSeen?: () => void;
-  isMarkingSeen?: boolean;
+  newReporterActivityAt?: string;
+  onMarkSeen?: (activityAt: string) => Promise<unknown>;
   maxImageMb?: number;
   maxVideoMb?: number;
 }) {
@@ -70,6 +116,36 @@ export function ConversationCard({
   const [fileError, setFileError] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [image, setImage] = useState<{ url: string; filename: string } | null>(null);
+  const names = useMemo(
+    () => attachmentNames(conversation.messages, originalFiles ?? []),
+    [conversation.messages, originalFiles]
+  );
+  const { isSettled: openStateKnown } = useUserPreferences();
+  const acknowledgedAt = useRef<string | undefined>(undefined);
+
+  // Activity counts as seen once the conversation is expanded. The ref keeps one request per
+  // activity timestamp while the acknowledgement and the report refetch are in flight.
+  useEffect(() => {
+    if (!openStateKnown || !open || !canEdit || !newReporterActivityAt || !onMarkSeen) return;
+    if (
+      conversation.isLoading ||
+      conversation.error ||
+      acknowledgedAt.current === newReporterActivityAt
+    )
+      return;
+    acknowledgedAt.current = newReporterActivityAt;
+    void Promise.resolve(onMarkSeen(newReporterActivityAt)).catch(() => {
+      if (acknowledgedAt.current === newReporterActivityAt) acknowledgedAt.current = undefined;
+    });
+  }, [
+    openStateKnown,
+    open,
+    canEdit,
+    newReporterActivityAt,
+    onMarkSeen,
+    conversation.isLoading,
+    conversation.error,
+  ]);
 
   function changeFiles(next: File[]) {
     if (next.length > 5) {
@@ -109,8 +185,7 @@ export function ConversationCard({
         confirmPortalAccess: confirmPortalAccess || undefined,
       });
     } catch (error) {
-      if (isApiError(error) && error.response?.data?.error === 'CONFIRMATION_REQUIRED')
-        setConfirming(true);
+      if (isConfirmationRequired(error)) setConfirming(true);
       else setConfirming(false);
       return;
     }
@@ -130,22 +205,13 @@ export function ConversationCard({
             <CardTitle className="flex min-w-0 items-center gap-2">
               <MessageSquare className="size-4 shrink-0" aria-hidden />
               Conversation<Badge variant="secondary">{conversation.messages.length}</Badge>
+              <ReporterActivityIndicator active={Boolean(newReporterActivityAt)} />
             </CardTitle>
             <ChevronDown
               className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180"
               aria-hidden
             />
           </CollapsibleTrigger>
-          {hasNewReporterActivity && (
-            <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
-              <Badge variant="secondary">New reporter activity</Badge>
-              {canEdit && onMarkSeen && (
-                <Button variant="outline" size="sm" disabled={isMarkingSeen} onClick={onMarkSeen}>
-                  Mark as seen
-                </Button>
-              )}
-            </div>
-          )}
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-4">
@@ -155,7 +221,7 @@ export function ConversationCard({
                   ? 'Project inactive. The conversation is not visible in the portal.'
                   : !portalEnabled
                     ? 'Portal disabled for this project'
-                    : hasOwner
+                    : (conversation.portal?.visible ?? hasOwner)
                       ? 'Visible to the reporter in the portal'
                       : 'No reporter currently has portal access to this report'}
               </p>
@@ -235,12 +301,16 @@ export function ConversationCard({
                         >
                           {entry.files.map((file) => {
                             const url = `/api/reports/${reportId}/files/${file.id}`;
+                            const { label, filename } = names.get(file.id) ?? {
+                              label: file.filename,
+                              filename: file.filename,
+                            };
                             return (
                               <li key={file.id} className="min-w-0 space-y-2">
                                 {file.mimeType.startsWith('video/') ? (
                                   <video
                                     src={url}
-                                    aria-label={file.filename}
+                                    aria-label={label}
                                     controls
                                     preload="metadata"
                                     className="max-h-48 w-full rounded-md border bg-black object-contain"
@@ -248,13 +318,13 @@ export function ConversationCard({
                                 ) : (
                                   <button
                                     type="button"
-                                    aria-label={`View ${file.filename}`}
-                                    onClick={() => setImage({ url, filename: file.filename })}
+                                    aria-label={`View ${label}`}
+                                    onClick={() => setImage({ url, filename })}
                                     className="block w-full cursor-zoom-in rounded-md focus-visible:focus-ring"
                                   >
                                     <img
                                       src={url}
-                                      alt={file.filename}
+                                      alt={label}
                                       loading="lazy"
                                       className="max-h-48 w-full rounded-md border bg-muted object-contain"
                                     />
@@ -262,13 +332,13 @@ export function ConversationCard({
                                 )}
                                 <a
                                   href={url}
-                                  download={file.filename}
+                                  download={filename}
                                   className="flex min-h-11 min-w-0 items-center gap-2 rounded-sm text-sm text-primary underline-offset-2 hover:underline focus-visible:focus-ring"
-                                  aria-label={`Download ${file.filename}`}
+                                  aria-label={`Download ${label}`}
                                 >
                                   <Download className="size-4 shrink-0" aria-hidden />
-                                  <span className="truncate" title={file.filename}>
-                                    {file.filename}
+                                  <span className="truncate" title={label}>
+                                    {label}
                                   </span>
                                 </a>
                               </li>
@@ -331,7 +401,7 @@ export function ConversationCard({
                     {fileError}
                   </p>
                 )}
-                {conversation.sendError && (
+                {conversation.sendError && !isConfirmationRequired(conversation.sendError) && (
                   <Alert variant="destructive">
                     <AlertDescription>
                       {getApiErrorMessage(conversation.sendError, 'Failed to send message')}
@@ -378,7 +448,10 @@ export function ConversationCard({
         <PortalAccessConfirmation
           open={confirming}
           busy={conversation.isSending}
-          onOpenChange={setConfirming}
+          onOpenChange={(next) => {
+            setConfirming(next);
+            if (!next) conversation.resetSendError();
+          }}
           onConfirm={() => void submit(true)}
         />
         <ImageLightbox image={image} onClose={() => setImage(null)} />

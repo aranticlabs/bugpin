@@ -183,8 +183,8 @@ export function ReportDetail() {
       .catch(() => undefined);
   }, [loadedReportId, queryClient]);
 
-  // Load integrations for this report's project
-  const { data: integrations } = useIntegrations(data?.report?.projectId);
+  // Listing and forwarding integrations are admin-only on the server.
+  const { data: integrations } = useIntegrations(isAdmin ? data?.report?.projectId : undefined);
 
   const { data: assignableUsers = [] } = useQuery({
     queryKey: ['assignable-users'],
@@ -195,31 +195,28 @@ export function ReportDetail() {
     enabled: canEdit,
   });
 
-  // Fetch global settings for messaging enabled check
+  // Admin-only endpoints: other roles read the portal and messaging state from the conversation.
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
       const response = await api.get('/settings');
       return response.data.settings as AppSettings;
     },
-    enabled: !!data?.report?.projectId,
+    enabled: !!data?.report?.projectId && isAdmin,
   });
 
-  // Fetch project for per-project messaging settings
   const { data: projectData } = useQuery({
     queryKey: ['project', data?.report?.projectId],
     queryFn: async () => {
       const response = await api.get(`/projects/${data?.report?.projectId}`);
       return response.data.project as Project;
     },
-    enabled: !!data?.report?.projectId,
+    enabled: !!data?.report?.projectId && isAdmin,
   });
 
   const markReporterActivitySeen = useMutation({
-    mutationFn: () =>
-      api.post(`/reports/${id}/reporter-activity/seen`, {
-        lastReporterActivityAt: data?.report.lastReporterActivityAt,
-      }),
+    mutationFn: (lastReporterActivityAt: string) =>
+      api.post(`/reports/${id}/reporter-activity/seen`, { lastReporterActivityAt }),
     onSuccess: () => {
       for (const queryKey of [['report', id], ['reports'], ['reporter-activity-count']])
         void queryClient.invalidateQueries({ queryKey });
@@ -373,14 +370,26 @@ export function ReportDetail() {
     return toPlain(report, { ...base, sections });
   };
 
-  const messagingEnabled = (() => {
-    if (projectData?.settings?.notifyReporter === false) return false;
-    return (
-      projectData?.settings?.reporterNotifications?.messagingEnabled ??
-      settingsData?.reporterNotifications?.messagingEnabled ??
-      true
-    );
-  })();
+  const portal = conversation.portal;
+  const messagingEnabled =
+    portal?.messagingEnabled ??
+    (projectData?.settings?.notifyReporter === false
+      ? false
+      : (projectData?.settings?.reporterNotifications?.messagingEnabled ??
+        settingsData?.reporterNotifications?.messagingEnabled ??
+        true));
+  const portalEnabled =
+    portal?.portalEnabled ??
+    (projectData ? effectiveReporterPortal(projectData.settings, settingsData).enabled : undefined);
+  const projectActive = portal?.projectActive ?? projectData?.isActive;
+  const maxImageMb =
+    portal?.maxImageMb ??
+    projectData?.settings?.screenshot?.maxImageUploadSizeMb ??
+    settingsData?.screenshot?.maxImageUploadSizeMb;
+  const maxVideoMb =
+    portal?.maxVideoMb ??
+    projectData?.settings?.screenshot?.maxVideoUploadSizeMb ??
+    settingsData?.screenshot?.maxVideoUploadSizeMb;
 
   const hasRecipient = Boolean(report.reporterId || report.claimableEmail || report.reporterEmail);
 
@@ -681,27 +690,19 @@ export function ReportDetail() {
             key={report.id}
             reportId={report.id}
             conversation={conversation}
+            originalFiles={files}
             canEdit={canEdit}
             messagingEnabled={messagingEnabled}
             hasRecipient={hasRecipient}
-            portalEnabled={
-              projectData
-                ? effectiveReporterPortal(projectData.settings, settingsData).enabled
-                : undefined
-            }
-            projectActive={projectData?.isActive}
+            portalEnabled={portalEnabled}
+            projectActive={projectActive}
             hasOwner={Boolean(report.reporterId)}
-            hasNewReporterActivity={report.hasNewReporterActivity}
-            onMarkSeen={() => markReporterActivitySeen.mutate()}
-            isMarkingSeen={markReporterActivitySeen.isPending}
-            maxImageMb={
-              projectData?.settings?.screenshot?.maxImageUploadSizeMb ??
-              settingsData?.screenshot?.maxImageUploadSizeMb
+            newReporterActivityAt={
+              report.hasNewReporterActivity ? report.lastReporterActivityAt : undefined
             }
-            maxVideoMb={
-              projectData?.settings?.screenshot?.maxVideoUploadSizeMb ??
-              settingsData?.screenshot?.maxVideoUploadSizeMb
-            }
+            onMarkSeen={markReporterActivitySeen.mutateAsync}
+            maxImageMb={maxImageMb}
+            maxVideoMb={maxVideoMb}
           />
 
           {/* Console Output */}

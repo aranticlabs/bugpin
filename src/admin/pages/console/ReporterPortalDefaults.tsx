@@ -91,6 +91,18 @@ export function ReporterPortalDefaults() {
       >
         <UnsavedChangesGuard isDirty={isDirty} onSave={save} onDiscard={() => setPortal(saved)} />
         <div className="space-y-6">
+          {overview.isError && (
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Unable to load the Reporter Portal requirements.
+                </AlertDescription>
+              </Alert>
+              <Button variant="outline" onClick={() => void overview.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
           {missing.length > 0 && (
             <Alert>
               <AlertDescription>

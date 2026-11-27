@@ -6,7 +6,7 @@ import { api } from '../../api/client';
 import { ConversationCard } from '../../components/report-detail/ConversationCard';
 import { useReporterMessages } from '../../hooks/useReporterMessages';
 import { server } from '../mocks/server';
-import { mockConversationMessages } from '../mocks/reporter-messages';
+import { mockConversationMessages, mockStaffConversationPortal } from '../mocks/reporter-messages';
 import { renderWithProviders, screen, userEvent, waitFor } from '../utils';
 import type { ReporterMessage } from '@shared/types';
 
@@ -18,18 +18,24 @@ function Harness({
 }: Partial<Omit<React.ComponentProps<typeof ConversationCard>, 'conversation'>>) {
   const conversation = useReporterMessages(reportId);
   return (
-    <ConversationCard
-      reportId={reportId}
-      canEdit
-      messagingEnabled
-      hasRecipient
-      hasOwner
-      portalEnabled
-      conversation={conversation}
-      {...props}
-    />
+    <>
+      <ConversationCard
+        reportId={reportId}
+        canEdit
+        messagingEnabled
+        hasRecipient
+        hasOwner
+        portalEnabled
+        conversation={conversation}
+        {...props}
+      />
+      <span data-testid="send-error-state">{conversation.sendError ? 'failed' : 'idle'}</span>
+    </>
   );
 }
+
+const ACTIVITY_AT = '2026-11-09T10:00:00.000Z';
+const LATER_ACTIVITY_AT = '2026-11-09T11:00:00.000Z';
 
 let messages: ReporterMessage[];
 let sent: unknown[];
@@ -84,7 +90,7 @@ afterEach(() => {
 });
 
 describe('ConversationCard', () => {
-  it('keeps activity and its acknowledgement action visible when the saved card state is collapsed', async () => {
+  it('keeps new activity unseen while the saved card state is collapsed and acknowledges it on expand', async () => {
     server.use(
       http.get('/api/user-preferences/me', () =>
         HttpResponse.json({ success: true, preferences: { reportMessagesOpen: false } })
@@ -92,35 +98,108 @@ describe('ConversationCard', () => {
     );
     const onMarkSeen = vi.fn();
     const user = userEvent.setup();
-    renderWithProviders(<Harness hasNewReporterActivity onMarkSeen={onMarkSeen} />);
-    await waitFor(() =>
-      expect(screen.queryByRole('list', { name: 'Messages' })).not.toBeInTheDocument()
-    );
-    expect(await screen.findByText('New reporter activity')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
-    expect(onMarkSeen).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: /Conversation/ })).toHaveAttribute(
-      'data-state',
-      'closed'
-    );
-  });
-
-  it('shows new activity without clearing it on view and lets editors acknowledge it', async () => {
-    const onMarkSeen = vi.fn();
-    const user = userEvent.setup();
-    renderWithProviders(<Harness hasNewReporterActivity onMarkSeen={onMarkSeen} />);
-    await screen.findByRole('list', { name: 'Messages' });
-    expect(screen.getByText('New reporter activity')).toBeInTheDocument();
+    renderWithProviders(<Harness newReporterActivityAt={ACTIVITY_AT} onMarkSeen={onMarkSeen} />);
+    const trigger = screen.getByRole('button', { name: /Conversation/ });
+    await waitFor(() => expect(trigger).toHaveAttribute('data-state', 'closed'));
+    expect(screen.getByRole('img', { name: 'New reporter activity' })).toBeVisible();
     expect(onMarkSeen).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Mark as seen' }));
-    expect(onMarkSeen).toHaveBeenCalledOnce();
+    await user.click(trigger);
+    await waitFor(() => expect(onMarkSeen).toHaveBeenCalledExactlyOnceWith(ACTIVITY_AT));
   });
 
-  it('shows the activity indicator to viewers without the acknowledgement action', async () => {
-    renderWithProviders(<Harness hasNewReporterActivity canEdit={false} onMarkSeen={vi.fn()} />);
+  it('acknowledges new activity once when the conversation is shown to an editor', async () => {
+    const onMarkSeen = vi.fn();
+    const { rerender } = renderWithProviders(
+      <Harness newReporterActivityAt={ACTIVITY_AT} onMarkSeen={onMarkSeen} />
+    );
     await screen.findByRole('list', { name: 'Messages' });
-    expect(screen.getByText('New reporter activity')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Mark as seen' })).not.toBeInTheDocument();
+    await waitFor(() => expect(onMarkSeen).toHaveBeenCalledExactlyOnceWith(ACTIVITY_AT));
+    rerender(<Harness newReporterActivityAt={ACTIVITY_AT} onMarkSeen={onMarkSeen} />);
+    expect(onMarkSeen).toHaveBeenCalledOnce();
+    rerender(<Harness newReporterActivityAt={LATER_ACTIVITY_AT} onMarkSeen={onMarkSeen} />);
+    await waitFor(() => expect(onMarkSeen).toHaveBeenLastCalledWith(LATER_ACTIVITY_AT));
+    expect(onMarkSeen).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed acknowledgement when the conversation is reopened', async () => {
+    const onMarkSeen = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Offline'))
+      .mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderWithProviders(<Harness newReporterActivityAt={ACTIVITY_AT} onMarkSeen={onMarkSeen} />);
+    await waitFor(() => expect(onMarkSeen).toHaveBeenCalledOnce());
+    const trigger = screen.getByRole('button', { name: /Conversation/ });
+    await user.click(trigger);
+    await user.click(trigger);
+    await waitFor(() => expect(onMarkSeen).toHaveBeenCalledTimes(2));
+  });
+
+  it('numbers visible reply media after original files and before hidden replies', async () => {
+    messages = [
+      {
+        ...messages[1],
+        id: 'hidden',
+        hiddenAt: ACTIVITY_AT,
+        files: [{ ...messages[1].files[0], id: 'hidden-video' }],
+      },
+      ...messages,
+    ];
+    renderWithProviders(<Harness originalFiles={[{ type: 'video', mimeType: 'video/mp4' }]} />);
+    await screen.findByRole('list', { name: 'Messages' });
+    expect(screen.getByRole('link', { name: 'Download Video 2' })).toHaveAttribute(
+      'href',
+      '/api/reports/report-1/files/video-file'
+    );
+    expect(screen.getByRole('link', { name: 'Download Video 3' })).toHaveAttribute(
+      'href',
+      '/api/reports/report-1/files/hidden-video'
+    );
+  });
+
+  it('shows the activity indicator to viewers without acknowledging it', async () => {
+    const onMarkSeen = vi.fn();
+    renderWithProviders(
+      <Harness newReporterActivityAt={ACTIVITY_AT} canEdit={false} onMarkSeen={onMarkSeen} />
+    );
+    await screen.findByRole('list', { name: 'Messages' });
+    expect(screen.getByRole('img', { name: 'New reporter activity' })).toBeInTheDocument();
+    expect(onMarkSeen).not.toHaveBeenCalled();
+  });
+
+  it('names attachments by kind and position instead of their stored filenames', async () => {
+    messages = [
+      ...messages,
+      {
+        ...messages[1],
+        id: 'second-reporter-message',
+        files: [
+          {
+            ...messages[0].files[0],
+            id: 'second-image',
+            messageId: 'second-reporter-message',
+            filename: 'file_abc123.webp',
+            mimeType: 'image/webp',
+          },
+        ],
+      },
+    ];
+    renderWithProviders(<Harness />);
+    await screen.findByRole('list', { name: 'Messages' });
+    expect(screen.getByRole('link', { name: 'Download Screenshot 1' })).toHaveAttribute(
+      'download',
+      'screenshot-1.png'
+    );
+    expect(screen.getByRole('link', { name: 'Download Video 1' })).toHaveAttribute(
+      'download',
+      'video-1.mp4'
+    );
+    expect(screen.getByRole('link', { name: 'Download Screenshot 2' })).toHaveAttribute(
+      'download',
+      'screenshot-2.webp'
+    );
+    expect(screen.getByRole('button', { name: 'View Screenshot 2' })).toBeInTheDocument();
+    expect(screen.queryByText('file_abc123.webp')).not.toBeInTheDocument();
   });
 
   it('confirms first portal access, preserves the draft on cancel, and sends explicit consent', async () => {
@@ -185,6 +264,42 @@ describe('ConversationCard', () => {
     expect((form.get('files[]') as File).name).toBe('attachment.png');
   });
 
+  it('keeps a confirmation request out of the error alert and clears it when the dialog is cancelled', async () => {
+    vi.spyOn(api, 'post').mockRejectedValueOnce(
+      Object.assign(new Error('Confirm portal access'), {
+        isAxiosError: true,
+        response: { data: { error: 'CONFIRMATION_REQUIRED', message: 'Confirm portal access' } },
+      })
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+    await user.type(screen.getByRole('textbox', { name: 'Message to reporter' }), 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Grant portal access?' });
+    expect(screen.getByTestId('send-error-state')).toHaveTextContent('failed');
+    expect(screen.queryByText('Confirm portal access')).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByTestId('send-error-state')).toHaveTextContent('idle'));
+    expect(screen.getByRole('textbox', { name: 'Message to reporter' })).toHaveValue('Hello');
+  });
+
+  it.each([
+    [true, 'Visible to the reporter in the portal'],
+    [false, 'No reporter currently has portal access to this report'],
+  ])('describes portal visibility from the server state (visible: %s)', async (visible, text) => {
+    server.use(
+      http.get('/api/reports/:id/reporter-messages', () =>
+        HttpResponse.json({
+          success: true,
+          messages,
+          portal: { ...mockStaffConversationPortal, portalEnabled: true, visible },
+        })
+      )
+    );
+    renderWithProviders(<Harness canEdit={false} hasOwner={!visible} />);
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+
   it('shows suppression and last-login hints while keeping the conversation available', async () => {
     server.use(
       http.get('/api/reports/:id/reporter-messages', () =>
@@ -211,19 +326,19 @@ describe('ConversationCard', () => {
     const entries = within(screen.getByRole('list', { name: 'Messages' })).getAllByRole('article');
     expect(entries[0]).toHaveTextContent('Could you share more details?');
     expect(entries[1]).toHaveTextContent('Here is a video');
-    expect(screen.getByRole('link', { name: 'Download screen.png' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Download Screenshot 1' })).toHaveAttribute(
       'href',
       '/api/reports/report-1/files/image-file'
     );
-    expect(screen.getByLabelText('recording.mp4')).toHaveAttribute('preload', 'metadata');
+    expect(screen.getByLabelText('Video 1')).toHaveAttribute('preload', 'metadata');
     expect(screen.getByText('Visible to the reporter in the portal')).toBeInTheDocument();
   });
 
   it('opens an image using the existing lightbox', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Harness />);
-    await user.click(await screen.findByRole('button', { name: 'View screen.png' }));
-    expect(screen.getByRole('dialog', { name: 'screen.png' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'View Screenshot 1' }));
+    expect(screen.getByRole('dialog', { name: 'screenshot-1.png' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open in new tab' })).toHaveAttribute(
       'href',
       '/api/reports/report-1/files/image-file'
@@ -400,7 +515,7 @@ describe('ConversationCard', () => {
     renderWithProviders(<Harness />);
     await user.click(await screen.findByRole('button', { name: 'Hide message from Anna Staff' }));
     expect(await screen.findByText('Hidden from reporter')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Download screen.png' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Download Screenshot 1' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Unhide message from Anna Staff' }));
     await waitFor(() => expect(screen.queryByText('Hidden from reporter')).not.toBeInTheDocument());
   });
@@ -453,8 +568,12 @@ describe('ConversationCard', () => {
       })
     );
     const user = userEvent.setup();
-    renderWithProviders(<Harness />);
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    const onMarkSeen = vi.fn();
+    renderWithProviders(<Harness newReporterActivityAt={ACTIVITY_AT} onMarkSeen={onMarkSeen} />);
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(onMarkSeen).not.toHaveBeenCalled();
+    await user.click(retry);
+    await waitFor(() => expect(onMarkSeen).toHaveBeenCalledExactlyOnceWith(ACTIVITY_AT));
     expect(await screen.findByText('Could you share more details?')).toBeInTheDocument();
   });
 

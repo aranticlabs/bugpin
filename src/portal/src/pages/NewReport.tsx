@@ -77,7 +77,7 @@ export function NewReport() {
   if (projects.isError) return <QueryState retry={() => void projects.refetch()} />;
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (project && !mutation.isPending) mutation.mutate();
+    if (project && !mutation.isPending && title.trim().length >= 4) mutation.mutate();
   }
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl space-y-5">

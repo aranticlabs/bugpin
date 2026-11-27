@@ -67,7 +67,12 @@ reporterMessages.post(
       } else {
         body = await c.req.json();
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'BodyLimitError')
+        return c.json(
+          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Message upload is too large' },
+          413
+        );
       return c.json(
         { success: false, error: 'VALIDATION_ERROR', message: 'Invalid message request' },
         400
