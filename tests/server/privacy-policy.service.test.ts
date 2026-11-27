@@ -135,6 +135,29 @@ describe('privacyPolicyService', () => {
     expect(filtered.userActivity?.[0]?.url).toContain('[bugpin:redacted-email]');
   });
 
+  it('keeps a private IPv4 host in URL fields and still redacts phone numbers in messages', () => {
+    const filtered = privacyPolicyService.applySubmissionPolicy(
+      {
+        ...metadata,
+        url: 'http://192.168.100.200:3000/groups',
+        consoleErrors: [
+          {
+            type: 'error',
+            message: 'Customer phone: +49 170.123.45.67',
+            source: 'http://192.168.100.200:3000/app.js',
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      },
+      standardPrivacy,
+      projectSettings()
+    );
+
+    expect(filtered.url).toBe('http://192.168.100.200:3000/groups');
+    expect(filtered.consoleErrors?.[0]?.source).toBe('http://192.168.100.200:3000/app.js');
+    expect(filtered.consoleErrors?.[0]?.message).toBe('Customer phone: [bugpin:redacted-phone]');
+  });
+
   it('keeps automatic activity and enforces diagnostic category restrictions', () => {
     const filtered = privacyPolicyService.applySubmissionPolicy(metadata, standardPrivacy, {
       consoleCapture: false,

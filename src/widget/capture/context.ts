@@ -1,4 +1,4 @@
-import { redactSensitiveText } from '@shared/privacy';
+import { redactSensitiveText, redactSensitiveUrl } from '@shared/privacy';
 
 // Extend XMLHttpRequest for tracking
 declare global {
@@ -116,7 +116,7 @@ function sanitizeActivityText(value: string | null | undefined, limit: number): 
 
 function sanitizeActivityUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  return redactSensitiveText(value).slice(0, MAX_MESSAGE_LENGTH);
+  return redactSensitiveUrl(value).slice(0, MAX_MESSAGE_LENGTH);
 }
 
 function getUnhandledReason(event: PromiseRejectionEvent | Event): unknown {
@@ -172,7 +172,7 @@ export function startErrorCapture(options: ErrorCaptureOptions = {}): void {
         {
           type: 'error',
           message: truncateMessage(redactSensitiveText(String(message))),
-          source: source ? redactSensitiveText(source) : undefined,
+          source: source ? redactSensitiveUrl(source) : undefined,
           line: line || undefined,
           timestamp: new Date().toISOString(),
         },
@@ -220,7 +220,7 @@ export function startErrorCapture(options: ErrorCaptureOptions = {}): void {
           pushBounded(
             capturedNetworkErrors,
             {
-              url: truncateMessage(redactSensitiveText(url)),
+              url: truncateMessage(redactSensitiveUrl(url)),
               method,
               status: response.status,
               statusText: truncateMessage(redactSensitiveText(response.statusText)),
@@ -234,7 +234,7 @@ export function startErrorCapture(options: ErrorCaptureOptions = {}): void {
         pushBounded(
           capturedNetworkErrors,
           {
-            url: truncateMessage(redactSensitiveText(url)),
+            url: truncateMessage(redactSensitiveUrl(url)),
             method,
             status: 0,
             statusText: truncateMessage(
@@ -266,7 +266,7 @@ export function startErrorCapture(options: ErrorCaptureOptions = {}): void {
           pushBounded(
             capturedNetworkErrors,
             {
-              url: truncateMessage(redactSensitiveText(this._bugpinUrl || '')),
+              url: truncateMessage(redactSensitiveUrl(this._bugpinUrl || '')),
               method: this._bugpinMethod || 'GET',
               status: this.status,
               statusText: truncateMessage(redactSensitiveText(this.statusText)),

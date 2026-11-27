@@ -40,6 +40,22 @@ export function redactSensitiveText(value: string): string {
     .replace(LABELED_TOKEN_PATTERN, '$1[bugpin:redacted-token]');
 }
 
+// Scheme and authority of an absolute URL, e.g. "http://192.168.0.10:3000".
+const URL_ORIGIN_PATTERN = /^[a-z][a-z\d+.-]*:\/\/[^/?#]*/i;
+
+/**
+ * Redact a captured URL field. The scheme and host are kept as they are: a host
+ * is not personal data, and dotted-quad addresses such as 192.168.100.200 would
+ * otherwise be taken for phone numbers and lose the report its page URL. The
+ * path, query and fragment go through the same redaction as any other text.
+ * A URL carrying user info (user@host) is redacted as a whole, as before.
+ */
+export function redactSensitiveUrl(value: string): string {
+  const origin = URL_ORIGIN_PATTERN.exec(value)?.[0];
+  if (!origin || origin.includes('@')) return redactSensitiveText(value);
+  return origin + redactSensitiveText(value.slice(origin.length));
+}
+
 export function stripUrlQueryAndFragment(value: string): string {
   const queryIndex = value.indexOf('?');
   const fragmentIndex = value.indexOf('#');

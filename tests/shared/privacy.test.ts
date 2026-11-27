@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { redactSensitiveText, stripUrlQueryAndFragment } from '../../src/shared/privacy';
+import {
+  redactSensitiveText,
+  redactSensitiveUrl,
+  stripUrlQueryAndFragment,
+} from '../../src/shared/privacy';
 
 describe('redactSensitiveText', () => {
   it('redacts email addresses', () => {
@@ -33,6 +37,12 @@ describe('redactSensitiveText', () => {
     expect(redactSensitiveText('call 555-123-4567')).toBe('call [bugpin:redacted-phone]');
   });
 
+  it('redacts a dotted phone number even where it resembles an IPv4 address', () => {
+    expect(redactSensitiveText('Customer phone: +49 170.123.45.67')).toBe(
+      'Customer phone: [bugpin:redacted-phone]'
+    );
+  });
+
   it('does not mistake plain digit runs for phone numbers', () => {
     expect(redactSensitiveText('order 123456789 shipped')).toBe('order 123456789 shipped');
     expect(redactSensitiveText('code 0042')).toBe('code 0042');
@@ -60,6 +70,32 @@ describe('redactSensitiveText', () => {
   it('keeps normal diagnostic text untouched', () => {
     const message = 'TypeError: cannot read properties of undefined (reading "map")';
     expect(redactSensitiveText(message)).toBe(message);
+  });
+});
+
+describe('redactSensitiveUrl', () => {
+  it('keeps a private IPv4 host whose octets resemble a phone number', () => {
+    expect(redactSensitiveUrl('http://192.168.100.200:3000/groups')).toBe(
+      'http://192.168.100.200:3000/groups'
+    );
+  });
+
+  it('still redacts the path, query and fragment', () => {
+    expect(redactSensitiveUrl('http://192.168.100.200/users/person@example.com')).toBe(
+      'http://192.168.100.200/users/[bugpin:redacted-email]'
+    );
+    expect(redactSensitiveUrl('https://example.com/support?phone=+49 170.123.45.67')).toBe(
+      'https://example.com/support?phone=[bugpin:redacted-phone]'
+    );
+  });
+
+  it('redacts relative URLs and URLs with user info as plain text', () => {
+    expect(redactSensitiveUrl('/api/callback/555-123-4567')).toBe(
+      '/api/callback/[bugpin:redacted-phone]'
+    );
+    expect(redactSensitiveUrl('https://person@example.com/inbox')).toBe(
+      'https://[bugpin:redacted-email]/inbox'
+    );
   });
 });
 
