@@ -51,6 +51,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
   localStorage.removeItem('bugpin-portal-theme');
   document.documentElement.classList.remove('light', 'dark');
+  document.getElementById('bugpin-portal-colors')?.remove();
 });
 afterAll(() => server.close());
 

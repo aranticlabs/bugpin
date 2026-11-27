@@ -526,7 +526,9 @@ it('applies the Admin Console button colors in light and dark themes', async () 
   mount();
   const colors = () => document.getElementById('bugpin-portal-colors')?.textContent ?? '';
   await waitFor(() =>
-    expect(colors()).toContain(':root:root { --primary: #ffff00; --primary-foreground: #000000;')
+    expect(colors()).toContain(
+      ':root:not(.dark) { --primary: #ffff00; --primary-foreground: #000000;'
+    )
   );
   expect(colors()).toContain(':root.dark { --primary: #7c3aed;');
   expect(colors()).toContain('--primary-hover-foreground: #fef08a;');

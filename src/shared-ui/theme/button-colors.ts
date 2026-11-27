@@ -10,8 +10,9 @@ function declarations(colors: Record<string, string>): string {
 }
 
 /**
- * Builds light and dark overrides for the primary tokens. The doubled selectors outrank the
- * default tokens regardless of stylesheet order, and the cascade handles theme switches.
+ * Builds light and dark overrides for the primary tokens. Both selectors outrank the default
+ * tokens regardless of stylesheet order, and each applies only to its own theme, so a missing
+ * dark color falls back to the dark default instead of the light override.
  */
 export function buildButtonColorsCss(colors: AdminButtonColors): string {
   const light = declarations({
@@ -26,7 +27,7 @@ export function buildButtonColorsCss(colors: AdminButtonColors): string {
     '--primary-hover': colors.darkButtonHoverColor,
     '--primary-hover-foreground': colors.darkTextHoverColor,
   });
-  return `:root:root { ${light} } :root.dark { ${dark} }`;
+  return `:root:not(.dark) { ${light} } :root.dark { ${dark} }`;
 }
 
 /** Writes the overrides into one style element, so each call replaces the previous colors */

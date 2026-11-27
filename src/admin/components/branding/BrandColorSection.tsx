@@ -63,7 +63,7 @@ export function BrandColorSection() {
   return (
     <SettingsCard
       title="Brand Colors"
-      description="Configure the primary colors for buttons, interactive elements in the Admin Console and the Reporter Portal."
+      description="Configure the primary colors for buttons and interactive elements in the Admin Console and the Reporter Portal."
     >
       <UnsavedChangesGuard
         isDirty={draft.isDirty}

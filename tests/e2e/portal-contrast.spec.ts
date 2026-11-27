@@ -56,3 +56,22 @@ test('keeps branded link buttons readable and underlined in dark mode', async ({
     .toBeGreaterThanOrEqual(4.5);
   await expect(link).toHaveCSS('text-decoration-line', 'underline');
 });
+
+test('applies the Admin Console button colors for each theme', async ({ page, runtime }) => {
+  await page.route('**/api/portal/config', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      config: { branding: { buttonColors: { lightButtonColor: string; darkButtonColor: string } } };
+    };
+    body.config.branding.buttonColors.lightButtonColor = '#7c3aed';
+    body.config.branding.buttonColors.darkButtonColor = '#0f766e';
+    await route.fulfill({ response, json: body });
+  });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto(`${runtime.portalOrigin}/reporter-portal/login`);
+  const button = page.getByRole('button', { name: 'Send me a sign-in link' });
+  await expect(button).toHaveCSS('background-color', 'rgb(124, 58, 237)');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(button).toHaveCSS('background-color', 'rgb(15, 118, 110)');
+});

@@ -34,7 +34,7 @@ describe('buildButtonColorsCss', () => {
   it('writes light and dark primary tokens as hex', () => {
     const css = buildButtonColorsCss(mockBrandingConfig.adminThemeColors);
     expect(css).toContain(
-      `:root:root { --primary: ${mockBrandingConfig.adminThemeColors.lightButtonColor};`
+      `:root:not(.dark) { --primary: ${mockBrandingConfig.adminThemeColors.lightButtonColor};`
     );
     expect(css).toContain(
       `:root.dark { --primary: ${mockBrandingConfig.adminThemeColors.darkButtonColor};`
@@ -50,7 +50,7 @@ describe('buildButtonColorsCss', () => {
       lightButtonColor: 'red; } body { display: none',
     });
     expect(css).not.toContain('display: none');
-    expect(css).not.toMatch(/:root:root \{ --primary:/);
+    expect(css).not.toMatch(/:root:not\(\.dark\) \{ --primary:/);
   });
 });
 
