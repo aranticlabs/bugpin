@@ -41,7 +41,7 @@ const password = 'correct-horse-battery-1';
 const past = '2026-01-01T00:00:00.000Z';
 const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
-let portalInUse: ReturnType<typeof spyOn>;
+let portalProjectId: string;
 let close: () => void;
 let app: ReturnType<typeof createPortalTestApp>;
 let sent: Parameters<typeof emailService.sendEmail>[0][];
@@ -76,8 +76,13 @@ beforeEach(async () => {
   loginChallengeService.clear();
   app = createPortalTestApp();
   app.route('/api/auth', authRoutes);
-  // Signing in needs the Reporter Portal in use; the availability tests cover that rule.
-  portalInUse = spyOn(projectsRepo, 'hasEnabledReporterPortal').mockReturnValue(true);
+  // Signing in needs the Reporter Portal in use. This project has no reports, so read scopes stay empty.
+  portalProjectId = (
+    await projectsRepo.create({
+      name: 'Portal in use',
+      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
+    })
+  ).id;
   sent = [];
   spyOn(emailService, 'sendEmail').mockImplementation(async (options) => {
     sent.push(options);
@@ -235,39 +240,86 @@ describe('availability', () => {
     );
   });
 
-  it('is on by default', async () => {
+  it('is on by default while the portal shares the Application URL', async () => {
     getDb().run("DELETE FROM settings WHERE key = 'portal_team_sign_in'");
     settingsCacheService.invalidate();
     expect((await settingsRepo.getAll()).portalTeamSignIn).toBe(true);
     expect(await portalOperatorAuthService.enabled()).toBe(true);
   });
 
+  it('is off by default on a separate portal address until an admin turns it on', async () => {
+    getDb().run("DELETE FROM settings WHERE key = 'portal_team_sign_in'");
+    await settingsRepo.updateAll({ portalBaseUrl: 'https://portal.example.test' });
+    settingsCacheService.invalidate();
+    expect((await settingsRepo.getAll()).portalTeamSignIn).toBe(false);
+    expect(await portalOperatorAuthService.signInUrl()).toBeNull();
+    expect(Result.unwrap(await settingsService.getAllRedacted()).portalTeamSignInSaved).toBe(false);
+
+    const saved = await settingsService.update({ portalTeamSignIn: true });
+    expect(saved.success && saved.value.portalTeamSignInSaved).toBe(true);
+    expect((await settingsRepo.getAll()).portalTeamSignIn).toBe(true);
+    expect(await portalOperatorAuthService.signInUrl()).toBe(
+      'https://portal.example.test/reporter-portal/team-login'
+    );
+  });
+
+  it('ends team sessions when a separate portal address turns the default off', async () => {
+    const { cookie } = await signedInOperator();
+    getDb().run("DELETE FROM settings WHERE key = 'portal_team_sign_in'");
+    settingsCacheService.invalidate();
+    expect((await portalRequest('/me', cookie)).status).toBe(200);
+    const update = await settingsService.update({ portalBaseUrl: 'https://portal.example.test' });
+    expect(update.success).toBe(true);
+    expect((await portalRequest('/me', cookie)).status).toBe(401);
+    await settingsRepo.updateAll({ portalBaseUrl: '' });
+    settingsCacheService.invalidate();
+    expect((await portalRequest('/me', cookie)).status).toBe(401);
+  });
+
+  it('keeps an explicit choice when a separate portal address is set', async () => {
+    const { cookie } = await signedInOperator();
+    const update = await settingsService.update({ portalBaseUrl: 'https://portal.example.test' });
+    expect(update.success).toBe(true);
+    expect((await settingsRepo.getAll()).portalTeamSignIn).toBe(true);
+    expect(await portalOperatorAuthService.signInUrl()).not.toBeNull();
+    expect((await portalRequest('/me', cookie)).status).toBe(200);
+  });
+
   it('opens sign-in only while the Reporter Portal is in use, without ending sessions', async () => {
-    portalInUse.mockRestore();
+    const { cookie } = await signedInOperator();
     const open = async () => {
       const response = await portalRequest('/config');
       const { config } = (await response.json()) as { config: { teamSignIn: boolean } };
       expect((await portalOperatorAuthService.signInUrl()) !== null).toBe(config.teamSignIn);
       return config.teamSignIn;
     };
+    expect(await open()).toBe(true);
+
+    getDb().run('UPDATE projects SET is_active = 0 WHERE id = ?', [portalProjectId]);
     expect(await open()).toBe(false);
-    expect(await portalOperatorAuthService.enabled()).toBe(true);
-    const response = await portalPost(app, '/auth/team/login', {
+    getDb().run('UPDATE projects SET is_active = 1, settings = ? WHERE id = ?', [
+      '{}',
+      portalProjectId,
+    ]);
+    expect(await open()).toBe(false);
+    clearAllRateLimits();
+    const closed = await portalPost(app, '/auth/team/login', {
       email: 'someone@example.test',
       password,
     });
-    expect(response.status).toBe(404);
+    expect(closed.status).toBe(404);
+    expect((await portalRequest('/me', cookie)).status).toBe(200);
+
     await settingsRepo.updateAll({ reporterPortal: { enabled: true, allowNewReports: true } });
     settingsCacheService.invalidate();
     expect(await open()).toBe(true);
     await settingsRepo.updateAll({ reporterPortal: { enabled: false, allowNewReports: false } });
     settingsCacheService.invalidate();
     expect(await open()).toBe(false);
-    await projectsRepo.create({
-      name: 'Portal project',
-      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
-    });
-    expect(await open()).toBe(true);
+
+    const logout = await portalPost(app, '/auth/logout', {}, cookie);
+    expect(logout.status).toBe(200);
+    expect((await portalRequest('/me', cookie)).status).toBe(401);
   });
 
   it('gives every signed-in user the team sign-in address while it is available', async () => {
@@ -286,6 +338,13 @@ describe('availability', () => {
     const available = await signInUrl(`session=${session.id}`);
     expect(available.status).toBe(200);
     expect(available.body.url).toBe(`${portalOrigin}/reporter-portal/team-login`);
+
+    getDb().run('UPDATE projects SET settings = ? WHERE id = ?', ['{}', portalProjectId]);
+    expect((await signInUrl(`session=${session.id}`)).body.url).toBeNull();
+    getDb().run('UPDATE projects SET settings = ? WHERE id = ?', [
+      JSON.stringify({ reporterPortal: { enabled: true, allowNewReports: true } }),
+      portalProjectId,
+    ]);
 
     await settingsRepo.updateAll({ portalTeamSignIn: false });
     settingsCacheService.invalidate();
@@ -338,6 +397,24 @@ describe('availability', () => {
           .status
       );
     }
+    expect(statuses.slice(-1)).toEqual([429]);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(1);
+  });
+
+  it('shares one second factor attempt budget with the Admin Console sign-in', async () => {
+    clearAllRateLimits();
+    const body = { challengeToken: 'unknown-challenge', code: '123456' };
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await app.request(`${portalOrigin}/api/auth/login/two-factor`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Origin: portalOrigin },
+        body: JSON.stringify(body),
+      });
+      statuses.push(response.status);
+    }
+    for (let attempt = 0; attempt < 6; attempt++)
+      statuses.push((await portalPost(app, '/auth/team/two-factor', body)).status);
     expect(statuses.slice(-1)).toEqual([429]);
     expect(statuses.filter((status) => status === 429)).toHaveLength(1);
   });
@@ -948,7 +1025,7 @@ describe('operator session', () => {
 
     it('stays ended after the portal URL becomes insecure and is fixed again', async () => {
       // An enabled Reporter Portal would refuse an insecure Application URL.
-      portalInUse.mockReturnValue(false);
+      getDb().run('UPDATE projects SET settings = ? WHERE id = ?', ['{}', portalProjectId]);
       expect((await settingsService.update({ appUrl: 'http://bugpin.example.com' })).success).toBe(
         true
       );
@@ -1352,7 +1429,7 @@ describe('logout', () => {
     expect((await portalRequest('/me', cookie)).status).toBe(401);
     const revoked = getDb()
       .query<{ revoked_at: string | null }, []>(
-        'SELECT revoked_at FROM portal_operator_sessions ORDER BY created_at DESC LIMIT 1'
+        'SELECT revoked_at FROM portal_operator_sessions ORDER BY created_at DESC, rowid DESC LIMIT 1'
       )
       .get();
     expect(revoked?.revoked_at).not.toBeNull();

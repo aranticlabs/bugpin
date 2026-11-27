@@ -847,6 +847,8 @@ export interface AppSettings {
   appUrl: string;
   portalBaseUrl: string;
   portalTeamSignIn: boolean;
+  /** Read-only: whether an admin saved a team sign-in choice; otherwise it follows the Portal Base URL. */
+  portalTeamSignInSaved?: boolean;
   reporterPortalLimits: ReporterPortalLimits;
   retentionDays: number;
   rateLimitPerMinute: number;

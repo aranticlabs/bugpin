@@ -105,6 +105,7 @@ export function useProjectSettingsForm(projectId: string) {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['project-summaries'] });
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['portal-team-sign-in'] });
     },
   });
 

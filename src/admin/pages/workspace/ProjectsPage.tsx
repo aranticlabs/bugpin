@@ -338,6 +338,7 @@ export function ProjectsPage() {
     queryClient.invalidateQueries({ queryKey: ['projects'] });
     queryClient.invalidateQueries({ queryKey: ['project-summaries'] });
     queryClient.invalidateQueries({ queryKey: ['pinned-projects'] });
+    queryClient.invalidateQueries({ queryKey: ['portal-team-sign-in'] });
   };
   const refreshLicense = () => {
     queryClient.invalidateQueries({ queryKey: ['license-status'] });

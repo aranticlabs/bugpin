@@ -86,6 +86,51 @@ describe('Settings sections', () => {
     ).toBeInTheDocument();
   });
 
+  it('previews team sign-in turning off for a separate portal URL until an admin chooses', async () => {
+    const settingsServer = mockSettingsServer({
+      portalTeamSignIn: true,
+      portalTeamSignInSaved: false,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Settings />);
+    const toggle = await screen.findByRole('switch', {
+      name: 'Team Sign-in to the Reporter Portal',
+    });
+    expect(toggle).toBeChecked();
+    const portal = screen.getByLabelText('Portal Base URL');
+    await user.type(portal, 'https://portal.example.com');
+    expect(toggle).not.toBeChecked();
+    await user.clear(portal);
+    expect(toggle).toBeChecked();
+    await user.type(portal, 'https://portal.example.com');
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([
+        { portalBaseUrl: 'https://portal.example.com', portalTeamSignIn: true },
+      ])
+    );
+  });
+
+  it('keeps a saved team sign-in choice while a portal URL is typed', async () => {
+    const settingsServer = mockSettingsServer({
+      portalTeamSignIn: true,
+      portalTeamSignInSaved: true,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Settings />);
+    const toggle = await screen.findByRole('switch', {
+      name: 'Team Sign-in to the Reporter Portal',
+    });
+    await user.type(screen.getByLabelText('Portal Base URL'), 'https://portal.example.com');
+    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() =>
+      expect(settingsServer.puts).toEqual([{ portalBaseUrl: 'https://portal.example.com' }])
+    );
+  });
+
   it('saves only edited portal limits on Network and resets them without changing network settings', async () => {
     const settingsServer = mockSettingsServer({
       reporterPortalLimits: { messagesPerReporterPerMinute: 20, sseStreamsPerSession: 5 },

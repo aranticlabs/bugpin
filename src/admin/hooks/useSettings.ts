@@ -53,6 +53,7 @@ export function useUpdateSettings({
     onSuccess: (settings) => {
       queryClient.setQueryData(settingsKeys.all, settings);
       queryClient.invalidateQueries({ queryKey: ['password-policy'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-team-sign-in'] });
       if (successMessage) toast.success(successMessage);
     },
     onError: (error) => {

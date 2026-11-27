@@ -79,11 +79,12 @@ function mapRowToProject(row: ProjectRow): Project {
 export { CreateProjectData };
 
 export const projectsRepo = {
-  hasEnabledReporterPortal(): boolean {
+  /** Whether a project, including a deactivated one unless `activeOnly` is set, enables the Reporter Portal */
+  hasEnabledReporterPortal({ activeOnly = false }: { activeOnly?: boolean } = {}): boolean {
     return (
       getDb()
         .query(
-          `SELECT 1 FROM projects WHERE deleted_at IS NULL
+          `SELECT 1 FROM projects WHERE deleted_at IS NULL ${activeOnly ? 'AND is_active = 1' : ''}
       AND ${portalSetting('projects', 'enabled')} = 1 LIMIT 1`
         )
         .get() !== null

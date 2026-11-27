@@ -227,7 +227,12 @@ it('rejects clearing the staff origin and restores Admin Console routing through
   expect(recovered.exitCode).toBe(0);
   expect(recovered.stdout.toString()).toContain('Portal Base URL cleared');
   await initDatabase();
-  expect(await settingsRepo.getAll()).toEqual({ ...before, portalBaseUrl: '' });
+  // Without a saved choice, team sign-in returns to its default once the separate address is gone.
+  expect(await settingsRepo.getAll()).toEqual({
+    ...before,
+    portalBaseUrl: '',
+    portalTeamSignIn: true,
+  });
   settingsCacheService.invalidate();
   expect((await app.request('https://staff.example.test/admin')).status).toBe(200);
   expect(

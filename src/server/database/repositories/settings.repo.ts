@@ -165,6 +165,15 @@ export const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
   darkTextHoverColor: '#ffffff',
 };
 
+/**
+ * Team sign-in to the Reporter Portal until an admin chooses: on where the portal shares the
+ * Application URL, off on a separate portal address, which may be public while the Admin Console
+ * is not.
+ */
+export function defaultPortalTeamSignIn(portalBaseUrl: string): boolean {
+  return !portalBaseUrl.trim();
+}
+
 // Key mapping from camelCase to snake_case
 const KEY_MAP: Record<string, string> = {
   appName: 'app_name',
@@ -240,6 +249,15 @@ export const settingsRepo = {
       [JSON.stringify(value), new Date().toISOString(), key, JSON.stringify(expected)]
     );
     return result.changes === 1;
+  },
+
+  /** Whether a setting holds a saved value rather than its default */
+  isStored(key: keyof AppSettings): boolean {
+    const dbKey = KEY_MAP[key];
+    return (
+      dbKey !== undefined &&
+      getDb().query('SELECT 1 FROM settings WHERE key = ?').get(dbKey) !== null
+    );
   },
 
   mutate<T>(key: string, update: (current: T | null) => T): void {
@@ -341,7 +359,9 @@ function readAll(): AppSettings {
     appName: (settings.appName as string) ?? 'BugPin',
     appUrl: (settings.appUrl as string) ?? '',
     portalBaseUrl: (settings.portalBaseUrl as string) ?? '',
-    portalTeamSignIn: (settings.portalTeamSignIn as boolean) ?? true,
+    portalTeamSignIn:
+      (settings.portalTeamSignIn as boolean | undefined) ??
+      defaultPortalTeamSignIn((settings.portalBaseUrl as string | undefined) ?? ''),
     reporterPortalLimits: {
       ...DEFAULT_REPORTER_PORTAL_LIMITS,
       ...(settings.reporterPortalLimits as Partial<AppSettings['reporterPortalLimits']>),

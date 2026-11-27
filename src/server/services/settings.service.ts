@@ -1,5 +1,5 @@
 import { hasEEFeature } from '../utils/ee.js';
-import { settingsRepo } from '../database/repositories/settings.repo.js';
+import { defaultPortalTeamSignIn, settingsRepo } from '../database/repositories/settings.repo.js';
 import { config } from '../config.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { isSecurePortalUrl, securePortalBaseUrl } from '../utils/portal-url.js';
@@ -155,6 +155,14 @@ function redactSecrets(settings: AppSettings): AppSettings {
   };
 }
 
+/** Redacted settings plus read-only state the Admin Console needs to show effective values */
+function toClientSettings(settings: AppSettings): AppSettings {
+  return {
+    ...redactSecrets(settings),
+    portalTeamSignInSaved: settingsRepo.isStored('portalTeamSignIn'),
+  };
+}
+
 // Service
 
 export const settingsService = {
@@ -182,7 +190,7 @@ export const settingsService = {
    */
   async getAllRedacted(): Promise<Result<AppSettings>> {
     const settings = await settingsRepo.getAll();
-    return Result.ok(redactSecrets(settings));
+    return Result.ok(toClientSettings(settings));
   },
 
   /**
@@ -415,11 +423,15 @@ export const settingsService = {
     if (input.portalBaseUrl !== undefined) updates.portalBaseUrl = portalBaseUrl;
     if (input.portalTeamSignIn !== undefined) updates.portalTeamSignIn = input.portalTeamSignIn;
     // Turning the setting off, or losing the secure portal address, ends every team session, so
-    // restoring either revives none.
+    // restoring either revives none. Until an admin chooses, the setting follows the portal address.
     const teamSignInBefore = current.portalTeamSignIn && securePortalBaseUrl(current) !== null;
+    const teamSignInChoice =
+      input.portalTeamSignIn ??
+      (settingsRepo.isStored('portalTeamSignIn')
+        ? current.portalTeamSignIn
+        : defaultPortalTeamSignIn(portalBaseUrl));
     const teamSignInAfter =
-      (input.portalTeamSignIn ?? current.portalTeamSignIn) &&
-      securePortalBaseUrl({ appUrl, portalBaseUrl }) !== null;
+      teamSignInChoice && securePortalBaseUrl({ appUrl, portalBaseUrl }) !== null;
     if (teamSignInBefore && !teamSignInAfter)
       portalOperatorsRepo.revokeAll(new Date().toISOString());
     if (input.reporterPortalLimits !== undefined) {
@@ -492,7 +504,7 @@ export const settingsService = {
     }
 
     logger.info('Settings updated', { updates: Object.keys(updates) });
-    return Result.ok(redactSecrets(settings));
+    return Result.ok(toClientSettings(settings));
   },
 
   /**

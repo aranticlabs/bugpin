@@ -305,7 +305,9 @@ describe('AppSidebar', () => {
     renderSidebar();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Admin User/ }));
-    const item = await screen.findByRole('menuitem', { name: 'Reporter Portal' });
+    const item = await screen.findByRole('menuitem', {
+      name: /^Reporter Portal\s*\(opens in a new tab\)$/,
+    });
     expect(item).toHaveAttribute('href', 'https://portal.example.com/reporter-portal/team-login');
     expect(item).toHaveAttribute('target', '_blank');
     expect(item).toHaveAttribute('rel', 'noopener noreferrer');
@@ -324,7 +326,9 @@ describe('AppSidebar', () => {
     await user.click(await screen.findByRole('button', { name: /Admin User/ }));
     expect(await screen.findByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
     await waitFor(() => expect(checks).toBeGreaterThan(0));
-    expect(screen.queryByRole('menuitem', { name: 'Reporter Portal' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: /^Reporter Portal\s*\(opens in a new tab\)$/ })
+    ).not.toBeInTheDocument();
   });
 
   it('checks team sign-in again each time the user menu opens', async () => {
@@ -337,13 +341,14 @@ describe('AppSidebar', () => {
     const trigger = await screen.findByRole('button', { name: /Admin User/ });
     await user.click(trigger);
     expect(await screen.findByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Reporter Portal' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: /^Reporter Portal\s*\(opens in a new tab\)$/ })
+    ).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     url = 'https://portal.example.com/reporter-portal/team-login';
     await user.click(trigger);
-    expect(await screen.findByRole('menuitem', { name: 'Reporter Portal' })).toHaveAttribute(
-      'href',
-      url
-    );
+    expect(
+      await screen.findByRole('menuitem', { name: /^Reporter Portal\s*\(opens in a new tab\)$/ })
+    ).toHaveAttribute('href', url);
   });
 });

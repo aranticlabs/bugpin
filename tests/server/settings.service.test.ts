@@ -117,6 +117,7 @@ const originalGetAll = settingsRepo.getAll;
 const originalHasEnabledReporterPortal = projectsRepo.hasEnabledReporterPortal;
 const originalUpdateAll = settingsRepo.updateAll;
 const originalGet = settingsRepo.get;
+const originalIsStored = settingsRepo.isStored;
 const originalSendTestEmail = emailService.sendTestEmail;
 const originalDeleteAllReports = cleanupService.deleteAllReports;
 
@@ -136,6 +137,7 @@ beforeEach(() => {
       ...updates,
     };
   };
+  settingsRepo.isStored = () => true;
   settingsRepo.get = async <T>(key: string) => {
     if (key === 'missing') {
       return null;
@@ -149,6 +151,7 @@ afterEach(() => {
   settingsRepo.getAll = originalGetAll;
   settingsRepo.updateAll = originalUpdateAll;
   settingsRepo.get = originalGet;
+  settingsRepo.isStored = originalIsStored;
   emailService.sendTestEmail = originalSendTestEmail;
   cleanupService.deleteAllReports = originalDeleteAllReports;
 });

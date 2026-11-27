@@ -84,6 +84,7 @@ beforeEach(() => {
   cleanupService.deleteAllReports = async () => ({ deleted: 0, errors: 0 });
   storedSettings = settingsWithSecrets();
   settingsRepo.getAll = async () => storedSettings;
+  settingsRepo.isStored = () => true;
 
   emailService.sendTestEmail = async () => ({ success: true });
 });

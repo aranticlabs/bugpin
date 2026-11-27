@@ -67,14 +67,18 @@ export const portalOperatorAuthService = {
 
   /**
    * The team sign-in page while new sign-ins are open, or null. Signing in also needs the
-   * Reporter Portal in use, as the instance default or in a project, so an instance without it
-   * offers no second staff password form.
+   * Reporter Portal in use, as the instance default or in an active project, so an instance
+   * without it offers no second staff password form.
    */
   async signInUrl(): Promise<string | null> {
     const settings = await settingsCacheService.getAll();
     const baseUrl = securePortalBaseUrl(settings);
     if (!settings.portalTeamSignIn || !baseUrl) return null;
-    if (!settings.reporterPortal.enabled && !projectsRepo.hasEnabledReporterPortal()) return null;
+    if (
+      !settings.reporterPortal.enabled &&
+      !projectsRepo.hasEnabledReporterPortal({ activeOnly: true })
+    )
+      return null;
     return new URL('/reporter-portal/team-login', baseUrl).href;
   },
 

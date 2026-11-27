@@ -32,8 +32,8 @@ export function NavUser() {
   const { isMobile, setOpenMobile } = useSidebar();
   const { data: portalUrl, refetch: refetchPortalUrl } = useQuery({
     queryKey: ['portal-team-sign-in'],
-    queryFn: async () =>
-      (await api.get<{ url: string | null }>('/auth/portal-team-sign-in')).data.url,
+    queryFn: async ({ signal }) =>
+      (await api.get<{ url: string | null }>('/auth/portal-team-sign-in', { signal })).data.url,
     enabled: canLoadData,
   });
 
@@ -55,7 +55,11 @@ export function NavUser() {
     <SidebarMenu>
       <SidebarMenuItem>
         {/* Settings and projects decide whether team sign-in is open, so check on every open. */}
-        <DropdownMenu onOpenChange={(open) => open && canLoadData && void refetchPortalUrl()}>
+        <DropdownMenu
+          onOpenChange={(open) =>
+            open && canLoadData && void refetchPortalUrl({ cancelRefetch: false })
+          }
+        >
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
@@ -107,6 +111,7 @@ export function NavUser() {
                 <a href={portalUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="mr-2 h-4 w-4" />
                   <span>Reporter Portal</span>
+                  <span className="sr-only">{' (opens in a new tab)'}</span>
                 </a>
               </DropdownMenuItem>
             )}

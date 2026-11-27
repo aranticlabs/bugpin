@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -86,6 +86,8 @@ export function Settings() {
     register,
     handleSubmit,
     reset,
+    resetField,
+    watch,
     control,
     formState: { errors, isDirty, dirtyFields },
   } = useForm<SettingsFormData>({
@@ -101,6 +103,16 @@ export function Settings() {
     values: saved,
     resetOptions: { keepDirtyValues: true },
   });
+
+  // Without a saved choice the server derives team sign-in from the Portal Base URL, so the switch
+  // previews what saving the typed address will do. Flipping it saves a real choice.
+  const portalBaseUrl = watch('portalBaseUrl');
+  const teamSignInFollowsDefault = settings !== undefined && !settings.portalTeamSignInSaved;
+  const teamSignInEdited = Boolean(dirtyFields.portalTeamSignIn);
+  useEffect(() => {
+    if (!teamSignInFollowsDefault || teamSignInEdited) return;
+    resetField('portalTeamSignIn', { defaultValue: !portalBaseUrl.trim() });
+  }, [teamSignInFollowsDefault, teamSignInEdited, portalBaseUrl, resetField]);
 
   const mutation = useUpdateSettings({ successMessage: 'Settings saved successfully' });
 
