@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { MigrationRunner } from '../../../src/server/database/migration-runner';
+
+import { config } from '../../../src/server/config';
 
 const migration = '021_store_relative_file_paths.sql';
 const source = resolve(import.meta.dir, '../../../src/server/database/migrations', migration);
@@ -102,4 +104,25 @@ it('rewrites local file paths relative to the data directory', () => {
     mismatch: '/data/uploads/screenshots/rpt_k/k.txt',
   });
   expect(db.query('SELECT 1 FROM migrations WHERE name = ?').get(migration)).not.toBeNull();
+});
+
+it('keeps a reachable absolute path until the upload is available in the new data directory', () => {
+  const previous = config.dataDir;
+  const layout = 'uploads/screenshots/rpt_a';
+  const original = join(directory, 'old', layout);
+  config.dataDir = join(directory, 'new');
+  try {
+    mkdirSync(original, { recursive: true });
+    writeFileSync(join(original, 'a.png'), 'image');
+    insert('mounted', 'screenshot', 'rpt_a', 'a.png', join(original, 'a.png'));
+    new MigrationRunner(db, join(directory, 'migrations')).run();
+    expect(paths().mounted).toBe(join(original, 'a.png'));
+    mkdirSync(join(config.dataDir, layout), { recursive: true });
+    copyFileSync(join(original, 'a.png'), join(config.dataDir, layout, 'a.png'));
+    db.run('DELETE FROM migrations WHERE name = ?', [migration]);
+    new MigrationRunner(db, join(directory, 'migrations')).run();
+    expect(paths().mounted).toBe(join(layout, 'a.png'));
+  } finally {
+    config.dataDir = previous;
+  }
 });

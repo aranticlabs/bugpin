@@ -95,6 +95,26 @@ describe('migration runner', () => {
     expect(backups()).toEqual([]);
   });
 
+  it('rolls back the final migration when integrity verification fails and retries on restart', () => {
+    writeMigration('001_first.sql', 'CREATE TABLE first_change (id INTEGER)');
+    writeMigration(
+      '002_final.sql',
+      `CREATE TABLE bounded (value INTEGER CHECK(value > 0));
+      PRAGMA ignore_check_constraints = ON;
+      INSERT INTO bounded VALUES (-1);
+      PRAGMA ignore_check_constraints = OFF;`
+    );
+    expect(() => runner.run()).toThrow('Database integrity check failed');
+    expect(db.query('SELECT name FROM migrations').all()).toEqual([{ name: '001_first.sql' }]);
+    expect(db.query("SELECT 1 FROM sqlite_schema WHERE name = 'bounded'").get()).toBeNull();
+    expect(() => new MigrationRunner(db, sqlDirectory).run()).toThrow(
+      'Database integrity check failed'
+    );
+    writeMigration('002_final.sql', 'CREATE TABLE bounded (value INTEGER CHECK(value > 0))');
+    new MigrationRunner(db, sqlDirectory).run();
+    expect(db.query('SELECT COUNT(*) AS count FROM migrations').get()).toEqual({ count: 2 });
+  });
+
   it('backs up committed WAL content once before any upgrade writes', () => {
     writeMigration('001_test.sql', 'CREATE TABLE first_change (id INTEGER);');
     writeMigration('002_test.sql', "UPDATE existing SET value = 'after';");

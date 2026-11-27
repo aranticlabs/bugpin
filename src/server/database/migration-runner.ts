@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import {
   REPORTERS_SCHEMA,
@@ -67,6 +68,32 @@ function copyColumns(db: Database, table: string): Record<string, string> {
       .all(table)
       .map(({ name }) => [name, `"${name.replaceAll('"', '""')}"`])
   );
+}
+
+function rewriteRelativePaths(db: Database, verifyOnly: boolean): boolean {
+  const candidates = db.query<{ id: string; path: string; relativePath: string }, []>(`
+    WITH candidates AS (
+      SELECT id, path, 'uploads/' ||
+        CASE WHEN type IN ('screenshot', 'video') THEN 'screenshots' ELSE 'attachments' END ||
+        '/' || report_id || '/' || filename AS relativePath
+      FROM files
+    )
+    SELECT id, path, relativePath FROM candidates
+    WHERE path NOT LIKE 's3://%' AND path NOT LIKE 'http://%' AND path NOT LIKE 'https://%'
+      AND substr(path, -(length(relativePath) + 1)) = '/' || relativePath
+  `);
+  const update = db.query('UPDATE files SET path = ? WHERE id = ?');
+  for (const row of candidates.iterate()) {
+    if (
+      path.isAbsolute(row.path) &&
+      fs.existsSync(row.path) &&
+      !fs.existsSync(path.resolve(config.dataDir, row.relativePath))
+    )
+      continue;
+    if (verifyOnly) return false;
+    update.run(row.relativePath, row.id);
+  }
+  return true;
 }
 
 const migrations: Record<string, Migration> = {
@@ -201,6 +228,10 @@ const migrations: Record<string, Migration> = {
         'idx_portal_operator_tokens_user',
       ]),
     apply: addMissingColumns,
+  },
+  '021_store_relative_file_paths.sql': {
+    isSatisfied: (db) => rewriteRelativePaths(db, true),
+    apply: (db) => rewriteRelativePaths(db, false),
   },
 };
 
@@ -343,26 +374,24 @@ export class MigrationRunner {
     this.db.exec(MIGRATIONS_SCHEMA);
 
     const pendingFiles = this.pendingFiles();
-    for (const file of pendingFiles) {
+    for (const [index, file] of pendingFiles.entries()) {
       logger.info('Applying migration', { file });
       const migration = migrations[file];
       const sql = fs.readFileSync(path.join(this.directory, file), 'utf8');
       this.db.exec('PRAGMA foreign_keys = OFF');
       try {
         this.db.exec('BEGIN IMMEDIATE');
-        if (this.db.query('SELECT 1 FROM migrations WHERE name = ?').get(file)) {
-          this.db.exec('COMMIT');
-          continue;
-        }
-        if (!migration?.isSatisfied(this.db)) {
+        const recorded = this.db.query('SELECT 1 FROM migrations WHERE name = ?').get(file);
+        if (!recorded && !migration?.isSatisfied(this.db)) {
           if (migration) migration.apply(this.db, sql);
           else this.db.exec(sql);
         }
-        if (migration && !migration.isSatisfied(this.db)) {
+        if (!recorded && migration && !migration.isSatisfied(this.db)) {
           throw new Error(`Migration did not produce the expected schema: ${file}`);
         }
         checkForeignKeys(this.db);
-        this.db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
+        if (index === pendingFiles.length - 1) checkIntegrity(this.db);
+        if (!recorded) this.db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
         this.db.exec('COMMIT');
       } catch (error) {
         if (this.db.inTransaction) this.db.exec('ROLLBACK');
@@ -377,7 +406,6 @@ export class MigrationRunner {
     }
 
     if (pendingFiles.length > 0) {
-      checkIntegrity(this.db);
       checkForeignKeys(this.db);
       if (this.backupPath) {
         this.rotateBackups();
