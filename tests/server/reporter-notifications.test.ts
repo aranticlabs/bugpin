@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 import { notificationsService } from '../../src/server/services/notifications.service';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
+import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
+import { reportMessagesRepo } from '../../src/server/database/repositories/report-messages.repo';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { emailService } from '../../src/server/services/email.service';
@@ -60,6 +62,8 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
+const originalFindReport = reportsRepo.findById;
+let currentReport: Report | null = baseReport;
 let projectById: Project | null = baseProject;
 
 const sendReporterConfirmationEmail = mock(async () => ({ success: true }));
@@ -74,6 +78,8 @@ const sendReporterAssignmentEmail = mock(async () => ({ success: true }));
 beforeEach(() => {
   reportersRepo.findByEmail = () => null;
   reporterSuppressionsRepo.has = () => false;
+  currentReport = baseReport;
+  reportsRepo.findById = async () => currentReport;
   projectById = baseProject;
   settingsCacheService.invalidate();
 
@@ -107,6 +113,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reportsRepo.findById = originalFindReport;
   reportersRepo.findByEmail = originalReporterLookup;
   reporterSuppressionsRepo.has = originalSuppressionHas;
   Object.assign(projectsRepo, originalProjectsRepo);
@@ -227,6 +234,7 @@ describe('notificationsService.notifyReporterMessage', () => {
 
   it('skips when report has no reporterEmail', async () => {
     const reportWithoutEmail = { ...baseReport, reporterEmail: undefined };
+    currentReport = reportWithoutEmail;
     await notificationsService.notifyReporterMessage(reportWithoutEmail, 'Hello', 'usr_1');
     expect(sendReporterMessageEmail).not.toHaveBeenCalled();
   });
@@ -239,6 +247,7 @@ describe('notificationsService.notifyReporterMessage', () => {
 
   it('skips when reporterEmail is malformed', async () => {
     const badReport = { ...baseReport, reporterEmail: 'not-an-email' };
+    currentReport = badReport;
     await notificationsService.notifyReporterMessage(badReport, 'Hello', 'usr_1');
     expect(sendReporterMessageEmail).not.toHaveBeenCalled();
   });
@@ -328,4 +337,62 @@ describe('notificationsService.notifyReporterAssignment', () => {
     await notificationsService.notifyReporterAssignment(baseReport, undefined, 'usr_1');
     expect(sendReporterAssignmentEmail).not.toHaveBeenCalled();
   });
+});
+
+it('resolves the recipient again after sending the staff copy', async () => {
+  emailService.sendReporterMessageCcEmail = async () => {
+    currentReport = { ...baseReport, claimableEmail: 'new@example.com' };
+    return { success: true };
+  };
+  await notificationsService.notifyReporterMessage(baseReport, 'Reply', baseUser.id, true);
+  expect(sendReporterMessageEmail).toHaveBeenCalledWith(
+    'new@example.com',
+    expect.objectContaining({ report: currentReport })
+  );
+});
+
+it('skips reporter delivery when the message was hidden or deleted during CC', async () => {
+  let hidden = false;
+  const message = {
+    id: 'msg',
+    reportId: baseReport.id,
+    body: 'Reply',
+    userId: baseUser.id,
+    reporterId: null,
+    authorKind: 'staff' as const,
+    authorName: baseUser.name,
+    hiddenAt: null,
+    hiddenByUserId: null,
+    createdAt: baseReport.createdAt,
+  };
+  const read = spyOn(reportMessagesRepo, 'findById').mockImplementation(() =>
+    hidden ? { ...message, hiddenAt: baseReport.createdAt } : null
+  );
+  emailService.sendReporterMessageCcEmail = async () => {
+    hidden = true;
+    return { success: true };
+  };
+  try {
+    await notificationsService.notifyReporterMessage(
+      baseReport,
+      'Reply',
+      baseUser.id,
+      true,
+      [],
+      'msg'
+    );
+    hidden = false;
+    await notificationsService.notifyReporterMessage(
+      baseReport,
+      'Reply',
+      baseUser.id,
+      false,
+      [],
+      'msg'
+    );
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(sendReporterMessageEmail).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
 });

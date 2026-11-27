@@ -11,7 +11,7 @@ export const emailStyles = `
     .footer { background: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; border-top: none; }
     .footer a { color: ${BRAND_COLOR_PLACEHOLDER}; text-decoration: none; }
     .footer a:hover { text-decoration: underline; }
-    .button { display: inline-block; background: ${BRAND_COLOR_PLACEHOLDER}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: 500; }
+    .content a.button, .button { display: inline-block; background: ${BRAND_COLOR_PLACEHOLDER}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: 500; }
     .button:hover { background: ${BRAND_COLOR_HOVER_PLACEHOLDER}; }
     .meta { background: white; padding: 15px; border-radius: 6px; margin: 15px 0; }
     .meta-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
@@ -96,7 +96,7 @@ export function reporterConfirmationHtml(copy: ReporterConfirmationCopy): string
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
 
       <p style="display: {{reporter.portalDisplay}}; text-align: center;">
-        <a class="button" href="{{reporter.loginUrl}}">{{reporter.actionLabel}}</a>
+        <a class="button" style="color: white;" href="{{reporter.loginUrl}}">{{reporter.actionLabel}}</a>
       </p>
       <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
         <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
@@ -143,7 +143,7 @@ export function reporterStatusChangeHtml(copy: ReporterStatusChangeCopy): string
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
 
       <p style="display: {{reporter.portalDisplay}}; text-align: center;">
-        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+        <a class="button" style="color: white;" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
       </p>
       <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
         <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
@@ -184,7 +184,7 @@ export function reporterPriorityChangeHtml(copy: ReporterPriorityChangeCopy): st
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
 
       <p style="display: {{reporter.portalDisplay}}; text-align: center;">
-        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+        <a class="button" style="color: white;" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
       </p>
       <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
         <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
@@ -231,7 +231,7 @@ export function reporterAssignmentHtml(copy: ReporterAssignmentCopy): string {
       <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">${copy.outro}</p>
 
       <p style="display: {{reporter.portalDisplay}}; text-align: center;">
-        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+        <a class="button" style="color: white;" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
       </p>
       <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
         <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
@@ -268,7 +268,7 @@ export function reporterMessageHtml(copy: ReporterMessageCopy): string {
 
 
       <p style="display: {{reporter.portalDisplay}}; text-align: center;">
-        <a class="button" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
+        <a class="button" style="color: white;" href="{{reporter.updateUrl}}">{{reporter.actionLabel}}</a>
       </p>
       <p style="display: {{reporter.unsubscribeDisplay}}; font-size: 12px;">
         <a href="{{reporter.unsubscribeUrl}}">{{reporter.unsubscribeLabel}}</a>
@@ -286,6 +286,6 @@ export function reporterLoginHtml(copy: {
 }): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles}</style></head>
 <body><div class="container"><div class="header"><h1>${copy.login}</h1><p>{{app.name}}</p></div>
-<div class="content"><p>${copy.loginIntro}</p><a class="button" href="{{reporter.loginUrl}}">${copy.login}</a><p>${copy.loginExpiry}</p></div>
+<div class="content"><p>${copy.loginIntro}</p><a class="button" style="color: white;" href="{{reporter.loginUrl}}">${copy.login}</a><p>${copy.loginExpiry}</p></div>
 </div></body></html>`;
 }

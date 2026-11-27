@@ -1,4 +1,5 @@
 import { withEffectiveBranding } from '../utils/effective-branding.js';
+import { securePortalBaseUrl } from '../utils/portal-url.js';
 import nodemailer from 'nodemailer';
 import { settingsCacheService } from './settings-cache.service.js';
 import { logger } from '../utils/logger.js';
@@ -115,6 +116,15 @@ async function loadOverridesFromEE(): Promise<CustomEmailTemplates | undefined> 
   return overrides ?? undefined;
 }
 
+const reporterTemplates = new Set<EmailTemplateType>([
+  'reporterLogin',
+  'reporterConfirmation',
+  'reporterStatusChange',
+  'reporterPriorityChange',
+  'reporterAssignment',
+  'reporterMessage',
+]);
+
 // Service
 
 export const emailService = {
@@ -122,9 +132,12 @@ export const emailService = {
     const whiteLabel = await getEEHooks().getWhiteLabelService()?.getConfig();
     const settings = withEffectiveBranding(await settingsCacheService.getAll());
     let branded = appendFooterToHtml(html, type, whiteLabel);
-    if (settings.branding?.logoLightUrl && settings.appUrl) {
+    const baseUrl = reporterTemplates.has(type)
+      ? securePortalBaseUrl(settings) || settings.appUrl
+      : settings.appUrl;
+    if (settings.branding?.logoLightUrl && baseUrl) {
       try {
-        const url = new URL(settings.branding.logoLightUrl, settings.appUrl);
+        const url = new URL(settings.branding.logoLightUrl, baseUrl);
         if (['http:', 'https:'].includes(url.protocol)) {
           const logo = templateService.compileTemplate(
             '<img src="{{logo.url}}" alt="{{app.name}}" style="max-width:240px;max-height:80px" />',

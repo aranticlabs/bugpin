@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'bun:test';
-import { resolveTemplate } from '../../../src/server/services/email.service';
+import { describe, it, expect, spyOn } from 'bun:test';
+import * as ee from '../../../src/server/utils/ee';
+import { openPortalDatabase } from '../portal/helpers';
+import { settingsRepo } from '../../../src/server/database/repositories/settings.repo';
+import { settingsCacheService } from '../../../src/server/services/settings-cache.service';
+import { emailService, resolveTemplate } from '../../../src/server/services/email.service';
 import { templateService } from '../../../src/server/services/template.service';
 import { applyBrandColor, appendFooterToHtml } from '../../../src/server/constants/email-templates';
 import {
@@ -208,4 +212,70 @@ describe('translated email rendering', () => {
       expect(html).not.toContain('Resolved');
     });
   });
+});
+
+it('keeps button text white in reporter templates and staff activity emails', () => {
+  for (const type of [
+    'reporterLogin',
+    'reporterConfirmation',
+    'reporterStatusChange',
+    'reporterPriorityChange',
+    'reporterAssignment',
+    'reporterMessage',
+    'reporterActivity',
+  ] as const) {
+    const { html } = resolveTemplate(type, 'en');
+    expect(html).toContain('.content a.button, .button');
+    expect(html).toMatch(/<a class="button"[^>]*style="color: white;"/);
+  }
+});
+
+it('words reporter update subjects for the reporter, without the staff project prefix', () => {
+  const locales: LocaleCode[] = ['en', 'de', 'es', 'fr', 'it', 'ja', 'nl', 'zh'];
+  for (const locale of locales) {
+    for (const type of [
+      'reporterConfirmation',
+      'reporterStatusChange',
+      'reporterPriorityChange',
+      'reporterAssignment',
+      'reporterMessage',
+    ] as const) {
+      const { subject } = resolveTemplate(type, locale);
+      expect(subject).not.toContain('{{project.name}}');
+      expect(subject).toEndWith('{{report.title}}');
+    }
+  }
+  expect(resolveTemplate('reporterAssignment', 'en').subject).toBe(
+    'Assignment update on your bug report: {{report.title}}'
+  );
+});
+
+it('uses the reporter origin for reporter logos and the application origin for staff logos', async () => {
+  const close = await openPortalDatabase();
+  const branding = spyOn(ee, 'hasEEFeature').mockReturnValue(true);
+  try {
+    const settings = await settingsRepo.getAll();
+    await settingsRepo.updateAll({
+      appUrl: 'https://staff.example.com',
+      portalBaseUrl: 'https://portal.example.com',
+      branding: { ...settings.branding, logoLightUrl: '/branding/light/logo.png' },
+    });
+    settingsCacheService.invalidate();
+    for (const type of [
+      'reporterLogin',
+      'reporterConfirmation',
+      'reporterStatusChange',
+      'reporterPriorityChange',
+      'reporterAssignment',
+      'reporterMessage',
+      'reporterActivity',
+    ] as const) {
+      const html = await emailService.appendFooter(resolveTemplate(type, 'en').html, type);
+      const host = type === 'reporterActivity' ? 'staff' : 'portal';
+      expect(html).toContain(`src="https://${host}.example.com/branding/light/logo.png"`);
+    }
+  } finally {
+    branding.mockRestore();
+    close();
+  }
 });

@@ -148,7 +148,8 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
       'A new reply',
       'staff',
       true,
-      []
+      [],
+      result.reporterMessage.id
     );
   } finally {
     auth.mockRestore();

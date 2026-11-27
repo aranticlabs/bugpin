@@ -198,7 +198,8 @@ it('makes a report claimable and sends the optional invitation as a normal staff
     'Welcome to the conversation.',
     'editor',
     false,
-    []
+    [],
+    messages[0].id
   );
   expect(await reportMessagesService.portalContext(first.id)).toMatchObject({
     success: true,

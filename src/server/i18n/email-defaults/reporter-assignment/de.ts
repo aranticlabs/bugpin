@@ -2,7 +2,7 @@ import type { EmailTemplate } from '@shared/types';
 import { reporterAssignmentHtml } from '../styles.js';
 
 const de: EmailTemplate = {
-  subject: '[{{project.name}}] Zuweisung des Berichts aktualisiert: {{report.title}}',
+  subject: 'Zuweisungsänderung deines Fehlerberichts: {{report.title}}',
   html: reporterAssignmentHtml({
     headerTitle: 'Zuweisung aktualisiert',
     introWithPrevious:

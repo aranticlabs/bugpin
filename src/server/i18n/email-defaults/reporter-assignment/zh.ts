@@ -2,7 +2,7 @@ import type { EmailTemplate } from '@shared/types';
 import { reporterAssignmentHtml } from '../styles.js';
 
 const zh: EmailTemplate = {
-  subject: '[{{project.name}}] 您的 bug 报告负责人已更新：{{report.title}}',
+  subject: '您的 bug 报告负责人已更新：{{report.title}}',
   html: reporterAssignmentHtml({
     headerTitle: '负责人已更新',
     introWithPrevious:

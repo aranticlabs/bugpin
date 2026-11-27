@@ -349,7 +349,14 @@ async function sendStaffMessage(
     const report = await reportsRepo.findById(reportId);
     if (report)
       notificationsService
-        .notifyReporterMessage(report, saved.value.body, userId, ccSender, saved.value.files)
+        .notifyReporterMessage(
+          report,
+          saved.value.body,
+          userId,
+          ccSender,
+          saved.value.files,
+          saved.value.id
+        )
         .catch((error) => {
           logger.error('Failed to send reporter message notification', error, { reportId });
         });

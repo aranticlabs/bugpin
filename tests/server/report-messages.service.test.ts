@@ -282,7 +282,8 @@ describe('message writes', () => {
         'A reply',
         'staff',
         true,
-        result.value.files
+        result.value.files,
+        result.value.id
       );
     } finally {
       notify.mockRestore();

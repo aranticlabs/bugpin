@@ -48,7 +48,7 @@ function template(locale: LocaleCode) {
   const text = copy[locale];
   return {
     subject: `${text.title}: {{report.title}}`,
-    html: `<!DOCTYPE html><html lang="${locale}"><head><meta charset="utf-8"><style>${emailStyles}</style></head><body><div class="container"><div class="header"><h1>${text.title}</h1><p>{{app.name}}</p></div><div class="content"><p>${text.intro}</p><h2>{{report.title}}</h2><a class="button" href="{{report.url}}">${text.action}</a></div></div></body></html>`,
+    html: `<!DOCTYPE html><html lang="${locale}"><head><meta charset="utf-8"><style>${emailStyles}</style></head><body><div class="container"><div class="header"><h1>${text.title}</h1><p>{{app.name}}</p></div><div class="content"><p>${text.intro}</p><h2>{{report.title}}</h2><a class="button" style="color: white;" href="{{report.url}}">${text.action}</a></div></div></body></html>`,
   };
 }
 

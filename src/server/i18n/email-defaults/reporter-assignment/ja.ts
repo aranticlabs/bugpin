@@ -2,7 +2,7 @@ import type { EmailTemplate } from '@shared/types';
 import { reporterAssignmentHtml } from '../styles.js';
 
 const ja: EmailTemplate = {
-  subject: '[{{project.name}}] バグレポートの担当者が更新されました：{{report.title}}',
+  subject: 'バグレポートの担当者が変更されました：{{report.title}}',
   html: reporterAssignmentHtml({
     headerTitle: '担当者が更新されました',
     introWithPrevious:

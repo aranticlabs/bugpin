@@ -2,6 +2,8 @@ import {
   notificationPreferencesRepo,
   projectNotificationDefaultsRepo,
 } from '../database/repositories/notification-preferences.repo.js';
+import { reportsRepo } from '../database/repositories/reports.repo.js';
+import { reportMessagesRepo } from '../database/repositories/report-messages.repo.js';
 import { reportersRepo } from '../database/repositories/reporters.repo.js';
 import { normalizeEmail } from '../utils/email-normalize.js';
 import { usersRepo } from '../database/repositories/users.repo.js';
@@ -113,6 +115,16 @@ async function getReporterContext(
   }
 
   const settings = await settingsCacheService.getAll();
+  return prepareReporterContext(report, project, settings, flag, source);
+}
+
+function prepareReporterContext(
+  report: Report,
+  project: Project,
+  settings: AppSettings,
+  flag: keyof ReporterNotificationSettings,
+  source?: 'confirmation' | 'invitation'
+): ReporterContext | null {
   const effective = getEffectiveReporterSettings(settings, project.settings);
   if (!effective.emailEnabled || !effective[flag]) {
     return null;
@@ -781,7 +793,8 @@ export const notificationsService = {
     message: string,
     senderUserId: string,
     ccSender?: boolean,
-    files: { filename: string }[] = []
+    files: { filename: string }[] = [],
+    messageId?: string
   ): Promise<void> {
     try {
       const [project, settings, sender] = await Promise.all([
@@ -815,10 +828,25 @@ export const notificationsService = {
           logger.warn('Reporter message CC to sender failed', { reportId: report.id });
         }
       }
-      const ctx = await getReporterContext(report, 'messagingEnabled', 'invitation');
+      const [currentProject, currentSettings] = await Promise.all([
+        projectsRepo.findById(report.projectId),
+        settingsCacheService.getAll(),
+      ]);
+      const currentReport = await reportsRepo.findById(report.id);
+      if (!currentReport || !currentProject) return;
+      if (messageId && reportMessagesRepo.findById(report.id, messageId)?.hiddenAt !== null) return;
+      const ctx = prepareReporterContext(
+        currentReport,
+        currentProject,
+        currentSettings,
+        'messagingEnabled',
+        'invitation'
+      );
       if (!ctx) return;
       const result = await emailService.sendReporterMessageEmail(ctx.recipient, {
         ...emailData,
+        report: currentReport,
+        projectName: currentProject.name,
         correspondence: ctx.correspondence,
       });
       if (!result.success)
