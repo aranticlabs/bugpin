@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { ChevronDown, Globe, LogOut, Sun, User } from 'lucide-react';
 import { Button } from '@shared-ui/components/ui/button';
 import { Input } from '@shared-ui/components/ui/input';
 import { Label } from '@shared-ui/components/ui/label';
@@ -15,6 +16,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
   DropdownMenuSub,
@@ -26,6 +28,8 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { normalizeLocale } from '../i18n/catalog';
+import { PersonAvatar } from './PersonAvatar';
+import { ThemeRadioGroup } from './ThemeMenu';
 
 export const languages = {
   en: 'English',
@@ -47,6 +51,7 @@ export function ProfileMenu() {
   const logout = useMutation({ mutationFn: auth.signOut, onError: () => setLogoutFailed(true) });
   const update = useMutation({ mutationFn: auth.updateProfile, onSuccess: () => setOpen(false) });
   const accountName = auth.reporter?.displayName ?? auth.operator?.name;
+  const accountEmail = auth.reporter?.email ?? auth.operator?.email;
   if (accountName === undefined) return null;
   const busy = update.isPending || logout.isPending;
   function submit(event: FormEvent) {
@@ -57,12 +62,18 @@ export function ProfileMenu() {
     <div className="min-w-0 max-w-full">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 max-w-full" disabled={busy}>
-            <span className="truncate">{accountName}</span>
-            <span aria-hidden="true">▾</span>
+          <Button variant="ghost" className="h-10 max-w-full gap-2 px-2" disabled={busy}>
+            <PersonAvatar name={accountName} className="h-7 w-7 text-[11px]" />
+            <span className="sr-only sm:not-sr-only sm:max-w-40 sm:truncate">{accountName}</span>
+            <ChevronDown className="text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuLabel className="font-normal">
+            <p className="truncate text-sm font-medium">{accountName}</p>
+            <p className="truncate text-xs text-muted-foreground">{accountEmail}</p>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
           {auth.reporter && (
             <>
               <DropdownMenuItem
@@ -72,10 +83,14 @@ export function ProfileMenu() {
                   setOpen(true);
                 }}
               >
+                <User />
                 {t('displayName')}
               </DropdownMenuItem>
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{t('language')}</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>
+                  <Globe />
+                  {t('language')}
+                </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuRadioGroup
                     value={locale}
@@ -98,15 +113,25 @@ export function ProfileMenu() {
               >
                 {t('emailUpdates')}
               </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
             </>
           )}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Sun />
+              {t('appearance')}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <ThemeRadioGroup />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
               setLogoutFailed(false);
               logout.mutate();
             }}
           >
+            <LogOut />
             {t('signOut')}
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -1,5 +1,6 @@
 import { getDb, transaction } from '../database.js';
 import type { FileType, MessageAuthorKind, ReportStatus, ProjectSettings } from '@shared/types';
+import type { PortalReportSort } from '@shared/portal-types';
 import type { PortalReportCursor } from '../../utils/portal-schemas.js';
 import { portalSetting } from '../reporter-portal-sql.js';
 
@@ -25,8 +26,34 @@ function scoped(scope: PortalScope): { where: string; params: string[] } {
 // The team view has no reader of its own, so it never reports or clears unread state.
 function summaryColumns(scope: PortalScope): string {
   return `r.id, r.title, r.status, p.id AS projectId, p.name AS projectName,
-  r.created_at AS createdAt, r.updated_at AS updatedAt,
+  r.created_at AS createdAt, r.updated_at AS updatedAt, r.reporter_id AS ownerId,
   ${scope.kind === 'reporter' ? unread : '0'} AS unread`;
+}
+
+const visibleMessage = 'm.report_id = r.id AND m.hidden_at IS NULL';
+const listColumns = `(SELECT COUNT(*) FROM report_messages m WHERE ${visibleMessage}) AS replyCount,
+  lm.author_kind AS latestAuthorKind, lm.author_name AS latestAuthorName,
+  lm.reporter_id AS latestReporterId, substr(lm.body, 1, 160) AS latestBody,
+  lm.created_at AS latestCreatedAt,
+  (SELECT COUNT(*) FROM files f WHERE f.message_id = lm.id AND f.report_id = r.id) AS latestFileCount`;
+const latestMessage = `LEFT JOIN report_messages lm ON lm.id = (SELECT m.id FROM report_messages m
+  WHERE ${visibleMessage} ORDER BY julianday(m.created_at) DESC, m.id DESC LIMIT 1)`;
+
+// Ownership history stores the previous owner as a reporter id or, for a claim, as an email.
+const handedOver = `EXISTS (SELECT 1 FROM report_history h WHERE h.report_id = r.id
+  AND h.action IN ('owner_assigned', 'owner_removed', 'claimable_set')
+  AND h.old_value IS NOT NULL AND instr(h.old_value, '@') = 0
+  AND h.old_value IS NOT r.reporter_id)`;
+
+const sortColumn: Record<PortalReportSort, { column: string; descending: boolean }> = {
+  updated: { column: 'r.updated_at', descending: true },
+  newest: { column: 'r.created_at', descending: true },
+  oldest: { column: 'r.created_at', descending: false },
+};
+
+/** Escapes LIKE wildcards so a search term matches literally */
+function containsPattern(term: string): string {
+  return `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
 }
 
 interface SummaryRow {
@@ -37,14 +64,26 @@ interface SummaryRow {
   projectName: string;
   createdAt: string;
   updatedAt: string;
+  ownerId: string | null;
   unread: number;
 }
 
+export interface ListRow extends SummaryRow {
+  replyCount: number;
+  latestAuthorKind: MessageAuthorKind | null;
+  latestAuthorName: string | null;
+  latestReporterId: string | null;
+  latestBody: string | null;
+  latestCreatedAt: string | null;
+  latestFileCount: number;
+}
+
 interface DetailRow extends SummaryRow {
-  ownerId: string | null;
   description: string | null;
+  metadata: string | null;
+  handedOver: number;
   assigneeName: string | null;
-  allowNewFeedback: number | null;
+  allowNewReports: number | null;
   notifyReporter: number | null;
   messagingEnabled: number | null;
 }
@@ -52,7 +91,7 @@ interface DetailRow extends SummaryRow {
 interface ProjectRow {
   id: string;
   name: string;
-  allowNewFeedback: number | null;
+  allowNewReports: number | null;
   maxImageMb: number | null;
   maxVideoMb: number | null;
 }
@@ -78,6 +117,27 @@ export interface PortalFileRow {
 
 const fileColumns = `f.id, f.type, f.mime_type AS mimeType, f.size_bytes AS sizeBytes,
   f.width, f.height, f.message_id AS messageId`;
+
+function listFilter(
+  scope: PortalScope,
+  input: { projectId?: string; q?: string }
+): { where: string[]; params: (string | number)[] } {
+  const visible = scoped(scope);
+  const where = [visible.where];
+  const params: (string | number)[] = [...visible.params];
+  if (input.projectId) {
+    where.push('p.id = ?');
+    params.push(input.projectId);
+  }
+  if (input.q) {
+    const pattern = containsPattern(input.q);
+    where.push(
+      "(r.title LIKE ? ESCAPE '\\' OR COALESCE(r.original_description, '') LIKE ? ESCAPE '\\')"
+    );
+    params.push(pattern, pattern);
+  }
+  return { where, params };
+}
 
 export const portalReportsRepo = {
   visibleScope(reporterId: string): { id: string; projectId: string }[] {
@@ -113,7 +173,7 @@ export const portalReportsRepo = {
       FROM projects p JOIN reporters a ON a.id = ? AND a.suspended_at IS NULL
       LEFT JOIN users u ON u.id = json_extract(p.settings, '$.defaultAssigneeUserId') AND u.is_active = 1
         AND (u.invitation_sent_at IS NULL OR u.invitation_accepted_at IS NOT NULL)
-      WHERE p.id = ? AND ${enabledProject} AND ${portalSetting('p', 'allowNewFeedback')} = 1
+      WHERE p.id = ? AND ${enabledProject} AND ${portalSetting('p', 'allowNewReports')} = 1
       AND EXISTS (SELECT 1 FROM reports r WHERE r.project_id = p.id AND r.reporter_id = a.id)`
       )
       .get(reporterId, projectId);
@@ -162,7 +222,7 @@ export const portalReportsRepo = {
     return getDb()
       .query<ProjectRow, string[]>(
         `SELECT DISTINCT p.id, p.name,
-      ${portalSetting('p', 'allowNewFeedback')} AS allowNewFeedback,
+      ${portalSetting('p', 'allowNewReports')} AS allowNewReports,
       json_extract(p.settings, '$.screenshot.maxImageUploadSizeMb') AS maxImageMb,
       json_extract(p.settings, '$.screenshot.maxVideoUploadSizeMb') AS maxVideoMb
       FROM ${reportTables} WHERE ${where} ORDER BY p.name, p.id`
@@ -175,17 +235,13 @@ export const portalReportsRepo = {
     input: {
       projectId?: string;
       status?: ReportStatus;
+      q?: string;
+      sort: PortalReportSort;
       cursor?: PortalReportCursor;
       limit: number;
     }
-  ): { rows: SummaryRow[]; total: number; unreadCount: number } {
-    const visible = scoped(scope);
-    const where = [visible.where];
-    const params: (string | number)[] = [...visible.params];
-    if (input.projectId) {
-      where.push('p.id = ?');
-      params.push(input.projectId);
-    }
+  ): { rows: ListRow[]; total: number; unreadCount: number } {
+    const { where, params } = listFilter(scope, input);
     if (input.status) {
       where.push('r.status = ?');
       params.push(input.status);
@@ -197,28 +253,44 @@ export const portalReportsRepo = {
       FROM ${reportTables} WHERE ${where.join(' AND ')}`
       )
       .get(...params)!;
+    const { column, descending } = sortColumn[input.sort];
     if (input.cursor) {
       where.push(
-        '(julianday(r.updated_at) < julianday(?) OR (julianday(r.updated_at) = julianday(?) AND r.id > ?))'
+        `(julianday(${column}) ${descending ? '<' : '>'} julianday(?) OR (julianday(${column}) = julianday(?) AND r.id > ?))`
       );
-      params.push(input.cursor.updatedAt, input.cursor.updatedAt, input.cursor.id);
+      params.push(input.cursor.at, input.cursor.at, input.cursor.id);
     }
     const rows = getDb()
-      .query<SummaryRow, (string | number)[]>(
-        `SELECT ${summaryColumns(scope)} FROM ${reportTables} WHERE ${where.join(' AND ')}
-      ORDER BY julianday(r.updated_at) DESC, r.id ASC LIMIT ?`
+      .query<ListRow, (string | number)[]>(
+        `SELECT ${summaryColumns(scope)}, ${listColumns} FROM ${reportTables} ${latestMessage}
+      WHERE ${where.join(' AND ')}
+      ORDER BY julianday(${column}) ${descending ? 'DESC' : 'ASC'}, r.id ASC LIMIT ?`
       )
       .all(...params, input.limit + 1);
     return { rows, ...counts };
+  },
+
+  statusCounts(
+    scope: PortalScope,
+    input: { projectId?: string; q?: string }
+  ): { status: ReportStatus; count: number }[] {
+    const { where, params } = listFilter(scope, input);
+    return getDb()
+      .query<{ status: ReportStatus; count: number }, (string | number)[]>(
+        `SELECT r.status, COUNT(*) AS count FROM ${reportTables}
+      WHERE ${where.join(' AND ')} GROUP BY r.status`
+      )
+      .all(...params);
   },
 
   detail(reportId: string, scope: PortalScope): DetailRow | null {
     const { where, params } = scoped(scope);
     return getDb()
       .query<DetailRow, string[]>(
-        `SELECT ${summaryColumns(scope)}, r.reporter_id AS ownerId,
-      r.original_description AS description, u.name AS assigneeName,
-      ${portalSetting('p', 'allowNewFeedback')} AS allowNewFeedback,
+        `SELECT ${summaryColumns(scope)},
+      r.original_description AS description, r.metadata, ${handedOver} AS handedOver,
+      u.name AS assigneeName,
+      ${portalSetting('p', 'allowNewReports')} AS allowNewReports,
       json_extract(p.settings, '$.notifyReporter') AS notifyReporter,
       json_extract(p.settings, '$.reporterNotifications.messagingEnabled') AS messagingEnabled
       FROM ${reportTables} LEFT JOIN users u ON u.id = r.assigned_to

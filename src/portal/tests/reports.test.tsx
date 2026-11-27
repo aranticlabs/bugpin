@@ -16,13 +16,14 @@ import { App } from '../src/App';
 import { AuthProvider } from '../src/auth/AuthProvider';
 import { I18nProvider } from '../src/i18n/I18nProvider';
 import { BrandingProvider } from '../src/branding/BrandingProvider';
+import { ThemeProvider } from '@shared-ui/theme/ThemeProvider';
 import { server, TestEventSource } from './setup';
 
 let reporter: PortalMe;
 const project: PortalProject = {
   id: 'project',
   name: 'Shop',
-  allowNewFeedback: true,
+  allowNewReports: true,
   maxImageMb: 1,
   maxVideoMb: 2,
 };
@@ -34,6 +35,16 @@ const summary: PortalReportSummary = {
   unread: true,
   createdAt: '2026-11-01T10:00:00Z',
   updatedAt: '2026-11-02T10:00:00Z',
+  replyCount: 2,
+  latestReply: {
+    authorKind: 'staff',
+    authorName: 'Anna snapshot',
+    isOwn: false,
+    isPreviousReporter: false,
+    body: 'Can you share the browser?',
+    fileCount: 0,
+    createdAt: '2026-11-02T10:00:00Z',
+  },
 };
 const detail: PortalReportDetail = {
   ...summary,
@@ -72,24 +83,41 @@ const detail: PortalReportDetail = {
       createdAt: summary.updatedAt,
     },
   ],
+  statusEvents: [],
+  environment: null,
   canReply: true,
-  canSubmitNewFeedback: true,
+  canSubmitNewReport: true,
 };
+
+const statusCounts = { open: 3, in_progress: 0, resolved: 2, closed: 1 };
+
+function unreadResponse(unreadCount: number) {
+  return HttpResponse.json({
+    success: true,
+    reports: [],
+    nextCursor: null,
+    total: 0,
+    unreadCount,
+    statusCounts,
+  });
+}
 
 function mount(path = '/reports') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <I18nProvider>
-          <BrandingProvider>
-            <MemoryRouter initialEntries={[path]}>
-              <App />
-            </MemoryRouter>
-          </BrandingProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider storageKey="bugpin-portal-theme">
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <I18nProvider>
+            <BrandingProvider>
+              <MemoryRouter initialEntries={[path]}>
+                <App />
+              </MemoryRouter>
+            </BrandingProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
   return client;
 }
@@ -117,11 +145,12 @@ beforeEach(() => {
   );
 });
 
-it('uses filtered server totals, pagination, unread markers, and title count in the list', async () => {
+it('uses filtered server totals, pagination, rich rows, status tabs, and title count in the list', async () => {
   const cursors: (string | null)[] = [];
   server.use(
     http.get('/api/portal/reports', ({ request }) => {
       const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(1);
       expect(query.get('projectId')).toBe('project');
       expect(query.get('status')).toBe('resolved');
       cursors.push(query.get('cursor'));
@@ -129,31 +158,129 @@ it('uses filtered server totals, pagination, unread markers, and title count in 
         success: true,
         reports: [
           query.has('cursor')
-            ? { ...summary, id: 'second', title: 'Another report', unread: false }
+            ? {
+                ...summary,
+                id: 'second',
+                title: 'Another report',
+                unread: false,
+                replyCount: 0,
+                latestReply: null,
+              }
             : summary,
         ],
         nextCursor: query.has('cursor') ? null : 'next',
         total: 2,
         unreadCount: 1,
+        statusCounts,
       });
     })
   );
   mount('/reports?projectId=project&status=resolved');
-  expect(await screen.findByRole('link', { name: /Checkout button/ })).toBeVisible();
-  expect(screen.getByText('Unread')).toHaveClass('sr-only');
-  expect(screen.getByRole('link', { name: /Unread.*Checkout button/ })).toBeVisible();
-  expect(screen.getByText('●')).toHaveAttribute('aria-hidden', 'true');
-  await waitFor(() => expect(document.title).toBe('(1) My feedback | BugPin'));
+  const row = await screen.findByRole('link', { name: /Checkout button/ });
+  expect(within(row).getByText('New reply')).toBeVisible();
+  expect(within(row).getByText('Anna snapshot:')).toBeVisible();
+  expect(within(row).getByText('Can you share the browser?')).toBeVisible();
+  expect(within(row).getByText('Replies: 2')).toHaveClass('sr-only');
+  const tabs = screen.getByRole('tablist', { name: 'Filter by status' });
+  expect(within(tabs).getByRole('tab', { name: 'Resolved 2' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  expect(within(tabs).getByRole('tab', { name: 'All 6' })).toBeInTheDocument();
+  await waitFor(() => expect(document.title).toBe('(1) My reports | BugPin'));
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
   expect(await screen.findByText('Another report')).toBeVisible();
   expect(cursors).toEqual([null, 'next']);
   expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 });
 
-it('keeps four read-only board columns with excluded columns empty and filtered unread totals', async () => {
+it('keeps status, search, and sort in the URL and the list request', async () => {
+  const requests: URLSearchParams[] = [];
+  const last = () => requests[requests.length - 1];
   server.use(
     http.get('/api/portal/reports', ({ request }) => {
       const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(0);
+      requests.push(query);
+      return HttpResponse.json({
+        success: true,
+        reports: [summary],
+        nextCursor: null,
+        total: 1,
+        unreadCount: 1,
+        statusCounts,
+      });
+    })
+  );
+  mount('/reports');
+  const user = userEvent.setup({ delay: null });
+  await screen.findByRole('link', { name: /Checkout button/ });
+  await user.click(screen.getByRole('tab', { name: 'Open 3' }));
+  await waitFor(() => expect(last()?.get('status')).toBe('open'));
+  await user.type(screen.getByRole('searchbox', { name: 'Search reports' }), 'checkout');
+  await waitFor(() => expect(last()?.get('q')).toBe('checkout'));
+  expect(requests.filter((query) => query.has('q'))).toHaveLength(1);
+  await user.click(screen.getByRole('combobox', { name: 'Sort' }));
+  await user.click(await screen.findByRole('option', { name: 'Newest first' }));
+  await waitFor(() => expect(last()?.get('sort')).toBe('newest'));
+  expect(last()?.get('status')).toBe('open');
+  expect(last()?.get('q')).toBe('checkout');
+  await user.click(screen.getByRole('tab', { name: 'All 6' }));
+  await waitFor(() => expect(last()?.has('status')).toBe(false));
+});
+
+it('keeps a filter picked while a search is pending and searches for any word', async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get('/api/portal/reports', ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(0);
+      requests.push(query);
+      return HttpResponse.json({
+        success: true,
+        reports: [summary],
+        nextCursor: null,
+        total: 1,
+        unreadCount: 0,
+        statusCounts,
+      });
+    })
+  );
+  mount('/reports');
+  const user = userEvent.setup({ delay: null });
+  await screen.findByRole('link', { name: /Checkout button/ });
+  await user.type(screen.getByRole('searchbox', { name: 'Search reports' }), 'all');
+  await user.click(screen.getByRole('tab', { name: 'Open 3' }));
+  await waitFor(() => expect(requests[requests.length - 1]?.get('q')).toBe('all'));
+  expect(requests[requests.length - 1]?.get('status')).toBe('open');
+  expect(screen.getByRole('searchbox', { name: 'Search reports' })).toHaveValue('all');
+});
+
+it('previews a reply that only has attachments with its file count', async () => {
+  server.use(
+    http.get('/api/portal/reports', ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(0);
+      return HttpResponse.json({
+        success: true,
+        reports: [{ ...summary, latestReply: { ...summary.latestReply!, body: '', fileCount: 2 } }],
+        nextCursor: null,
+        total: 1,
+        unreadCount: 0,
+        statusCounts,
+      });
+    })
+  );
+  mount('/reports');
+  const row = await screen.findByRole('link', { name: /Checkout button/ });
+  expect(within(row).getByText('Files (2)')).toBeVisible();
+});
+
+it('keeps the status tabs on the board and empties the excluded columns', async () => {
+  server.use(
+    http.get('/api/portal/reports', ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('limit') === '1') return unreadResponse(3);
       expect(query.get('groupByStatus')).toBe('true');
       expect(query.get('status')).toBe('resolved');
       return HttpResponse.json({
@@ -176,7 +303,12 @@ it('keeps four read-only board columns with excluded columns empty and filtered 
   expect(await screen.findByRole('button', { name: 'Open Checkout button broken' })).toBeVisible();
   for (const name of ['Open: 0', 'In progress: 0', 'Resolved: 17', 'Closed: 0'])
     expect(screen.getByLabelText(name)).toBeInTheDocument();
-  await waitFor(() => expect(document.title).toBe('(3) My feedback | BugPin'));
+  const tabs = screen.getByRole('tablist', { name: 'Filter by status' });
+  expect(await within(tabs).findByRole('tab', { name: 'Resolved 2' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  await waitFor(() => expect(document.title).toBe('(3) My reports | BugPin'));
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   expect(document.querySelector('[draggable="true"]')).toBeNull();
 });
@@ -193,7 +325,7 @@ it('renders the localized previous reporter label, snapshots, escaped original t
     'noopener noreferrer nofollow'
   );
   expect(document.querySelector('video')).toHaveAttribute('src', '/api/portal/files/video');
-  expect(screen.getByRole('heading', { name: 'Ursprüngliche Meldung' })).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'Deine Meldung' })).toBeVisible();
 });
 
 it('sends multipart messages with files and keeps drafts after quota failure', async () => {
@@ -247,7 +379,7 @@ it('rejects oversized files and more than five files before sending', async () =
 });
 
 it.each([
-  ['closed', 'This report is closed.'],
+  ['closed', 'This report is closed'],
   ['disabled', 'The team answers through other channels.'],
 ])('shows the %s state without a composer', async (state, text) => {
   server.use(
@@ -261,11 +393,15 @@ it.each([
   mount('/reports/report');
   expect(await screen.findByText(text)).toBeVisible();
   expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'New feedback' }) !== null).toBe(state === 'closed');
+  expect(
+    screen
+      .queryAllByRole('link', { name: 'New report' })
+      .some((link) => link.getAttribute('href') === '/new?projectId=project')
+  ).toBe(state === 'closed');
 });
 
 it.each([
-  [409, 'REPORT_CLOSED', 'This report is closed.'],
+  [409, 'REPORT_CLOSED', 'This report is closed'],
   [403, 'MESSAGING_DISABLED', 'The team answers through other channels.'],
   [404, 'NOT_FOUND', 'Page not found'],
 ] as const)(
@@ -323,7 +459,7 @@ it.each([
 );
 
 it.each([
-  [409, 'REPORT_CLOSED', 'This report is closed.'],
+  [409, 'REPORT_CLOSED', 'This report is closed'],
   [403, 'MESSAGING_DISABLED', 'The team answers through other channels.'],
   [404, 'NOT_FOUND', 'Page not found'],
 ] as const)(
@@ -465,15 +601,12 @@ it('keeps a pending reply and its draft intact during an unrelated live refresh'
   }
 });
 
-it('submits new feedback only to an eligible owned project and opens its detail', async () => {
+it('submits a new report only to an eligible owned project and opens its detail', async () => {
   server.use(
     http.get('/api/portal/projects', () =>
       HttpResponse.json({
         success: true,
-        projects: [
-          project,
-          { ...project, id: 'disabled', name: 'Hidden', allowNewFeedback: false },
-        ],
+        projects: [project, { ...project, id: 'disabled', name: 'Hidden', allowNewReports: false }],
       })
     ),
     http.post('/api/portal/reports', async ({ request }) => {
@@ -520,7 +653,7 @@ it('saves a display name and email preference through the profile menu', async (
   await waitFor(() => expect(reporter.emailUpdates).toBe(false));
 });
 
-it('clears private report content immediately on access changes and hides revoked feedback', async () => {
+it('clears private report content immediately on access changes and hides revoked reports', async () => {
   let revoked = false;
   server.use(
     http.get('/api/portal/reports/report', async () => {
@@ -542,8 +675,8 @@ it('clears private report content immediately on access changes and hides revoke
 it('invalidates live reports, reconnects, and expires a revoked session', async () => {
   let reads = 0;
   server.use(
-    http.get('/api/portal/reports', () => {
-      reads++;
+    http.get('/api/portal/reports', ({ request }) => {
+      if (new URL(request.url).searchParams.get('limit') !== '1') reads++;
       return HttpResponse.json({
         success: true,
         reports: [summary],
@@ -581,17 +714,19 @@ it('invalidates live reports, reconnects, and expires a revoked session', async 
 
 it('closes the live connection on unmount', async () => {
   const result = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <AuthProvider>
-        <I18nProvider>
-          <BrandingProvider>
-            <MemoryRouter>
-              <App />
-            </MemoryRouter>
-          </BrandingProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider storageKey="bugpin-portal-theme">
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider>
+          <I18nProvider>
+            <BrandingProvider>
+              <MemoryRouter>
+                <App />
+              </MemoryRouter>
+            </BrandingProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
   await screen.findByRole('button', { name: 'Jane' });
   const events = TestEventSource.instances[0];
@@ -615,18 +750,19 @@ it('updates the account language and immediately localizes the page', async () =
   language.focus();
   await user.keyboard('{ArrowRight}');
   await user.click(await screen.findByRole('menuitemradio', { name: 'Deutsch' }));
-  expect(await screen.findByRole('heading', { name: 'Mein Feedback' })).toBeVisible();
+  expect(await screen.findByRole('heading', { name: 'Meine Meldungen' })).toBeVisible();
   expect(document.documentElement.lang).toBe('de');
 });
 
-it('shows no new feedback action when no owned project permits submissions', async () => {
+it('shows no new report action when no owned project permits submissions', async () => {
   server.use(
     http.get('/api/portal/projects', () =>
-      HttpResponse.json({ success: true, projects: [{ ...project, allowNewFeedback: false }] })
+      HttpResponse.json({ success: true, projects: [{ ...project, allowNewReports: false }] })
     )
   );
   mount('/new');
-  expect(await screen.findByText('No project currently allows new feedback.')).toBeVisible();
+  expect(await screen.findByText('No project currently allows new reports.')).toBeVisible();
+  expect(screen.queryByRole('link', { name: 'New report' })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
 });
 
@@ -635,8 +771,9 @@ it('paginates an individual board column without changing its full count or unre
   server.use(
     http.get('/api/portal/reports', ({ request }) => {
       const query = new URL(request.url).searchParams;
-      expect(query.get('status')).toBe('open');
-      cursors.push(query.get('cursor'));
+      if (query.get('limit') === '1') return unreadResponse(2);
+      const requested = query.get('status');
+      if (requested === 'open') cursors.push(query.get('cursor'));
       const next = query.has('cursor');
       return HttpResponse.json({
         success: true,
@@ -645,7 +782,7 @@ it('paginates an individual board column without changing its full count or unre
             status,
             {
               reports:
-                status === 'open'
+                status === 'open' && requested === 'open'
                   ? [
                       {
                         ...summary,
@@ -655,8 +792,8 @@ it('paginates an individual board column without changing its full count or unre
                       },
                     ]
                   : [],
-              total: status === 'open' ? 50 : 0,
-              nextCursor: status === 'open' && !next ? 'column-next' : null,
+              total: status === 'open' && requested === 'open' ? 50 : 0,
+              nextCursor: status === 'open' && requested === 'open' && !next ? 'column-next' : null,
             },
           ])
         ),
@@ -669,7 +806,7 @@ it('paginates an individual board column without changing its full count or unre
   expect(await screen.findByRole('button', { name: 'Open Next column item' })).toBeVisible();
   expect(screen.getByLabelText('Open: 50')).toBeInTheDocument();
   expect(cursors).toEqual([null, 'column-next']);
-  await waitFor(() => expect(document.title).toBe('(2) My feedback | BugPin'));
+  await waitFor(() => expect(document.title).toBe('(2) My reports | BugPin'));
 });
 
 it('ignores a canceled request response before dispatching session expiry', async () => {
@@ -710,7 +847,7 @@ it.each(['sign-out', 'session-expiry'])(
       http.post('/api/portal/auth/logout', () => HttpResponse.json({ success: true }))
     );
     mount();
-    await waitFor(() => expect(document.title).toBe('(7) My feedback | BugPin'));
+    await waitFor(() => expect(document.title).toBe('(7) My reports | BugPin'));
     if (action === 'sign-out') {
       await userEvent.click(screen.getByRole('button', { name: 'Jane' }));
       await userEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
@@ -732,7 +869,7 @@ it('sets a neutral title on a cold signed-out reports load', async () => {
   expect(document.title).toBe('Reporter Portal | BugPin');
 });
 
-it('gives every original, message, and metadata file control a unique contextual name', async () => {
+it('gives every media control a unique name and opens images in a lightbox', async () => {
   const image = { ...detail.files[0], mimeType: 'image/png' };
   server.use(
     http.get('/api/portal/reports/report', () =>
@@ -754,21 +891,177 @@ it('gives every original, message, and metadata file control a unique contextual
   );
   mount('/reports/report');
   await screen.findByRole('heading', { name: detail.title });
-  for (const context of ['Original report', 'Conversation 1', 'Conversation 2']) {
-    expect(screen.getByRole('link', { name: `${context}: Open file 1` })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Play Video 1' })).toBeInTheDocument();
+  for (const number of [1, 2, 3, 4]) {
+    expect(screen.getByRole('button', { name: `View Attachment ${number}` })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `Download Attachment ${number}` })).toHaveAttribute(
+      'download',
+      `attachment-${number}.png`
+    );
   }
-  expect(screen.getByRole('link', { name: 'Conversation 2: Open file 2' })).toBeInTheDocument();
-  const links = screen
-    .getAllByRole('link')
-    .filter((link) => link.textContent?.includes('Open file'));
-  expect(new Set(links.map((link) => link.getAttribute('aria-label'))).size).toBe(links.length);
-  const images = screen
-    .getAllByRole('img')
-    .filter((image) => image.getAttribute('src')?.startsWith('/api/portal/files/'));
-  expect(new Set(images.map((image) => image.getAttribute('alt'))).size).toBe(images.length);
-  expect(screen.getByRole('link', { name: 'My feedback' })).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Report details' })).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Jane' })).toBeVisible();
+  const names = [...screen.getAllByRole('button'), ...screen.getAllByRole('link')]
+    .map((control) => control.getAttribute('aria-label') ?? '')
+    .filter((name) => /^(View|Play|Download) /.test(name));
+  expect(new Set(names).size).toBe(names.length);
+  expect(
+    screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('/api/portal/files/'))
+      .every((link) => link.getAttribute('target') !== '_blank')
+  ).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'My reports' }).length).toBeGreaterThan(0);
+  expect(screen.getByRole('button', { name: 'Show full report' })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'View Attachment 3' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('img', { name: 'Full size image' })).toHaveAttribute(
+    'src',
+    '/api/portal/files/message-1-1'
+  );
+  await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: 'Play Video 1' }));
+  const player = await screen.findByRole('dialog');
+  expect(player.querySelector('video')).toHaveAttribute('src', '/api/portal/files/video');
+});
+
+it('shows status changes inline and the allowlisted captured details', async () => {
+  server.use(
+    http.get('/api/portal/reports/report', () =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          ...detail,
+          statusEvents: [
+            {
+              id: 'event',
+              from: 'open',
+              to: 'resolved',
+              actorName: null,
+              createdAt: '2026-11-01T12:00:00Z',
+            },
+          ],
+          environment: {
+            pageUrl: 'https://shop.example.test/checkout',
+            browser: 'Chrome 131',
+            os: 'Windows 11',
+            viewport: { width: 1920, height: 1080 },
+            timezone: 'Europe/Berlin',
+          },
+        },
+      })
+    )
+  );
+  mount('/reports/report');
+  const conversation = await screen.findByRole('list', { name: 'Conversation' });
+  const items = within(conversation).getAllByRole('listitem');
+  expect(items.map((item) => item.textContent)).toEqual([
+    expect.stringContaining('Earlier message'),
+    expect.stringContaining('The team moved this from Open to Resolved'),
+    expect.stringContaining('Can you share the browser?'),
+  ]);
+  expect(screen.getByRole('heading', { name: 'Captured with the report' })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'shop.example.test/checkout' })).toHaveAttribute(
+    'href',
+    'https://shop.example.test/checkout'
+  );
+  for (const text of ['Chrome 131', 'Windows 11', '1920 × 1080', 'Europe/Berlin'])
+    expect(screen.getByText(text)).toBeVisible();
+});
+
+it('shows a captured address that is not a web page as plain text', async () => {
+  server.use(
+    http.get('/api/portal/reports/report', () =>
+      HttpResponse.json({
+        success: true,
+        report: {
+          ...detail,
+          environment: {
+            pageUrl: 'javascript:alert(1)',
+            browser: null,
+            os: null,
+            viewport: null,
+            timezone: null,
+          },
+        },
+      })
+    )
+  );
+  mount('/reports/report');
+  expect(await screen.findByText('javascript:alert(1)')).toBeVisible();
+  expect(screen.queryByRole('link', { name: /alert/ })).not.toBeInTheDocument();
+});
+
+it('expands and collapses the original report on narrow screens', async () => {
+  mount('/reports/report');
+  const user = userEvent.setup();
+  const toggle = await screen.findByRole('button', { name: 'Show full report' });
+  await user.click(toggle);
+  expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  );
+  await user.click(screen.getByRole('button', { name: 'Show less' }));
+  expect(screen.getByRole('button', { name: 'Show full report' })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  );
+});
+
+it('hides captured details when the report has none', async () => {
+  mount('/reports/report');
+  await screen.findByRole('heading', { name: detail.title });
+  expect(
+    screen.queryByRole('heading', { name: 'Captured with the report' })
+  ).not.toBeInTheDocument();
+});
+
+it('switches the global email preference from the report page', async () => {
+  const updates: unknown[] = [];
+  server.use(
+    http.patch('/api/portal/me', async ({ request }) => {
+      const body = (await request.json()) as Partial<PortalMe>;
+      updates.push(body);
+      reporter = { ...reporter, ...body };
+      return HttpResponse.json({ success: true, reporter });
+    })
+  );
+  mount('/reports/report');
+  const toggle = await screen.findByRole('switch', { name: 'Email notifications' });
+  expect(toggle).toBeChecked();
+  await userEvent.click(toggle);
+  await waitFor(() => expect(updates).toEqual([{ emailUpdates: false }]));
+  await waitFor(() => expect(toggle).not.toBeChecked());
+});
+
+it('persists the theme choice from the account menu', async () => {
+  localStorage.removeItem('bugpin-portal-theme');
+  mount();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Jane' }));
+  const appearance = screen.getByRole('menuitem', { name: 'Appearance' });
+  appearance.focus();
+  await user.keyboard('{ArrowRight}');
+  await user.click(await screen.findByRole('menuitemradio', { name: 'Dark' }));
+  expect(document.documentElement).toHaveClass('dark');
+  expect(localStorage.getItem('bugpin-portal-theme')).toBe('dark');
+  cleanup();
+  mount();
+  await screen.findByRole('button', { name: 'Jane' });
+  expect(document.documentElement).toHaveClass('dark');
+});
+
+it('links the BugPin footer unless white-label hides it', async () => {
+  mount();
+  const footer = await screen.findByRole('contentinfo');
+  expect(footer).toHaveTextContent('Powered by BugPin');
+  expect(within(footer).getByRole('link', { name: 'BugPin' })).toHaveAttribute(
+    'href',
+    'https://bugpin.io'
+  );
 });
 
 it('replaces refused CLOSED streams with capped backoff and resets the delay after recovery', async () => {
@@ -894,4 +1187,22 @@ it('retries session validation before replacing a closed stream when validation 
     cleanup();
     vi.useRealTimers();
   }
+});
+
+it('offers the theme switch in the header before sign-in', async () => {
+  localStorage.removeItem('bugpin-portal-theme');
+  server.use(
+    http.get('/api/portal/me', () =>
+      HttpResponse.json({ success: false, error: 'UNAUTHORIZED' }, { status: 401 })
+    )
+  );
+  mount('/login');
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Appearance' }));
+  await user.click(await screen.findByRole('menuitemradio', { name: 'Dark' }));
+  expect(document.documentElement).toHaveClass('dark');
+  await user.click(screen.getByRole('button', { name: 'Appearance' }));
+  await user.click(await screen.findByRole('menuitemradio', { name: 'Light' }));
+  expect(document.documentElement).toHaveClass('light');
+  expect(localStorage.getItem('bugpin-portal-theme')).toBe('light');
 });

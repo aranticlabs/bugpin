@@ -35,17 +35,17 @@ function mockOverview(initial: { prerequisites?: string[]; claimableReports?: nu
   return { claims };
 }
 
-const enableLabel = 'Let reporters see their feedback';
-const feedbackLabel = 'Allow new feedback from the portal';
+const enableLabel = 'Let reporters see their reports';
+const reportsLabel = 'Allow new reports from the portal';
 
 describe('ReporterPortalDefaults', () => {
   it('renders both switches reflecting the saved defaults', async () => {
-    mockSettingsServer({ reporterPortal: { enabled: true, allowNewFeedback: false } });
+    mockSettingsServer({ reporterPortal: { enabled: true, allowNewReports: false } });
     mockOverview();
     renderWithProviders(<ReporterPortalDefaults />);
 
     expect(await screen.findByLabelText(enableLabel)).toBeChecked();
-    expect(screen.getByLabelText(feedbackLabel)).not.toBeChecked();
+    expect(screen.getByLabelText(reportsLabel)).not.toBeChecked();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
   });
 
@@ -56,19 +56,19 @@ describe('ReporterPortalDefaults', () => {
     renderWithProviders(<ReporterPortalDefaults />);
 
     await user.click(await screen.findByLabelText(enableLabel));
-    await user.click(screen.getByLabelText(feedbackLabel));
+    await user.click(screen.getByLabelText(reportsLabel));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() =>
       expect(settingsServer.puts).toEqual([
-        { reporterPortal: { enabled: true, allowNewFeedback: true } },
+        { reporterPortal: { enabled: true, allowNewReports: true } },
       ])
     );
   });
 
-  it('turns new feedback off together with the portal', async () => {
+  it('turns new reports off together with the portal', async () => {
     const settingsServer = mockSettingsServer({
-      reporterPortal: { enabled: true, allowNewFeedback: true },
+      reporterPortal: { enabled: true, allowNewReports: true },
     });
     mockOverview();
     const user = userEvent.setup();
@@ -79,7 +79,7 @@ describe('ReporterPortalDefaults', () => {
 
     await waitFor(() =>
       expect(settingsServer.puts).toEqual([
-        { reporterPortal: { enabled: false, allowNewFeedback: false } },
+        { reporterPortal: { enabled: false, allowNewReports: false } },
       ])
     );
   });
@@ -99,7 +99,7 @@ describe('ReporterPortalDefaults', () => {
   });
 
   it('keeps the portal switch usable for turning it off when prerequisites are missing', async () => {
-    mockSettingsServer({ reporterPortal: { enabled: true, allowNewFeedback: false } });
+    mockSettingsServer({ reporterPortal: { enabled: true, allowNewReports: false } });
     mockOverview({ prerequisites: ['smtp'] });
     renderWithProviders(<ReporterPortalDefaults />);
 

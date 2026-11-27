@@ -35,7 +35,7 @@ export const portalSubmissionsService = {
     const sizeMb = Math.max(
       0,
       ...projects.value
-        .filter((p) => p.allowNewFeedback)
+        .filter((p) => p.allowNewReports)
         .map((p) => Math.max(p.maxImageMb, p.maxVideoMb))
     );
     const settings = await settingsCacheService.getAll();
@@ -57,7 +57,7 @@ export const portalSubmissionsService = {
     files: MessageUpload[] = []
   ): Promise<Result<PortalReportDetail>> {
     const parsed = portalSubmissionSchema.safeParse(input);
-    if (!parsed.success) return Result.fail('Invalid feedback request', 'VALIDATION_ERROR');
+    if (!parsed.success) return Result.fail('Invalid report request', 'VALIDATION_ERROR');
     if (files.length > MAX_MESSAGE_FILES)
       return Result.fail('Attach at most 5 image or video files', 'INVALID_FILE');
     const { projectId, title, description } = parsed.data;
@@ -230,14 +230,14 @@ export const portalSubmissionsService = {
         .catch(() => logger.warn('Failed to queue report sync', { reportId: id }));
       return await portalReportsService.detail(id, { kind: 'reporter', reporterId });
     } catch (error) {
-      logger.error('Failed to save portal feedback', error, { reportId: id });
-      return Result.fail('Failed to save feedback', 'SUBMISSION_WRITE_FAILED');
+      logger.error('Failed to save portal report', error, { reportId: id });
+      return Result.fail('Failed to save report', 'SUBMISSION_WRITE_FAILED');
     } finally {
       releaseVideo?.();
       if (!committed)
         for (const file of staged) {
           if (!(await deleteFile(file.path)))
-            logger.error('Failed to discard staged feedback file', { path: file.path });
+            logger.error('Failed to discard staged report file', { path: file.path });
         }
     }
   },

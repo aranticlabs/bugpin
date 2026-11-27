@@ -33,7 +33,7 @@ beforeEach(async () => {
   );
   project = await projectsRepo.create({
     name: 'Portal project',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   spyOn(notificationsService, 'notifyNewReport').mockResolvedValue(undefined);
   spyOn(notificationsService, 'notifyReporterSubmission').mockResolvedValue(undefined);
@@ -79,7 +79,7 @@ it('attaches widget reports across enabled projects after verified login even wi
   expect((await reportsRepo.findById(reportId))!.reporterId).toBeUndefined();
   const secondProject = await projectsRepo.create({
     name: 'Second project',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   const secondReport = await reportsRepo.create({
     projectId: secondProject.id,
@@ -123,7 +123,7 @@ it('attaches widget reports across enabled projects after verified login even wi
 
 it('does not make disabled, anonymous, or manually created reports claimable', async () => {
   await projectsRepo.update(project.id, {
-    settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: false, allowNewReports: false } },
   });
   const disabled = Result.unwrap(
     await reportsService.create({
@@ -134,7 +134,7 @@ it('does not make disabled, anonymous, or manually created reports claimable', a
     })
   );
   await projectsRepo.update(project.id, {
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   const anonymous = Result.unwrap(
     await reportsService.create({
@@ -168,7 +168,7 @@ it('leaves claimability intact while disabled and attaches on a later login afte
     claimableEmail: 'jane@example.com',
   });
   await projectsRepo.update(project.id, {
-    settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: false, allowNewReports: false } },
   });
   const first = login();
   expect(first.attachedReportCount).toBe(0);
@@ -176,7 +176,7 @@ it('leaves claimability intact while disabled and attaches on a later login afte
   expect(reporterAuthService.validateSession(first.sessionSecret).success).toBe(true);
   expect(reporterOwnershipRepo.canAccess(report.id, first.reporter.id)).toBe(false);
   await projectsRepo.update(project.id, {
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   expect(login().attachedReportCount).toBe(1);
   expect(reporterOwnershipRepo.canAccess(report.id, first.reporter.id)).toBe(true);

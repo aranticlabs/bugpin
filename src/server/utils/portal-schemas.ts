@@ -1,10 +1,18 @@
 import { z } from 'zod';
 import { REPORT_STATUSES, SUPPORTED_LOCALES } from '@shared/types';
+import { PORTAL_REPORT_SORTS } from '@shared/portal-types';
 
 export const portalReportQuerySchema = z
   .object({
     projectId: z.string().min(1).max(200).optional(),
     status: z.enum(REPORT_STATUSES).optional(),
+    q: z
+      .string()
+      .trim()
+      .max(200)
+      .transform((value) => value || undefined)
+      .optional(),
+    sort: z.enum(PORTAL_REPORT_SORTS).default('updated'),
     groupByStatus: z
       .enum(['true', 'false'])
       .transform((value) => value === 'true')
@@ -27,7 +35,8 @@ export type PortalReportQuery = z.output<typeof portalReportQuerySchema>;
 
 export const portalCursorSchema = z
   .object({
-    updatedAt: z
+    sort: z.enum(PORTAL_REPORT_SORTS),
+    at: z
       .string()
       .max(40)
       .refine((value) => Number.isFinite(Date.parse(value))),

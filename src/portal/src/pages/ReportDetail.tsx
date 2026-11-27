@@ -1,12 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@shared-ui/components/ui/card';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@shared-ui/components/ui/collapsible';
+import { ArrowLeft } from 'lucide-react';
 import { ReportStatusLabel } from '@shared-ui/lib/status';
 import { Button } from '@shared-ui/components/ui/button';
 import { portalApi } from '../api/reports';
@@ -14,11 +9,16 @@ import { PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { useProjects } from '../hooks/useProjects';
-import { FilePreview } from '../components/FilePreview';
-import { PlainText } from '../components/PlainText';
+import { useIsWide } from '../hooks/useIsWide';
+import { relativeTime } from '../lib/time';
 import { Composer } from '../components/Composer';
 import { QueryState } from '../components/QueryState';
 import { AuthCard } from '../components/AuthCard';
+import { ReportCard } from '../components/report/ReportCard';
+import { DetailsCard } from '../components/report/DetailsCard';
+import { CapturedDetailsCard } from '../components/report/CapturedDetailsCard';
+import { NotificationsCard } from '../components/report/NotificationsCard';
+import { Conversation } from '../components/report/Conversation';
 
 export function ReportDetail() {
   const { id = '' } = useParams();
@@ -26,6 +26,7 @@ export function ReportDetail() {
   const auth = useAuth();
   const projects = useProjects();
   const client = useQueryClient();
+  const wide = useIsWide();
   const query = useQuery({
     queryKey: ['portal', 'report', id],
     queryFn: ({ signal }) => portalApi.detail(id, signal),
@@ -33,139 +34,69 @@ export function ReportDetail() {
   useEffect(() => {
     if (query.data) void client.invalidateQueries({ queryKey: ['portal', 'reports'] });
   }, [id, query.dataUpdatedAt, client]);
+  const back = t(auth.operator ? 'teamReports' : 'myReports');
   if (query.isPending) return <QueryState loading />;
   if (query.isError)
     return query.error instanceof PortalApiError && query.error.status === 404 ? (
-      <div role="status">
+      <div role="status" className="flex flex-1 flex-col">
         <AuthCard title={t('notFound')}>
-          <Link to="/reports">{t(auth.operator ? 'teamFeedback' : 'myFeedback')}</Link>
+          <Link to="/reports" className="underline">
+            {back}
+          </Link>
         </AuthCard>
       </div>
     ) : (
       <QueryState retry={() => void query.refetch()} />
     );
   const report = query.data;
-  const allFiles = [...report.files, ...report.messages.flatMap((message) => message.files)];
-  const date = (value: string) => new Date(value).toLocaleString(locale);
-  const facts = (
-    <div className="space-y-5 p-4">
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-        <dt>{t('status')}</dt>
-        <dd>
-          <ReportStatusLabel status={report.status} label={t(report.status)} />
-        </dd>
-        <dt>{t('project')}</dt>
-        <dd className="break-words">{report.project.name}</dd>
-        <dt>{t('assignee')}</dt>
-        <dd className="break-words">{report.assigneeName ?? t('unassigned')}</dd>
-        <dt>{t('created')}</dt>
-        <dd>
-          <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
-        </dd>
-        <dt>{t('updated')}</dt>
-        <dd>
-          <time dateTime={report.updatedAt}>{date(report.updatedAt)}</time>
-        </dd>
-      </dl>
-      {allFiles.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="font-semibold">{t('files')}</h2>
-          <FilePreview files={allFiles} context={t('reportDetails')} />
-        </div>
-      )}
-    </div>
+  const composer = (
+    <Composer
+      key={id}
+      reportId={id}
+      refreshedAt={query.dataUpdatedAt}
+      project={projects.data?.find((project) => project.id === report.project.id)}
+    />
+  );
+  const sideCards = (
+    <>
+      <DetailsCard report={report} />
+      {report.environment && <CapturedDetailsCard environment={report.environment} />}
+      <NotificationsCard />
+      {projects.isError && <QueryState retry={() => void projects.refetch()} />}
+    </>
   );
   return (
     <div className="min-w-0 space-y-5">
-      <Button asChild variant="link" className="px-0 underline dark:text-foreground">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
         <Link to="/reports">
-          <span aria-hidden="true">← </span>
-          {t(auth.operator ? 'teamFeedback' : 'myFeedback')}
+          <ArrowLeft />
+          {back}
         </Link>
       </Button>
-      <h1 className="break-words text-2xl font-semibold [overflow-wrap:anywhere]">
-        {report.title}
-      </h1>
-      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-4">
-          <Collapsible className="rounded-lg border lg:hidden">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full justify-between">
-                {t('reportDetails')}
-                <span aria-hidden="true">▾</span>
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>{facts}</CollapsibleContent>
-          </Collapsible>
-          <Card>
-            <CardHeader>
-              <CardTitle role="heading" aria-level={2}>
-                {t('originalReport')}
-              </CardTitle>
-              <time className="text-sm text-muted-foreground" dateTime={report.createdAt}>
-                {date(report.createdAt)}
-              </time>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {report.description && <PlainText text={report.description} />}
-              <FilePreview files={report.files} context={t('originalReport')} />
-            </CardContent>
-          </Card>
-          <ol className="space-y-4" aria-label={t('conversation')}>
-            {report.messages.map((message, index) => (
-              <li key={message.id}>
-                <Card className={message.isOwn ? 'border-primary/30' : ''}>
-                  <CardHeader>
-                    <CardTitle role="heading" aria-level={2}>
-                      {message.isPreviousReporter ? t('previousReporter') : message.authorName}
-                    </CardTitle>
-                    <time className="text-sm text-muted-foreground" dateTime={message.createdAt}>
-                      {date(message.createdAt)}
-                    </time>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <PlainText text={message.body} />
-                    <FilePreview
-                      files={message.files}
-                      context={`${t('conversation')} ${index + 1}`}
-                    />
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ol>
-          {report.canReply ? (
-            <Composer
-              key={id}
-              reportId={id}
-              refreshedAt={query.dataUpdatedAt}
-              project={projects.data?.find((project) => project.id === report.project.id)}
-            />
-          ) : (
-            <Card className="space-y-3 p-4">
-              <p role="status">
-                {t(
-                  auth.operator
-                    ? 'teamReadOnlyReply'
-                    : report.status === 'closed'
-                      ? 'reportClosed'
-                      : 'messagingOff'
-                )}
-              </p>
-              {report.status === 'closed' && report.canSubmitNewFeedback && (
-                <Button asChild>
-                  <Link to={`/new?projectId=${encodeURIComponent(report.project.id)}`}>
-                    {t('newFeedback')}
-                  </Link>
-                </Button>
-              )}
-            </Card>
-          )}
-          {projects.isError && <QueryState retry={() => void projects.refetch()} />}
+      <div className="space-y-2">
+        <h1 className="break-words text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
+          {report.title}
+        </h1>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <ReportStatusLabel status={report.status} label={t(report.status)} />
+          <span className="break-words">{report.project.name}</span>
+          <span>{t('openedAgo', { time: relativeTime(report.createdAt, locale) })}</span>
+        </p>
+      </div>
+      {/* One tree for every width keeps the reply draft when the layout changes */}
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr] lg:gap-x-6">
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <ReportCard
+            key={report.id}
+            report={report}
+            collapsible={!wide}
+            defaultCollapsed={report.messages.length > 0}
+          />
         </div>
-        <aside className="hidden min-w-0 lg:block">
-          <Card>{facts}</Card>
-        </aside>
+        <div className="relative min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[30rem]">
+          <Conversation report={report} composer={composer} panel={wide} />
+        </div>
+        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">{sideCards}</div>
       </div>
     </div>
   );

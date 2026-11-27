@@ -50,13 +50,6 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       link.href = url.href;
     }
   }, [data]);
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => document.documentElement.classList.toggle('dark', media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
   return <BrandingContext.Provider value={data}>{children}</BrandingContext.Provider>;
 }
 

@@ -168,7 +168,7 @@ async function credential(caller: Caller): Promise<string> {
       'matrix-report',
     ]);
     getDb().run('UPDATE projects SET settings = ? WHERE id = ?', [
-      JSON.stringify({ reporterPortal: { enabled: caller === 'owner', allowNewFeedback: true } }),
+      JSON.stringify({ reporterPortal: { enabled: caller === 'owner', allowNewReports: true } }),
       'matrix-project',
     ]);
   }

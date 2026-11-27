@@ -26,7 +26,7 @@ test('requests a real SMTP login link, previews without a session, then exchange
     (await context.cookies()).some((cookie) => cookie.name === 'bugpin_reporter_session')
   ).toBe(false);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
   const cookie = (await context.cookies()).find((item) => item.name === 'bugpin_reporter_session');
   expect(cookie).toMatchObject({ domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' });
   await page.getByRole('button', { name: 'login', exact: true }).click();
@@ -72,7 +72,7 @@ test('resends a real widget confirmation link after expiry without consuming it 
   await expect.poll(() => previews).toBe(2);
   expect(new URL(page.url()).hash.length).toBe(0);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
 });
 
 test('resends an expired requested token without consuming it on preview', async ({
@@ -91,7 +91,7 @@ test('resends an expired requested token without consuming it on preview', async
   expect(next).not.toBe(link);
   await page.goto(next);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
 });
 
 test('isolates cookies and routes between hosts and rejects unknown hosts', async ({
@@ -114,7 +114,7 @@ test('isolates cookies and routes between hosts and rejects unknown hosts', asyn
   await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
   await page.goto(await runtime.waitForLink('isolation@example.test'));
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
   const staffCookies = await context.cookies(runtime.staffOrigin);
   const portalCookies = await context.cookies(runtime.portalOrigin);
   expect(staffCookies.some((cookie) => cookie.name === 'bugpin_reporter_session')).toBe(false);

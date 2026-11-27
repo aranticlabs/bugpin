@@ -50,7 +50,7 @@ beforeEach(async () => {
     await projectsRepo.create({
       name: 'Owned project',
       settings: {
-        reporterPortal: { enabled: true, allowNewFeedback: true },
+        reporterPortal: { enabled: true, allowNewReports: true },
         defaultAssigneeUserId: 'staff',
       },
     })
@@ -221,13 +221,13 @@ it('rejects forged identity, control fields, unknown projects, and projects with
   clearAllRateLimits();
   const other = await projectsRepo.create({
     name: 'No ownership',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: true } },
   });
   for (const id of ['unknown', other.id])
     expect((await submit({ projectId: id })).status).toBe(404);
   for (const reporterPortal of [
-    { enabled: false, allowNewFeedback: true },
-    { enabled: true, allowNewFeedback: false },
+    { enabled: false, allowNewReports: true },
+    { enabled: true, allowNewReports: false },
   ]) {
     await project({ reporterPortal });
     expect((await submit()).status).toBe(404);
@@ -307,13 +307,13 @@ it('returns closed, messaging-disabled, unauthorized, and missing errors without
   expect((await reply()).status).toBe(409);
   await reportsRepo.update(reportId, { status: 'open' });
   await project({
-    reporterPortal: { enabled: true, allowNewFeedback: true },
+    reporterPortal: { enabled: true, allowNewReports: true },
     reporterNotifications: { messagingEnabled: false },
   });
   expect((await reply()).status).toBe(403);
-  await project({ reporterPortal: { enabled: false, allowNewFeedback: true } });
+  await project({ reporterPortal: { enabled: false, allowNewReports: true } });
   expect((await reply()).status).toBe(404);
-  await project({ reporterPortal: { enabled: true, allowNewFeedback: true } });
+  await project({ reporterPortal: { enabled: true, allowNewReports: true } });
   reporterOwnershipRepo.setOwner(reportId, null, null);
   expect((await reply()).status).toBe(404);
   getDb().run('UPDATE reporter_sessions SET revoked_at = ? WHERE reporter_id = ?', [
@@ -407,16 +407,16 @@ it('rolls back reports, files, history, and activity when an insert fails', asyn
 
 it('rechecks access and size limits after file staging and leaves no partial report', async () => {
   for (const change of ['ownership', 'allow-new', 'size'] as const) {
-    await project({ reporterPortal: { enabled: true, allowNewFeedback: true } });
+    await project({ reporterPortal: { enabled: true, allowNewReports: true } });
     reporterOwnershipRepo.setOwner(reportId, reporterId, null);
     const upload = image();
     spyOn(upload, 'arrayBuffer').mockImplementation(async () => {
       if (change === 'ownership') reporterOwnershipRepo.setOwner(reportId, null, null);
       if (change === 'allow-new')
-        await project({ reporterPortal: { enabled: true, allowNewFeedback: false } });
+        await project({ reporterPortal: { enabled: true, allowNewReports: false } });
       if (change === 'size')
         await project({
-          reporterPortal: { enabled: true, allowNewFeedback: true },
+          reporterPortal: { enabled: true, allowNewReports: true },
           screenshot: { maxImageUploadSizeMb: 0.000001 },
         });
       return png.buffer.slice(0) as ArrayBuffer;
@@ -461,7 +461,7 @@ it('keeps the reporter daily upload cap atomic across concurrent new feedback an
 
 it('enforces the shared project video budget across feedback and replies', async () => {
   await project({
-    reporterPortal: { enabled: true, allowNewFeedback: true },
+    reporterPortal: { enabled: true, allowNewReports: true },
     screenshot: { maxVideoUploadMbPerDay: 1 },
   });
   const bytes = new Uint8Array(600 * 1024);
@@ -511,7 +511,7 @@ it('normalizes optional descriptions before storing submitted and original conte
 
 it('omits assignment effects when no default assignee is eligible', async () => {
   await project({
-    reporterPortal: { enabled: true, allowNewFeedback: true },
+    reporterPortal: { enabled: true, allowNewReports: true },
     defaultAssigneeUserId: 'staff',
   });
   getDb().run("UPDATE users SET is_active = 0 WHERE id = 'staff'");
@@ -548,7 +548,7 @@ for (const usedBytes of [1024 * 1024, 768 * 1024]) {
   it(`rejects pre-buffer uploads against remaining quota after ${usedBytes} bytes for submissions and replies`, async () => {
     await limits({ uploadMbPerReporterPerDay: 1 });
     await project({
-      reporterPortal: { enabled: true, allowNewFeedback: true },
+      reporterPortal: { enabled: true, allowNewReports: true },
       screenshot: { maxImageUploadSizeMb: 50, maxVideoUploadSizeMb: 100 },
     });
     await filesRepo.create({
@@ -626,7 +626,7 @@ it.each([
   async (quota, error) => {
     await limits({ uploadMbPerReporterPerDay: quota });
     await project({
-      reporterPortal: { enabled: true, allowNewFeedback: true },
+      reporterPortal: { enabled: true, allowNewReports: true },
       screenshot: { maxImageUploadSizeMb: 1, maxVideoUploadSizeMb: 1 },
     });
     const limit = Result.unwrap(await reportMessagesService.uploadBodyLimit(reportId, reporterId));

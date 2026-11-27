@@ -2,7 +2,7 @@ import type { AppSettings, ProjectSettings, ReporterPortalProjectSettings } from
 
 export const DEFAULT_REPORTER_PORTAL: ReporterPortalProjectSettings = {
   enabled: false,
-  allowNewFeedback: false,
+  allowNewReports: false,
 };
 
 /** A project's own Reporter Portal settings, or the instance defaults when it has none */

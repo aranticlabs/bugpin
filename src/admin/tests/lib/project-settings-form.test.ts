@@ -9,9 +9,9 @@ describe('project portal settings updates', () => {
   it.each<ProjectSettings | undefined>([
     undefined,
     {},
-    { reporterPortal: { enabled: false, allowNewFeedback: false } },
-    { reporterPortal: { enabled: true, allowNewFeedback: false } },
-    { reporterPortal: { enabled: true, allowNewFeedback: true } },
+    { reporterPortal: { enabled: false, allowNewReports: false } },
+    { reporterPortal: { enabled: true, allowNewReports: false } },
+    { reporterPortal: { enabled: true, allowNewReports: true } },
   ])('omits an unchanged normalized portal while saving unrelated settings: %j', (saved) => {
     const form = projectSettingsToForm(saved, null);
     const update = buildProjectSettingsUpdate(
@@ -24,11 +24,11 @@ describe('project portal settings updates', () => {
   });
 
   it('includes a changed portal and supports disabling new submissions or the portal', () => {
-    const saved = { reporterPortal: { enabled: true, allowNewFeedback: true } };
+    const saved = { reporterPortal: { enabled: true, allowNewReports: true } };
     const form = projectSettingsToForm(saved, null);
     for (const reporterPortal of [
-      { enabled: true, allowNewFeedback: false },
-      { enabled: false, allowNewFeedback: false },
+      { enabled: true, allowNewReports: false },
+      { enabled: false, allowNewReports: false },
     ])
       expect(
         buildProjectSettingsUpdate(saved, { ...form, reporterPortal }, undefined).reporterPortal
@@ -44,15 +44,15 @@ describe('project portal settings updates', () => {
         {
           ...inherited,
           useCustomReporterPortal: true,
-          reporterPortal: { enabled: true, allowNewFeedback: false },
+          reporterPortal: { enabled: true, allowNewReports: false },
         },
         undefined
       ).reporterPortal
-    ).toEqual({ enabled: true, allowNewFeedback: false });
+    ).toEqual({ enabled: true, allowNewReports: false });
   });
 
   it('clears a portal override so the project inherits the defaults again', () => {
-    const saved = { reporterPortal: { enabled: true, allowNewFeedback: false } };
+    const saved = { reporterPortal: { enabled: true, allowNewReports: false } };
     const form = projectSettingsToForm(saved, null);
     expect(form.useCustomReporterPortal).toBe(true);
     expect(

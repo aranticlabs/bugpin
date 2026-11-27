@@ -165,7 +165,7 @@ export function Settings() {
             <Input
               id="portal-base-url"
               type="url"
-              placeholder="https://feedback.example.com"
+              placeholder="https://portal.example.com"
               {...register('portalBaseUrl')}
               aria-invalid={!!errors.portalBaseUrl}
             />
@@ -176,7 +176,7 @@ export function Settings() {
           <SettingRow
             label="Team Sign-in to the Reporter Portal"
             htmlFor="portal-team-sign-in"
-            description="Lets every BugPin user sign in to the Reporter Portal with their account for a read-only view of reporter feedback. The first sign-in confirms the user's email address."
+            description="Lets every BugPin user sign in to the Reporter Portal with their account for a read-only view of the reports from reporters. The first sign-in confirms the user's email address."
           >
             <Controller
               control={control}

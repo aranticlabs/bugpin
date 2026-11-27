@@ -46,9 +46,9 @@ export function ReporterPortalDefaults() {
   const saved = settings?.reporterPortal ?? DEFAULT_REPORTER_PORTAL;
   const [portal, setPortal] = useState<ReporterPortalProjectSettings>(saved);
   const [confirming, setConfirming] = useState(false);
-  useEffect(() => setPortal(saved), [saved.enabled, saved.allowNewFeedback]);
+  useEffect(() => setPortal(saved), [saved.enabled, saved.allowNewReports]);
   const isDirty =
-    portal.enabled !== saved.enabled || portal.allowNewFeedback !== saved.allowNewFeedback;
+    portal.enabled !== saved.enabled || portal.allowNewReports !== saved.allowNewReports;
   const mutation = useUpdateSettings({ successMessage: 'Reporter Portal defaults saved' });
   const claim = useMutation({
     mutationFn: async () =>

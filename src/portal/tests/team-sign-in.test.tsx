@@ -9,6 +9,7 @@ import { AuthProvider } from '../src/auth/AuthProvider';
 import { takeLoginToken, type LoginToken } from '../src/auth/login-token';
 import { I18nProvider } from '../src/i18n/I18nProvider';
 import { BrandingProvider } from '../src/branding/BrandingProvider';
+import { ThemeProvider } from '@shared-ui/theme/ThemeProvider';
 import { server, TestEventSource } from './setup';
 
 const secret = 'T'.repeat(43);
@@ -41,17 +42,19 @@ function portalConfig(teamSignIn: boolean) {
 function mount(path: string, initialToken: LoginToken | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <I18nProvider>
-          <BrandingProvider>
-            <MemoryRouter initialEntries={[path]}>
-              <App initialToken={initialToken} />
-            </MemoryRouter>
-          </BrandingProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider storageKey="bugpin-portal-theme">
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <I18nProvider>
+            <BrandingProvider>
+              <MemoryRouter initialEntries={[path]}>
+                <App initialToken={initialToken} />
+              </MemoryRouter>
+            </BrandingProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
   return client;
 }
@@ -84,6 +87,8 @@ const reportSummary = {
   createdAt: '2026-11-01T10:00:00Z',
   updatedAt: '2026-11-01T10:00:00Z',
   unread: false,
+  replyCount: 0,
+  latestReply: null,
 };
 
 function teamViewHandlers() {
@@ -92,7 +97,7 @@ function teamViewHandlers() {
       HttpResponse.json({
         success: true,
         projects: [
-          { id: 'project', name: 'Shop', allowNewFeedback: false, maxImageMb: 5, maxVideoMb: 50 },
+          { id: 'project', name: 'Shop', allowNewReports: false, maxImageMb: 5, maxVideoMb: 50 },
         ],
       })
     ),
@@ -103,6 +108,7 @@ function teamViewHandlers() {
         nextCursor: null,
         total: 1,
         unreadCount: 0,
+        statusCounts: { open: 1, in_progress: 0, resolved: 0, closed: 0 },
       })
     ),
     http.get('/api/portal/reports/:id', ({ params }) =>
@@ -115,8 +121,10 @@ function teamViewHandlers() {
           assigneeName: null,
           files: [],
           messages: [],
+          statusEvents: [],
+          environment: null,
           canReply: false,
-          canSubmitNewFeedback: false,
+          canSubmitNewReport: false,
         },
       })
     )
@@ -187,7 +195,7 @@ it('signs in with credentials, then a two-factor code, and lands in the team vie
   await user.type(screen.getByLabelText('Authenticator code'), '123456');
   await user.click(screen.getByRole('button', { name: 'Verify' }));
 
-  expect(await screen.findByRole('heading', { name: 'Reporter feedback' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
   expect(requests).toEqual([
     { email: 'staff@example.com', password: 'secret-password' },
     { challengeToken: 'challenge-1', code: '123456' },
@@ -290,7 +298,7 @@ it('captures the team verification token from the fragment and exchanges it only
   await screen.findByRole('heading', { name: 'Confirm team sign-in for s***@example.com?' });
   expect(exchanges).toBe(0);
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  expect(await screen.findByRole('heading', { name: 'Reporter feedback' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
   expect(exchanges).toBe(1);
 });
 
@@ -317,27 +325,24 @@ it('offers a way back to team sign-in for an expired confirmation link', async (
   expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
 });
 
-it('shows the read-only team view with its banner, heading, and no New feedback button', async () => {
+it('shows the read-only team view with its strip, heading, and no New report button', async () => {
   signedInAsOperator();
   teamViewHandlers();
   mount('/reports');
-  expect(await screen.findByRole('heading', { name: 'Reporter feedback' })).toBeInTheDocument();
-  expect(
-    screen.getByText(
-      'Team view: you see each report as its reporter sees it. This view is read-only.'
-    )
-  ).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
+  expect(screen.getByText('Team view')).toBeInTheDocument();
+  expect(screen.getByText('You see reports as their reporters do. Read-only.')).toBeInTheDocument();
   expect(await screen.findByText('Checkout button is broken')).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: 'My feedback' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'New feedback' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'New feedback' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'My reports' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'New report' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New report' })).not.toBeInTheDocument();
 });
 
 it('redirects /new to the report list in the team view', async () => {
   signedInAsOperator();
   teamViewHandlers();
   mount('/new');
-  expect(await screen.findByRole('heading', { name: 'Reporter feedback' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
 });
 
 it('replaces the reply composer with the read-only notice on a report', async () => {
@@ -345,14 +350,17 @@ it('replaces the reply composer with the read-only notice on a report', async ()
   teamViewHandlers();
   mount('/reports/report-1');
   expect(
-    await screen.findByText('Read-only team view. Reply to the reporter in the Admin Console.')
+    await screen.findByText('Reply to the reporter in the Admin Console.')
   ).toBeInTheDocument();
+  expect(screen.getByText('Read-only team view')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Email notifications' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Reporter feedback' })).toBeInTheDocument();
+  expect(screen.getAllByRole('link', { name: 'All reports' }).length).toBeGreaterThan(0);
 });
 
-it('shows only Sign out in the profile menu', async () => {
+it('shows only Appearance and Sign out in the profile menu', async () => {
   signedInAsOperator();
   teamViewHandlers();
   mount('/reports');
@@ -360,7 +368,7 @@ it('shows only Sign out in the profile menu', async () => {
   await user.click(await screen.findByRole('button', { name: /Sam Staff/ }));
   const menu = await screen.findByRole('menu');
   const items = within(menu).getAllByRole('menuitem');
-  expect(items.map((item) => item.textContent)).toEqual(['Sign out']);
+  expect(items.map((item) => item.textContent)).toEqual(['Appearance', 'Sign out']);
   expect(within(menu).queryAllByRole('menuitemcheckbox')).toHaveLength(0);
   expect(within(menu).queryAllByRole('menuitemradio')).toHaveLength(0);
 });
@@ -390,7 +398,7 @@ it('forces English in the team view even when the browser language is German', a
   signedInAsOperator();
   teamViewHandlers();
   mount('/reports');
-  expect(await screen.findByRole('heading', { name: 'Reporter feedback' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'All reports' })).toBeInTheDocument();
   expect(document.documentElement.lang).toBe('en');
 });
 
@@ -410,7 +418,7 @@ it('does not open an events stream in the team view', async () => {
   signedInAsOperator();
   teamViewHandlers();
   mount('/reports');
-  await screen.findByRole('heading', { name: 'Reporter feedback' });
+  await screen.findByRole('heading', { name: 'All reports' });
   await screen.findByText('Checkout button is broken');
   expect(TestEventSource.instances).toHaveLength(0);
 });
@@ -419,6 +427,8 @@ it('still keeps German for a signed-in reporter, so the forced English is specif
   server.use(http.get('/api/portal/me', () => HttpResponse.json({ success: true, reporter })));
   mount('/reports');
   await waitFor(() => expect(document.documentElement.lang).toBe('de'));
-  expect(screen.queryByRole('heading', { name: 'Reporter feedback' })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Team view: you see each report/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'All reports' })).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('You see reports as their reporters do. Read-only.')
+  ).not.toBeInTheDocument();
 });

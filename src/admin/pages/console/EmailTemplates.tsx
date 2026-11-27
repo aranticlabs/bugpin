@@ -44,7 +44,7 @@ const TEMPLATE_TYPES: { value: EmailTemplateType; label: string; description: st
   {
     value: 'reporterActivity',
     label: 'Reporter Activity',
-    description: 'Sent to staff when a reporter replies or submits feedback',
+    description: 'Sent to staff when a reporter replies or submits a report',
   },
   {
     value: 'newReport',
@@ -571,10 +571,10 @@ export function EmailTemplates() {
                         html.includes('report.portalUrl')) && (
                       <p role="status" className="text-sm text-muted-foreground">
                         {selectedType === 'reporterConfirmation'
-                          ? 'This confirmation template has no reporter.loginUrl. Add it so reporters can sign in to follow their feedback.'
+                          ? 'This confirmation template has no reporter.loginUrl. Add it so reporters can sign in to follow their reports.'
                           : selectedType === 'reporterLogin'
                             ? 'This login template has no reporter.loginUrl. Add it so reporters can sign in.'
-                            : 'This update template has no reporter.updateUrl or report.portalUrl. Add a link so reporters can follow their feedback.'}
+                            : 'This update template has no reporter.updateUrl or report.portalUrl. Add a link so reporters can follow their reports.'}
                       </p>
                     )}
                   <VariablesReference variables={availableVariables} />

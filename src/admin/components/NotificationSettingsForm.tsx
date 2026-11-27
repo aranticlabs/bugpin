@@ -185,7 +185,7 @@ export function NotificationSettingsForm({
                   Reporter replies
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Notify when reporters reply or submit feedback
+                  Notify when reporters reply or submit reports
                 </p>
               </div>
               <Switch

@@ -47,7 +47,7 @@ beforeEach(async () => {
     await projectsRepo.create({
       name: 'Owned project',
       settings: {
-        reporterPortal: { enabled: true, allowNewFeedback: true },
+        reporterPortal: { enabled: true, allowNewReports: true },
       },
     })
   ).id;
@@ -56,22 +56,41 @@ afterEach(() => close());
 
 async function report(
   reporterId = owner.id,
-  options: { projectId?: string; status?: ReportStatus; updatedAt?: string } = {}
+  options: {
+    projectId?: string;
+    status?: ReportStatus;
+    updatedAt?: string;
+    createdAt?: string;
+    title?: string;
+    description?: string;
+  } = {}
 ) {
   const item = await reportsRepo.create({
     projectId: options.projectId ?? projectId,
-    title: `Report ${crypto.randomUUID()}`,
-    description: 'Original submitted description',
+    title: options.title ?? `Report ${crypto.randomUUID()}`,
+    description: options.description ?? 'Original submitted description',
     priority: 'highest',
     assignedTo: 'staff',
     reporterEmail: 'private-contact@example.com',
     reporterName: 'Private contact',
-    metadata: { timestamp: past, url: 'https://secret.example.com', consoleErrors: [] },
+    metadata: {
+      timestamp: past,
+      url: 'https://shop.example.com/checkout?token=secret-query#secret-fragment',
+      title: 'Private page title',
+      referrer: 'https://referrer.example.com',
+      browser: { name: 'Chrome', version: '131', userAgent: 'Private user agent' },
+      device: { type: 'desktop', os: 'Windows', osVersion: '11' },
+      viewport: { width: 1920, height: 1080, devicePixelRatio: 2 },
+      timezone: 'Europe/Berlin',
+      pageLoadTime: 1234,
+      consoleErrors: [{ type: 'error', message: 'Private console error', timestamp: past }],
+    },
   });
   reporterOwnershipRepo.setOwner(item.id, reporterId, null);
-  getDb().run('UPDATE reports SET status = ?, updated_at = ? WHERE id = ?', [
+  getDb().run('UPDATE reports SET status = ?, updated_at = ?, created_at = ? WHERE id = ?', [
     options.status ?? 'open',
     options.updatedAt ?? past,
+    options.createdAt ?? past,
     item.id,
   ]);
   return item;
@@ -121,17 +140,17 @@ it('lists only enabled owned projects with upload limits and submission availabi
   await report(owner.id, { projectId: disabled.id });
   const foreign = await projectsRepo.create({
     name: 'Other project',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: true } },
   });
   await report(other.id, { projectId: foreign.id });
   const readOnly = await projectsRepo.create({
     name: 'Read only',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   await report(owner.id, { projectId: readOnly.id });
   await projectsRepo.update(projectId, {
     settings: {
-      reporterPortal: { enabled: true, allowNewFeedback: true },
+      reporterPortal: { enabled: true, allowNewReports: true },
       screenshot: { maxImageUploadSizeMb: 3, maxVideoUploadSizeMb: 7 },
     },
   });
@@ -141,13 +160,13 @@ it('lists only enabled owned projects with upload limits and submission availabi
   expect(body.projects[0]).toEqual({
     id: projectId,
     name: 'Owned project',
-    allowNewFeedback: true,
+    allowNewReports: true,
     maxImageMb: 3,
     maxVideoMb: 7,
   });
   const settings = await settingsCacheService.getAll();
   expect(body.projects[1]).toMatchObject({
-    allowNewFeedback: false,
+    allowNewReports: false,
     maxImageMb: settings.screenshot.maxImageUploadSizeMb,
     maxVideoMb: settings.screenshot.maxVideoUploadSizeMb,
   });
@@ -173,7 +192,17 @@ it('paginates chronologically with ID ties and reports full filtered totals and 
   expect(third.unreadCount).toBe(3);
   expect(third.nextCursor).toBeNull();
   expect(Object.keys(first.reports[0]).sort()).toEqual(
-    ['id', 'title', 'status', 'project', 'createdAt', 'updatedAt', 'unread'].sort()
+    [
+      'id',
+      'title',
+      'status',
+      'project',
+      'createdAt',
+      'updatedAt',
+      'unread',
+      'replyCount',
+      'latestReply',
+    ].sort()
   );
   expect((await list('?projectId=unknown')).total).toBe(0);
 });
@@ -245,10 +274,19 @@ it('keeps detail DTOs allowlisted and separates original files from visible mess
       'updatedAt',
       'files',
       'messages',
+      'statusEvents',
+      'environment',
       'canReply',
-      'canSubmitNewFeedback',
+      'canSubmitNewReport',
     ].sort()
   );
+  expect(result.environment).toEqual({
+    pageUrl: 'https://shop.example.com/checkout',
+    browser: 'Chrome 131',
+    os: 'Windows 11',
+    viewport: { width: 1920, height: 1080 },
+    timezone: 'Europe/Berlin',
+  });
   expect(Object.keys(result.messages[0]).sort()).toEqual(
     [
       'id',
@@ -266,7 +304,16 @@ it('keeps detail DTOs allowlisted and separates original files from visible mess
   );
   expect(JSON.stringify(result)).not.toContain('staff-secret@example.com');
   expect(JSON.stringify(result)).not.toContain('private-contact@example.com');
-  expect(JSON.stringify(result)).not.toContain('https://secret.example.com');
+  for (const secret of [
+    'secret-query',
+    'secret-fragment',
+    'Private page title',
+    'referrer.example.com',
+    'Private user agent',
+    'Private console error',
+    '1234',
+  ])
+    expect(JSON.stringify(result)).not.toContain(secret);
   expect(JSON.stringify(result)).not.toContain(hiddenFile.id);
 });
 
@@ -321,14 +368,14 @@ it('computes reply availability from status and effective messaging settings', a
   expect((await detail(item.id)).canReply).toBe(false);
   await projectsRepo.update(projectId, {
     settings: {
-      reporterPortal: { enabled: true, allowNewFeedback: false },
+      reporterPortal: { enabled: true, allowNewReports: false },
       reporterNotifications: { messagingEnabled: true },
     },
   });
   expect((await detail(item.id)).canReply).toBe(true);
-  expect((await detail(item.id)).canSubmitNewFeedback).toBe(false);
+  expect((await detail(item.id)).canSubmitNewReport).toBe(false);
   await projectsRepo.update(projectId, {
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: true }, notifyReporter: false },
+    settings: { reporterPortal: { enabled: true, allowNewReports: true }, notifyReporter: false },
   });
   expect((await detail(item.id)).canReply).toBe(false);
 });
@@ -388,8 +435,8 @@ it('removes disabled, inactive, and deleted projects from every read without end
   const item = await report();
   const uploaded = await file(item.id);
   for (const update of [
-    { settings: { reporterPortal: { enabled: false, allowNewFeedback: false } } },
-    { settings: { reporterPortal: { enabled: true, allowNewFeedback: true } }, isActive: false },
+    { settings: { reporterPortal: { enabled: false, allowNewReports: false } } },
+    { settings: { reporterPortal: { enabled: true, allowNewReports: true } }, isActive: false },
     { isActive: true, deletedAt: new Date().toISOString() },
   ]) {
     if ('deletedAt' in update)
@@ -421,15 +468,20 @@ it('rejects invalid limits, statuses, board cursors, and malformed cursor payloa
   ]) {
     expect((await request(`/reports${query}`)).status).toBe(400);
   }
-  for (const value of [
-    { updatedAt: 'bad', id: item.id },
-    { updatedAt: past, id: '' },
-    { updatedAt: past, id: item.id, extra: true },
-    null,
-  ]) {
+  for (const [value, sort] of [
+    [{ sort: 'updated', at: 'bad', id: item.id }, 'updated'],
+    [{ sort: 'updated', at: past, id: '' }, 'updated'],
+    [{ sort: 'updated', at: past, id: item.id, extra: true }, 'updated'],
+    [{ updatedAt: past, id: item.id }, 'updated'],
+    [{ sort: 'newest', at: past, id: item.id }, 'updated'],
+    [{ sort: 'updated', at: past, id: item.id }, 'oldest'],
+    [null, 'updated'],
+  ] as const) {
     const cursor = Buffer.from(JSON.stringify(value)).toString('base64url');
-    expect((await request(`/reports?cursor=${cursor}`)).status).toBe(400);
+    expect((await request(`/reports?sort=${sort}&cursor=${cursor}`)).status).toBe(400);
   }
+  for (const query of ['?sort=priority', `?q=${'x'.repeat(201)}`])
+    expect((await request(`/reports${query}`)).status).toBe(400);
   expect((await list('?limit=50')).total).toBe(1);
 });
 
@@ -443,7 +495,7 @@ it('applies project and status filters to complete counts while preserving chron
   staffMessage(resolved.id);
   const secondProject = await projectsRepo.create({
     name: 'Second',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   const second = await report(owner.id, {
     projectId: secondProject.id,
@@ -581,4 +633,210 @@ it('returns the same not-found response for GET and HEAD when an original or cha
       }
     }
   }
+});
+
+it('searches titles and original descriptions literally and sorts with matching cursors', async () => {
+  const titled = await report(owner.id, {
+    title: 'Checkout 100% broken',
+    createdAt: '2026-01-03T00:00:00.000Z',
+    updatedAt: '2026-01-04T00:00:00.000Z',
+  });
+  const described = await report(owner.id, {
+    title: 'Payment page',
+    description: 'The under_score field is empty',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-06T00:00:00.000Z',
+  });
+  const plain = await report(owner.id, {
+    title: 'Profile page',
+    createdAt: '2026-01-02T00:00:00.000Z',
+    updatedAt: '2026-01-05T00:00:00.000Z',
+  });
+  getDb().run('UPDATE reports SET description = ? WHERE id = ?', [
+    'Staff edit mentions checkout',
+    plain.id,
+  ]);
+  await report(other.id, { title: 'Checkout for someone else' });
+  expect((await list('?q=checkout')).reports.map((r) => r.id)).toEqual([titled.id]);
+  expect((await list('?q=100%25')).reports.map((r) => r.id)).toEqual([titled.id]);
+  expect((await list('?q=%25')).reports.map((r) => r.id)).toEqual([titled.id]);
+  expect((await list('?q=under_score')).reports.map((r) => r.id)).toEqual([described.id]);
+  expect((await list('?q=_')).reports.map((r) => r.id)).toEqual([described.id]);
+  expect((await list('?q=%20%20')).total).toBe(3);
+  const orders = {
+    updated: [described.id, plain.id, titled.id],
+    newest: [titled.id, plain.id, described.id],
+    oldest: [described.id, plain.id, titled.id],
+  };
+  for (const [sort, expected] of Object.entries(orders)) {
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: PortalReportList = await list(
+        `?sort=${sort}&limit=1${cursor ? `&cursor=${cursor}` : ''}`
+      );
+      ids.push(...page.reports.map((r) => r.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(ids).toEqual(expected);
+  }
+  const board = (await (
+    await request('/reports?groupByStatus=true&q=payment')
+  ).json()) as PortalReportBoard;
+  expect(board.columns.open.reports.map((r) => r.id)).toEqual([described.id]);
+});
+
+it('counts reports per status for the project and search filters but not the status filter', async () => {
+  await report(owner.id, { title: 'Alpha one' });
+  await report(owner.id, { title: 'Alpha two', status: 'resolved' });
+  await report(owner.id, { title: 'Beta', status: 'resolved' });
+  const secondProject = await projectsRepo.create({
+    name: 'Second',
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
+  });
+  await report(owner.id, { projectId: secondProject.id, title: 'Alpha elsewhere' });
+  await report(other.id, { title: 'Alpha foreign' });
+  expect((await list()).statusCounts).toEqual({
+    open: 2,
+    in_progress: 0,
+    resolved: 2,
+    closed: 0,
+  });
+  const filtered = await list(`?status=open&q=alpha&projectId=${projectId}`);
+  expect(filtered.total).toBe(1);
+  expect(filtered.statusCounts).toEqual({ open: 1, in_progress: 0, resolved: 1, closed: 0 });
+});
+
+it('summarizes visible replies with the latest one masked like the conversation', async () => {
+  const item = await report();
+  const quiet = await report();
+  expect((await list()).reports.find((r) => r.id === quiet.id)).toMatchObject({
+    replyCount: 0,
+    latestReply: null,
+  });
+  const earlier = reportMessagesRepo.insert(
+    item.id,
+    { kind: 'reporter', reporterId: owner.id },
+    'Earlier reply'
+  )!;
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [past, earlier.id]);
+  const staff = staffMessage(item.id, `Staff ${'x'.repeat(300)}`);
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [
+    '2026-01-01T00:00:01.000Z',
+    staff.id,
+  ]);
+  const hidden = staffMessage(item.id, 'Hidden latest');
+  getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [
+    '2026-01-01T00:00:03.000Z',
+    hidden.id,
+  ]);
+  reportMessagesRepo.setHidden(item.id, hidden.id, 'staff', true);
+  const summary = (await list()).reports.find((r) => r.id === item.id)!;
+  expect(summary.replyCount).toBe(2);
+  expect(summary.latestReply).toEqual({
+    authorKind: 'staff',
+    authorName: 'Staff display',
+    isOwn: false,
+    isPreviousReporter: false,
+    body: `Staff ${'x'.repeat(154)}`,
+    fileCount: 0,
+    createdAt: '2026-01-01T00:00:01.000Z',
+  });
+  await file(item.id, earlier.id);
+  await file(item.id, earlier.id);
+  await file(item.id, staff.id);
+  reportMessagesRepo.setHidden(item.id, staff.id, 'staff', true);
+  expect((await list()).reports.find((r) => r.id === item.id)).toMatchObject({
+    replyCount: 1,
+    latestReply: { authorKind: 'reporter', isOwn: true, body: 'Earlier reply', fileCount: 2 },
+  });
+  reporterOwnershipRepo.setOwner(item.id, other.id, null);
+  const reassigned = (await (await request('/reports', other.cookie)).json()) as PortalReportList;
+  expect(reassigned.reports[0].latestReply).toEqual({
+    authorKind: 'reporter',
+    authorName: '',
+    isOwn: false,
+    isPreviousReporter: true,
+    body: 'Earlier reply',
+    fileCount: 2,
+    createdAt: past,
+  });
+  expect(JSON.stringify(reassigned)).not.toContain(earlier.authorName);
+});
+
+it('returns status changes with staff names and hides captured details of portal reports', async () => {
+  const item = await report();
+  getDb().run(
+    "INSERT INTO users (id, name, email, password_hash, role) VALUES ('gone', 'Former staff', 'gone@example.com', 'unused', 'editor')"
+  );
+  const rows: [string, string | null, string, string, string][] = [
+    ['h1', 'staff', 'open', 'in_progress', '2026-01-02T00:00:00.000Z'],
+    ['h2', 'gone', 'in_progress', 'resolved', '2026-01-03T00:00:00.000Z'],
+    ['h3', null, 'resolved', 'private', '2026-01-04T00:00:00.000Z'],
+  ];
+  for (const [id, userId, from, to, createdAt] of rows)
+    getDb().run(
+      `INSERT INTO report_history (id, report_id, user_id, action, old_value, new_value, created_at)
+       VALUES (?, ?, ?, 'status_changed', ?, ?, ?)`,
+      [id, item.id, userId, from, to, createdAt]
+    );
+  getDb().run(
+    `INSERT INTO report_history (id, report_id, user_id, action, old_value, new_value, created_at)
+     VALUES ('h4', ?, 'staff', 'priority_changed', 'low', 'high', ?)`,
+    [item.id, past]
+  );
+  getDb().run("UPDATE report_history SET user_id = NULL WHERE user_id = 'gone'");
+  getDb().run("DELETE FROM users WHERE id = 'gone'");
+  expect((await detail(item.id)).statusEvents).toEqual([
+    {
+      id: 'h1',
+      from: 'open',
+      to: 'in_progress',
+      actorName: 'Staff display',
+      createdAt: '2026-01-02T00:00:00.000Z',
+    },
+    {
+      id: 'h2',
+      from: 'in_progress',
+      to: 'resolved',
+      actorName: null,
+      createdAt: '2026-01-03T00:00:00.000Z',
+    },
+  ]);
+  getDb().run('UPDATE reports SET metadata = ? WHERE id = ?', [
+    JSON.stringify({ timestamp: past, portal: true, url: 'https://portal.example.com' }),
+    item.id,
+  ]);
+  expect((await detail(item.id)).environment).toBeNull();
+  getDb().run('UPDATE reports SET metadata = ? WHERE id = ?', [
+    JSON.stringify({ timestamp: past }),
+    item.id,
+  ]);
+  expect((await detail(item.id)).environment).toBeNull();
+  getDb().run('UPDATE reports SET metadata = ? WHERE id = ?', [
+    JSON.stringify({ timestamp: past, device: { type: 'desktop' } }),
+    item.id,
+  ]);
+  expect((await detail(item.id)).environment).toBeNull();
+  getDb().run('UPDATE reports SET metadata = ? WHERE id = ?', [
+    JSON.stringify({ timestamp: past, url: 'https://user:secret@shop.example.com/cart?token=1' }),
+    item.id,
+  ]);
+  expect((await detail(item.id)).environment?.pageUrl).toBe('https://shop.example.com/cart');
+  getDb().run('UPDATE reports SET metadata = ? WHERE id = ?', [
+    JSON.stringify({ timestamp: past, url: 'file:///Users/someone/page.html', timezone: 'UTC' }),
+    item.id,
+  ]);
+  expect((await detail(item.id)).environment).toMatchObject({ pageUrl: null, timezone: 'UTC' });
+  const handOver = (id: string, from: string) =>
+    getDb().run(
+      `INSERT INTO report_history (id, report_id, user_id, action, old_value, new_value, created_at)
+       VALUES (?, ?, NULL, 'owner_assigned', ?, ?, ?)`,
+      [id, item.id, from, owner.id, past]
+    );
+  handOver('claimed', 'claim@example.com');
+  handOver('returned', owner.id);
+  expect((await detail(item.id)).environment).toMatchObject({ timezone: 'UTC' });
+  handOver('reassigned', other.id);
+  expect((await detail(item.id)).environment).toBeNull();
 });

@@ -4,6 +4,7 @@ import type {
   PortalReportBoard,
   PortalReportDetail,
   PortalReportList,
+  PortalReportSort,
 } from '@shared/portal-types';
 import type { ReportStatus } from '@shared/types';
 import { portalFetch } from './client';
@@ -11,7 +12,10 @@ import { portalFetch } from './client';
 function reportQuery(filters: {
   projectId?: string;
   status?: ReportStatus;
+  q?: string;
+  sort?: PortalReportSort;
   cursor?: string;
+  limit?: number;
   groupByStatus?: boolean;
 }) {
   const query = new URLSearchParams();

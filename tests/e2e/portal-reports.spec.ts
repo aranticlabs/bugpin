@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-test('follows owned feedback, uploads a reply, submits new feedback, and updates the profile on mobile', async ({
+test('follows an owned report, uploads a reply, submits a new report, and updates the profile on mobile', async ({
   page,
   request,
   runtime,
@@ -15,7 +15,7 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
     headers: { 'x-api-key': runtime.widgetApiKey },
     data: {
       title: 'Browser workflow',
-      description: 'Original feedback description',
+      description: 'Original report description',
       reporterEmail: 'workflow@example.test',
       reporterName: 'Jane',
       metadata: {
@@ -31,24 +31,42 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   await page.goto(await runtime.waitForLink('workflow@example.test'));
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Browser workflow' })).toBeVisible();
-  await expect(page.getByText('Original feedback description')).toBeVisible();
+  await expect(page.getByText('Original report description')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Captured with the report' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'example.test/shop' })).toBeVisible();
+  const panel = await page.evaluate<{ card: number; column: number }>(`(() => {
+    const heading = [...document.querySelectorAll('[role="heading"]')].find(
+      (element) => element.textContent === 'Conversation'
+    );
+    const card = heading.closest('.rounded-xl');
+    let cell = card;
+    while (!cell.parentElement.classList.contains('lg:grid-cols-2')) cell = cell.parentElement;
+    const top = cell.previousElementSibling.getBoundingClientRect().top;
+    const bottom = cell.nextElementSibling.getBoundingClientRect().bottom;
+    return { card: card.getBoundingClientRect().height, column: bottom - top };
+  })()`);
+  expect(Math.abs(panel.card - Math.max(panel.column, 480))).toBeLessThan(2);
   await page.screenshot({
     path: testInfo.outputPath('report-desktop.png'),
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.getByRole('button', { name: /Report details/ }).click();
+  await expect(page.getByRole('button', { name: 'Show less' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Details' })).toBeVisible();
   await expect(page.getByText('Browser confirmations', { exact: true }).first()).toBeVisible();
   expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('report-mobile.png'), animations: 'disabled' });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveClass(/dark/);
   const foreground = (await page.evaluate('getComputedStyle(document.body).color')) as string;
-  await expect(page.getByRole('button', { name: 'Report details', exact: true })).toHaveCSS(
+  await expect(page.getByRole('button', { name: 'Show less', exact: true })).toHaveCSS(
     'color',
     foreground
   );
-  await expect(page.getByLabel('Files', { exact: true })).toHaveCSS('color', foreground);
+  await expect(page.getByRole('button', { name: 'Attach', exact: true })).toHaveCSS(
+    'color',
+    foreground
+  );
   await page.screenshot({
     path: testInfo.outputPath('report-mobile-dark.png'),
     animations: 'disabled',
@@ -71,13 +89,20 @@ test('follows owned feedback, uploads a reply, submits new feedback, and updates
   expect((await reply).status()).toBe(201);
   await expect(page.getByText('Chrome 131, attached screenshot', { exact: true })).toBeVisible();
   await expect(page.locator('ol img')).toBeVisible();
-  await page.getByRole('link', { name: 'My feedback' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await page.getByRole('link', { name: 'My reports' }).click();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
+  const search = page.getByRole('searchbox', { name: 'Search reports' });
+  const listTop = (await search.boundingBox())?.y;
   await page.getByRole('tab', { name: 'Board', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Board', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  expect((await search.boundingBox())?.y).toBe(listTop);
   await expect(page.getByRole('button', { name: 'Open Browser workflow' })).toBeVisible();
-  await page.getByRole('link', { name: 'New feedback' }).click();
+  await page.getByRole('link', { name: 'New report' }).click();
   await page.getByLabel('Title', { exact: true }).fill('Created from the portal');
-  await page.getByLabel('Description', { exact: true }).fill('New feedback details');
+  await page.getByLabel('Description', { exact: true }).fill('New report details');
   await page.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Created from the portal' })).toBeVisible();
   await page.getByRole('button', { name: 'workflow' }).click();
@@ -151,7 +176,7 @@ for (const status of [429, 503]) {
     await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
     await page.goto(await runtime.waitForLink(email));
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
     await expect.poll(() => streams).toBe(2);
     expect(authenticatedChecks).toBeGreaterThan(0);
     await expect(page.getByText('Connection lost. Reconnecting…')).toHaveCount(0);

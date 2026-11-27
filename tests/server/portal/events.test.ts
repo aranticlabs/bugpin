@@ -48,7 +48,7 @@ beforeEach(async () => {
   projectId = (
     await projectsRepo.create({
       name: 'Project',
-      settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
     })
   ).id;
   reportId = (
@@ -259,7 +259,7 @@ for (const change of [
     if (change === 'disabled')
       Result.unwrap(
         await projectsService.update(projectId, {
-          settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+          settings: { reporterPortal: { enabled: false, allowNewReports: false } },
         })
       );
     if (change === 'inactive')
@@ -392,7 +392,7 @@ for (const target of ['session', 'reporter', 'project'] as const) {
   it(`targets ${target} invalidation without revalidating unrelated streams`, async () => {
     const foreignProject = await projectsRepo.create({
       name: 'Other project',
-      settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
     });
     const foreignReport = await reportsRepo.create({
       projectId: foreignProject.id,
@@ -409,7 +409,7 @@ for (const target of ['session', 'reporter', 'project'] as const) {
     if (target === 'project')
       Result.unwrap(
         await projectsService.update(projectId, {
-          settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+          settings: { reporterPortal: { enabled: false, allowNewReports: false } },
         })
       );
     if (target === 'project')

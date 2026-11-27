@@ -27,8 +27,8 @@ it.each([
   (enabled, appUrl, portalBaseUrl, expected) => {
     expect(
       projectPortalUrl(
-        { settings: { reporterPortal: { enabled, allowNewFeedback: false } } },
-        { appUrl, portalBaseUrl, reporterPortal: { enabled: false, allowNewFeedback: false } }
+        { settings: { reporterPortal: { enabled, allowNewReports: false } } },
+        { appUrl, portalBaseUrl, reporterPortal: { enabled: false, allowNewReports: false } }
       )
     ).toBe(expected);
   }

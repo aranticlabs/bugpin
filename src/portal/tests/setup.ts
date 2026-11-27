@@ -25,7 +25,14 @@ vi.stubGlobal('EventSource', TestEventSource);
 export const server = setupServer(
   http.get('/api/portal/projects', () => HttpResponse.json({ success: true, projects: [] })),
   http.get('/api/portal/reports', () =>
-    HttpResponse.json({ success: true, reports: [], nextCursor: null, total: 0, unreadCount: 0 })
+    HttpResponse.json({
+      success: true,
+      reports: [],
+      nextCursor: null,
+      total: 0,
+      unreadCount: 0,
+      statusCounts: { open: 0, in_progress: 0, resolved: 0, closed: 0 },
+    })
   )
 );
 Object.defineProperty(window, 'matchMedia', {
@@ -42,6 +49,8 @@ afterEach(() => {
   TestEventSource.instances = [];
   server.resetHandlers();
   window.history.replaceState(null, '', '/');
+  localStorage.removeItem('bugpin-portal-theme');
+  document.documentElement.classList.remove('light', 'dark');
 });
 afterAll(() => server.close());
 

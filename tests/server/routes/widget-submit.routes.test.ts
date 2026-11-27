@@ -1180,7 +1180,7 @@ describe('widget routes', () => {
           ...baseProject,
           settings: {
             ...baseProject.settings,
-            reporterPortal: { enabled, allowNewFeedback: false },
+            reporterPortal: { enabled, allowNewReports: false },
           },
         };
         settingsService.getAll = async () =>

@@ -1,24 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Button } from '@shared-ui/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@shared-ui/components/ui/select';
 import { useAuth } from './auth/AuthProvider';
 import { takeLoginToken, type LoginToken } from './auth/login-token';
 import { useBranding } from './branding/BrandingProvider';
 import { useI18n } from './i18n/I18nProvider';
-import { normalizeLocale } from './i18n/catalog';
 import { AuthCard } from './components/AuthCard';
+import { Header } from './components/Header';
+import { Footer } from './components/Footer';
+import { TeamStrip } from './components/TeamStrip';
 import { LoginRequest } from './pages/LoginRequest';
-import { ProfileMenu, languages } from './components/ProfileMenu';
-import { MyFeedback } from './pages/MyFeedback';
+import { MyReports } from './pages/MyReports';
 import { ReportDetail } from './pages/ReportDetail';
-import { NewFeedback } from './pages/NewFeedback';
+import { NewReport } from './pages/NewReport';
 import { usePortalEvents } from './hooks/usePortalEvents';
 import { LoginContinue } from './pages/LoginContinue';
 import { TeamLogin } from './pages/TeamLogin';
@@ -32,7 +26,7 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
   const offline = usePortalEvents();
   const auth = useAuth();
   const branding = useBranding();
-  const { locale, setLocale, t } = useI18n();
+  const { locale, t } = useI18n();
   const location = useLocation();
   useEffect(() => {
     const capture = () => {
@@ -52,64 +46,21 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
     if (location.pathname !== '/reports' || !auth.signedIn)
       document.title = `${t('portalTitle')} | ${branding?.appName ?? 'BugPin'}`;
   }, [location.pathname, branding?.appName, locale, auth.signedIn]);
-  const logo = branding?.branding;
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-muted/30">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:p-3">
         {t('skipContent')}
       </a>
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link to="/" className="min-w-0 max-w-full" aria-label={branding?.appName ?? 'BugPin'}>
-            <picture>
-              <source
-                media="(prefers-color-scheme: dark)"
-                srcSet={logo?.logoDarkUrl ?? '/branding/dark/logo-dark.svg'}
-              />
-              <img
-                src={logo?.logoLightUrl ?? '/branding/light/logo-light.svg'}
-                alt={branding?.appName ?? 'BugPin'}
-                className="h-8 max-w-full object-contain"
-              />
-            </picture>
-          </Link>
-          {auth.signedIn ? (
-            <ProfileMenu />
-          ) : location.pathname.startsWith('/team-login') ? null : (
-            <Select
-              value={locale}
-              onValueChange={(value) => {
-                const next = normalizeLocale(value);
-                if (next) setLocale(next);
-              }}
-            >
-              <SelectTrigger className="h-11 w-36" aria-label={t('language')}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(languages).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      </header>
+      {auth.operator && !auth.loading && <TeamStrip />}
+      <Header />
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 outline-none sm:px-6 sm:py-12"
+        className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 outline-none sm:px-6"
       >
         {offline && (
-          <p role="status" className="mb-4 rounded-md border p-3">
+          <p role="status" className="mb-4 rounded-md border bg-background p-3">
             {t('reconnecting')}
-          </p>
-        )}
-        {auth.operator && !auth.loading && (
-          <p role="status" className="mb-4 rounded-md border bg-muted p-3 text-sm">
-            {t('teamViewBanner')}
           </p>
         )}
         {auth.loading ? (
@@ -158,7 +109,7 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
               path="/"
               element={auth.signedIn ? <Navigate to="/reports" replace /> : <LoginRequest />}
             />
-            <Route path="/reports" element={auth.signedIn ? <MyFeedback /> : <LoginRequest />} />
+            <Route path="/reports" element={auth.signedIn ? <MyReports /> : <LoginRequest />} />
             <Route
               path="/reports/:id"
               element={auth.signedIn ? <ReportDetail /> : <LoginRequest />}
@@ -167,7 +118,7 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
               path="/new"
               element={
                 auth.reporter ? (
-                  <NewFeedback />
+                  <NewReport />
                 ) : auth.operator ? (
                   <Navigate to="/reports" replace />
                 ) : (
@@ -188,18 +139,7 @@ export function App({ initialToken = null }: { initialToken?: LoginToken | null 
           </Routes>
         )}
       </main>
-      {!branding?.hideFooterBranding && (
-        <footer className="border-t px-4 py-5 text-center text-sm text-muted-foreground">
-          <a
-            href="https://bugpin.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center"
-          >
-            {t('poweredBy')}
-          </a>
-        </footer>
-      )}
+      <Footer />
     </div>
   );
 }

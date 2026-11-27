@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
 import { takeLoginToken } from '../src/auth/login-token';
 import { I18nProvider, useI18n } from '../src/i18n/I18nProvider';
 import { BrandingProvider } from '../src/branding/BrandingProvider';
+import { ThemeProvider } from '@shared-ui/theme/ThemeProvider';
 import { portalFetch } from '../src/api/client';
 import { server } from './setup';
 
@@ -39,18 +40,20 @@ const config = {
 function mount(path = '/', token = '', controls?: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <I18nProvider>
-          {controls}
-          <BrandingProvider>
-            <MemoryRouter initialEntries={[path]}>
-              <App initialToken={token ? { kind: 'reporter', token } : null} />
-            </MemoryRouter>
-          </BrandingProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider storageKey="bugpin-portal-theme">
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <I18nProvider>
+            {controls}
+            <BrandingProvider>
+              <MemoryRouter initialEntries={[path]}>
+                <App initialToken={token ? { kind: 'reporter', token } : null} />
+              </MemoryRouter>
+            </BrandingProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
   return client;
 }
@@ -70,8 +73,10 @@ beforeEach(() => {
           description: '',
           files: [],
           messages: [],
+          statusEvents: [],
+          environment: null,
           canReply: false,
-          canSubmitNewFeedback: false,
+          canSubmitNewReport: false,
           createdAt: '2026-11-01T10:00:00Z',
           updatedAt: '2026-11-01T10:00:00Z',
           assigneeName: null,
@@ -160,7 +165,7 @@ it('preserves the active login token when the skip link changes the fragment', a
   await waitFor(() => expect(window.location.hash).toBe('#main-content'));
   expect(previews).toBe(1);
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  await screen.findByRole('heading', { name: 'My feedback' });
+  await screen.findByRole('heading', { name: 'My reports' });
 });
 
 it('warns before switching accounts and clears the previous account cache after exchange', async () => {
@@ -349,7 +354,7 @@ it('reconciles a superseded exchange without navigating away from or consuming t
     expect(
       screen.getByRole('heading', { name: 'Sign in as b***@example.com?' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'My feedback' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My reports' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('heading', { name: 'Report new-report' });
     expect(screen.getByText('Bob')).toBeInTheDocument();
@@ -447,8 +452,10 @@ it('uses the account locale and respects white-label footer suppression', async 
           description: '',
           files: [],
           messages: [],
+          statusEvents: [],
+          environment: null,
           canReply: false,
-          canSubmitNewFeedback: false,
+          canSubmitNewReport: false,
           createdAt: '2026-11-01T10:00:00Z',
           updatedAt: '2026-11-01T10:00:00Z',
           assigneeName: null,
@@ -460,9 +467,9 @@ it('uses the account locale and respects white-label footer suppression', async 
     )
   );
   mount('/reports');
-  await screen.findByRole('heading', { name: 'Mein Feedback' });
+  await screen.findByRole('heading', { name: 'Meine Meldungen' });
   await waitFor(() => expect(document.documentElement.lang).toBe('de'));
-  expect(screen.queryByText('Powered by BugPin')).not.toBeInTheDocument();
+  expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
 });
 
 it('keeps button text readable with a bright custom brand color', async () => {
@@ -478,8 +485,10 @@ it('keeps button text readable with a bright custom brand color', async () => {
           description: '',
           files: [],
           messages: [],
+          statusEvents: [],
+          environment: null,
           canReply: false,
-          canSubmitNewFeedback: false,
+          canSubmitNewReport: false,
           createdAt: '2026-11-01T10:00:00Z',
           updatedAt: '2026-11-01T10:00:00Z',
           assigneeName: null,
@@ -589,8 +598,8 @@ it('focuses main when navigating to another report screen', async () => {
   server.use(http.get('/api/portal/me', () => HttpResponse.json({ success: true, reporter })));
   mount('/reports/report');
   await screen.findByRole('heading', { name: 'Report report' });
-  await userEvent.click(screen.getByRole('link', { name: 'My feedback' }));
-  await screen.findByRole('heading', { name: 'My feedback' });
+  await userEvent.click(screen.getAllByRole('link', { name: 'My reports' })[0]);
+  await screen.findByRole('heading', { name: 'My reports' });
   expect(screen.getByRole('main')).toHaveFocus();
 });
 

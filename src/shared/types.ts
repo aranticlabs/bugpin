@@ -145,7 +145,7 @@ export interface Reporter {
 
 export interface ReporterPortalProjectSettings {
   enabled: boolean;
-  allowNewFeedback: boolean;
+  allowNewReports: boolean;
 }
 
 export interface ReporterPortalLimits {

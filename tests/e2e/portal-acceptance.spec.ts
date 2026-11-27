@@ -95,7 +95,7 @@ test('isolates two reporters and serves original files privately through portal 
     await other.getByRole('button', { name: 'Send me a sign-in link' }).click();
     await other.goto(await runtime.waitForLink('isolation-outsider@example.test'));
     await other.getByRole('button', { name: 'Continue' }).click();
-    await expect(other.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'My reports' })).toBeVisible();
     expect(
       (await outsider.request.get(`${runtime.portalOrigin}/api/portal/reports/${id}`)).status()
     ).toBe(404);
@@ -315,7 +315,7 @@ test('keeps deleted ownership inaccessible after a fresh login and permits a lat
   await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
   await page.goto(await runtime.waitForLink(email));
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'My feedback' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My reports' })).toBeVisible();
   expect(
     (await page.request.get(`${runtime.portalOrigin}/api/portal/reports/${oldId}`)).status()
   ).toBe(404);

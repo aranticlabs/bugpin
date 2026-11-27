@@ -26,7 +26,7 @@ portalSubmissionsRoutes.post(
           {
             success: false,
             error: result.value.errorCode,
-            message: 'Feedback upload is too large',
+            message: 'Report upload is too large',
           },
           413
         ),
@@ -35,7 +35,7 @@ portalSubmissionsRoutes.post(
   async (c) => {
     if (!c.req.header('content-type')?.includes('multipart/form-data'))
       return c.json(
-        { success: false, error: 'VALIDATION_ERROR', message: 'Expected a feedback form' },
+        { success: false, error: 'VALIDATION_ERROR', message: 'Expected a report form' },
         400
       );
     try {
@@ -57,7 +57,7 @@ portalSubmissionsRoutes.post(
         )
       )
         return c.json(
-          { success: false, error: 'VALIDATION_ERROR', message: 'Invalid feedback form' },
+          { success: false, error: 'VALIDATION_ERROR', message: 'Invalid report form' },
           400
         );
       const result = await portalSubmissionsService.create(
@@ -78,11 +78,11 @@ portalSubmissionsRoutes.post(
     } catch (error) {
       if (error instanceof Error && error.name === 'BodyLimitError')
         return c.json(
-          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Feedback upload is too large' },
+          { success: false, error: 'PAYLOAD_TOO_LARGE', message: 'Report upload is too large' },
           413
         );
       return c.json(
-        { success: false, error: 'VALIDATION_ERROR', message: 'Invalid feedback form' },
+        { success: false, error: 'VALIDATION_ERROR', message: 'Invalid report form' },
         400
       );
     }

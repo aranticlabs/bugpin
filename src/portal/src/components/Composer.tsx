@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Send } from 'lucide-react';
 import type { PortalProject } from '@shared/portal-types';
 import { Button } from '@shared-ui/components/ui/button';
 import { Textarea } from '@shared-ui/components/ui/textarea';
-import { Label } from '@shared-ui/components/ui/label';
 import { FilePicker } from './FilePicker';
 import { portalFetch, PortalApiError } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
@@ -53,30 +53,44 @@ export function Composer({
     if (!mutation.isPending && (body.trim() || files.length)) mutation.mutate();
   }
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-lg border p-4">
-      <Label htmlFor="message-body">{t('message')}</Label>
+    <form
+      onSubmit={submit}
+      className="w-full overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring"
+    >
       <Textarea
-        id="message-body"
+        aria-label={t('message')}
+        placeholder={t('replyPlaceholder')}
         maxLength={5000}
         value={body}
         onChange={(event) => setBody(event.target.value)}
         disabled={mutation.isPending}
-      />
-      <FilePicker
-        files={files}
-        onChange={setFiles}
-        project={project}
-        disabled={mutation.isPending}
+        className="min-h-24 resize-none border-0 shadow-none focus-visible:ring-0"
       />
       {mutation.isError && (
-        <p role="alert" className="text-destructive">
+        <p role="alert" className="px-3 pb-2 text-sm text-destructive">
           {t(errorKey(mutation.error))}
         </p>
       )}
-      <p className="text-sm text-muted-foreground">{t('messageHint')}</p>
-      <Button disabled={mutation.isPending || (!body.trim() && !files.length)}>
-        {t(mutation.isPending ? 'loading' : 'send')}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-3 py-2">
+        <FilePicker
+          compact
+          files={files}
+          onChange={setFiles}
+          project={project}
+          disabled={mutation.isPending}
+        />
+        <span className="hidden min-w-0 flex-1 text-xs text-muted-foreground sm:inline">
+          {t('messageHint')}
+        </span>
+        <Button
+          size="sm"
+          className="ml-auto"
+          disabled={mutation.isPending || (!body.trim() && !files.length)}
+        >
+          {!mutation.isPending && <Send />}
+          {t(mutation.isPending ? 'loading' : 'send')}
+        </Button>
+      </div>
     </form>
   );
 }

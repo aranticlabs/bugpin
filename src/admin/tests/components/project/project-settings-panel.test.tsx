@@ -245,13 +245,13 @@ describe('ProjectSettingsPanel', () => {
     await user.click(
       await screen.findByRole('switch', { name: 'Use custom reporter portal settings' })
     );
-    await user.click(screen.getByRole('switch', { name: 'Let reporters see their feedback' }));
-    await user.click(screen.getByRole('switch', { name: 'Allow new feedback from the portal' }));
+    await user.click(screen.getByRole('switch', { name: 'Let reporters see their reports' }));
+    await user.click(screen.getByRole('switch', { name: 'Allow new reports from the portal' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() =>
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
         settings: expect.objectContaining({
-          reporterPortal: { enabled: true, allowNewFeedback: true },
+          reporterPortal: { enabled: true, allowNewReports: true },
         }),
       })
     );
@@ -266,7 +266,7 @@ describe('ProjectSettingsPanel', () => {
       reporterPortalPrerequisites: ['smtp'],
       settings: {
         ...baseProject.settings,
-        reporterPortal: { enabled: true, allowNewFeedback: false },
+        reporterPortal: { enabled: true, allowNewReports: false },
       },
     });
     mockPatch.mockImplementation(async (path: string, body: { settings?: Project['settings'] }) => {

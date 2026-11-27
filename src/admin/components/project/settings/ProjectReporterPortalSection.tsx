@@ -80,7 +80,7 @@ export function ProjectReporterPortalSection({
     <>
       <SettingsCard
         title="Reporter Portal"
-        description="Let reporters sign in to follow their feedback and talk to your team."
+        description="Let reporters sign in to follow their reports and talk to your team."
         badge={!form.useCustomReporterPortal && <InheritedBadge />}
         action={
           <CustomSwitch
@@ -112,7 +112,7 @@ export function ProjectReporterPortalSection({
             />
           </InheritedFields>
           <p className="text-sm text-muted-foreground">
-            Portal access and email updates are independent. Reporters can read their feedback even
+            Portal access and email updates are independent. Reporters can read their reports even
             when update emails or messaging are disabled. Update emails respect each reporter's
             unsubscribe preference.
           </p>

@@ -43,7 +43,7 @@ export const reporterPortalSettingsService = {
     const defaults = await settingsCacheService.getAll();
     const next = effectiveReporterPortal(settings, defaults);
     const before = effectiveReporterPortal(previous, defaults);
-    return (next.enabled && !before.enabled) || (next.allowNewFeedback && !before.allowNewFeedback)
+    return (next.enabled && !before.enabled) || (next.allowNewReports && !before.allowNewReports)
       ? this.checkPrerequisites()
       : Result.ok(undefined);
   },
@@ -54,13 +54,13 @@ export const reporterPortalSettingsService = {
     previous?: ReporterPortalProjectSettings,
     candidate?: Parameters<typeof this.checkPrerequisites>[0]
   ): Promise<Result<void>> {
-    if (portal?.allowNewFeedback && !portal.enabled)
+    if (portal?.allowNewReports && !portal.enabled)
       return Result.fail(
-        'Enable the reporter portal before allowing new feedback',
+        'Enable the Reporter Portal before allowing new reports',
         'INVALID_REPORTER_PORTAL_SETTINGS'
       );
     const disablingSubmissions =
-      previous?.enabled && previous.allowNewFeedback && !portal?.allowNewFeedback;
+      previous?.enabled && previous.allowNewReports && !portal?.allowNewReports;
     return portal?.enabled && !disablingSubmissions
       ? this.checkPrerequisites(candidate)
       : Result.ok(undefined);

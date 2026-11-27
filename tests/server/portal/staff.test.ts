@@ -63,7 +63,7 @@ beforeEach(async () => {
   }
   project = await projectsRepo.create({
     name: 'Portal project',
-    settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+    settings: { reporterPortal: { enabled: true, allowNewReports: false } },
   });
   spyOn(emailService, 'sendEmail').mockResolvedValue({ success: true });
   spyOn(notificationsService, 'notifyNewReport').mockResolvedValue(undefined);
@@ -620,7 +620,7 @@ it('exempts only validated Bearer credentials and never grants the exemption to 
 });
 
 it('checks prerequisites for project enablement and sends test login only to the acting admin', async () => {
-  const enabled = { settings: { reporterPortal: { enabled: true, allowNewFeedback: false } } };
+  const enabled = { settings: { reporterPortal: { enabled: true, allowNewReports: false } } };
   await settingsRepo.updateAll({ appUrl: '', smtpEnabled: false });
   settingsCacheService.invalidate();
   const blocked = await request(`/api/projects/${project.id}`, 'PATCH', enabled);
@@ -661,12 +661,12 @@ it('checks prerequisites for project enablement and sends test login only to the
     ).status
   ).toBe(200);
   expect(sent.mock.calls.at(-1)![0].to[0].email).toBe('admin@example.com');
-  const invalid = { settings: { reporterPortal: { enabled: false, allowNewFeedback: true } } };
+  const invalid = { settings: { reporterPortal: { enabled: false, allowNewReports: true } } };
   expect((await request(`/api/projects/${project.id}`, 'PATCH', invalid)).status).toBe(400);
   expect(
     (
       await request(`/api/projects/${project.id}`, 'PATCH', {
-        settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+        settings: { reporterPortal: { enabled: false, allowNewReports: false } },
       })
     ).status
   ).toBe(200);
@@ -679,7 +679,7 @@ for (const changes of [
 ]) {
   it(`allows unrelated settings and disabling new submissions with missing prerequisites ${JSON.stringify(changes)}`, async () => {
     await projectsRepo.update(project.id, {
-      settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+      settings: { reporterPortal: { enabled: true, allowNewReports: true } },
     });
     await settingsRepo.updateAll(changes);
     settingsCacheService.invalidate();
@@ -690,7 +690,7 @@ for (const changes of [
         })
       ).status
     ).toBe(200);
-    const off = { settings: { reporterPortal: { enabled: true, allowNewFeedback: false } } };
+    const off = { settings: { reporterPortal: { enabled: true, allowNewReports: false } } };
     expect((await request(`/api/projects/${project.id}`, 'PATCH', off)).status).toBe(200);
     expect((await projectsRepo.findById(project.id))!.settings.reporterPortal).toEqual(
       off.settings.reporterPortal
@@ -698,7 +698,7 @@ for (const changes of [
     expect(
       (
         await request(`/api/projects/${project.id}`, 'PATCH', {
-          settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+          settings: { reporterPortal: { enabled: true, allowNewReports: true } },
         })
       ).status
     ).toBe(409);

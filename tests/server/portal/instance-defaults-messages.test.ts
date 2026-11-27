@@ -11,8 +11,8 @@ import { notificationsService } from '../../../src/server/services/notifications
 import { reportMessagesService } from '../../../src/server/services/report-messages.service';
 import type { Project, Report, ReporterPortalProjectSettings } from '../../../src/shared/types';
 
-const ON: ReporterPortalProjectSettings = { enabled: true, allowNewFeedback: false };
-const OFF: ReporterPortalProjectSettings = { enabled: false, allowNewFeedback: false };
+const ON: ReporterPortalProjectSettings = { enabled: true, allowNewReports: false };
+const OFF: ReporterPortalProjectSettings = { enabled: false, allowNewReports: false };
 const metadata = { timestamp: '2026-01-01T00:00:00.000Z' };
 
 let close: () => void;

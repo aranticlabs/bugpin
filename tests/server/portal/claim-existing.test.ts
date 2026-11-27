@@ -46,7 +46,7 @@ beforeEach(async () => {
     });
     cookies[role] = `session=${session.id}`;
   }
-  await settingsRepo.updateAll({ reporterPortal: { enabled: true, allowNewFeedback: false } });
+  await settingsRepo.updateAll({ reporterPortal: { enabled: true, allowNewReports: false } });
   settingsCacheService.invalidate();
   spyOn(realtimeService, 'publish').mockImplementation(() => undefined);
 });
@@ -137,11 +137,11 @@ describe('claimExisting', () => {
   it('skips disabled and deleted projects and follows project overrides', async () => {
     const forcedOff = await projectsRepo.create({
       name: 'Off',
-      settings: { reporterPortal: { enabled: false, allowNewFeedback: false } },
+      settings: { reporterPortal: { enabled: false, allowNewReports: false } },
     });
     const forcedOn = await projectsRepo.create({
       name: 'On',
-      settings: { reporterPortal: { enabled: true, allowNewFeedback: false } },
+      settings: { reporterPortal: { enabled: true, allowNewReports: false } },
     });
     const deleted = await inheriting();
     const offReport = await report(forcedOff.id, 'a@example.com');
@@ -157,7 +157,7 @@ describe('claimExisting', () => {
   });
 
   it('claims nothing when the default is off and projects inherit it', async () => {
-    await settingsRepo.updateAll({ reporterPortal: { enabled: false, allowNewFeedback: false } });
+    await settingsRepo.updateAll({ reporterPortal: { enabled: false, allowNewReports: false } });
     settingsCacheService.invalidate();
     const project = await inheriting();
     await report(project.id, 'jane@example.com');

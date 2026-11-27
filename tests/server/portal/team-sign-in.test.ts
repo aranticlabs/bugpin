@@ -942,14 +942,14 @@ describe('read scope', () => {
     enabledId = (
       await projectsRepo.create({
         name: 'Enabled project',
-        settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+        settings: { reporterPortal: { enabled: true, allowNewReports: true } },
       })
     ).id;
     disabledId = (await projectsRepo.create({ name: 'Disabled project', settings: {} })).id;
     inactiveId = (
       await projectsRepo.create({
         name: 'Inactive project',
-        settings: { reporterPortal: { enabled: true, allowNewFeedback: true } },
+        settings: { reporterPortal: { enabled: true, allowNewReports: true } },
       })
     ).id;
     getDb().run('UPDATE projects SET is_active = 0 WHERE id = ?', [inactiveId]);
@@ -992,11 +992,11 @@ describe('read scope', () => {
     expect(listed.sort()).toEqual([ids.owned, ids.claimable].sort());
   });
 
-  it('shows the enabled project without new-feedback permission', async () => {
+  it('shows the enabled project without new-report permission', async () => {
     const response = await portalRequest('/projects', cookie);
     const { projects } = (await response.json()) as { projects: PortalProject[] };
     expect(projects.map((project) => project.id)).toEqual([enabledId]);
-    expect(projects[0].allowNewFeedback).toBe(false);
+    expect(projects[0].allowNewReports).toBe(false);
   });
 
   it('never reports unread state, even when the owner has unread staff replies', async () => {
@@ -1015,6 +1015,39 @@ describe('read scope', () => {
       unreadCount: number;
     };
     expect(board.unreadCount).toBe(0);
+  });
+
+  it('summarizes the latest reply from the current owner perspective', async () => {
+    const latest = async () =>
+      ((await (await portalRequest('/reports', cookie)).json()) as PortalReportList).reports.find(
+        (report) => report.id === ids.owned
+      )?.latestReply;
+    const earlier = reportMessagesRepo.insert(
+      ids.owned,
+      { kind: 'reporter', reporterId: previousReporter.id },
+      'From a previous reporter'
+    )!;
+    getDb().run('UPDATE report_messages SET created_at = ? WHERE id = ?', [past, earlier.id]);
+    expect(await latest()).toMatchObject({
+      authorKind: 'reporter',
+      authorName: '',
+      isOwn: false,
+      isPreviousReporter: true,
+      body: 'From a previous reporter',
+    });
+    const own = reportMessagesRepo.insert(
+      ids.owned,
+      { kind: 'reporter', reporterId: owner.id },
+      'From the owner'
+    )!;
+    expect(await latest()).toMatchObject({
+      authorKind: 'reporter',
+      authorName: own.authorName,
+      isOwn: true,
+      isPreviousReporter: false,
+      body: 'From the owner',
+    });
+    expect(own.authorName).not.toBe('');
   });
 
   it('returns 404 for unowned reports and reports in disabled or inactive projects', async () => {
@@ -1038,7 +1071,7 @@ describe('read scope', () => {
     expect(response.status).toBe(200);
     const { report } = (await response.json()) as { report: PortalReportDetail };
     expect(report.canReply).toBe(false);
-    expect(report.canSubmitNewFeedback).toBe(false);
+    expect(report.canSubmitNewReport).toBe(false);
     expect(report.messages.map((message) => message.body)).toEqual(['Unseen reply']);
     expect(seen()).toBeNull();
 

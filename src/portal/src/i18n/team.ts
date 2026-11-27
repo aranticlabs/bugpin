@@ -22,10 +22,14 @@ export const team = {
   teamConfirmTitle: 'Confirm team sign-in for {email}?',
   teamLinkExpired: 'This confirmation link expired. Sign in again to get a new one.',
   signInAgain: 'Sign in again',
-  teamViewBanner: 'Team view: you see each report as its reporter sees it. This view is read-only.',
-  teamFeedback: 'Reporter feedback',
-  emptyTeamFeedback: 'No feedback matches these filters.',
-  teamReadOnlyReply: 'Read-only team view. Reply to the reporter in the Admin Console.',
+  teamViewTitle: 'Team view',
+  teamViewText: 'You see reports as their reporters do. Read-only.',
+  teamReports: 'All reports',
+  teamReportTitle: 'Report',
+  teamConversationHint: 'Messages between the reporter and the team.',
+  reporterSentReport: 'The reporter sent this report',
+  teamReadOnlyTitle: 'Read-only team view',
+  teamReadOnlyReply: 'Reply to the reporter in the Admin Console.',
 };
 
 export type TeamMessageKey = keyof typeof team;

@@ -51,7 +51,7 @@ function normalizeReporterPortal(
 ): ReporterPortalProjectSettings {
   return {
     enabled: settings?.enabled ?? false,
-    allowNewFeedback: settings?.allowNewFeedback ?? false,
+    allowNewReports: settings?.allowNewReports ?? false,
   };
 }
 

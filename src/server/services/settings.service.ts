@@ -484,7 +484,7 @@ export const settingsService = {
     // Open portal streams of projects that follow the defaults recheck their access.
     if (
       reporterPortal.enabled !== current.reporterPortal.enabled ||
-      reporterPortal.allowNewFeedback !== current.reporterPortal.allowNewFeedback
+      reporterPortal.allowNewReports !== current.reporterPortal.allowNewReports
     ) {
       for (const project of await projectsRepo.findAll())
         if (!project.settings.reporterPortal)

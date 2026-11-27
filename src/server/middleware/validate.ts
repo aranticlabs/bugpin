@@ -243,7 +243,7 @@ const widgetDialogContentProjectSchema = z
 const projectSettingsSchema = z
   .object({
     reporterPortal: z
-      .object({ enabled: z.boolean(), allowNewFeedback: z.boolean() })
+      .object({ enabled: z.boolean(), allowNewReports: z.boolean() })
       .strict()
       .nullable()
       .optional(),
@@ -730,7 +730,7 @@ export const schemas = {
       portalBaseUrl: z.string().max(2048).optional(),
       portalTeamSignIn: z.boolean().optional(),
       reporterPortal: z
-        .object({ enabled: z.boolean().optional(), allowNewFeedback: z.boolean().optional() })
+        .object({ enabled: z.boolean().optional(), allowNewReports: z.boolean().optional() })
         .strict()
         .optional(),
       reporterPortalLimits: reporterPortalLimitsSchema.optional(),
