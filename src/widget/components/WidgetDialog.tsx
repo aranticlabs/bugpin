@@ -268,7 +268,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                 rel="noopener noreferrer"
                 class="inline-flex min-h-11 items-center rounded-sm bg-primary px-4 text-primary-foreground font-medium hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {t('portal.viewFeedback')}
+                {t('portal.viewReports')}
               </a>
             )}
             <Button variant="outline" onClick={onClose}>
@@ -479,7 +479,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
               rel="noopener noreferrer"
               class="inline-flex min-h-11 items-center text-brand underline"
             >
-              {t('portal.myFeedback')}
+              {t('portal.myReports')}
             </a>
           </div>
         )}

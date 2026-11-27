@@ -98,11 +98,11 @@ test('shows working portal links and submission success on the Admin Console wid
   );
   const widget = page.locator('#bugpin-widget');
   await widget.getByRole('button', { name: 'Report Bug', exact: true }).click();
-  await expect(widget.getByRole('link', { name: 'My feedback', exact: true })).toHaveAttribute(
+  await expect(widget.getByRole('link', { name: 'My reports', exact: true })).toHaveAttribute(
     'href',
     `${runtime.portalOrigin}/reporter-portal/`
   );
-  await expect(widget.getByRole('link', { name: 'My feedback', exact: true })).toHaveAttribute(
+  await expect(widget.getByRole('link', { name: 'My reports', exact: true })).toHaveAttribute(
     'target',
     '_blank'
   );
@@ -113,9 +113,9 @@ test('shows working portal links and submission success on the Admin Console wid
     widget.getByRole('heading', { name: 'Bug report submitted successfully!' })
   ).toBeVisible();
   await expect(
-    widget.getByText('Check your inbox for a sign-in link, or request one in My feedback.')
+    widget.getByText('Check your inbox for a sign-in link, or request one in My reports.')
   ).toBeVisible();
-  await expect(widget.getByRole('link', { name: 'View my feedback', exact: true })).toHaveAttribute(
+  await expect(widget.getByRole('link', { name: 'View my reports', exact: true })).toHaveAttribute(
     'href',
     `${runtime.portalOrigin}/reporter-portal/`
   );

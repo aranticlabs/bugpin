@@ -282,14 +282,14 @@ describe('widget components', () => {
     const enabled = renderToString(
       <WidgetDialog {...dialog.props} portalUrl={portalUrl} hidePoweredBy />
     );
-    expect(enabled).toContain('My feedback');
+    expect(enabled).toContain('My reports');
     expect(enabled).toContain(portalUrl);
     expect(enabled).not.toContain('Powered by');
-    expect(html).not.toContain('My feedback');
+    expect(html).not.toContain('My reports');
     const success = renderToString(
       <WidgetDialog {...dialog.props} portalUrl={portalUrl} submitted submittedWithEmail />
     );
-    expect(success).toContain('View my feedback');
+    expect(success).toContain('View my reports');
     expect(success).toContain('Check your inbox');
     expect(success).not.toContain('Submit Report');
     const anonymous = renderToString(

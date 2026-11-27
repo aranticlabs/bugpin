@@ -179,9 +179,9 @@ const fr: WidgetCatalog = {
   'annotation.buttons.cancel': 'Annuler',
   'annotation.buttons.done': 'Terminer',
   'portal.checkEmail':
-    'Consultez votre boîte de réception pour un lien de connexion ou demandez-en un dans Mes retours.',
-  'portal.viewFeedback': 'Voir mes retours',
-  'portal.myFeedback': 'Mes retours',
+    'Consultez votre boîte de réception pour un lien de connexion ou demandez-en un dans Mes signalements.',
+  'portal.viewReports': 'Voir mes signalements',
+  'portal.myReports': 'Mes signalements',
 };
 
 export default fr;
