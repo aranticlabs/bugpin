@@ -37,8 +37,8 @@ describe('floatingTagsFor', () => {
     });
   });
 
-  it('accepts versions with or without the v prefix and an empty tag list', () => {
-    expect(floatingTagsFor('1.0.0', [])).toEqual({ latest: true, minor: true });
+  it('compares numeric components with or without the v prefix', () => {
+    expect(floatingTagsFor('v1.3.9', ['1.3.10'])).toEqual({ latest: false, minor: false });
     expect(floatingTagsFor('1.3.0', ['1.3.1'])).toEqual({
       latest: false,
       minor: false,
@@ -48,5 +48,23 @@ describe('floatingTagsFor', () => {
   it('returns null for a version that is not a plain release', () => {
     expect(floatingTagsFor('v1.3.0-beta.1', released)).toBeNull();
     expect(floatingTagsFor('main', released)).toBeNull();
+  });
+
+  it.each([
+    ['v1.3.0', ''],
+    ['v1.3.0', 'main\nv1.3.1-beta.1\n'],
+    ['main', 'v1.3.0\n'],
+  ])('fails without writing tag decisions for release %j and inventory %j', (release, input) => {
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        Bun.resolveSync('../../src/server/scripts/floating-image-tags.ts', import.meta.dir),
+        release,
+      ],
+      { stdin: Buffer.from(input) }
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toBe('');
+    expect(result.stderr.toString()).toContain('stable');
   });
 });

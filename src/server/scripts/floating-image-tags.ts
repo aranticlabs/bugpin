@@ -8,11 +8,11 @@ export interface FloatingTags {
 /**
  * Decides which floating image tags a release may move. A floating tag only moves forward:
  * `latest` to the newest release overall and `1.3` to the newest 1.3.x. Tags that are not plain x.y.z versions, such as dev and beta builds, are ignored.
- * Returns null when the release itself is not a plain x.y.z version.
+ * Requires a plain x.y.z release and at least one plain version in the inventory.
  */
 export function floatingTagsFor(version: string, existingTags: string[]): FloatingTags | null {
   const release = parseVersion(version);
-  if (!release) return null;
+  if (!release || !existingTags.some((tag) => parseVersion(tag) !== null)) return null;
 
   const newer = existingTags
     .filter((tag) => parseVersion(tag) !== null && compareVersions(tag, version) > 0)
@@ -34,7 +34,7 @@ if (import.meta.main) {
   const result = floatingTagsFor(version, existingTags);
   if (!result) {
     console.error(
-      'Usage: bun run src/server/scripts/floating-image-tags.ts <x.y.z> (existing tags on stdin)'
+      'Expected a stable release version and at least one stable version tag on stdin.'
     );
     process.exit(1);
   }

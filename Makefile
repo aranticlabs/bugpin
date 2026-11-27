@@ -352,20 +352,19 @@ release-widget finalize-widget: export WIDGET_VERSION = $(v)
 release-widget finalize-widget:
 	@bash src/widget/scripts/release.sh "$@"
 
+retag: export RETAG_VERSION = $(v)
 retag:
-	@if [ -z "$(v)" ]; then \
-		echo "$(RED)[ERROR]$(NC) Version required. Usage: make retag v=1.0.3-dev"; \
+	@if ! [[ "$$RETAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-dev|-beta(\.[0-9]+)?)$$ ]]; then \
+		echo 'Retag requires X.Y.Z-dev, X.Y.Z-beta, or X.Y.Z-beta.N.' >&2; \
 		exit 1; \
 	fi
-	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	echo "$(BLUE)[INFO]$(NC) Pushing $$BRANCH to origin..."; \
-	git push origin $$BRANCH
-	@echo "$(BLUE)[INFO]$(NC) Retagging v$(v)..."
-	@git tag -d v$(v) 2>/dev/null || true
-	@git push origin :refs/tags/v$(v) 2>/dev/null || true
-	@git tag v$(v)
-	@git push origin v$(v)
-	@echo "$(GREEN)[SUCCESS]$(NC) Tag v$(v) re-pushed to origin"
+	@if [[ "$$(git branch --show-current)" != dev ]]; then \
+		echo 'Run retag from the dev branch.' >&2; \
+		exit 1; \
+	fi
+	@git tag -f "v$$RETAG_VERSION" refs/heads/dev
+	@git push --atomic origin refs/heads/dev "+refs/tags/v$$RETAG_VERSION"
+	@echo "$(GREEN)[SUCCESS]$(NC) Tag v$$RETAG_VERSION re-pushed to origin"
 
 # ==============================================================================
 # Help
@@ -427,7 +426,7 @@ help:
 	row 'make release v=1.2.3' 'Tag a production release from main'; \
 	row 'make release v=1.2.3-dev' 'Tag a dev release from dev'; \
 	row 'make release v=1.2.3-beta.1' 'Tag a beta release from dev'; \
-	row 'make retag v=1.2.3' 'Delete and re-push a tag'; \
+	row 'make retag v=1.2.3-dev' 'Replace a dev or beta tag from dev'; \
 	row 'make release-widget v=1.2.3' 'Publish the widget to npm and tag widget-vX.Y.Z'; \
 	row 'make finalize-widget v=1.2.3' 'Verify an npm publication and finish pushing its release'; \
 	section 'Notes'; \

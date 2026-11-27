@@ -40,7 +40,7 @@ case "${1:-}" in
     if [[ $current != "$version" ]]; then
       git show-ref --verify --quiet "refs/tags/$tag" && fail "Local $tag already exists for a different version."
       node -e 'const fs=require("fs"); const [file,version]=process.argv.slice(1); const p=JSON.parse(fs.readFileSync(file)); p.version=version; fs.writeFileSync(file,JSON.stringify(p,null,2)+"\n");' "$manifest" "$version"
-      git commit -m "chore(widget): bump version to $version" -- "$manifest"
+      git commit -s -m "chore(widget): bump version to $version" -- "$manifest"
       release_commit=$(git rev-parse HEAD)
       bumped=1
     fi
