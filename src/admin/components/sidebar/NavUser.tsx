@@ -1,6 +1,15 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronsUpDown, Settings, User, Bell, SunMoon, LogOut, ExternalLink } from 'lucide-react';
+import {
+  ChevronsUpDown,
+  Settings,
+  User,
+  Bell,
+  SunMoon,
+  LogOut,
+  ExternalLink,
+  MessagesSquare,
+} from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -109,8 +118,12 @@ export function NavUser() {
             {portalUrl && (
               <DropdownMenuItem asChild className="cursor-pointer">
                 <a href={portalUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
+                  <MessagesSquare className="mr-2 h-4 w-4" aria-hidden="true" />
                   <span>Reporter Portal</span>
+                  <ExternalLink
+                    className="ml-auto size-3.5! text-muted-foreground"
+                    aria-hidden="true"
+                  />
                   <span className="sr-only">{' (opens in a new tab)'}</span>
                 </a>
               </DropdownMenuItem>
