@@ -31,7 +31,7 @@ import { reportHistoryService } from './report-history.service.js';
 import { reportHistoryRepo } from '../database/repositories/report-history.repo.js';
 import { reporterOwnershipRepo } from '../database/repositories/reporter-ownership.repo.js';
 import { reporterOwnershipService } from './reporter-ownership.service.js';
-import { normalizeUrl } from '../utils/validators.js';
+import { isValidEmail, normalizeUrl } from '../utils/validators.js';
 import { effectiveReporterPortal } from '@shared/reporter-portal';
 import { inspectRecording, remuxRecording } from './video-remux.service.js';
 import type {
@@ -379,6 +379,11 @@ async function createForProject(
     return Result.fail('Title must be at most 200 characters', 'INVALID_TITLE');
   }
 
+  const reporterEmail = normalizeOptionalText(input.reporterEmail);
+  if (reporterEmail && !isValidEmail(reporterEmail)) {
+    return Result.fail('Invalid email address', 'INVALID_EMAIL');
+  }
+
   let assignedTo: string | undefined;
   if (options.requestedAssignee === undefined) {
     assignedTo = await resolveDefaultAssignee(project.id, project.settings?.defaultAssigneeUserId);
@@ -411,12 +416,12 @@ async function createForProject(
     assignedTo,
     annotations: input.annotations,
     metadata: input.metadata,
-    reporterEmail: normalizeOptionalText(input.reporterEmail),
+    reporterEmail,
     reporterName: normalizeOptionalText(input.reporterName),
     reporterLocale: input.reporterLocale ?? 'en',
     claimableEmail:
-      options.source === 'widget' && portalEnabled && input.reporterEmail?.trim()
-        ? normalizeEmail(input.reporterEmail)
+      options.source === 'widget' && portalEnabled && reporterEmail
+        ? normalizeEmail(reporterEmail)
         : undefined,
     submissionId: input.submissionId,
   };

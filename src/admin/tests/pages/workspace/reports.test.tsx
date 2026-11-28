@@ -475,6 +475,63 @@ describe('Reports Page - Bulk Actions', () => {
     postSpy.mockRestore();
   });
 
+  it('validates reporter email before submitting a manual report', async () => {
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        success: true,
+        report: {
+          id: 'rpt_manual_email',
+          projectId: 'proj-1',
+          source: 'manual',
+          title: 'Escalated QA issue',
+          status: 'open',
+          priority: 'medium',
+          reporterEmail: 'qa@example.com',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    } as never);
+
+    const user = userEvent.setup();
+    renderWithProviders(<Reports />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Create Report' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Create Report' }));
+    await user.type(screen.getByLabelText('Title'), 'Escalated QA issue');
+    const emailInput = screen.getByLabelText('Reporter Email');
+    await user.type(emailInput, 'rter');
+
+    const createButtons = screen.getAllByRole('button', { name: 'Create Report' });
+    await user.click(createButtons[createButtons.length - 1]);
+
+    expect(screen.getByText('Please enter a valid email address')).toBeInTheDocument();
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true');
+    expect(postSpy).not.toHaveBeenCalled();
+
+    await user.clear(emailInput);
+    await user.type(emailInput, 'qa@example.com');
+
+    expect(screen.queryByText('Please enter a valid email address')).not.toBeInTheDocument();
+    expect(emailInput).toHaveAttribute('aria-invalid', 'false');
+
+    await user.click(createButtons[createButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const formData = postSpy.mock.calls[0]?.[1] as FormData;
+    const data = JSON.parse(String(formData.get('data') ?? '{}')) as {
+      reporterEmail?: string;
+    };
+    expect(data.reporterEmail).toBe('qa@example.com');
+    postSpy.mockRestore();
+  });
+
   it('selects all reports when header checkbox is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Reports />);

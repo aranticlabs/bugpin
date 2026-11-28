@@ -559,7 +559,11 @@ export const schemas = {
     priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).optional(),
     assignedTo: z.string().nullable().optional(),
     reporterName: z.string().optional(),
-    reporterEmail: z.string().email('Invalid email address').optional().or(z.literal('')),
+    reporterEmail: z
+      .string()
+      .trim()
+      .pipe(z.string().email('Invalid email address').or(z.literal('')))
+      .optional(),
     url: z
       .string()
       .trim()
