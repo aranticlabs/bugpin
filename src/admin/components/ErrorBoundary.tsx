@@ -25,6 +25,7 @@ interface ErrorBoundaryState {
   errorInfo: React.ErrorInfo | null;
   showDetails: boolean;
   copied: boolean;
+  copiedComponentStack: boolean;
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -36,6 +37,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       errorInfo: null,
       showDetails: false,
       copied: false,
+      copiedComponentStack: false,
     };
   }
 
@@ -70,6 +72,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       errorInfo: null,
       showDetails: false,
       copied: false,
+      copiedComponentStack: false,
     });
   };
 
@@ -96,12 +99,26 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
   };
 
+  handleCopyComponentStack = async (): Promise<void> => {
+    const componentStack = this.state.errorInfo?.componentStack;
+    if (!componentStack) return;
+
+    try {
+      await navigator.clipboard.writeText(componentStack.trim());
+      this.setState({ copiedComponentStack: true });
+      setTimeout(() => this.setState({ copiedComponentStack: false }), 2000);
+    } catch {
+      // Clipboard not available
+      console.error('Failed to copy to clipboard');
+    }
+  };
+
   toggleDetails = (): void => {
     this.setState((state) => ({ showDetails: !state.showDetails }));
   };
 
   render(): ReactNode {
-    const { hasError, error, errorInfo, showDetails, copied } = this.state;
+    const { hasError, error, errorInfo, showDetails, copied, copiedComponentStack } = this.state;
     const { children, fallback } = this.props;
 
     if (!hasError) {
@@ -162,6 +179,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                       className="h-6 w-6"
                       onClick={this.handleCopyError}
                       title="Copy error details"
+                      aria-label="Copy error details"
                     >
                       {copied ? (
                         <Check className="h-3 w-3 text-success" />
@@ -181,9 +199,25 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
                   {errorInfo?.componentStack && (
                     <div className="min-w-0">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Component Stack:
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Component Stack:
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={this.handleCopyComponentStack}
+                          title="Copy component stack"
+                          aria-label="Copy component stack"
+                        >
+                          {copiedComponentStack ? (
+                            <Check className="h-3 w-3 text-success" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
                       <ScrollArea
                         className="max-h-32 rounded-lg bg-muted"
                         aria-label="Component stack"
