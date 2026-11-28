@@ -18,13 +18,11 @@ import { cn } from '../../lib/utils';
 import { formatDay, levelProgressPercent, unlockedCount } from '../../lib/dashboard';
 import {
   ACHIEVEMENT_TARGETS,
-  AMBER_WAITED_DAYS,
-  DRAGONFLY_TRIAGE_MINUTES,
   EARLY_RESOLVE_MINUTES,
   FIREFLY_RESOLVE_HOURS,
-  LADYBUG_STAYS_FIXED_DAYS,
   LEVEL_XP,
   REPORT_PRIORITIES,
+  WEB_WEAVER_BUGS_PER_PROJECT,
   XP_BY_PRIORITY,
   XP_PER_REPORTER_MESSAGE,
   type AchievementId,
@@ -54,33 +52,33 @@ export const ACHIEVEMENTS: Record<AchievementId, { title: string; description: s
     title: 'Hatchling',
     description: 'Resolve your first bug. Everyone starts small',
   },
-  cocoon: {
-    title: 'Cocoon',
-    description: `Resolve ${ACHIEVEMENT_TARGETS.cocoon} bugs. Something is taking shape`,
-  },
   butterfly: {
     title: 'Butterfly',
     description: `Resolve ${ACHIEVEMENT_TARGETS.butterfly} bugs. Fully transformed`,
   },
   firefly: {
     title: 'Firefly',
-    description: `Resolve a highest-priority bug within ${FIREFLY_RESOLVE_HOURS} h of its first assignment`,
+    description: `Resolve ${ACHIEVEMENT_TARGETS.firefly} highest-priority bugs within ${FIREFLY_RESOLVE_HOURS} h of first assignment`,
   },
   dragonfly: {
     title: 'Dragonfly',
-    description: `Set the priority of ${ACHIEVEMENT_TARGETS.dragonfly} new bugs within ${DRAGONFLY_TRIAGE_MINUTES} minutes of arrival`,
+    description: `Resolve ${ACHIEVEMENT_TARGETS.dragonfly} bugs within ${EARLY_RESOLVE_MINUTES} min of first assignment`,
   },
-  ladybug: {
-    title: 'Ladybug',
-    description: `Resolve ${ACHIEVEMENT_TARGETS.ladybug} bugs that stay fixed for ${LADYBUG_STAYS_FIXED_DAYS} days`,
+  stag_beetle: {
+    title: 'Stag beetle',
+    description: `Resolve ${ACHIEVEMENT_TARGETS.stag_beetle} high- or highest-priority bugs`,
+  },
+  honeybee: {
+    title: 'Honeybee',
+    description: `Resolve at least one bug in ${ACHIEVEMENT_TARGETS.honeybee} consecutive months`,
   },
   web_weaver: {
     title: 'Web weaver',
-    description: `Resolve bugs in ${ACHIEVEMENT_TARGETS.web_weaver} different projects`,
+    description: `Resolve ${WEB_WEAVER_BUGS_PER_PROJECT} bugs in each of ${ACHIEVEMENT_TARGETS.web_weaver} different projects`,
   },
-  amber: {
-    title: 'Amber find',
-    description: `Resolve a bug that waited more than ${AMBER_WAITED_DAYS} days`,
+  cricket: {
+    title: 'Cricket',
+    description: `Message reporters on ${ACHIEVEMENT_TARGETS.cricket} different bugs`,
   },
 };
 

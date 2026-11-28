@@ -15,7 +15,10 @@ import { projectsRepo } from '../../src/server/database/repositories/projects.re
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { dashboardService, median } from '../../src/server/services/dashboard.service';
-import type { UserResolutionRow } from '../../src/server/database/repositories/gamification.repo';
+import type {
+  ReporterMessageRow,
+  UserResolutionRow,
+} from '../../src/server/database/repositories/gamification.repo';
 import { userPreferencesService } from '../../src/server/services/user-preferences.service';
 import { Result } from '../../src/server/utils/result';
 import {
@@ -28,6 +31,7 @@ import {
 import {
   ACHIEVEMENT_IDS,
   ACHIEVEMENT_TARGETS,
+  WEB_WEAVER_BUGS_PER_PROJECT,
   type AchievementId,
   type ReportHistoryAction,
   type ReportMetadata,
@@ -186,8 +190,6 @@ describe('levelFor', () => {
 });
 
 describe('buildProgress', () => {
-  const now = Date.parse('2026-11-30T12:00:00.000Z');
-
   function resolution(
     overrides: Partial<UserResolutionRow> & Pick<UserResolutionRow, 'reportId'>
   ): UserResolutionRow {
@@ -199,46 +201,45 @@ describe('buildProgress', () => {
       resolvedAt: '2026-11-01T10:00:00.000Z',
       assignedAt: null,
       firstAssignedAt: null,
-      reopenedAt: null,
       ...overrides,
     };
   }
 
+  function message(reportId: string, at = '2026-11-01T10:00:00.000Z'): ReporterMessageRow {
+    return { userId: 'u1', reportId, at };
+  }
+
   it('adds XP by priority and dates each unlocked achievement', () => {
-    const progress = buildProgress(
-      [
-        resolution({
-          reportId: 'a',
-          priority: 'highest',
-          firstAssignedAt: '2026-11-01T08:00:00.000Z',
-        }),
-        resolution({
-          reportId: 'b',
-          projectId: 'p2',
-          priority: 'low',
-          resolvedAt: '2026-11-02T10:00:00.000Z',
-        }),
-      ],
-      [],
-      now
-    );
+    const progress = buildProgress([
+      resolution({
+        reportId: 'a',
+        priority: 'highest',
+        firstAssignedAt: '2026-11-01T08:00:00.000Z',
+      }),
+      resolution({
+        reportId: 'b',
+        projectId: 'p2',
+        priority: 'low',
+        resolvedAt: '2026-11-02T10:00:00.000Z',
+      }),
+    ]);
     const byId = Object.fromEntries(progress.achievements.map((item) => [item.id, item]));
 
     expect(progress.xp).toBe(60);
     expect(byId.hatchling.unlockedAt).toBe('2026-11-01T10:00:00.000Z');
-    expect(byId.firefly.unlockedAt).toBe('2026-11-01T10:00:00.000Z');
-    expect(byId.cocoon).toMatchObject({ current: 2, target: 100, unlockedAt: undefined });
-    expect(byId.butterfly).toMatchObject({ current: 2, target: 500, unlockedAt: undefined });
-    expect(byId.web_weaver).toMatchObject({ current: 2, target: 5 });
+    expect(byId.firefly).toMatchObject({ current: 1, target: 5, unlockedAt: undefined });
+    expect(byId.butterfly).toMatchObject({ current: 2, target: 300, unlockedAt: undefined });
+    expect(byId.stag_beetle).toMatchObject({ current: 1, target: 50, unlockedAt: undefined });
+    expect(byId.web_weaver).toMatchObject({ current: 0, target: 3, unlockedAt: undefined });
     expect(progress.achievements.map((item) => item.id)).toEqual([
       'hatchling',
-      'cocoon',
       'butterfly',
       'firefly',
       'dragonfly',
-      'ladybug',
+      'stag_beetle',
+      'honeybee',
       'web_weaver',
-      'amber',
+      'cricket',
     ]);
   });
 
@@ -264,42 +265,88 @@ describe('buildProgress', () => {
     expect(resolvedEarly(neverAssigned)).toBe(true);
     expect(xpFor([early, late, neverAssigned], 0)).toBe(60 + 30 + 20);
     expect(xpFor([], 3)).toBe(15);
-    expect(buildProgress([late], [], now, 2).xp).toBe(40);
+    expect(buildProgress([late], [message('m1'), message('m2')]).xp).toBe(40);
   });
 
-  it('counts fixes that stayed fixed for 14 days, once the 14 days are over', () => {
-    const progress = buildProgress(
-      [
-        resolution({ reportId: 'kept' }),
-        resolution({ reportId: 'reopened', reopenedAt: '2026-11-05T10:00:00.000Z' }),
-        resolution({ reportId: 'reopened-late', reopenedAt: '2026-11-20T10:00:00.000Z' }),
-        resolution({ reportId: 'too-recent', resolvedAt: '2026-11-25T10:00:00.000Z' }),
-      ],
-      [],
-      now
-    );
-    expect(progress.achievements.find((item) => item.id === 'ladybug')).toMatchObject({
+  it('counts high and highest priority resolutions towards Stag beetle', () => {
+    const progress = buildProgress([
+      resolution({ reportId: 'a', priority: 'highest' }),
+      resolution({ reportId: 'b', priority: 'high' }),
+      resolution({ reportId: 'c', priority: 'medium' }),
+      resolution({ reportId: 'd', priority: 'low' }),
+      resolution({ reportId: 'e', priority: 'lowest' }),
+    ]);
+    expect(progress.achievements.find((item) => item.id === 'stag_beetle')).toMatchObject({
       current: 2,
-      target: 25,
+      target: 50,
+      unlockedAt: undefined,
     });
   });
 
-  it('unlocks the cold case for a report that waited more than 90 days', () => {
-    const progress = buildProgress(
-      [
-        resolution({ reportId: 'recent' }),
-        resolution({
-          reportId: 'old',
-          createdAt: '2026-07-01T10:00:00.000Z',
-          resolvedAt: '2026-11-03T10:00:00.000Z',
-        }),
-      ],
-      [],
-      now
+  it('tracks consecutive UTC months across year boundaries for Honeybee and resets after a gap', () => {
+    const unlocked = buildProgress([
+      resolution({ reportId: 'm1a', resolvedAt: '2026-10-05T10:00:00.000Z' }),
+      resolution({ reportId: 'm1b', resolvedAt: '2026-10-20T10:00:00.000Z' }),
+      resolution({ reportId: 'm2', resolvedAt: '2026-11-12T10:00:00.000Z' }),
+      resolution({ reportId: 'm3', resolvedAt: '2026-12-31T23:00:00.000Z' }),
+      resolution({ reportId: 'm4', resolvedAt: '2027-01-02T10:00:00.000Z' }),
+      resolution({ reportId: 'm5', resolvedAt: '2027-02-14T10:00:00.000Z' }),
+      resolution({ reportId: 'm6', resolvedAt: '2027-03-08T10:00:00.000Z' }),
+    ]);
+    expect(unlocked.achievements.find((item) => item.id === 'honeybee')).toMatchObject({
+      current: 6,
+      target: 6,
+      unlockedAt: '2027-03-08T10:00:00.000Z',
+    });
+
+    const gapped = buildProgress([
+      resolution({ reportId: 'm1', resolvedAt: '2026-01-10T10:00:00.000Z' }),
+      resolution({ reportId: 'm2', resolvedAt: '2026-02-10T10:00:00.000Z' }),
+      resolution({ reportId: 'm4', resolvedAt: '2026-04-10T10:00:00.000Z' }),
+      resolution({ reportId: 'm5', resolvedAt: '2026-05-10T10:00:00.000Z' }),
+      resolution({ reportId: 'm6', resolvedAt: '2026-06-10T10:00:00.000Z' }),
+      resolution({ reportId: 'm7', resolvedAt: '2026-07-10T10:00:00.000Z' }),
+    ]);
+    expect(gapped.achievements.find((item) => item.id === 'honeybee')).toMatchObject({
+      current: 4,
+      target: 6,
+      unlockedAt: undefined,
+    });
+  });
+
+  it('requires 10 resolved bugs per project to count a project towards Web weaver', () => {
+    const rows: UserResolutionRow[] = [
+      ...Array.from({ length: WEB_WEAVER_BUGS_PER_PROJECT }, (_, i) =>
+        resolution({ reportId: `p1-${i}`, projectId: 'p1' })
+      ),
+      ...Array.from({ length: WEB_WEAVER_BUGS_PER_PROJECT - 1 }, (_, i) =>
+        resolution({ reportId: `p2-${i}`, projectId: 'p2' })
+      ),
+    ];
+    expect(buildProgress(rows).achievements.find((item) => item.id === 'web_weaver')).toMatchObject(
+      {
+        current: 1,
+        target: 3,
+        unlockedAt: undefined,
+      }
     );
-    expect(progress.achievements.find((item) => item.id === 'amber')).toMatchObject({
-      current: 1,
-      unlockedAt: '2026-11-03T10:00:00.000Z',
+  });
+
+  it('counts each messaged report once towards Cricket while keeping full message XP', () => {
+    const progress = buildProgress(
+      [],
+      [
+        message('r1', '2026-11-01T10:00:00.000Z'),
+        message('r1', '2026-11-01T11:00:00.000Z'),
+        message('r1', '2026-11-01T12:00:00.000Z'),
+        message('r2', '2026-11-02T10:00:00.000Z'),
+      ]
+    );
+    expect(progress.xp).toBe(20);
+    expect(progress.achievements.find((item) => item.id === 'cricket')).toMatchObject({
+      current: 2,
+      target: 25,
+      unlockedAt: undefined,
     });
   });
 });
@@ -424,9 +471,9 @@ describe('dashboardService.getPersonal', () => {
     const on = await dashboardService.getPersonal(me, 'UTC', NOW);
     if (!on.success) throw new Error(on.error);
     expect(on.value.gamification?.xp).toBe(55);
-    expect(
-      on.value.gamification?.achievements.find((item) => item.id === 'firefly')?.unlockedAt
-    ).toBeDefined();
+    expect(on.value.gamification?.achievements.find((item) => item.id === 'firefly')?.current).toBe(
+      1
+    );
 
     const asViewer = await dashboardService.getPersonal(viewer, 'UTC', NOW);
     if (!asViewer.success) throw new Error(asViewer.error);
@@ -472,8 +519,7 @@ describe('history from before gamification', () => {
     expect(game?.achievements.find((item) => item.id === 'hatchling')?.unlockedAt).toBe(
       ago(300 * DAY)
     );
-    // Waited 100 days before it was resolved
-    expect(game?.achievements.find((item) => item.id === 'amber')?.current).toBe(1);
+    expect(game?.achievements.find((item) => item.id === 'cricket')?.current).toBe(1);
   });
 });
 
@@ -676,12 +722,11 @@ describe('early resolve clock', () => {
 });
 
 describe('achievement rules', () => {
-  const now = Date.parse('2026-12-31T12:00:00.000Z');
   let sequence = 0;
 
   function row(overrides: Partial<UserResolutionRow> = {}): UserResolutionRow {
     sequence++;
-    const resolvedAt = new Date(Date.parse('2026-11-01T00:00:00.000Z') + sequence * HOUR);
+    const resolvedAt = new Date(Date.parse('2026-11-02T00:00:00.000Z') + sequence * HOUR);
     return {
       userId: 'u1',
       reportId: `r${sequence}`,
@@ -691,24 +736,17 @@ describe('achievement rules', () => {
       resolvedAt: resolvedAt.toISOString(),
       assignedAt: null,
       firstAssignedAt: null,
-      reopenedAt: null,
       ...overrides,
     };
   }
 
-  const times = (count: number) =>
-    Array.from({ length: count }, (_, index) =>
-      new Date(Date.UTC(2026, 10, 1, index)).toISOString()
-    );
-
   // Builds the least data that meets an achievement, given how many qualifying events there are
   const scenarios: Record<
     AchievementId,
-    (count: number) => { rows: UserResolutionRow[]; triage: string[] }
+    (count: number) => { rows: UserResolutionRow[]; messages: ReporterMessageRow[] }
   > = {
-    hatchling: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
-    cocoon: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
-    butterfly: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
+    hatchling: (count) => ({ rows: Array.from({ length: count }, () => row()), messages: [] }),
+    butterfly: (count) => ({ rows: Array.from({ length: count }, () => row()), messages: [] }),
     firefly: (count) => ({
       rows: Array.from({ length: count }, () => {
         const fast = row({ priority: 'highest' });
@@ -717,20 +755,45 @@ describe('achievement rules', () => {
           firstAssignedAt: new Date(Date.parse(fast.resolvedAt) - 4 * HOUR).toISOString(),
         };
       }),
-      triage: [],
+      messages: [],
     }),
-    dragonfly: (count) => ({ rows: [], triage: times(count) }),
-    ladybug: (count) => ({ rows: Array.from({ length: count }, () => row()), triage: [] }),
-    web_weaver: (count) => ({
-      rows: Array.from({ length: count }, (_, index) => row({ projectId: `p${index}` })),
-      triage: [],
-    }),
-    amber: (count) => ({
+    dragonfly: (count) => ({
       rows: Array.from({ length: count }, () => {
-        const old = row();
-        return { ...old, createdAt: new Date(Date.parse(old.resolvedAt) - 91 * DAY).toISOString() };
+        const fast = row();
+        return {
+          ...fast,
+          firstAssignedAt: new Date(Date.parse(fast.resolvedAt) - HOUR).toISOString(),
+        };
       }),
-      triage: [],
+      messages: [],
+    }),
+    stag_beetle: (count) => ({
+      rows: Array.from({ length: count }, (_, index) =>
+        row({ priority: index % 2 === 0 ? 'highest' : 'high' })
+      ),
+      messages: [],
+    }),
+    honeybee: (count) => ({
+      rows: Array.from({ length: count }, (_, index) =>
+        row({ resolvedAt: new Date(Date.UTC(2026, index, 10, 10)).toISOString() })
+      ),
+      messages: [],
+    }),
+    web_weaver: (count) => ({
+      rows: Array.from({ length: count }, (_, projectIndex) =>
+        Array.from({ length: WEB_WEAVER_BUGS_PER_PROJECT }, () =>
+          row({ projectId: `p${projectIndex}` })
+        )
+      ).flat(),
+      messages: [],
+    }),
+    cricket: (count) => ({
+      rows: [],
+      messages: Array.from({ length: count }, (_, index) => ({
+        userId: 'u1',
+        reportId: `m${index}`,
+        at: new Date(Date.UTC(2026, 10, 2, index)).toISOString(),
+      })),
     }),
   };
 
@@ -739,8 +802,8 @@ describe('achievement rules', () => {
       const target = ACHIEVEMENT_TARGETS[id];
       const progressFor = (count: number) => {
         sequence = 0;
-        const { rows, triage } = scenarios[id](count);
-        return buildProgress(rows, triage, now).achievements.find((item) => item.id === id);
+        const { rows, messages } = scenarios[id](count);
+        return buildProgress(rows, messages).achievements.find((item) => item.id === id);
       };
       expect(progressFor(target)?.unlockedAt).toBeDefined();
       expect(progressFor(target - 1)).toMatchObject({ current: target - 1, unlockedAt: undefined });
@@ -749,23 +812,21 @@ describe('achievement rules', () => {
 
   it('does not count a fast resolution of a non-highest report towards Firefly', () => {
     const fast = row({ priority: 'high' });
-    const progress = buildProgress([{ ...fast, firstAssignedAt: fast.resolvedAt }], [], now);
+    const progress = buildProgress([{ ...fast, firstAssignedAt: fast.resolvedAt }]);
     expect(progress.achievements.find((item) => item.id === 'firefly')?.current).toBe(0);
   });
 
-  it('counts a triage at exactly the 60-minute limit towards Dragonfly', async () => {
-    const me = await createUser('Alex', 'admin');
-    const id = await createReport({ createdAt: '2026-11-01T10:00:00.000Z' });
-    addHistory(id, me.id, 'priority_changed', 'medium', 'high', '2026-11-01T11:00:00.000Z');
-    const late = await createReport({ createdAt: '2026-11-01T10:00:00.000Z' });
-    addHistory(late, me.id, 'priority_changed', 'medium', 'high', '2026-11-01T11:00:01.000Z');
-    await gamificationService.update({ enabled: true });
-
-    const result = await dashboardService.getPersonal(me, 'UTC', NOW);
-    if (!result.success) throw new Error(result.error);
-    expect(
-      result.value.gamification?.achievements.find((item) => item.id === 'dragonfly')?.current
-    ).toBe(1);
+  it('counts resolutions within the 60-minute limit towards Dragonfly and skips slower ones', () => {
+    const onTime = row();
+    const late = row();
+    const progress = buildProgress([
+      { ...onTime, firstAssignedAt: new Date(Date.parse(onTime.resolvedAt) - HOUR).toISOString() },
+      {
+        ...late,
+        firstAssignedAt: new Date(Date.parse(late.resolvedAt) - HOUR - 1000).toISOString(),
+      },
+    ]);
+    expect(progress.achievements.find((item) => item.id === 'dragonfly')?.current).toBe(1);
   });
 });
 

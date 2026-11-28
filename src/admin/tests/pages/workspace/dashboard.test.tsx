@@ -17,7 +17,7 @@ const withGamification: DashboardPersonal = {
     nextLevelXp: 500,
     achievements: [
       { id: 'hatchling', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
-      { id: 'cocoon', current: 12, target: 100 },
+      { id: 'butterfly', current: 12, target: 300 },
     ],
   },
 };
@@ -250,7 +250,7 @@ describe('Dashboard Page', () => {
         ...(withGamification.gamification as NonNullable<DashboardPersonal['gamification']>),
         achievements: [
           { id: 'hatchling', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
-          { id: 'amber', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
+          { id: 'stag_beetle', current: 50, target: 50, unlockedAt: '2026-11-01T10:00:00.000Z' },
         ],
       },
     };
@@ -273,12 +273,14 @@ describe('Dashboard Page', () => {
     await user.click(within(first).getByRole('button', { name: 'Keep going' }));
 
     const second = await screen.findByRole('dialog');
-    expect(await within(second).findByText('Achievement unlocked: Amber find')).toBeInTheDocument();
+    expect(
+      await within(second).findByText('Achievement unlocked: Stag beetle')
+    ).toBeInTheDocument();
     await waitFor(() => expect(saved).toEqual([{ seenAchievements: ['hatchling'] }]));
     await user.click(within(second).getByRole('button', { name: 'Keep going' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(saved[saved.length - 1]).toEqual({ seenAchievements: ['hatchling', 'amber'] });
+    expect(saved[saved.length - 1]).toEqual({ seenAchievements: ['hatchling', 'stag_beetle'] });
   });
 
   it('records what is already unlocked on the first visit without a dialog', async () => {

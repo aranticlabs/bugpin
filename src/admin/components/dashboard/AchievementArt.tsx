@@ -46,42 +46,6 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
       </>
     ),
   },
-  cocoon: {
-    palette: { from: '#ecfccb', to: '#84cc16', rim: '#3f6212' },
-    scene: ({ id }) => (
-      <>
-        <defs>
-          <linearGradient id={`${id}-cocoon`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#fef3c7" />
-            <stop offset="100%" stopColor="#d4a35a" />
-          </linearGradient>
-        </defs>
-        <path d="M12 17 Q32 12 54 15" fill="none" stroke="#78350f" strokeWidth={3} />
-        <path d="M44 14.5 Q49 9 53 11 Q49 15 44 14.5 Z" fill="#4d7c0f" />
-        <line x1="32" y1="14" x2="32" y2="20" stroke="#78350f" strokeWidth={1.2} />
-        <ellipse
-          cx="32"
-          cy="34"
-          rx="8.5"
-          ry="14.5"
-          fill={`url(#${id}-cocoon)`}
-          stroke="#a16207"
-          strokeWidth={1.2}
-        />
-        {[25, 30, 35, 40].map((y) => (
-          <path
-            key={y}
-            d={`M24.5 ${y} Q32 ${y + 3.5} 39.5 ${y}`}
-            fill="none"
-            stroke="#a16207"
-            strokeWidth={0.9}
-            opacity={0.7}
-          />
-        ))}
-        <ellipse cx="28.5" cy="30" rx="1.6" ry="5" fill="#fff" opacity={0.55} />
-      </>
-    ),
-  },
   butterfly: {
     palette: { from: '#ede9fe', to: '#8b5cf6', rim: '#5b21b6' },
     scene: ({ id }) => (
@@ -208,49 +172,172 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
       </>
     ),
   },
-  ladybug: {
-    palette: { from: '#fef9c3', to: '#facc15', rim: '#a16207' },
+  stag_beetle: {
+    palette: { from: '#ffe4e6', to: '#f43f5e', rim: '#9f1239' },
     scene: ({ id }) => (
       <>
         <defs>
-          <radialGradient id={`${id}-shell`} cx="0.35" cy="0.3" r="0.8">
-            <stop offset="0%" stopColor="#f87171" />
-            <stop offset="100%" stopColor="#b91c1c" />
+          <radialGradient id={`${id}-carapace`} cx="0.35" cy="0.3" r="0.75">
+            <stop offset="0%" stopColor="#92400e" />
+            <stop offset="60%" stopColor="#451a03" />
+            <stop offset="100%" stopColor="#1c0a00" />
           </radialGradient>
         </defs>
-        <path d="M14 50 Q30 34 52 44 Q34 56 14 50 Z" fill="#22c55e" />
-        <path d="M16 49.5 Q32 44 50 44.5" fill="none" stroke="#15803d" strokeWidth={0.9} />
-        <circle cx="32" cy="23.5" r="6" fill="#111827" />
-        <circle cx="29.6" cy="21.8" r="1.1" fill="#fff" />
-        <circle cx="34.4" cy="21.8" r="1.1" fill="#fff" />
-        <circle
-          cx="32"
-          cy="35"
-          r="12"
-          fill={`url(#${id}-shell)`}
-          stroke="#7f1d1d"
-          strokeWidth={1}
-        />
-        <line x1="32" y1="23.2" x2="32" y2="47" stroke="#111827" strokeWidth={1.4} />
-        {[
-          [26, 30, 2.3],
-          [38, 30, 2.3],
-          [25, 38.5, 2.1],
-          [39, 38.5, 2.1],
-          [28.5, 44, 1.6],
-          [35.5, 44, 1.6],
-        ].map(([cx, cy, r]) => (
-          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="#111827" />
-        ))}
+        <ellipse cx="32" cy="52" rx="12" ry="2.4" fill="#881337" opacity={0.25} />
+        <g
+          stroke="#270e04"
+          strokeWidth={1.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        >
+          <path d="M24 30 L17 25 L14.5 28.5" />
+          <path d="M40 30 L47 25 L49.5 28.5" />
+          <path d="M23 36.5 L15.5 36.5 L14 41.5" />
+          <path d="M41 36.5 L48.5 36.5 L50 41.5" />
+          <path d="M24.5 43.5 L18 47.5 L17 51" />
+          <path d="M39.5 43.5 L46 47.5 L47 51" />
+        </g>
+        <g
+          fill="none"
+          stroke="#451a03"
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M28.5 23 C22.5 18.5 22 12.5 27.5 11" />
+          <path d="M35.5 23 C41.5 18.5 42 12.5 36.5 11" />
+        </g>
+        <g fill="none" stroke="#78350f" strokeWidth={1.1} strokeLinecap="round">
+          <path d="M24.2 16.5 L27.2 16" />
+          <path d="M39.8 16.5 L36.8 16" />
+          <path d="M25.5 13.5 L28 14" />
+          <path d="M38.5 13.5 L36 14" />
+        </g>
         <ellipse
-          cx="27"
-          cy="27.5"
-          rx="3"
-          ry="1.8"
-          fill="#fff"
-          opacity={0.4}
-          transform="rotate(-30 27 27.5)"
+          cx="32"
+          cy="25"
+          rx="5.4"
+          ry="3.6"
+          fill="#270e04"
+          stroke="#1c0a00"
+          strokeWidth={0.9}
         />
+        <circle cx="27.2" cy="24.2" r="1.2" fill="#f59e0b" />
+        <circle cx="36.8" cy="24.2" r="1.2" fill="#f59e0b" />
+        <ellipse
+          cx="32"
+          cy="30.5"
+          rx="8.2"
+          ry="4.5"
+          fill={`url(#${id}-carapace)`}
+          stroke="#1c0a00"
+          strokeWidth={1.1}
+        />
+        <ellipse
+          cx="32"
+          cy="41.5"
+          rx="9.5"
+          ry="10.2"
+          fill={`url(#${id}-carapace)`}
+          stroke="#1c0a00"
+          strokeWidth={1.1}
+        />
+        <line x1="32" y1="31.5" x2="32" y2="51.5" stroke="#1c0a00" strokeWidth={1.2} />
+        <ellipse
+          cx="27.2"
+          cy="38.5"
+          rx="2"
+          ry="4.5"
+          fill="#fde68a"
+          opacity={0.32}
+          transform="rotate(-14 27.2 38.5)"
+        />
+        <ellipse cx="28" cy="29.5" rx="2.4" ry="1.1" fill="#fde68a" opacity={0.28} />
+      </>
+    ),
+  },
+  honeybee: {
+    palette: { from: '#fef3c7', to: '#f59e0b', rim: '#b45309' },
+    scene: ({ id }) => (
+      <>
+        <defs>
+          <radialGradient id={`${id}-bee`} cx="0.4" cy="0.35" r="0.7">
+            <stop offset="0%" stopColor="#fef08a" />
+            <stop offset="100%" stopColor="#eab308" />
+          </radialGradient>
+        </defs>
+        <g stroke="#b45309" strokeOpacity={0.22} fill="none" strokeWidth={0.9}>
+          {[
+            [20, 17],
+            [44, 17],
+            [15, 29],
+            [49, 29],
+            [20, 44],
+            [44, 44],
+          ].map(([cx, cy]) => (
+            <polygon
+              key={`${cx}-${cy}`}
+              points={`${cx},${cy - 5} ${cx + 4.3},${cy - 2.5} ${cx + 4.3},${cy + 2.5} ${cx},${cy + 5} ${cx - 4.3},${cy + 2.5} ${cx - 4.3},${cy - 2.5}`}
+            />
+          ))}
+        </g>
+        <g fill="#fff" fillOpacity={0.78} stroke="#92400e" strokeWidth={0.9}>
+          <ellipse cx="21" cy="26.5" rx="9" ry="4.4" transform="rotate(-22 21 26.5)" />
+          <ellipse cx="43" cy="26.5" rx="9" ry="4.4" transform="rotate(22 43 26.5)" />
+          <ellipse cx="23.5" cy="33" rx="6.5" ry="3.2" transform="rotate(14 23.5 33)" />
+          <ellipse cx="40.5" cy="33" rx="6.5" ry="3.2" transform="rotate(-14 40.5 33)" />
+        </g>
+        <path d="M32 49 L32 52.5" stroke="#1c1917" strokeWidth={1.6} strokeLinecap="round" />
+        <ellipse
+          cx="32"
+          cy="39"
+          rx="8.2"
+          ry="10.2"
+          fill={`url(#${id}-bee)`}
+          stroke="#78350f"
+          strokeWidth={1.1}
+        />
+        <path d="M24.2 35.5 Q32 38.5 39.8 35.5" fill="none" stroke="#1c1917" strokeWidth={2.6} />
+        <path d="M24.4 41 Q32 44 39.6 41" fill="none" stroke="#1c1917" strokeWidth={2.6} />
+        <path d="M26.5 46 Q32 48.2 37.5 46" fill="none" stroke="#1c1917" strokeWidth={2.2} />
+        <ellipse
+          cx="28.2"
+          cy="33"
+          rx="1.6"
+          ry="3"
+          fill="#fff"
+          opacity={0.45}
+          transform="rotate(-15 28.2 33)"
+        />
+        <ellipse
+          cx="32"
+          cy="27.5"
+          rx="6.2"
+          ry="5"
+          fill="#292524"
+          stroke="#1c1917"
+          strokeWidth={0.9}
+        />
+        <circle cx="32" cy="19.5" r="4.4" fill="#1c1917" />
+        <circle cx="30.2" cy="18.8" r="1.1" fill="#fff" />
+        <circle cx="33.8" cy="18.8" r="1.1" fill="#fff" />
+        <path
+          d="M30 16 Q26.5 11.5 23.5 12.5"
+          fill="none"
+          stroke="#1c1917"
+          strokeWidth={1.1}
+          strokeLinecap="round"
+        />
+        <path
+          d="M34 16 Q37.5 11.5 40.5 12.5"
+          fill="none"
+          stroke="#1c1917"
+          strokeWidth={1.1}
+          strokeLinecap="round"
+        />
+        <circle cx="23.5" cy="12.5" r="1.1" fill="#1c1917" />
+        <circle cx="40.5" cy="12.5" r="1.1" fill="#1c1917" />
       </>
     ),
   },
@@ -297,38 +384,98 @@ const BADGES: Record<AchievementId, BadgeDefinition> = {
       );
     },
   },
-  amber: {
+  cricket: {
     palette: { from: '#ffedd5', to: '#fb923c', rim: '#9a3412' },
     scene: ({ id }) => (
       <>
         <defs>
-          <radialGradient id={`${id}-amber`} cx="0.4" cy="0.45" r="0.7">
-            <stop offset="0%" stopColor="#fde68a" />
-            <stop offset="55%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#b45309" />
-          </radialGradient>
+          <linearGradient id={`${id}-cricket`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#65a30d" />
+            <stop offset="100%" stopColor="#365314" />
+          </linearGradient>
         </defs>
-        <path
-          d="M32 13 C38.5 23 46.5 29.5 46.5 38.5 C46.5 46.5 40.5 52 32 52 C23.5 52 17.5 46.5 17.5 38.5 C17.5 29.5 25.5 23 32 13 Z"
-          fill={`url(#${id}-amber)`}
-          stroke="#92400e"
-          strokeWidth={1.2}
-        />
-        <g opacity={0.75} stroke="#78350f" strokeWidth={0.9} strokeLinecap="round">
-          <path d="M28.5 37 L25 35 M28.5 40.5 L24.5 41 M28.5 44 L25.5 46.5" />
-          <path d="M35.5 37 L39 35 M35.5 40.5 L39.5 41 M35.5 44 L38.5 46.5" />
-          <path d="M31 33 L29 29.5 M33 33 L35 29.5" />
+        <g fill="none" stroke="#fff" strokeLinecap="round" opacity={0.85}>
+          <path d="M38 19 A5 5 0 0 1 43 24" strokeWidth={1.3} />
+          <path d="M40.5 15.5 A8.5 8.5 0 0 1 47.5 23" strokeWidth={1.2} opacity={0.7} />
+          <path d="M43 12.5 A12 12 0 0 1 51.5 22" strokeWidth={1.1} opacity={0.5} />
         </g>
-        <ellipse cx="32" cy="41" rx="4" ry="5.5" fill="#78350f" opacity={0.8} />
-        <circle cx="32" cy="34.2" r="2.2" fill="#78350f" opacity={0.8} />
+        <path
+          d="M14 48 Q32 43.5 50 48"
+          fill="none"
+          stroke="#9a3412"
+          strokeWidth={1.8}
+          opacity={0.4}
+          strokeLinecap="round"
+        />
+        <g
+          stroke="#1a2e05"
+          strokeWidth={1.3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        >
+          <path d="M24 38 L20 45.5 L17.5 46" />
+          <path d="M30 39 L28 45.5 L25.5 46" />
+        </g>
+        <path
+          d="M18.5 31 Q15 19.5 28 14.5"
+          fill="none"
+          stroke="#1a2e05"
+          strokeWidth={1}
+          strokeLinecap="round"
+        />
+        <path
+          d="M19.5 30 Q18.5 22.5 31 19"
+          fill="none"
+          stroke="#1a2e05"
+          strokeWidth={0.9}
+          strokeLinecap="round"
+        />
         <ellipse
-          cx="25.5"
-          cy="34"
-          rx="2.2"
-          ry="5"
-          fill="#fff"
-          opacity={0.5}
-          transform="rotate(-20 25.5 34)"
+          cx="32.5"
+          cy="37"
+          rx="10.5"
+          ry="4.8"
+          fill={`url(#${id}-cricket)`}
+          stroke="#1a2e05"
+          strokeWidth={1.1}
+          transform="rotate(-8 32.5 37)"
+        />
+        <path
+          d="M42.5 36.5 L47.5 35.5 M42 38.5 L47 39"
+          stroke="#1a2e05"
+          strokeWidth={1}
+          strokeLinecap="round"
+        />
+        <ellipse
+          cx="29.5"
+          cy="35"
+          rx="4.5"
+          ry="1.6"
+          fill="#bef264"
+          opacity={0.45}
+          transform="rotate(-10 29.5 35)"
+        />
+        <circle cx="21.5" cy="34.5" r="4.3" fill="#4d7c0f" stroke="#1a2e05" strokeWidth={1.1} />
+        <circle cx="20" cy="33.5" r="1.4" fill="#1a2e05" />
+        <circle cx="19.6" cy="33" r="0.5" fill="#fff" />
+        <path
+          d="M32 37.5 L40 26.5 L47.5 45.5 L50 45.5"
+          fill="none"
+          stroke="#1a2e05"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <ellipse
+          cx="36.2"
+          cy="32"
+          rx="6.2"
+          ry="2.5"
+          fill="#65a30d"
+          stroke="#1a2e05"
+          strokeWidth={1.1}
+          transform="rotate(-54 36.2 32)"
         />
       </>
     ),

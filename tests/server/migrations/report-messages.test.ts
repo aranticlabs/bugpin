@@ -85,7 +85,7 @@ it('migrates authoritative sent times and preserves the legacy JSON API and staf
       .all()
   ).toEqual([]);
   expect(gamificationRepo.listReporterMessageTimes(['staff'])).toEqual([
-    { userId: 'staff', at: '2026-01-02T03:04:05.000Z' },
+    { userId: 'staff', reportId: 'report', at: '2026-01-02T03:04:05.000Z' },
   ]);
   const user = await usersRepo.findById('staff');
   if (!user) throw new Error('Missing staff fixture');
@@ -193,7 +193,7 @@ it('keeps author snapshots, returns both authors and their files, and counts onl
   expect(file).toMatchObject({ messageId: 'reply', uploadedByReporterId: 'reporter' });
   expect(await filesRepo.findByMessageId('reply')).toEqual([file]);
   expect(gamificationRepo.listReporterMessageTimes(['staff'])).toEqual([
-    { userId: 'staff', at: staffMessage.createdAt },
+    { userId: 'staff', reportId: 'report', at: staffMessage.createdAt },
   ]);
   const messages = await reportMessagesService.listByReport('report');
   expect(messages.success).toBe(true);

@@ -80,7 +80,7 @@ describe('level progress', () => {
         game({
           achievements: [
             { id: 'hatchling', current: 1, target: 1, unlockedAt: '2026-11-01T10:00:00.000Z' },
-            { id: 'cocoon', current: 3, target: 100 },
+            { id: 'butterfly', current: 3, target: 300 },
           ],
         })
       )
