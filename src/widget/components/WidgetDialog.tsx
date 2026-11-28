@@ -466,7 +466,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   aria-valuenow={Math.round(uploadProgress * 100)}
                 >
                   <div
-                    class="h-full bg-[var(--button-color)] transition-[width]"
+                    class="h-full bg-primary transition-[width]"
                     style={{ width: `${Math.round(uploadProgress * 100)}%` }}
                   />
                 </div>

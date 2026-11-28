@@ -392,7 +392,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                     {/* Badges */}
                     <div class="absolute top-1.5 left-1.5 flex gap-1">
                       {item.annotated && (
-                        <span class="px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-info text-info-foreground">
+                        <span class="px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-primary text-primary-foreground">
                           {t('screenshot.badge.annotated')}
                         </span>
                       )}

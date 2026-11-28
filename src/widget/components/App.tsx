@@ -960,7 +960,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
                 <button
                   type="button"
                   onClick={handleCloseKeepDraft}
-                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-transparent text-[var(--button-text-color)] bg-[var(--button-color)] hover:bg-[var(--button-hover-color)] hover:text-[var(--button-hover-text-color)] transition-colors"
+                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-transparent bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-hover-foreground transition-colors"
                 >
                   {t('closeConfirm.saveDraftButton')}
                 </button>

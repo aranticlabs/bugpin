@@ -428,27 +428,29 @@ export function TestWidgetPage() {
 
       {/* API Key Notice Banner */}
       {apiKey && (
-        <div className="flex-shrink-0 bg-bugpin-primary-700 px-5 py-3 text-center text-sm text-white">
+        <div className="flex-shrink-0 bg-primary px-5 py-3 text-center text-sm text-primary-foreground">
           API key:{' '}
-          <code className="bg-white/15 px-1.5 py-0.5 rounded font-mono text-xs">{apiKey}</code>
+          <code className="bg-primary-foreground/15 px-1.5 py-0.5 rounded font-mono text-xs">
+            {apiKey}
+          </code>
           <Button
             variant="outline"
             size="sm"
-            className="ml-3 h-7 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"
+            className="ml-3 h-7 bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
             onClick={handleChangeApiKey}
           >
             Change
           </Button>
           <span className="ml-3">
             Test reporter:{' '}
-            <code className="bg-white/15 px-1.5 py-0.5 rounded font-mono text-xs">
+            <code className="bg-primary-foreground/15 px-1.5 py-0.5 rounded font-mono text-xs">
               {reporterLoggedIn ? `${reporter.name} · ${reporter.email}` : 'Logged out'}
             </code>
           </span>
           <Button
             variant="outline"
             size="sm"
-            className="ml-3 h-7 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"
+            className="ml-3 h-7 bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
             onClick={() => setShowReporterModal(true)}
           >
             Edit reporter
@@ -456,7 +458,7 @@ export function TestWidgetPage() {
           <Button
             variant="outline"
             size="sm"
-            className="ml-2 h-7 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"
+            className="ml-2 h-7 bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
             onClick={handleToggleReporter}
           >
             {reporterLoggedIn ? 'Test logged out' : 'Use reporter'}
@@ -487,8 +489,7 @@ export function TestWidgetPage() {
                       key={item.label}
                       className={cn(
                         'flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-700',
-                        item.active &&
-                          'bg-zinc-700 shadow-[inset_3px_0_0_var(--color-bugpin-primary-700)]'
+                        item.active && 'bg-zinc-700 shadow-[inset_3px_0_0_var(--primary)]'
                       )}
                     >
                       <Icon className="w-5 h-5" />
@@ -796,7 +797,7 @@ export function TestWidgetPage() {
                       </SelectContent>
                     </Select>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="rounded" />
+                      <input type="checkbox" className="rounded accent-primary" />
                       <span className="text-sm">Checkbox</span>
                     </label>
                   </div>

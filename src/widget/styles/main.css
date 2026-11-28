@@ -289,6 +289,7 @@
   .bugpin-container {
     color-scheme: light;
     color: var(--foreground);
+    accent-color: var(--primary);
     --border: color-mix(in srgb, var(--foreground) 11%, var(--background));
     --input: color-mix(in srgb, var(--foreground) 11%, var(--background));
     --ring: color-mix(in srgb, var(--foreground) 38%, var(--background));
