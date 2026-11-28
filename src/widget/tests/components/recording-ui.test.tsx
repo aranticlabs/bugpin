@@ -137,10 +137,12 @@ const barProps = {
   elapsedMs: 5000,
   maxDurationMs: 180_000,
   isPaused: false,
+  allowMicrophone: false,
   hasMicrophone: false,
   isWholeScreen: false,
   position: null,
   onPositionChange: noop,
+  onToggleMicrophone: noop,
   onStart: noop,
   onPause: noop,
   onResume: noop,
@@ -172,8 +174,6 @@ const dialogProps = {
   showScreenCaptureConsent: false,
   onConsentConfirm: noop,
   onConsentCancel: noop,
-  reduceScreenshotQuality: false,
-  onReduceScreenshotQualityChange: noop,
   oversizedCapture: null,
   onDismissOversizedCapture: noop,
 };
@@ -575,13 +575,32 @@ describe('VideoCaptureBar', () => {
     );
   });
 
-  it('is excluded from DOM capture and shows a microphone icon when active', async () => {
-    await mount(<VideoCaptureBar {...barProps} />);
-    const svgCount = container.querySelectorAll('svg').length;
-    await mount(<VideoCaptureBar {...barProps} hasMicrophone />);
-
+  it('is excluded from DOM capture and toggles the microphone button when allowed', async () => {
+    await mount(<VideoCaptureBar {...barProps} isReady />);
     expect(container.querySelector('[data-bugpin-exclude]')).not.toBeNull();
-    expect(container.querySelectorAll('svg').length).toBe(svgCount + 1);
+    expect(button(t('recording.microphone'))).toBeNull();
+
+    const onToggleMicrophone = mock(noop);
+    await mount(
+      <VideoCaptureBar
+        {...barProps}
+        isReady
+        allowMicrophone
+        onToggleMicrophone={onToggleMicrophone}
+      />
+    );
+    const micButton = button(t('recording.microphone'));
+    expect(micButton).not.toBeNull();
+    expect(micButton?.disabled).toBe(false);
+    expect(micButton?.getAttribute('aria-pressed')).toBe('false');
+    micButton?.click();
+    expect(onToggleMicrophone).toHaveBeenCalledTimes(1);
+
+    await mount(<VideoCaptureBar {...barProps} isReady={false} allowMicrophone hasMicrophone />);
+    const activeMicButton = button(t('recording.microphoneOn'));
+    expect(activeMicButton).not.toBeNull();
+    expect(activeMicButton?.disabled).toBe(true);
+    expect(activeMicButton?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('keeps the tools hidden during the countdown', async () => {
@@ -1013,9 +1032,6 @@ describe('ScreenRecordingPanel', () => {
     onUpload: noop,
     onRemove: noop,
     isStarting: false,
-    allowMicrophone: false,
-    includeMicrophone: false,
-    onIncludeMicrophoneChange: noop,
     oversizedRecording: null,
     onDismissOversizedRecording: noop,
   };
@@ -1043,31 +1059,17 @@ describe('ScreenRecordingPanel', () => {
     expect(footer?.classList.contains('flex-wrap')).toBe(true);
   });
 
-  it('hides the microphone option unless an admin allows it', async () => {
-    await mount(<ScreenRecordingPanel {...panelProps} />);
-    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
-
-    await mount(<ScreenRecordingPanel {...panelProps} allowMicrophone />);
-    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-    expect(checkbox.classList.contains('sr-only')).toBe(true);
-    expect(checkbox.nextElementSibling?.getAttribute('aria-hidden')).toBe('true');
-    expect(container.textContent).toContain(t('recording.microphone'));
-  });
-
   it('matches the screenshot panel control layout', async () => {
-    await mount(<ScreenRecordingPanel {...panelProps} allowMicrophone />);
+    await mount(<ScreenRecordingPanel {...panelProps} />);
 
     const recordButton = [...container.querySelectorAll('button')].find(
       (item) => item.textContent === t('recording.start')
     );
-    const microphone = container.querySelector('input[type="checkbox"]');
     const privacyTip = [...container.querySelectorAll('p')].find(
       (item) => item.textContent === t('recording.privacyTip')
     );
 
     expect(recordButton?.classList.contains('flex-1')).toBe(true);
-    expect(microphone?.closest('div')?.classList.contains('justify-end')).toBe(true);
     expect(privacyTip?.classList.contains('text-center')).toBe(false);
   });
 

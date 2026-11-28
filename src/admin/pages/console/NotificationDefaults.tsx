@@ -48,23 +48,6 @@ export function NotificationDefaults() {
     }
   };
 
-  // The email switches save by themselves: the tab is locked while its emails are off. Only the
-  // switch is sent, so unsaved edits on either tab stay in their drafts.
-  const handleTeamChange = (next: Partial<NotificationDefaultSettings>) => {
-    const changes = changedFields(next, teamValue);
-    team.patch(changes);
-    if (changes.emailEnabled !== undefined && next.emailEnabled !== undefined) {
-      mutation.mutate({ notifications: { emailEnabled: next.emailEnabled } });
-    }
-  };
-  const handleReporterChange = (next: Partial<ReporterNotificationSettings>) => {
-    const changes = changedFields(next, reporterValue);
-    reporter.patch(changes);
-    if (changes.emailEnabled !== undefined && next.emailEnabled !== undefined) {
-      mutation.mutate({ reporterNotifications: { emailEnabled: next.emailEnabled } });
-    }
-  };
-
   return (
     <>
       <UnsavedChangesGuard
@@ -77,9 +60,9 @@ export function NotificationDefaults() {
       />
       <NotificationTabs
         team={teamValue}
-        onTeamChange={handleTeamChange}
+        onTeamChange={(next) => team.patch(changedFields(next, teamValue))}
         reporter={reporterValue}
-        onReporterChange={handleReporterChange}
+        onReporterChange={(next) => reporter.patch(changedFields(next, reporterValue))}
         renderPanel={(form) => (
           <SectionCard section="notifications" showHeader={false}>
             {form}

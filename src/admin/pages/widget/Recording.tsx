@@ -44,33 +44,13 @@ export function Recording() {
 
   const value = draft.value;
 
-  const handleChange = (next: ScreenshotSettings) => {
-    const changes = changedFields(next, value);
-    draft.patch(changes);
-    // The on/off switch saves by itself: while recording is off the form is locked, so it could
-    // not be saved afterwards. Only the switch is sent, other unsaved edits stay in the draft.
-    if (changes.enableScreenRecording !== undefined) {
-      const enabled = changes.enableScreenRecording;
-      mutation.mutate({
-        screenshot: {
-          enableScreenRecording: enabled,
-          ...(enabled ? {} : { allowRecordingMicrophone: false }),
-        },
-      });
-    }
-  };
-
   return (
     <SectionCard section="recording">
-      <UnsavedChangesGuard
-        isDirty={draft.isDirty && !!value.enableScreenRecording}
-        onSave={save}
-        onDiscard={draft.reset}
-      />
+      <UnsavedChangesGuard isDirty={draft.isDirty} onSave={save} onDiscard={draft.reset} />
       <div className="space-y-6">
         <RecordingSettingsForm
           value={value}
-          onChange={handleChange}
+          onChange={(next) => draft.patch(changedFields(next, value))}
           disabled={mutation.isPending}
         />
       </div>

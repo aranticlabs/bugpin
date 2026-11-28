@@ -195,8 +195,6 @@ describe('widget components', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -214,8 +212,6 @@ describe('widget components', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -233,8 +229,6 @@ describe('widget components', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={false}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -271,8 +265,6 @@ describe('widget components', () => {
         showScreenCaptureConsent={false}
         onConsentConfirm={() => undefined}
         onConsentCancel={() => undefined}
-        reduceScreenshotQuality={false}
-        onReduceScreenshotQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -349,8 +341,6 @@ describe('widget components', () => {
         showScreenCaptureConsent={false}
         onConsentConfirm={() => undefined}
         onConsentCancel={() => undefined}
-        reduceScreenshotQuality={false}
-        onReduceScreenshotQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -391,8 +381,6 @@ describe('widget components', () => {
         showScreenCaptureConsent={false}
         onConsentConfirm={() => undefined}
         onConsentCancel={() => undefined}
-        reduceScreenshotQuality={false}
-        onReduceScreenshotQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -429,8 +417,6 @@ describe('widget components', () => {
         showScreenCaptureConsent={false}
         onConsentConfirm={() => undefined}
         onConsentCancel={() => undefined}
-        reduceScreenshotQuality={false}
-        onReduceScreenshotQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />
@@ -450,8 +436,6 @@ describe('widget components', () => {
         onAnnotate={() => undefined}
         isCapturing={true}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />

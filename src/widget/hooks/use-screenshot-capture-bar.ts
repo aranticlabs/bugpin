@@ -25,9 +25,10 @@ interface UseScreenshotBarOptions {
   dependencies?: Partial<ScreenshotCaptureBarDependencies>;
   /**
    * Runs once the bar is hidden. Receives the shared tab stream when one is open, or null
-   * to capture the DOM (also after the user declined the share picker).
+   * to capture the DOM (also after the user declined the share picker). Return true to keep
+   * the bar and stream open so the user can adjust options and retry.
    */
-  capture: (session: ScreenCaptureSession | null) => Promise<void>;
+  capture: (session: ScreenCaptureSession | null) => Promise<boolean | void>;
 }
 
 /**
@@ -96,11 +97,16 @@ export function useScreenshotCaptureBar({
     const current = statusRef.current;
     if (current !== 'ready' && current !== 'countdown') return;
     updateStatus('capturing');
+    let keepOpen = false;
     try {
-      await captureRef.current(sessionRef.current);
+      keepOpen = (await captureRef.current(sessionRef.current)) === true;
     } finally {
-      releaseSession();
-      updateStatus('idle');
+      if (keepOpen) {
+        updateStatus('ready');
+      } else {
+        releaseSession();
+        updateStatus('idle');
+      }
     }
   }, [releaseSession, updateStatus]);
 

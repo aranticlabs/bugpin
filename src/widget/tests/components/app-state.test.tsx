@@ -881,6 +881,62 @@ describe('Screenshot bar and capture API', () => {
     cleanup(container);
   });
 
+  it('keeps the bar and session open on oversized capture, clears warning on reduced size, and retries with 1x', async () => {
+    localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
+    const session = { grabFrame: mock(async () => 'data:image/png;base64,ok'), stop: mock() };
+    const openScreenCaptureSession = mock(async () => session);
+    const container = await renderApp(
+      { useScreenCaptureAPI: true, maxScreenshotSize: 4 },
+      { openScreenCaptureSession }
+    );
+    captureScreenshot
+      .mockImplementationOnce(async () => 'data:image/png;base64,AAAAAAAAAAAAAAAAAAAA')
+      .mockImplementationOnce(async () => 'data:image/png;base64,AA==');
+
+    await openBar(container);
+    await flush();
+
+    clickCapture(container);
+    await settle();
+
+    // Stays on the capture bar with the warning visible and session still alive
+    expect(barHandle(container)).not.toBeNull();
+    expect(session.stop).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      t('screenshot.error.captureTooLargeHint')
+    );
+
+    // Switch image size to Reduced size (1x) — warning clears automatically
+    const sizeTrigger = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="menu"]')
+    ).find((b) => b.textContent?.includes(t('screenshot.bar.sizeLabel')));
+    sizeTrigger?.click();
+    await flush();
+    const reducedItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+    )[1];
+    reducedItem?.click();
+    await flush();
+
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    // Retry passes pixelRatioOverride: 1 and reuses the same session
+    clickCapture(container);
+    await settle();
+
+    const retryOptions = (captureScreenshot.mock.calls as unknown[][])[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(retryOptions.pixelRatioOverride).toBe(1);
+    expect(retryOptions.screenCaptureSession).toBe(session);
+    expect(session.stop).toHaveBeenCalledTimes(1);
+    expect(barHandle(container)).toBeNull();
+    expect((lastDialogProps?.media as unknown[]).length).toBe(1);
+
+    cleanup(container);
+  });
+
   it('captures the DOM without a second picker when the tab share was declined', async () => {
     localStorage.setItem('bugpin-skip-screen-capture-consent', 'true');
     const openScreenCaptureSession = mock(async () => {

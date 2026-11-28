@@ -263,14 +263,13 @@ describe('Settings sections', () => {
     expect(screen.queryByLabelText(/maximum screenshot size/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
-    await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
+    expect(settingsServer.puts).toHaveLength(0);
     await user.click(screen.getByRole('switch', { name: /allow microphone recording/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(settingsServer.puts).toHaveLength(2));
+    await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
     expect(settingsServer.puts).toEqual([
-      { screenshot: { enableScreenRecording: true } },
-      { screenshot: { allowRecordingMicrophone: true } },
+      { screenshot: { enableScreenRecording: true, allowRecordingMicrophone: true } },
     ]);
     expect(toast.success).toHaveBeenCalledWith('Recording settings saved successfully');
   });

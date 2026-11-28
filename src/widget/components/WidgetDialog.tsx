@@ -63,14 +63,9 @@ interface WidgetDialogProps {
   onConsentCancel: () => void;
   maxImageSize?: number;
   maxVideoSize?: number;
-  reduceScreenshotQuality: boolean;
-  onReduceScreenshotQualityChange: (value: boolean) => void;
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
   recordingEnabled?: boolean;
-  allowRecordingMicrophone?: boolean;
-  includeMicrophone?: boolean;
-  onIncludeMicrophoneChange?: (value: boolean) => void;
   isRecordingStarting?: boolean;
   onStartRecording?: () => void;
   oversizedRecording?: { sizeMb: number; limitMb: number } | null;
@@ -113,14 +108,9 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onConsentCancel,
   maxImageSize,
   maxVideoSize,
-  reduceScreenshotQuality,
-  onReduceScreenshotQualityChange,
   oversizedCapture,
   onDismissOversizedCapture,
   recordingEnabled = false,
-  allowRecordingMicrophone = false,
-  includeMicrophone = false,
-  onIncludeMicrophoneChange = () => undefined,
   isRecordingStarting = false,
   onStartRecording = () => undefined,
   oversizedRecording = null,
@@ -424,8 +414,6 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   isCapturing={isCapturing}
                   enableAnnotation={enableAnnotation}
                   maxImageSize={maxImageSize}
-                  reduceQuality={reduceScreenshotQuality}
-                  onReduceQualityChange={onReduceScreenshotQualityChange}
                   oversizedCapture={oversizedCapture}
                   onDismissOversizedCapture={onDismissOversizedCapture}
                 />
@@ -441,9 +429,6 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   onRemove={onRemoveMedia}
                   isStarting={isRecordingStarting}
                   maxVideoSize={maxVideoSize}
-                  allowMicrophone={allowRecordingMicrophone}
-                  includeMicrophone={includeMicrophone}
-                  onIncludeMicrophoneChange={onIncludeMicrophoneChange}
                   oversizedRecording={blockingOversize ?? oversizedRecording}
                   onDismissOversizedRecording={
                     blockingOversize ? undefined : onDismissOversizedRecording

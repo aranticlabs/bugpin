@@ -870,15 +870,19 @@ describe('App screen recording', () => {
 
   it('continues without audio when the microphone is denied', async () => {
     await renderOpenApp();
-    (dialogProps?.onIncludeMicrophoneChange as (value: boolean) => void)(true);
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.microphone')); i++) await flush();
+
+    button(t('recording.microphone'))?.click();
     await flush();
 
-    await reachRecording();
-
     expect(requestMicrophoneTrack).toHaveBeenCalledTimes(1);
+    expect(toast()).toContain(t('recording.notice.noMicrophone'));
+
+    await beginFromBar();
+
     expect(startRecording).toHaveBeenCalledTimes(1);
     expect(startRecording.mock.calls[0]?.[1]).toBeNull();
-    expect(toast()).toContain(t('recording.notice.noMicrophone'));
   });
 
   it('does not request the microphone unless the reporter opted in', async () => {
@@ -889,34 +893,80 @@ describe('App screen recording', () => {
     expect(requestMicrophoneTrack).toHaveBeenCalledTimes(0);
   });
 
-  it('resets the microphone option after each recording', async () => {
+  it('toggles the microphone on and off in the capture bar before starting', async () => {
+    const microphone = new FakeTrack();
+    requestMicrophoneTrack = mock(async () => microphone as unknown as MediaStreamTrack);
     await renderOpenApp();
-    (dialogProps?.onIncludeMicrophoneChange as (value: boolean) => void)(true);
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.microphone')); i++) await flush();
+
+    button(t('recording.microphone'))?.click();
     await flush();
-    await reachRecording();
+    expect(button(t('recording.microphone'))?.getAttribute('aria-pressed')).toBe('true');
+
+    button(t('recording.microphone'))?.click();
+    await flush();
+    expect(microphone.stopCount).toBe(1);
+    expect(button(t('recording.microphone'))?.getAttribute('aria-pressed')).toBe('false');
+
+    await beginFromBar();
+    expect(startRecording.mock.calls[0]?.[1]).toBeNull();
+  });
+
+  it('stops a late microphone track if the bar is discarded while requesting', async () => {
+    let resolveMic!: (track: MediaStreamTrack | null) => void;
+    requestMicrophoneTrack = mock(
+      () =>
+        new Promise<MediaStreamTrack | null>((resolve) => {
+          resolveMic = resolve;
+        })
+    );
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.microphone')); i++) await flush();
+
+    button(t('recording.microphone'))?.click();
+    await flush();
+    button(t('recording.discard'))?.click();
+    await flush();
+
+    const lateMic = new FakeTrack();
+    resolveMic(lateMic as unknown as MediaStreamTrack);
+    await flush();
+
+    expect(lateMic.stopCount).toBe(1);
+  });
+
+  it('resets the microphone option after each recording', async () => {
+    const microphone = new FakeTrack();
+    requestMicrophoneTrack = mock(async () => microphone as unknown as MediaStreamTrack);
+    await renderOpenApp();
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.microphone')); i++) await flush();
+    button(t('recording.microphone'))?.click();
+    await flush();
+    await beginFromBar();
+    expect(startRecording.mock.calls[0]?.[1]).toBe(microphone as unknown as MediaStreamTrack);
 
     current.resolveFinished(makeResult(10));
     await flush();
 
-    expect(dialogProps?.includeMicrophone).toBe(false);
+    startFromDialog();
+    for (let i = 0; i < 100 && !button(t('recording.microphone')); i++) await flush();
+    expect(button(t('recording.microphone'))?.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('keeps the dialog open and stops tracks when the draft cannot be saved', async () => {
     spyOn(draftStorage, 'save').mockImplementation(async () => {
       throw new Error('Quota exceeded');
     });
-    const microphone = new FakeTrack();
-    requestMicrophoneTrack = mock(async () => microphone as unknown as MediaStreamTrack);
     await renderOpenApp();
-    (dialogProps?.onIncludeMicrophoneChange as (value: boolean) => void)(true);
-    await flush();
 
     await reachRecording();
 
     expect(dialog()).not.toBeNull();
     expect(startRecording).toHaveBeenCalledTimes(0);
     expect(track.stopCount).toBeGreaterThan(0);
-    expect(microphone.stopCount).toBeGreaterThan(0);
     expect(toast()).not.toBeNull();
   });
 

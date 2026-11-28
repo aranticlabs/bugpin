@@ -365,7 +365,7 @@ function isScreenCaptureAvailable(): boolean {
 }
 
 export interface ScreenCaptureSession {
-  grabFrame: () => Promise<string>;
+  grabFrame: (pixelRatioOverride?: number) => Promise<string>;
   stop: () => void;
 }
 
@@ -414,7 +414,7 @@ export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> 
     await Promise.resolve(video.play?.()).catch(() => undefined);
 
     return {
-      grabFrame: async () => {
+      grabFrame: async (pixelRatioOverride?: number) => {
         if (stream.getTracks().every((track) => track.readyState === 'ended')) {
           throw new Error('Screen sharing was stopped');
         }
@@ -423,15 +423,20 @@ export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> 
         if (video.readyState < HAVE_CURRENT_DATA || video.videoWidth === 0) {
           throw new Error('Screen sharing has no frame yet');
         }
+        const dpr = Math.max(1, (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1);
+        const scale =
+          typeof pixelRatioOverride === 'number' && pixelRatioOverride > 0
+            ? Math.min(1, pixelRatioOverride / dpr)
+            : 1;
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           throw new Error('Failed to get canvas context');
         }
 
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         return canvas.toDataURL('image/png');
       },
       stop,
@@ -442,11 +447,11 @@ export async function openScreenCaptureSession(): Promise<ScreenCaptureSession> 
   }
 }
 
-async function captureWithScreenCaptureAPI(): Promise<string> {
+async function captureWithScreenCaptureAPI(pixelRatioOverride?: number): Promise<string> {
   const session = await openScreenCaptureSession();
   try {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    return await session.grabFrame();
+    return await session.grabFrame(pixelRatioOverride);
   } finally {
     session.stop();
   }
@@ -471,8 +476,8 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
   if (useScreenCaptureAPI) {
     try {
       return screenCaptureSession
-        ? await screenCaptureSession.grabFrame()
-        : await captureWithScreenCaptureAPI();
+        ? await screenCaptureSession.grabFrame(pixelRatioOverride)
+        : await captureWithScreenCaptureAPI(pixelRatioOverride);
     } catch (error) {
       console.warn(
         '[BugPin] Screen Capture API unavailable, falling back to DOM capture.',

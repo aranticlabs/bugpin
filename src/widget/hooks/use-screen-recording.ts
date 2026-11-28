@@ -50,6 +50,7 @@ interface UseScreenRecordingOptions {
 interface PendingCapture {
   stream: MediaStream;
   microphone: MediaStreamTrack | null;
+  handleMicrophoneEnded?: () => void;
   videoTrack: MediaStreamTrack | undefined;
   handleEnded: () => void;
 }
@@ -89,9 +90,11 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [hasMicrophone, setHasMicrophone] = useState(false);
+  const [isRequestingMicrophone, setIsRequestingMicrophone] = useState(false);
   const [isWholeScreen, setIsWholeScreen] = useState(false);
 
   const statusRef = useRef<RecordingStatus>('idle');
+  const requestingMicrophoneRef = useRef(false);
   const pendingRef = useRef<PendingCapture | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
   const failedRef = useRef(false);
@@ -109,6 +112,9 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     if (!pending) return null;
     pendingRef.current = null;
     pending.videoTrack?.removeEventListener('ended', pending.handleEnded);
+    if (pending.microphone && pending.handleMicrophoneEnded) {
+      pending.microphone.removeEventListener('ended', pending.handleMicrophoneEnded);
+    }
     return pending;
   }, []);
 
@@ -238,66 +244,111 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
 
   // The picker needs the click's transient activation, so nothing may be awaited
   // before requestStream runs.
-  const start = useCallback(
-    async (includeMicrophone: boolean) => {
-      if (statusRef.current !== 'idle') return;
-      const { apiKey, quality, dependencies } = optionsRef.current;
-      const requestStream = dependencies?.requestRecordingStream ?? requestRecordingStream;
-      const requestMicrophone = dependencies?.requestMicrophoneTrack ?? requestMicrophoneTrack;
-      const store = dependencies?.recordingStore ?? recordingStore;
-      const captureAllowed = dependencies?.isDisplayCaptureAllowed ?? isDisplayCaptureAllowed;
-      if (!captureAllowed()) {
+  const start = useCallback(async () => {
+    if (statusRef.current !== 'idle') return;
+    const { apiKey, quality, dependencies } = optionsRef.current;
+    const requestStream = dependencies?.requestRecordingStream ?? requestRecordingStream;
+    const store = dependencies?.recordingStore ?? recordingStore;
+    const captureAllowed = dependencies?.isDisplayCaptureAllowed ?? isDisplayCaptureAllowed;
+    if (!captureAllowed()) {
+      optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
+      return;
+    }
+    if (store.isStartBlocked(apiKey)) {
+      optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
+      return;
+    }
+    updateStatus('requesting');
+
+    let stream: MediaStream;
+    try {
+      stream = await requestStream(quality);
+    } catch (error) {
+      updateStatus('idle');
+      if (!isPermissionDenial(error)) {
+        console.error('[BugPin] Failed to request a recording stream:', error);
         optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
-        return;
       }
-      if (store.isStartBlocked(apiKey)) {
-        optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
-        return;
+      return;
+    }
+
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) await restrictCaptureToPage(videoTrack);
+
+    const prepared = mountedRef.current && (await optionsRef.current.prepare());
+    if (!prepared || !mountedRef.current || videoTrack?.readyState === 'ended') {
+      stopCaptureTracks(stream, null);
+      if (mountedRef.current) updateStatus('idle');
+      return;
+    }
+
+    videoTrack?.addEventListener('ended', cancelCountdown);
+    pendingRef.current = { stream, microphone: null, videoTrack, handleEnded: cancelCountdown };
+    setCountdown(COUNTDOWN_SECONDS);
+    setElapsedMs(0);
+    setIsPaused(false);
+    setHasMicrophone(false);
+    setIsWholeScreen(isWholeScreenCapture(videoTrack));
+    updateStatus('ready');
+    optionsRef.current.onEnter();
+  }, [cancelCountdown, updateStatus]);
+
+  const toggleMicrophone = useCallback(async () => {
+    if (statusRef.current !== 'ready' || requestingMicrophoneRef.current) return;
+    const pending = pendingRef.current;
+    if (!pending) return;
+
+    if (pending.microphone) {
+      if (pending.handleMicrophoneEnded) {
+        pending.microphone.removeEventListener('ended', pending.handleMicrophoneEnded);
+        pending.handleMicrophoneEnded = undefined;
       }
-      updateStatus('requesting');
+      pending.microphone.stop();
+      pending.microphone = null;
+      setHasMicrophone(false);
+      return;
+    }
 
-      let stream: MediaStream;
-      try {
-        stream = await requestStream(quality);
-      } catch (error) {
-        updateStatus('idle');
-        if (!isPermissionDenial(error)) {
-          console.error('[BugPin] Failed to request a recording stream:', error);
-          optionsRef.current.onNotice(t('recording.error.unavailable'), 'error');
-        }
-        return;
+    requestingMicrophoneRef.current = true;
+    setIsRequestingMicrophone(true);
+    const requestMicrophone =
+      optionsRef.current.dependencies?.requestMicrophoneTrack ?? requestMicrophoneTrack;
+    let microphone: MediaStreamTrack | null = null;
+    try {
+      microphone = await requestMicrophone();
+    } finally {
+      requestingMicrophoneRef.current = false;
+      if (mountedRef.current) setIsRequestingMicrophone(false);
+    }
+
+    if (!mountedRef.current || statusRef.current !== 'ready' || pendingRef.current !== pending) {
+      microphone?.stop();
+      return;
+    }
+
+    if (!microphone) {
+      optionsRef.current.onNotice(t('recording.notice.noMicrophone'), 'info');
+      setHasMicrophone(false);
+      return;
+    }
+
+    const handleMicrophoneEnded = () => {
+      if (pendingRef.current === pending && pending.microphone === microphone) {
+        pending.microphone = null;
+        pending.handleMicrophoneEnded = undefined;
+        setHasMicrophone(false);
       }
-
-      const microphone = includeMicrophone ? await requestMicrophone() : null;
-      if (includeMicrophone && !microphone) {
-        optionsRef.current.onNotice(t('recording.notice.noMicrophone'), 'info');
-      }
-
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) await restrictCaptureToPage(videoTrack);
-
-      const prepared = mountedRef.current && (await optionsRef.current.prepare());
-      if (!prepared || !mountedRef.current || videoTrack?.readyState === 'ended') {
-        stopCaptureTracks(stream, microphone);
-        if (mountedRef.current) updateStatus('idle');
-        return;
-      }
-
-      videoTrack?.addEventListener('ended', cancelCountdown);
-      pendingRef.current = { stream, microphone, videoTrack, handleEnded: cancelCountdown };
-      setCountdown(COUNTDOWN_SECONDS);
-      setElapsedMs(0);
-      setIsPaused(false);
-      setHasMicrophone(microphone?.readyState === 'live');
-      setIsWholeScreen(isWholeScreenCapture(videoTrack));
-      updateStatus('ready');
-      optionsRef.current.onEnter();
-    },
-    [cancelCountdown, updateStatus]
-  );
+    };
+    microphone.addEventListener('ended', handleMicrophoneEnded, { once: true });
+    pending.microphone = microphone;
+    pending.handleMicrophoneEnded = handleMicrophoneEnded;
+    setHasMicrophone(microphone.readyState === 'live');
+  }, []);
 
   const startCountdown = useCallback(() => {
-    if (statusRef.current === 'ready') updateStatus('countdown');
+    if (statusRef.current === 'ready') {
+      updateStatus('countdown');
+    }
   }, [updateStatus]);
 
   const pause = useCallback(() => {
@@ -332,8 +383,10 @@ export function useScreenRecording(options: UseScreenRecordingOptions) {
     elapsedMs,
     isPaused,
     hasMicrophone,
+    isRequestingMicrophone,
     isWholeScreen,
     start,
+    toggleMicrophone,
     startCountdown,
     pause,
     resume,
