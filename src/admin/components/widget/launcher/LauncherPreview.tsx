@@ -124,7 +124,7 @@ function LauncherPreview({
       <div
         className={cn(
           'absolute inset-0 overflow-hidden rounded-[inherit] pointer-events-none text-xs font-medium leading-none',
-          isDarkMode ? 'text-sky-300' : 'text-sky-800'
+          isDarkMode ? 'text-[color-mix(in_oklch,var(--primary)_60%,white)]' : 'text-primary'
         )}
         data-preview-theme={isDarkMode ? 'dark' : 'light'}
         aria-hidden="true"

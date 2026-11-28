@@ -77,9 +77,6 @@ function renderVideoPanel(
       onUpload={onUpload}
       onRemove={onRemove}
       isStarting={false}
-      allowMicrophone={false}
-      includeMicrophone={false}
-      onIncludeMicrophoneChange={() => undefined}
       oversizedRecording={null}
       onDismissOversizedRecording={() => undefined}
     />,
@@ -201,8 +198,6 @@ describe('ScreenshotManager uploads', () => {
           onAnnotate={() => undefined}
           isCapturing={false}
           enableAnnotation
-          reduceQuality={false}
-          onReduceQualityChange={() => undefined}
           oversizedCapture={null}
           onDismissOversizedCapture={() => undefined}
         />,
@@ -251,8 +246,6 @@ describe('ScreenshotManager uploads', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />,
@@ -280,8 +273,6 @@ describe('ScreenshotManager uploads', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />,
@@ -364,8 +355,6 @@ describe('ScreenshotManager uploads', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />,
@@ -407,8 +396,6 @@ describe('ScreenshotManager uploads', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />,
@@ -542,8 +529,6 @@ describe('ScreenshotManager paste', () => {
         onAnnotate={() => undefined}
         isCapturing={false}
         enableAnnotation={true}
-        reduceQuality={false}
-        onReduceQualityChange={() => undefined}
         oversizedCapture={null}
         onDismissOversizedCapture={() => undefined}
       />,

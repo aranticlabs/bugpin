@@ -3,8 +3,8 @@ import { usersRepo } from '../database/repositories/users.repo.js';
 import { userPreferencesRepo } from '../database/repositories/user-preferences.repo.js';
 import {
   gamificationRepo,
+  type ReporterMessageRow,
   type UserResolutionRow,
-  type UserTimeRow,
 } from '../database/repositories/gamification.repo.js';
 import { userPreferencesService } from './user-preferences.service.js';
 import { Result } from '../utils/result.js';
@@ -12,12 +12,10 @@ import { logger } from '../utils/logger.js';
 import { gamificationStatus } from '@shared/gamification';
 import {
   ACHIEVEMENT_TARGETS,
-  AMBER_WAITED_DAYS,
-  DRAGONFLY_TRIAGE_MINUTES,
   EARLY_RESOLVE_MINUTES,
   FIREFLY_RESOLVE_HOURS,
-  LADYBUG_STAYS_FIXED_DAYS,
   LEVEL_XP,
+  WEB_WEAVER_BUGS_PER_PROJECT,
   XP_BY_PRIORITY,
   XP_PER_REPORTER_MESSAGE,
   type AchievementId,
@@ -80,17 +78,13 @@ function groupByUser<T extends { userId: string }>(rows: T[]): Map<string, T[]> 
   return groups;
 }
 
-function times(rows: UserTimeRow[] | undefined): string[] {
-  return (rows ?? []).map((row) => row.at);
-}
-
-function progressFromTimes(id: AchievementId, times: string[]): AchievementProgress {
+function progressFromTimes(id: AchievementId, timestamps: string[]): AchievementProgress {
   const target = ACHIEVEMENT_TARGETS[id];
   return {
     id,
-    current: Math.min(times.length, target),
+    current: Math.min(timestamps.length, target),
     target,
-    unlockedAt: times.length >= target ? times[target - 1] : undefined,
+    unlockedAt: timestamps.length >= target ? timestamps[target - 1] : undefined,
   };
 }
 
@@ -108,15 +102,64 @@ function resolvedWithin(
     .map((row) => row.resolvedAt);
 }
 
-function firstVisitsToNewProjects(resolutions: UserResolutionRow[]): string[] {
-  const seen = new Set<string>();
-  const times: string[] = [];
+function resolvedWithPriorities(
+  resolutions: UserResolutionRow[],
+  priorities: readonly string[]
+): string[] {
+  return resolutions
+    .filter((row) => priorities.includes(row.priority))
+    .map((row) => row.resolvedAt);
+}
+
+/** Timestamp when each project first reaches the required number of resolved reports */
+function projectsReachingCount(
+  resolutions: UserResolutionRow[],
+  requiredPerProject: number
+): string[] {
+  const counts = new Map<string, number>();
+  const timestamps: string[] = [];
   for (const row of resolutions) {
-    if (seen.has(row.projectId)) continue;
-    seen.add(row.projectId);
-    times.push(row.resolvedAt);
+    const next = (counts.get(row.projectId) ?? 0) + 1;
+    counts.set(row.projectId, next);
+    if (next === requiredPerProject) timestamps.push(row.resolvedAt);
   }
-  return times;
+  return timestamps;
+}
+
+function firstMessagedReports(messages: readonly ReporterMessageRow[]): string[] {
+  const sorted = [...messages].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const seen = new Set<string>();
+  const timestamps: string[] = [];
+  for (const message of sorted) {
+    if (seen.has(message.reportId)) continue;
+    seen.add(message.reportId);
+    timestamps.push(message.at);
+  }
+  return timestamps;
+}
+
+function utcMonthIndex(ms: number): number {
+  const date = new Date(ms);
+  return date.getUTCFullYear() * 12 + date.getUTCMonth();
+}
+
+/** Longest run of consecutive UTC calendar months with at least one resolution */
+function bestMonthStreak(id: AchievementId, resolvedTimes: string[]): AchievementProgress {
+  const target = ACHIEVEMENT_TARGETS[id];
+  const sorted = [...resolvedTimes].sort((a, b) => Date.parse(a) - Date.parse(b));
+  let previousMonth: number | null = null;
+  let streak = 0;
+  let best = 0;
+  let unlockedAt: string | undefined;
+  for (const time of sorted) {
+    const month = utcMonthIndex(Date.parse(time));
+    if (month === previousMonth) continue;
+    streak = previousMonth !== null && month === previousMonth + 1 ? streak + 1 : 1;
+    previousMonth = month;
+    if (streak > best) best = streak;
+    if (unlockedAt === undefined && streak >= target) unlockedAt = time;
+  }
+  return { id, current: Math.min(best, target), target, unlockedAt };
 }
 
 export function levelFor(
@@ -129,27 +172,6 @@ export function levelFor(
     levelStartXp: LEVEL_XP[index],
     nextLevelXp: LEVEL_XP[index + 1] ?? null,
   };
-}
-
-/** Resolutions that were not reopened within the window, counted once the window is over */
-function staysFixed(resolutions: UserResolutionRow[], now: number): string[] {
-  const window = LADYBUG_STAYS_FIXED_DAYS * DAY_MS;
-  return resolutions
-    .map((row) => ({ row, settledAt: Date.parse(row.resolvedAt) + window }))
-    .filter(
-      ({ row, settledAt }) =>
-        settledAt <= now && (row.reopenedAt === null || Date.parse(row.reopenedAt) > settledAt)
-    )
-    .map(({ settledAt }) => new Date(settledAt).toISOString())
-    .sort();
-}
-
-function waitedLong(resolutions: UserResolutionRow[]): string[] {
-  return resolutions
-    .filter(
-      (row) => Date.parse(row.resolvedAt) - Date.parse(row.createdAt) > AMBER_WAITED_DAYS * DAY_MS
-    )
-    .map((row) => row.resolvedAt);
 }
 
 /** Resolved within the early window of its first assignment, or of arrival when never assigned */
@@ -169,21 +191,23 @@ export function xpFor(resolutions: UserResolutionRow[], reporterMessages: number
 
 export function buildProgress(
   resolutions: UserResolutionRow[],
-  quickTriageTimes: string[],
-  now: number,
-  reporterMessages = 0
+  reporterMessages: readonly ReporterMessageRow[] = []
 ): GamificationProgress {
-  const xp = xpFor(resolutions, reporterMessages);
+  const xp = xpFor(resolutions, reporterMessages.length);
   const resolvedTimes = resolutions.map((row) => row.resolvedAt);
+  const earlyResolvedTimes = resolutions.filter(resolvedEarly).map((row) => row.resolvedAt);
   const achievements: AchievementProgress[] = [
     progressFromTimes('hatchling', resolvedTimes),
-    progressFromTimes('cocoon', resolvedTimes),
     progressFromTimes('butterfly', resolvedTimes),
     progressFromTimes('firefly', resolvedWithin(resolutions, ['highest'], FIREFLY_RESOLVE_HOURS)),
-    progressFromTimes('dragonfly', quickTriageTimes),
-    progressFromTimes('ladybug', staysFixed(resolutions, now)),
-    progressFromTimes('web_weaver', firstVisitsToNewProjects(resolutions)),
-    progressFromTimes('amber', waitedLong(resolutions)),
+    progressFromTimes('dragonfly', earlyResolvedTimes),
+    progressFromTimes('stag_beetle', resolvedWithPriorities(resolutions, ['highest', 'high'])),
+    bestMonthStreak('honeybee', resolvedTimes),
+    progressFromTimes(
+      'web_weaver',
+      projectsReachingCount(resolutions, WEB_WEAVER_BUGS_PER_PROJECT)
+    ),
+    progressFromTimes('cricket', firstMessagedReports(reporterMessages)),
   ];
   return { xp, ...levelFor(xp), achievements };
 }
@@ -313,10 +337,9 @@ export const gamificationService = {
     const active = await this.isActiveFor(user);
     if (!active.success) return active;
     if (!active.value) return Result.ok(null);
-    const triage = gamificationRepo.listQuickTriage([user.id], DRAGONFLY_TRIAGE_MINUTES * 60);
     const messages = gamificationRepo.listReporterMessageTimes([user.id]);
     return Result.ok({
-      progress: buildProgress(resolutions, times(triage), now, messages.length),
+      progress: buildProgress(resolutions, messages),
       resolveXp: resolveXpFor(user.id, now),
     });
   },
@@ -339,22 +362,14 @@ export const gamificationService = {
     const people = (await usersRepo.findAll()).filter((user) => user.isActive && takesPart(user));
     const ids = people.map((user) => user.id);
     const resolutionsBy = groupByUser(gamificationRepo.listUserResolutions(ids));
-    const triageBy = groupByUser(
-      gamificationRepo.listQuickTriage(ids, DRAGONFLY_TRIAGE_MINUTES * 60)
-    );
     const messagesBy = groupByUser(gamificationRepo.listReporterMessageTimes(ids));
     const since = period === 'all' ? null : now - TEAM_PERIOD_DAYS[period] * DAY_MS;
     const inPeriod = (iso: string) => since === null || Date.parse(iso) >= since;
 
     const members: TeamMember[] = people.map((user) => {
       const resolutions = resolutionsBy.get(user.id) ?? [];
-      const messages = times(messagesBy.get(user.id));
-      const progress = buildProgress(
-        resolutions,
-        times(triageBy.get(user.id)),
-        now,
-        messages.length
-      );
+      const messages = messagesBy.get(user.id) ?? [];
+      const progress = buildProgress(resolutions, messages);
       return {
         id: user.id,
         name: user.name,
@@ -366,7 +381,7 @@ export const gamificationService = {
             ? progress.xp
             : xpFor(
                 resolutions.filter((row) => inPeriod(row.resolvedAt)),
-                messages.filter(inPeriod).length
+                messages.filter((row) => inPeriod(row.at)).length
               ),
         achievements: progress.achievements,
       };

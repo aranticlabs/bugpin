@@ -217,6 +217,48 @@ describe('reports routes', () => {
     });
   });
 
+  it('rejects invalid reporterEmail on manual report creation and trims valid emails', async () => {
+    userRole = 'editor';
+    const app = createApp();
+
+    const invalidRes = await app.request('http://localhost/reports', {
+      method: 'POST',
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId: 'prj_1',
+        title: 'Manual report',
+        reporterEmail: 'rter',
+      }),
+    });
+
+    expect(invalidRes.status).toBe(400);
+    expect(((await invalidRes.json()) as { error: string }).error).toBe('VALIDATION_ERROR');
+    expect(createManualPayload).toBeUndefined();
+
+    const validRes = await app.request('http://localhost/reports', {
+      method: 'POST',
+      headers: {
+        cookie: 'session=sess_1',
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId: 'prj_1',
+        title: 'Manual report',
+        reporterEmail: '  reporter@example.com  ',
+      }),
+    });
+
+    expect(validRes.status).toBe(201);
+    expect(createManualPayload).toMatchObject({
+      reporterEmail: 'reporter@example.com',
+    });
+  });
+
   it('normalizes MIME parameters on manual report files', async () => {
     const formData = new FormData();
     formData.append(

@@ -783,6 +783,24 @@ describe('reportsService.create', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('rejects invalid reporter emails on manual report creation', async () => {
+    projectsRepo.findById = async () => baseProject;
+
+    const result = await reportsService.createManual(
+      {
+        projectId: 'prj_1',
+        title: 'Manual report',
+        reporterEmail: 'rter',
+      },
+      'usr_1'
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.code).toBe('INVALID_EMAIL');
+    }
+  });
 });
 
 describe('reportsService.getById/getByIdWithFiles', () => {

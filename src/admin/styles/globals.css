@@ -28,12 +28,12 @@
 }
 
 @utility launcher-preview-margin {
-  background: oklch(0.685 0.148 237.32 / 22%);
+  background: color-mix(in oklch, var(--primary) 22%, transparent);
   opacity: 0;
   animation: launcher-margin-highlight 1s ease-out;
 
   [data-preview-theme='light'] & {
-    background: oklch(0.685 0.148 237.32 / 26%);
+    background: color-mix(in oklch, var(--primary) 26%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

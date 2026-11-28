@@ -85,7 +85,7 @@ function CropEditor({
             step={0.1}
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="w-full"
+            className="w-full accent-primary"
           />
         </div>
       </div>

@@ -28,6 +28,7 @@
 
   html {
     color-scheme: light;
+    accent-color: var(--primary);
   }
 
   html.dark {

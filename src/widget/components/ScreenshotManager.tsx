@@ -7,7 +7,6 @@ import {
   MEDIA_DROPZONE_ACTIVE_CLASS,
   MEDIA_DROPZONE_CLASS,
   MediaCaptureFeedback,
-  MediaOptionToggle,
   MediaUploadButton,
 } from './MediaPanelShared';
 import { useLocale } from '../hooks/use-locale.js';
@@ -44,8 +43,6 @@ interface ScreenshotManagerProps {
   isCapturing: boolean;
   enableAnnotation: boolean;
   maxImageSize?: number;
-  reduceQuality: boolean;
-  onReduceQualityChange: (value: boolean) => void;
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
 }
@@ -181,8 +178,6 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
   isCapturing,
   enableAnnotation,
   maxImageSize = DEFAULT_MAX_IMAGE_SIZE,
-  reduceQuality,
-  onReduceQualityChange,
   oversizedCapture,
   onDismissOversizedCapture,
 }) => {
@@ -314,13 +309,6 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
       {/* Fixed top section: capture button and related controls stay visible
           while the media grid below scrolls independently. */}
       <div class="shrink-0 flex flex-col gap-4 px-6 pt-6 pb-4">
-        <MediaOptionToggle
-          label={t('screenshot.quality.label')}
-          title={t('screenshot.quality.tooltip')}
-          checked={reduceQuality}
-          onChange={onReduceQualityChange}
-        />
-
         {/* Action button */}
         <div class="flex gap-2">
           <Button class="flex-1" onClick={onCapture} disabled={isCapturing}>
@@ -392,7 +380,7 @@ export const ScreenshotManager: FunctionComponent<ScreenshotManagerProps> = ({
                     {/* Badges */}
                     <div class="absolute top-1.5 left-1.5 flex gap-1">
                       {item.annotated && (
-                        <span class="px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-info text-info-foreground">
+                        <span class="px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide bg-primary text-primary-foreground">
                           {t('screenshot.badge.annotated')}
                         </span>
                       )}

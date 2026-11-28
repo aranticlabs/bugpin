@@ -38,7 +38,7 @@ describe('Capture settings', () => {
     );
   });
 
-  it('keeps unsaved screenshot edits when the recording switch saves on its own', async () => {
+  it('waits for the save bar before saving the recording switch alongside screenshot edits', async () => {
     const user = userEvent.setup();
     const settingsServer = mockSettingsServer();
     renderWithQueryAndRouter(<Capture />);
@@ -48,14 +48,15 @@ describe('Capture settings', () => {
     await user.click(screen.getByRole('tab', { name: 'Recording' }));
     await user.click(screen.getByRole('switch', { name: /enable screen recording/i }));
 
-    await waitFor(() =>
-      expect(settingsServer.puts).toEqual([{ screenshot: { enableScreenRecording: true } }])
-    );
+    expect(settingsServer.puts).toHaveLength(0);
     expect(screen.getByRole('switch', { name: /enable screen recording/i })).toBeChecked();
     expect(screenshotSize).toHaveValue(20);
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(settingsServer.puts).toHaveLength(2));
-    expect(settingsServer.puts[1]).toEqual({ screenshot: { maxScreenshotSize: 20 } });
+    expect(settingsServer.puts).toEqual([
+      { screenshot: { maxScreenshotSize: 20 } },
+      { screenshot: { enableScreenRecording: true } },
+    ]);
   });
 });

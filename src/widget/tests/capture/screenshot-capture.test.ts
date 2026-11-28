@@ -217,7 +217,7 @@ describe('captureScreenshot', () => {
       mediaDevices: {
         getDisplayMedia: async () => stream,
       },
-    } as Navigator;
+    } as unknown as Navigator;
     globalThis.setTimeout = ((handler: () => void, ms = 0) => {
       if (ms <= 100) handler();
       return 0 as unknown as number;
@@ -228,6 +228,51 @@ describe('captureScreenshot', () => {
 
     expect(result).toBe('data:image/png;base64,screen');
     expect(trackStopped).toBe(true);
+  });
+
+  it('downscales Screen Capture API frames when pixelRatioOverride is set', async () => {
+    const track = { stop: mock() };
+    const stream = { getTracks: () => [track] };
+    const video = {
+      videoWidth: 1600,
+      videoHeight: 1200,
+      set onloadedmetadata(handler: () => void) {
+        queueMicrotask(handler);
+      },
+    };
+    const drawImage = mock();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage }),
+      toDataURL: () => 'data:image/png;base64,scaled',
+    };
+
+    globalThis.window = { devicePixelRatio: 2 } as unknown as Window & typeof globalThis;
+    globalThis.document = {
+      createElement: (tag: string) => (tag === 'video' ? video : canvas),
+    } as unknown as Document;
+    globalThis.navigator = {
+      mediaDevices: {
+        getDisplayMedia: async () => stream,
+      },
+    } as unknown as Navigator;
+    globalThis.setTimeout = ((handler: () => void, ms = 0) => {
+      if (ms <= 100) handler();
+      return 0 as unknown as number;
+    }) as typeof setTimeout;
+
+    const { captureScreenshot } = await import('../../capture/screenshot');
+    const result = await captureScreenshot({
+      method: 'visible',
+      useScreenCaptureAPI: true,
+      pixelRatioOverride: 1,
+    });
+
+    expect(result).toBe('data:image/png;base64,scaled');
+    expect(canvas.width).toBe(800);
+    expect(canvas.height).toBe(600);
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 800, 600);
   });
 
   it('grabs the frame from an open screen capture session without a new picker', async () => {

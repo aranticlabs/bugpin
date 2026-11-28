@@ -223,8 +223,8 @@ it('takes its snapshot before bootstrap writes and leaves existing rows and FTS 
   if (!staff) throw new Error('Staff fixture missing');
   const now = Date.parse('2026-02-01');
   const legacyMessageTimes = db
-    .query<{ userId: string; at: string }, []>(
-      'SELECT user_id AS userId, sent_at AS at FROM reporter_messages'
+    .query<{ userId: string; reportId: string; at: string }, []>(
+      'SELECT user_id AS userId, report_id AS reportId, sent_at AS at FROM reporter_messages ORDER BY sent_at ASC'
     )
     .all();
   const messageTimes = spyOn(gamificationRepo, 'listReporterMessageTimes').mockReturnValue(

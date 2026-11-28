@@ -43,7 +43,7 @@ describe('NotificationDefaults', () => {
     });
   });
 
-  it('saves only the email switch and keeps unsaved edits on the other tab', async () => {
+  it('waits for the save bar before saving the email switch and other tab edits together', async () => {
     const settingsServer = mockSettingsServer();
     const user = userEvent.setup();
     renderWithProviders(<NotificationDefaults />);
@@ -52,9 +52,7 @@ describe('NotificationDefaults', () => {
     await user.click(screen.getByRole('tab', { name: 'Reporter' }));
     await user.click(await screen.findByRole('switch', { name: /email notifications/i }));
 
-    await waitFor(() =>
-      expect(settingsServer.puts).toEqual([{ reporterNotifications: { emailEnabled: false } }])
-    );
+    expect(settingsServer.puts).toHaveLength(0);
 
     await user.click(screen.getByRole('tab', { name: 'Team' }));
     expect(await screen.findByRole('switch', { name: /new reports/i })).toHaveAttribute(
@@ -63,7 +61,10 @@ describe('NotificationDefaults', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
-    await waitFor(() => expect(settingsServer.puts).toHaveLength(2));
-    expect(settingsServer.puts[1]).toEqual({ notifications: { notifyOnNewReport: false } });
+    await waitFor(() => expect(settingsServer.puts).toHaveLength(1));
+    expect(settingsServer.puts[0]).toEqual({
+      notifications: { notifyOnNewReport: false },
+      reporterNotifications: { emailEnabled: false },
+    });
   });
 });

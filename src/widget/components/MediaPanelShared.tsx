@@ -8,33 +8,6 @@ export const MEDIA_DROPZONE_CLASS =
 export const MEDIA_DROPZONE_ACTIVE_CLASS =
   'border-2 border-dashed border-primary rounded bg-primary/5';
 
-export const MediaOptionToggle: FunctionComponent<{
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  title?: string;
-}> = ({ label, checked, onChange, title }) => (
-  <div
-    class="flex items-center justify-end gap-2 text-xs text-muted-foreground select-none"
-    title={title}
-  >
-    <label class="flex items-center gap-2 cursor-pointer">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        class="peer sr-only"
-        checked={checked}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        aria-label={label}
-      />
-      <span
-        aria-hidden="true"
-        class="relative flex-shrink-0 inline-block w-8 h-4 rounded-full bg-muted-foreground/30 transition-colors peer-checked:bg-[var(--button-color)] peer-focus-visible:[outline:2px_solid_var(--primary)] peer-focus-visible:outline-offset-2 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4"
-      />
-    </label>
-  </div>
-);
-
 export const MediaUploadButton: FunctionComponent<{
   hasMedia: boolean;
   onClick: () => void;

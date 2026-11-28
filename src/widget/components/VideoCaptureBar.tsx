@@ -5,6 +5,7 @@ import {
   Eraser,
   GripVertical,
   Mic,
+  MicOff,
   MousePointer2,
   MousePointerClick,
   Pause,
@@ -47,10 +48,13 @@ interface VideoCaptureBarProps {
   elapsedMs: number;
   maxDurationMs: number;
   isPaused: boolean;
+  allowMicrophone: boolean;
   hasMicrophone: boolean;
+  isRequestingMicrophone?: boolean;
   isWholeScreen: boolean;
   position: CaptureBarPosition | null;
   onPositionChange: (position: CaptureBarPosition) => void;
+  onToggleMicrophone: () => void;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -71,10 +75,13 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
   elapsedMs,
   maxDurationMs,
   isPaused,
+  allowMicrophone,
   hasMicrophone,
+  isRequestingMicrophone = false,
   isWholeScreen,
   position,
   onPositionChange,
+  onToggleMicrophone,
   onStart,
   onPause,
   onResume,
@@ -166,11 +173,11 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
 
           {!isCountingDown && (
             <>
-              {(!isReady || hasMicrophone) && (
+              {(!isReady || allowMicrophone) && (
                 <>
-                  <div class="flex items-center gap-2 px-1">
+                  <div class="flex items-center gap-1.5">
                     {!isReady && (
-                      <>
+                      <div class="flex items-center gap-2 px-1">
                         <Circle
                           data-recording-indicator
                           class={cn(
@@ -190,10 +197,37 @@ export const VideoCaptureBar: FunctionComponent<VideoCaptureBarProps> = ({
                             / {formatDuration(maxDurationMs)}
                           </span>
                         </span>
-                      </>
+                      </div>
                     )}
-                    {hasMicrophone && (
-                      <Mic class="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    {allowMicrophone && (
+                      <CaptureBarButton
+                        label={
+                          isReady
+                            ? t('recording.microphone')
+                            : hasMicrophone
+                              ? t('recording.microphoneOn')
+                              : t('recording.microphone')
+                        }
+                        side={tooltipSide}
+                        variant={hasMicrophone ? 'secondary' : 'ghost'}
+                        class={cn('relative', !hasMicrophone && 'text-muted-foreground')}
+                        aria-pressed={hasMicrophone}
+                        aria-disabled={isReady && isRequestingMicrophone ? true : undefined}
+                        disabled={!isReady}
+                        onClick={isRequestingMicrophone ? undefined : onToggleMicrophone}
+                      >
+                        {hasMicrophone ? (
+                          <Mic class="w-4 h-4" aria-hidden="true" />
+                        ) : (
+                          <MicOff class="w-4 h-4" aria-hidden="true" />
+                        )}
+                        {hasMicrophone && isReady && (
+                          <span
+                            class="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-info ring-1 ring-background"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </CaptureBarButton>
                     )}
                   </div>
 

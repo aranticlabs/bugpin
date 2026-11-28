@@ -12,12 +12,11 @@ export interface UserResolutionRow {
   assignedAt: string | null;
   /** First time anyone was assigned the report before the resolution */
   firstAssignedAt: string | null;
-  /** First time the report went back to open or in progress after this resolution */
-  reopenedAt: string | null;
 }
 
-export interface UserTimeRow {
+export interface ReporterMessageRow {
   userId: string;
+  reportId: string;
   at: string;
 }
 
@@ -62,11 +61,7 @@ export const gamificationRepo = {
            (SELECT MAX(a.created_at) FROM report_history a
             WHERE a.report_id = first.report_id AND a.action = 'assignee_changed'
               AND a.new_value = first.user_id AND a.created_at <= first.resolved_at) AS assignedAt,
-           ${FIRST_ASSIGNED_AT('first.report_id', 'first.resolved_at')} AS firstAssignedAt,
-           (SELECT MIN(o.created_at) FROM report_history o
-            WHERE o.report_id = first.report_id AND o.action = 'status_changed'
-              AND o.old_value IN ('resolved', 'closed') AND o.new_value IN ('open', 'in_progress')
-              AND o.created_at > first.resolved_at) AS reopenedAt
+           ${FIRST_ASSIGNED_AT('first.report_id', 'first.resolved_at')} AS firstAssignedAt
          FROM (
            SELECT h.user_id, h.report_id, MIN(h.created_at) AS resolved_at
            FROM report_history h
@@ -88,30 +83,15 @@ export const gamificationRepo = {
       .all(...userIds, ...userIds) as UserResolutionRow[];
   },
 
-  /** Times each user first set the priority of a report within the triage window after it arrived */
-  listQuickTriage(userIds: readonly string[], withinSeconds: number): UserTimeRow[] {
+  listReporterMessageTimes(userIds: readonly string[]): ReporterMessageRow[] {
     if (userIds.length === 0) return [];
     return getDb()
       .query(
-        `SELECT h.user_id AS userId, MIN(h.created_at) AS at
-         FROM report_history h
-         JOIN reports r ON r.id = h.report_id
-         WHERE h.user_id IN (${placeholders(userIds)}) AND h.action = 'priority_changed'
-           AND unixepoch(h.created_at) - unixepoch(r.created_at) <= ?
-         GROUP BY h.user_id, h.report_id
-         ORDER BY at ASC`
+        `SELECT user_id AS userId, report_id AS reportId, created_at AS at FROM report_messages
+         WHERE author_kind = 'staff' AND user_id IN (${placeholders(userIds)})
+         ORDER BY created_at ASC`
       )
-      .all(...userIds, withinSeconds) as UserTimeRow[];
-  },
-
-  listReporterMessageTimes(userIds: readonly string[]): UserTimeRow[] {
-    if (userIds.length === 0) return [];
-    return getDb()
-      .query(
-        `SELECT user_id AS userId, created_at AS at FROM report_messages
-         WHERE author_kind = 'staff' AND user_id IN (${placeholders(userIds)})`
-      )
-      .all(...userIds) as UserTimeRow[];
+      .all(...userIds) as ReporterMessageRow[];
   },
 
   /** Open reports assigned to the user, with what decides the XP a resolution would earn now */

@@ -7,7 +7,6 @@ import {
   MEDIA_DROPZONE_ACTIVE_CLASS,
   MEDIA_DROPZONE_CLASS,
   MediaCaptureFeedback,
-  MediaOptionToggle,
   MediaUploadButton,
 } from './MediaPanelShared';
 import {
@@ -27,9 +26,6 @@ interface ScreenRecordingPanelProps {
   onRemove: (id: string) => void;
   isStarting: boolean;
   maxVideoSize?: number;
-  allowMicrophone: boolean;
-  includeMicrophone: boolean;
-  onIncludeMicrophoneChange: (value: boolean) => void;
   oversizedRecording: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedRecording?: () => void;
 }
@@ -45,9 +41,6 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
   onRemove,
   isStarting,
   maxVideoSize = DEFAULT_MAX_VIDEO_SIZE,
-  allowMicrophone,
-  includeMicrophone,
-  onIncludeMicrophoneChange,
   oversizedRecording,
   onDismissOversizedRecording,
 }) => {
@@ -129,14 +122,6 @@ export const ScreenRecordingPanel: FunctionComponent<ScreenRecordingPanelProps> 
         <div class="shrink-0 flex flex-col gap-4 px-6 pt-6 pb-4">
           {recordingEnabled && (
             <>
-              {allowMicrophone && (
-                <MediaOptionToggle
-                  label={t('recording.microphone')}
-                  checked={includeMicrophone}
-                  onChange={onIncludeMicrophoneChange}
-                />
-              )}
-
               <div class="flex gap-2">
                 <Button class="flex-1" onClick={onRecord} disabled={isStarting}>
                   <Video class="w-4.5 h-4.5" />

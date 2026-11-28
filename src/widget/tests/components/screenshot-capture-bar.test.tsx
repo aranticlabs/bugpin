@@ -27,9 +27,11 @@ function renderBar(overrides: Partial<Parameters<typeof ScreenshotCaptureBar>[0]
     countdown: 3,
     delaySeconds: 0,
     delayOptions: [0, 3, 5, 10],
+    reduceImageSize: false,
     position: null,
     onPositionChange: () => undefined,
     onDelayChange: mock(),
+    onReduceImageSizeChange: mock(),
     onCapture: mock(),
     onCancel: mock(),
     ...overrides,
@@ -46,8 +48,18 @@ function captureButton(): HTMLButtonElement | undefined {
   );
 }
 
+function menuTrigger(label: string): HTMLButtonElement {
+  return Array.from(
+    container.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="menu"]')
+  ).find((button) => button.textContent?.includes(label)) as HTMLButtonElement;
+}
+
 function timerTrigger(): HTMLButtonElement {
-  return container.querySelector('button[aria-haspopup="menu"]') as HTMLButtonElement;
+  return menuTrigger(t('screenshot.bar.timerLabel'));
+}
+
+function sizeTrigger(): HTMLButtonElement {
+  return menuTrigger(t('screenshot.bar.sizeLabel'));
 }
 
 function cancelButton(): HTMLButtonElement {
@@ -135,12 +147,58 @@ describe('ScreenshotCaptureBar', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('disables capture and timer while the tab share is pending', () => {
+  it('disables capture, timer and size while the tab share is pending', () => {
     renderBar({ isReady: false });
 
     expect(captureButton()?.disabled).toBe(true);
     expect(timerTrigger().disabled).toBe(true);
+    expect(sizeTrigger().disabled).toBe(true);
     expect(cancelButton().disabled).toBe(false);
+  });
+
+  it('lists full and reduced image size options and reports selection', async () => {
+    const props = renderBar({ reduceImageSize: false });
+
+    expect(sizeTrigger().textContent).toContain(t('screenshot.bar.sizeFullShort'));
+    sizeTrigger().click();
+    await settle();
+
+    expect(sizeTrigger().getAttribute('aria-expanded')).toBe('true');
+    expect(menuItems()).toHaveLength(2);
+    expect(menuItems()[0]?.getAttribute('aria-checked')).toBe('true');
+    expect(menuItems()[1]?.textContent).toContain(t('screenshot.bar.sizeReduced'));
+
+    menuItems()[1]?.click();
+    await settle();
+
+    expect(props.onReduceImageSizeChange).toHaveBeenCalledWith(true);
+    expect(menuItems()).toHaveLength(0);
+    expect(document.activeElement).toBe(sizeTrigger());
+  });
+
+  it('shows the reduced label when reduceImageSize is active', () => {
+    renderBar({ reduceImageSize: true });
+    expect(sizeTrigger().textContent).toContain(t('screenshot.bar.sizeReducedShort'));
+  });
+
+  it('shows and dismisses the oversized capture warning on the bar', () => {
+    const onDismissOversizedCapture = mock();
+    renderBar({
+      oversizedCapture: { sizeMb: 11.1, limitMb: 10 },
+      onDismissOversizedCapture,
+    });
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain(
+      t('screenshot.error.captureTooLarge', { size: 11.1, limit: 10 })
+    );
+    expect(alert?.textContent).toContain(t('screenshot.error.captureTooLargeHint'));
+
+    const dismiss = alert?.querySelector(`button[aria-label="${t('aria.close')}"]`) as
+      | HTMLButtonElement
+      | undefined;
+    dismiss?.click();
+    expect(onDismissOversizedCapture).toHaveBeenCalledTimes(1);
   });
 
   it('shows the countdown in the capture button and keeps cancel', () => {
@@ -155,6 +213,7 @@ describe('ScreenshotCaptureBar', () => {
     button?.click();
     expect(props.onCapture).not.toHaveBeenCalled();
     expect(timerTrigger().disabled).toBe(true);
+    expect(sizeTrigger().disabled).toBe(true);
     expect(cancelButton()).not.toBeNull();
   });
 });

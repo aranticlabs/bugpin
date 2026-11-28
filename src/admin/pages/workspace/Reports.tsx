@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { z } from 'zod';
 import { cn } from '../../lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
@@ -132,6 +133,23 @@ function normalizeManualReportUrl(value: string): string {
   return `https://${trimmed}`;
 }
 
+interface CreateReportFormErrors {
+  title?: string;
+  reporterEmail?: string;
+}
+
+const reporterEmailSchema = z.string().email('Please enter a valid email address');
+
+function validateReporterEmail(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return reporterEmailSchema.safeParse(trimmed).success
+    ? undefined
+    : 'Please enter a valid email address';
+}
+
 const REPORT_LABEL = { singular: 'report', plural: 'reports' };
 
 const DEFAULT_REPORT_SORT: { key: ReportSortKey; direction: SortDirection } = {
@@ -200,6 +218,7 @@ export function Reports({
   const [createForm, setCreateForm] = useState<CreateReportFormState>(() =>
     buildCreateReportForm(fixedProjectId ?? (searchParams.get('projectId') || undefined))
   );
+  const [createFormErrors, setCreateFormErrors] = useState<CreateReportFormErrors>({});
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -327,6 +346,7 @@ export function Reports({
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setShowCreateDialog(false);
       setCreateForm(buildCreateReportForm(report.projectId));
+      setCreateFormErrors({});
       toast.success('Report created successfully');
     },
     onError: (error) => {
@@ -427,6 +447,7 @@ export function Reports({
         available?.find((project) => project.id === projectId)?.id || available?.[0]?.id
       )
     );
+    setCreateFormErrors({});
     setShowCreateDialog(true);
   };
 
@@ -435,6 +456,23 @@ export function Reports({
     value: CreateReportFormState[K]
   ) => {
     setCreateForm((current) => ({ ...current, [key]: value }));
+    if (key === 'reporterEmail' && createFormErrors.reporterEmail) {
+      setCreateFormErrors((current) => ({
+        ...current,
+        reporterEmail: validateReporterEmail(String(value)),
+      }));
+    } else if (key === 'title' && createFormErrors.title) {
+      const trimmed = String(value).trim();
+      setCreateFormErrors((current) => ({
+        ...current,
+        title:
+          !trimmed
+            ? 'Title is required'
+            : trimmed.length < 4
+              ? 'Title must be at least 4 characters'
+              : undefined,
+      }));
+    }
   };
 
   // Bulk action handlers
@@ -564,6 +602,26 @@ export function Reports({
 
   const handleCreateReport = (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedTitle = createForm.title.trim();
+    const nextErrors: CreateReportFormErrors = {};
+
+    if (!trimmedTitle) {
+      nextErrors.title = 'Title is required';
+    } else if (trimmedTitle.length < 4) {
+      nextErrors.title = 'Title must be at least 4 characters';
+    }
+
+    const reporterEmailError = validateReporterEmail(createForm.reporterEmail);
+    if (reporterEmailError) {
+      nextErrors.reporterEmail = reporterEmailError;
+    }
+
+    if (nextErrors.title || nextErrors.reporterEmail) {
+      setCreateFormErrors(nextErrors);
+      return;
+    }
+
+    setCreateFormErrors({});
     createReportMutation.mutate(createForm);
   };
 
@@ -647,7 +705,11 @@ export function Reports({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleCreateReport} className="flex min-h-0 flex-1 flex-col gap-4">
+          <form
+            onSubmit={handleCreateReport}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
             <DialogBody className="flex-1" contentClassName="space-y-4 py-1">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
@@ -702,7 +764,14 @@ export function Reports({
                   onChange={(e) => updateCreateForm('title', e.target.value)}
                   placeholder="What needs attention?"
                   required
+                  aria-invalid={!!createFormErrors.title}
+                  aria-describedby={createFormErrors.title ? 'create-report-title-error' : undefined}
                 />
+                {createFormErrors.title && (
+                  <p id="create-report-title-error" className="text-xs text-destructive">
+                    {createFormErrors.title}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -777,8 +846,28 @@ export function Reports({
                     type="email"
                     value={createForm.reporterEmail}
                     onChange={(e) => updateCreateForm('reporterEmail', e.target.value)}
+                    onBlur={(e) =>
+                      setCreateFormErrors((current) => ({
+                        ...current,
+                        reporterEmail: validateReporterEmail(e.target.value),
+                      }))
+                    }
                     placeholder="Optional"
+                    aria-invalid={!!createFormErrors.reporterEmail}
+                    aria-describedby={
+                      createFormErrors.reporterEmail
+                        ? 'create-report-reporter-email-error'
+                        : undefined
+                    }
                   />
+                  {createFormErrors.reporterEmail && (
+                    <p
+                      id="create-report-reporter-email-error"
+                      className="text-xs text-destructive"
+                    >
+                      {createFormErrors.reporterEmail}
+                    </p>
+                  )}
                 </div>
               </div>
 

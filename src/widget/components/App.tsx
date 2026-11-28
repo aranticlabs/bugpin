@@ -167,13 +167,12 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showScreenCaptureConsent, setShowScreenCaptureConsent] = useState(false);
-  const [reduceScreenshotQuality, setReduceScreenshotQuality] = useState(false);
+  const [reduceImageSize, setReduceImageSize] = useState(false);
   const [oversizedCapture, setOversizedCapture] = useState<{
     sizeMb: number;
     limitMb: number;
   } | null>(null);
   const [consentMode, setConsentMode] = useState<ConsentMode>('screenshot');
-  const [includeMicrophone, setIncludeMicrophone] = useState(false);
   const [hasPendingRecording, setHasPendingRecording] = useState(false);
   const [videoCaptureBarPosition, setVideoCaptureBarPosition] = useState<CaptureBarPosition | null>(
     null
@@ -198,7 +197,6 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   ) => {
     setStep('form');
     setActiveTab('recording');
-    setIncludeMicrophone(false);
     if (!result) return;
 
     if (result.blob.size === 0) {
@@ -483,17 +481,16 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   );
 
   const addScreenshot = useCallback(
-    async (dataUrl: string) => {
+    async (dataUrl: string): Promise<boolean> => {
       // Reject oversized captures up-front instead of letting the server drop
-      // them silently on submit. Surface the failure via an inline banner in
-      // the screenshots tab so the user can lower the capture quality or
-      // resize the window and retry.
+      // them silently on submit. Surface the failure via an inline banner so the
+      // user can reduce the image size or resize the window and retry.
       const blob = dataUrlToBlob(dataUrl);
       if (blob.size > config.maxScreenshotSize) {
         const sizeMb = Math.round((blob.size / (1024 * 1024)) * 10) / 10;
         const limitMb = Math.round(config.maxScreenshotSize / (1024 * 1024));
         setOversizedCapture({ sizeMb, limitMb });
-        return;
+        return false;
       }
 
       setOversizedCapture(null);
@@ -508,27 +505,35 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       };
       mediaRef.current = [...mediaRef.current, newMedia];
       setMedia((prev) => [...prev, newMedia]);
+      return true;
     },
     [config.maxScreenshotSize]
   );
 
   const runCapture = useCallback(
-    async (screenCaptureSession: ScreenCaptureSession | null) => {
+    async (
+      screenCaptureSession: ScreenCaptureSession | null,
+      keepBarOnOversize = false
+    ): Promise<boolean> => {
       isCapturingRef.current = true;
       setIsCapturing(true);
       // Let the dialog and bar unmount so they are not part of the capture.
       await wait(100);
 
+      let keepOpen = false;
       try {
         // Without an open tab share, capture the DOM: a new share picker would steal focus
         // and close the menus or hover states the user is trying to capture.
         const dataUrl = await captureScreenshotFn({
           method: config.captureMethod,
           useScreenCaptureAPI: screenCaptureSession !== null,
-          pixelRatioOverride: reduceScreenshotQuality ? 1 : undefined,
+          pixelRatioOverride: reduceImageSize ? 1 : undefined,
           screenCaptureSession,
         });
-        await addScreenshot(dataUrl);
+        const added = await addScreenshot(dataUrl);
+        if (!added && keepBarOnOversize) {
+          keepOpen = true;
+        }
       } catch (error) {
         console.error('[BugPin] Failed to capture screenshot:', error);
         setToast({
@@ -539,22 +544,36 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
       isCapturingRef.current = false;
       setIsCapturing(false);
+      if (keepOpen) return true;
+
       setHasPendingRecording(false);
       setActiveTab('media');
       setStep('form');
+      return false;
     },
-    [addScreenshot, captureScreenshotFn, config.captureMethod, reduceScreenshotQuality]
+    [addScreenshot, captureScreenshotFn, config.captureMethod, reduceImageSize]
   );
 
   const screenshotCaptureBar = useScreenshotCaptureBar({
     useScreenCaptureAPI: config.useScreenCaptureAPI,
     dependencies: deps,
-    capture: runCapture,
+    capture: (session) => runCapture(session, true),
   });
   const [screenshotCaptureBarPosition, setScreenshotCaptureBarPosition] =
     useState<CaptureBarPosition | null>(null);
 
+  const handleReduceImageSizeChange = useCallback((reduce: boolean) => {
+    setReduceImageSize(reduce);
+    if (reduce) setOversizedCapture(null);
+  }, []);
+
+  const handleScreenshotBarCapture = useCallback(() => {
+    setOversizedCapture(null);
+    screenshotCaptureBar.capture();
+  }, [screenshotCaptureBar.capture]);
+
   const handleCancelScreenshotCaptureBar = useCallback(() => {
+    setOversizedCapture(null);
     screenshotCaptureBar.cancel();
     setStep('form');
   }, [screenshotCaptureBar.cancel]);
@@ -570,6 +589,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       }
       if (step === 'screenshot') {
         if (screenshotCaptureBar.status === 'capturing') return;
+        setOversizedCapture(null);
         screenshotCaptureBar.cancel();
         setStep('form');
       }
@@ -635,18 +655,18 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
       setShowScreenCaptureConsent(true);
       return;
     }
-    void startRecordingFlow(includeMicrophone);
-  }, [includeMicrophone, startRecordingFlow]);
+    void startRecordingFlow();
+  }, [startRecordingFlow]);
 
   const handleConsentConfirm = useCallback(() => {
     if (consentMode === 'recording') {
       setConsentMode('screenshot');
       setShowScreenCaptureConsent(false);
-      void startRecordingFlow(includeMicrophone);
+      void startRecordingFlow();
       return;
     }
     handleCaptureScreenshot();
-  }, [consentMode, handleCaptureScreenshot, includeMicrophone, startRecordingFlow]);
+  }, [consentMode, handleCaptureScreenshot, startRecordingFlow]);
 
   const handleConsentCancel = useCallback(() => {
     setConsentMode('screenshot');
@@ -839,10 +859,13 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           elapsedMs={recording.elapsedMs}
           maxDurationMs={config.maxRecordingDurationSeconds * 1000}
           isPaused={recording.isPaused}
+          allowMicrophone={config.allowRecordingMicrophone}
           hasMicrophone={recording.hasMicrophone}
+          isRequestingMicrophone={recording.isRequestingMicrophone}
           isWholeScreen={recording.isWholeScreen}
           position={videoCaptureBarPosition}
           onPositionChange={setVideoCaptureBarPosition}
+          onToggleMicrophone={recording.toggleMicrophone}
           onStart={recording.startCountdown}
           onPause={recording.pause}
           onResume={recording.resume}
@@ -858,10 +881,14 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           countdown={screenshotCaptureBar.countdown}
           delaySeconds={screenshotCaptureBar.delaySeconds}
           delayOptions={CAPTURE_DELAY_OPTIONS}
+          reduceImageSize={reduceImageSize}
+          oversizedCapture={oversizedCapture}
           position={screenshotCaptureBarPosition}
           onPositionChange={setScreenshotCaptureBarPosition}
           onDelayChange={screenshotCaptureBar.setDelaySeconds}
-          onCapture={screenshotCaptureBar.capture}
+          onReduceImageSizeChange={handleReduceImageSizeChange}
+          onDismissOversizedCapture={() => setOversizedCapture(null)}
+          onCapture={handleScreenshotBarCapture}
           onCancel={handleCancelScreenshotCaptureBar}
         />
       )}
@@ -920,14 +947,9 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           consentMode={consentMode}
           onConsentConfirm={handleConsentConfirm}
           onConsentCancel={handleConsentCancel}
-          reduceScreenshotQuality={reduceScreenshotQuality}
-          onReduceScreenshotQualityChange={setReduceScreenshotQuality}
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
           recordingEnabled={recordingEnabled}
-          allowRecordingMicrophone={config.allowRecordingMicrophone}
-          includeMicrophone={includeMicrophone}
-          onIncludeMicrophoneChange={setIncludeMicrophone}
           isRecordingStarting={recording.status !== 'idle'}
           onStartRecording={handleStartRecording}
           oversizedRecording={oversizedRecording}
@@ -960,7 +982,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
                 <button
                   type="button"
                   onClick={handleCloseKeepDraft}
-                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-transparent text-[var(--button-text-color)] bg-[var(--button-color)] hover:bg-[var(--button-hover-color)] hover:text-[var(--button-hover-text-color)] transition-colors"
+                  class="flex-1 px-4 py-2 text-sm font-medium rounded border border-solid border-transparent bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-hover-foreground transition-colors"
                 >
                   {t('closeConfirm.saveDraftButton')}
                 </button>

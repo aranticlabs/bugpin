@@ -1211,13 +1211,13 @@ export interface ResolveTimeSummary {
 
 export const ACHIEVEMENT_IDS = [
   'hatchling',
-  'cocoon',
   'butterfly',
   'firefly',
   'dragonfly',
-  'ladybug',
+  'stag_beetle',
+  'honeybee',
   'web_weaver',
-  'amber',
+  'cricket',
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENT_IDS)[number];
 
@@ -1242,26 +1242,20 @@ export const EARLY_RESOLVE_MINUTES = 60;
 /** How many qualifying events unlock each achievement */
 export const ACHIEVEMENT_TARGETS: Record<AchievementId, number> = {
   hatchling: 1,
-  cocoon: 100,
-  butterfly: 500,
-  firefly: 1,
-  dragonfly: 50,
-  ladybug: 25,
-  web_weaver: 5,
-  amber: 1,
+  butterfly: 300,
+  firefly: 5,
+  dragonfly: 25,
+  stag_beetle: 50,
+  honeybee: 6,
+  web_weaver: 3,
+  cricket: 25,
 };
 
 /** Firefly: a highest-priority report resolved this soon after its first assignment or arrival */
 export const FIREFLY_RESOLVE_HOURS = 4;
 
-/** Dragonfly: the priority of a new report set this soon after it arrived */
-export const DRAGONFLY_TRIAGE_MINUTES = 60;
-
-/** Ladybug: a resolved report that is not reopened for this long */
-export const LADYBUG_STAYS_FIXED_DAYS = 14;
-
-/** Amber find: a report that waited longer than this before it was resolved */
-export const AMBER_WAITED_DAYS = 90;
+/** Web weaver: reports resolved in a project for that project to count */
+export const WEB_WEAVER_BUGS_PER_PROJECT = 10;
 
 export interface AchievementProgress {
   id: AchievementId;
